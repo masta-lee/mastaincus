@@ -48,10 +48,10 @@ try {
         await prisma.host.update({where:{id:host.id},data:{poolFaulted:false}})
         const guest=await client.request<{created_at:string;config:Record<string,string>}>('GET','/1.0/instances/cleanup-guest')
         const customer=await prisma.user.create({data:{username:'native-expiry-renew-buyer',passwordHash:'fixture',balance:20}})
-        const pkg=await prisma.package.create({data:{userId:actor.id,name:'native-expiry-renew',cpuMax:200,memoryMax:768,diskMax:30720}})
-        const plan=await prisma.packagePlan.create({data:{packageId:pkg.id,name:'native-expiry-renew',cpu:200,memory:768,disk:30720,price:1000,portLimit:0,snapshotLimit:0,backupLimit:0,siteLimit:0,trafficLimit:0n}})
+        const pkg=await prisma.package.create({data:{userId:actor.id,name:'native-expiry-renew',cpuMax:host.cpuAllowanceMax,memoryMax:host.memoryMax,diskMax:30720}})
+        const plan=await prisma.packagePlan.create({data:{packageId:pkg.id,name:'native-expiry-renew',cpu:host.cpuAllowanceMax,memory:host.memoryMax,disk:30720,price:1000,portLimit:0,snapshotLimit:0,backupLimit:0,siteLimit:0,trafficLimit:0n}})
         const instance=await prisma.instance.create({data:{userId:customer.id,hostId:host.id,packageId:pkg.id,packagePlanId:plan.id,name:'cleanup-guest',incusId:'cleanup-guest',
-          image:'cleanup-fixture',status:'running',cpu:200,memory:768,disk:30720,storagePoolName:'cleanup-test',billingPrice:10,billingCycle:1,autoRenew:false,expiresAt:new Date(Date.now()-60000),
+          image:'cleanup-fixture',status:'running',cpu:host.cpuAllowanceMax,memory:host.memoryMax,disk:30720,storagePoolName:'cleanup-test',billingPrice:10,billingCycle:1,autoRenew:false,expiresAt:new Date(Date.now()-60000),
           snapshottedSpecs:{recoveryIdentity:{uuid:guest.config['volatile.uuid'],createdAt:guest.created_at,project:'default'}}}})
         await executeExpiryEnforcement()
         assert.equal((await client.request<{status:string}>('GET','/1.0/instances/cleanup-guest')).status,'Stopped')
@@ -74,7 +74,7 @@ try {
         await prisma.host.update({where:{id:host.id},data:{poolFaulted:false}})
         const customer=await prisma.user.create({data:{username:'actual-account-delete-fixture',passwordHash:'unused-fixture',balance:12.34,hostingBalance:4,affBalance:5}})
         const instance=await prisma.instance.create({data:{userId:customer.id,hostId:host.id,name:'cleanup-guest',incusId:'cleanup-guest',
-          image:'cleanup-fixture',status:'running',cpu:200,memory:768,disk:30720,storagePoolName:'cleanup-test'}})
+          image:'cleanup-fixture',status:'running',cpu:host.cpuAllowanceMax,memory:host.memoryMax,disk:30720,storagePoolName:'cleanup-test'}})
         await prisma.balanceLog.create({data:{userId:customer.id,instanceId:instance.id,type:'consume',amount:-11,balanceBefore:23.34,balanceAfter:12.34}})
         await prisma.instanceBillingRecord.create({data:{userId:customer.id,instanceId:instance.id,type:'newPurchase',amount:11,months:1,periodStart:new Date(),periodEnd:new Date(Date.now()+86400000)}})
         const deletingActor={id:actor.id,sid:'disposable-account-cleanup-session',iat:Math.floor(Date.now()/1000)+1}
@@ -97,7 +97,7 @@ try {
         const plan = await prisma.packagePlan.create({ data: { packageId: pkg.id, name: 'actual-expiry', cpu: 200, memory: 768, disk: 30720,
           portLimit: 0, snapshotLimit: 0, backupLimit: 0, siteLimit: 0, trafficLimit: 0n, price: 10 } })
         const instance = await prisma.instance.create({ data: { userId: actor.id, hostId: host.id, name: 'cleanup-guest', incusId: 'cleanup-guest',
-          image: 'cleanup-fixture', status: 'running', cpu: 200, memory: 768, disk: 30720, storagePoolName: 'cleanup-test',
+          image: 'cleanup-fixture', status: 'running', cpu: host.cpuAllowanceMax, memory: host.memoryMax, disk: 30720, storagePoolName: 'cleanup-test',
           packageId: pkg.id, packagePlanId: plan.id, billingPrice: 10, billingCycle: 1, expiresAt: new Date(Date.now() - 60000),
           snapshottedSpecs: { recoveryIdentity: { uuid: original.config['volatile.uuid'], createdAt: original.created_at, project: 'default' } } } })
         await executeExpiryEnforcement()
@@ -113,7 +113,7 @@ try {
       } else if (process.env.INSTANCE_DELETION_WORKER === '1') {
         await prisma.host.update({ where: { id: host.id }, data: { poolFaulted: false } })
         const instance = await prisma.instance.create({ data: { userId: actor.id, hostId: host.id, name: 'cleanup-guest', incusId: 'cleanup-guest',
-          image: 'cleanup-fixture', status: 'running', cpu: 200, memory: 768, disk: 30720, storagePoolName: 'cleanup-test' } })
+          image: 'cleanup-fixture', status: 'running', cpu: host.cpuAllowanceMax, memory: host.memoryMax, disk: 30720, storagePoolName: 'cleanup-test' } })
         const result = await requestInstanceDeletion(instance, { id: actor.id, sid: 'disposable-ci-session', iat: Math.floor(Date.now() / 1000) }, { mode: 'admin' })
         assert.equal(result.success, true, JSON.stringify(result))
         const deleted = await prisma.instance.findUniqueOrThrow({ where: { id: instance.id } })
