@@ -31,6 +31,8 @@ Owner 提供的 IP 在 2026-11-13 21:17 至23:32北京时间有11条成功注册
 
 ## 失败与剩余门槛
 
+进一步真实机器池creating测试发现：原开通补偿已成功删远端及释放分配后，账户删除再次把历史deleted记录设deletionBillingPending会触发数据库HOST_POOL_FAULTED。源码改沿原poolProvision failed清理实证继续核absence/回池，不重开库存；真实mTLS503保分配→恢复补偿→原池可售→删除账户通过（account-pool-creation-delete3.log）。普通旧deleted无原清理证据仍走完整授权删除，不放宽数据库池门禁。
+
 首轮完整224项221过/3失败（`account-full-tests-r5.log`）：分页、配置守卫仍匹配新增字段前文本，已修并定向通过；Windows十场景安装夹具60秒总时限失败，改外层180秒且产品内部限时保持，`account-agent-installer-final.log`十场景通过。新增快照续接曾使用数据库不允许的superseded，改合法cancelled并保留实例删除核验，已重新通过。浏览器早轮受编辑引起Vite reload及新增成功toast未清夹具影响，日志保留；稳定源码最后两轮通过。
 
 最终225项全套仍在运行；新增原生Incus账户删除已登记CI，以实际Running容器+快照+独立卷+forward验证全过程。双架构发行预览、v1.8.11原worker正常/已迁移/故障回滚再升级、实际签名包及目标主控验收仍待。全部完成之前不发布正式新版。

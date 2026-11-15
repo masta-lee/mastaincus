@@ -1,5 +1,7 @@
 # 版本与验证记录
 
+- creating专项补修：原pool开通失败补偿已释放的deleted记录再次claim会触发HOST_POOL_FAULTED；现沿poolProvision failed实证核远端absence/原回池后清账户，不重开库存。account-pool-creation-delete3.log含真实mTLS创建marker/503保占用/恢复补偿及全部六场景过，types过。此补充将入新来源；d3预览尚未主控部署/正式发行。
+
 - 最终本地225/225全绿（account-full-tests-final.log），后续排队task取消移入同一管理员权限事务、列表deletionMap分批性能修复的PG/mTLS/JWT/迁移与types再次通过（account-admin-admission-final.log）。原生Incus删除、双首装及双签名tar已过；旧worker基线修正版预览43665644538仍运行。准备v1.8.12候选版本号，未tag未发行未主控部署；原1.8.11保持。
 
 - 注册/删除账户/TG/密码来源3ad63ecd已推PR16，CI43664559570真实Incus132660955563与本批PG/HTTP/TG步骤通过；双候选tar244迁移/模块/签名/用户边界独立核过。预览43664562150六旧worker在升级动作前baseline误断言1.8.10失败（旧包已是真1.8.11），修为从已核包版本动态基线，保留同一旧worker/回滚与原身份。原最终225和云端综合仍待，未热更未发行，见检查记录。

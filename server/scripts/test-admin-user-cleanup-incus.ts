@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict'
-import { randomUUID,X509Certificate } from 'node:crypto'
+import { randomUUID,X509Certificate,createHash } from 'node:crypto'
 import { mkdtemp,readFile,rm } from 'node:fs/promises'
 import {tmpdir} from 'node:os'
 import {join} from 'node:path'
@@ -34,17 +34,21 @@ return bad(500)
 });await new Promise<void>(r=>server.listen(0,'127.0.0.1',r))
 const admin=await prisma.user.create({data:{username:tag+'admin',role:'admin',passwordHash:'fixture'}}),ids:number[]=[]
 const actor={id:admin.id,sid:tag,iat:Math.floor(Date.now()/1000)+1}
-try{for(const initial of ['running','deleted','creating','incoming_transfer','foreign_bill']){
+try{for(const initial of ['running','deleted','creating','pool_creating','incoming_transfer','foreign_bill']){
 const user=await prisma.user.create({data:{username:tag+initial,passwordHash:'fixture',balance:25}});ids.push(user.id)
 const host=await prisma.host.create({data:{userId:admin.id,name:tag,singleTenant:true,status:'online',isInstalled:true,instanceType:'container',architecture:'x86_64',resourcePreset:'E2',customerDiskGiB:30,storageSize:34,cpuAllowanceMax:200,memoryMax:768,cpuUsed:200,memoryUsed:768,diskUsed:30720,natPublicIp:'192.0.2.9',natBindIp:'10.0.0.9',natPortStart:1,natPortEnd:65535,portProtocol:'tcp',portProtocolApplied:'tcp',portProtocolRevision:1,portProtocolAppliedRevision:1,
 url:`https://127.0.0.1:${(server.address() as any).port}`,certPath:cert,keyPath:key,serverCertificate:certificate.toString(),serverFingerprint:new X509Certificate(certificate).fingerprint256,agent:{create:protectedAgentFixture(['ingress-port-protocol-v1'])},storagePools:{create:{name:'payincus-pool',driver:'lvm',purpose:'instance_data',config:{'volume.block.filesystem':'btrfs'}}}}})
 const sourceOwner=initial==='incoming_transfer'?await prisma.user.create({data:{username:tag+'payer',passwordHash:'fixture',balance:17}}):null
 if(sourceOwner)ids.push(sourceOwner.id)
-const instance=await prisma.instance.create({data:{userId:sourceOwner?.id||user.id,hostId:host.id,name:tag,incusId:tag+initial,image:'fixture',status:initial==='incoming_transfer'?'stopped':initial==='foreign_bill'?'running':initial as any,cpu:200,memory:768,disk:30720}})
+const managedAttempt=randomUUID()
+const instance=await prisma.instance.create({data:{userId:sourceOwner?.id||user.id,hostId:host.id,name:tag,incusId:tag+initial,image:'fixture',status:initial==='incoming_transfer'?'stopped':initial==='foreign_bill'?'running':initial==='pool_creating'?'creating':initial as any,cpu:200,memory:768,disk:30720,
+ ...(initial==='pool_creating'?{purchaseBatchId:tag+initial,snapshottedSpecs:{poolProvision:{version:1,phase:'creating'},managedCleanup:{attempt:managedAttempt,endpointHash:createHash('sha256').update(host.url).digest('hex')}}}:{})}})
+if(initial==='pool_creating')await prisma.instanceBillingRecord.create({data:{instanceId:instance.id,userId:user.id,type:'newPurchase',amount:11,months:1,periodStart:new Date(),periodEnd:new Date(Date.now()+86400000)}})
 const foreignBill=initial==='foreign_bill'?await prisma.instanceBillingRecord.create({data:{userId:admin.id,instanceId:instance.id,type:'newPurchase',amount:11,months:1,periodStart:new Date(),periodEnd:new Date(Date.now()+86400000)}}):null
 if(initial==='running')await prisma.autoSnapshotOperation.create({data:{id:randomUUID(),instanceId:instance.id,ownerId:user.id,hostId:host.id,incusId:instance.incusId,identityHash:transferHostIdentity(host),snapshotName:'auto-'+randomUUID(),state:'blocked',stage:'prepared'}})
 if(initial==='running')await prisma.instanceTask.create({data:{instanceId:instance.id,hostId:host.id,userId:user.id,taskType:'restart',status:'PENDING'}})
 guests.set(instance.incusId,{name:instance.incusId,status:'Running',project:'default',created_at:'2020-01-01T00:00:00Z',config:{'volatile.uuid':randomUUID()}})
+if(initial==='pool_creating')guests.get(instance.incusId).config['user.payincus.provisioning-attempt']=managedAttempt
 if(sourceOwner){
  const remote=guests.get(instance.incusId);remote.status='Stopped';guests.delete(remote.name);remote.name=instance.incusId+'renamed';guests.set(remote.name,remote)
  await prisma.instanceTransfer.create({data:{instanceId:instance.id,fromUserId:sourceOwner.id,toUserId:user.id,status:'processing',fee:3,

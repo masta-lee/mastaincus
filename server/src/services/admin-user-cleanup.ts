@@ -113,6 +113,18 @@ export async function processUserCleanup(userId: number): Promise<void> {
         await failPoolProvision(row.id, await getHostById(row.hostId), '管理员删除账户，取消原开通任务')
         throw new UserCleanupError('USER_CLEANUP_PROVISIONING_PENDING')
       }
+      if (row.status==='deleted' && !row.deletionIntent &&
+          (row.snapshottedSpecs as {poolProvision?:{phase?:string}}|null)?.poolProvision?.phase==='failed') {
+        // The original creation compensator already proved remote absence and
+        // released allocation. Reopening it as occupied violates the pool DB
+        // assignment fence. Confirm its proof and finish the original recovery.
+        const host=await getHostById(row.hostId)
+        if(!host)throw new UserCleanupError('USER_CLEANUP_POOL_PENDING')
+        await verifyInstanceDeleted(await getIncusClient(host,prisma,5000),row.incusId)
+        await processHostRecoveryCheck(row.hostId)
+        if((await prisma.host.findUniqueOrThrow({where:{id:row.hostId}})).poolFaulted)throw new UserCleanupError('USER_CLEANUP_POOL_PENDING')
+        continue
+      }
       const previousDeletion = readDeletionIntent(row.deletionIntent)
       if (previousDeletion && previousDeletion.status !== 'done' &&
           (previousDeletion.actor.id !== actor.id || previousDeletion.actor.sid !== actor.sid || previousDeletion.actor.iat !== actor.iat)) {
