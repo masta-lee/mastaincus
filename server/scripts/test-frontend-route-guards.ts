@@ -105,6 +105,10 @@ assert.ok(instanceCreateViewSource.includes("watch(promoContextKey, invalidatePr
   instanceCreateViewSource.includes('promoPageActive.value = false; invalidatePromoCode()'),
   'legacy create coupon quotes must belong to the current code/plan/session and stop stale submit continuations')
 const instanceDetailViewSource = readRepoFile('client/src/views/InstanceDetailView.vue')
+assert.ok(instanceDetailViewSource.includes('const isRenewalDisabled = computed<boolean>') &&
+  instanceDetailViewSource.includes("instance.value?.suspend_reason === 'expired' && instance.value.suspended_by == null") &&
+  instanceDetailViewSource.includes(':disabled="isRenewalDisabled"'),
+  'expiry-suspended customers can renew from detail without enabling lifecycle operations or manual suspension bypass')
 assert.ok(instanceDetailViewSource.includes('const AdminExpiryModal = isAdminEntry') &&
   instanceDetailViewSource.includes('v-if="isAdminEntry && authStore.isAdmin && showAdminExpiry && instance"') &&
   instanceInfoTabSource.includes('v-if="isAdminEntry && canEditExpiry"'),

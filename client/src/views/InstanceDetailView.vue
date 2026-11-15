@@ -1528,6 +1528,10 @@ const isOperationDisabled = computed<boolean>(() => {
   }
   return !!actionLoading.value || !!activeTask.value || hasPendingTransfer.value
 })
+const isRenewalDisabled = computed<boolean>(() =>
+  !!actionLoading.value || !!activeTask.value || hasPendingTransfer.value ||
+  (isSuspended.value && !(instance.value?.suspend_reason === 'expired' && instance.value.suspended_by == null))
+)
 
 // 操作
 type InstanceAction = 'start' | 'stop' | 'restart' | 'delete' | 'clone'
@@ -3201,8 +3205,8 @@ function formatShortDate(dateStr: string | null | undefined): string {
                     <div class="grid w-full grid-cols-2 gap-2 sm:flex sm:flex-wrap">
                       <button
                         class="btn-secondary btn-sm w-full justify-center sm:w-auto sm:min-w-[110px]"
-                        :disabled="isOperationDisabled"
-                        :class="isOperationDisabled ? 'opacity-50 cursor-not-allowed' : ''"
+                        :disabled="isRenewalDisabled"
+                        :class="isRenewalDisabled ? 'opacity-50 cursor-not-allowed' : ''"
                         @click="showRenewModal = true"
                       >
                         {{ $t('instance.subscription.renew') }}

@@ -1,5 +1,7 @@
 # 版本与验证记录
 
+- 2026-11-15候选533ff125双实际tar原pin签名/来源/244迁移/全部本批修复/用户边界过，预览43682328472双首装六v1.8.12原worker升级/回滚再升级success。现场准备追加发现详情续费错误沿用封停禁用，已局部修独立isRenewalDisabled；桌面/手机真实预览点击和原密码/生命周期浏览器、types/route/i18n双build过，生成最终新来源前未部署/公开。533完整产品CI继续核终态，不能用旧包替代最终补修验收。
+
 - 2026-11-15续费修复双原生98b7a3ad CI43679907784的AMD/ARM cleanup job均success，实际到期Stopped→手动续费/autoRenew=false→原worker同UUID Running/一次扣款→正常删除回池通过；本地225/225自然exit0。追加删用户图标和闪烁已源码修：同栏16px/title“删除用户”、处理中沙漏、后台刷新保留列表/滚动/同key行、末页修正及旧会话回执拒绝，18组浏览器和原生确认/完整轮询专项exit0，types/route/i18n过，最终双build进行中。全部同批保留，未热更/新版；CI其余分片终态及v1.8.12旧worker预览待，见[UI证据](docs/admin-user-delete-ui-2026-11-15.md)和[续费证据](docs/manual-renewal-expiry-resume-2026-11-15.md)。
 
 - Owner实测#51到期续费仍stopped：只读确认12:27到期/扣款，旧代码manual无resume任务；12:31普通手动start后running。已源码统一manual single/batch/PAT与auto在原expired封停付款同事务queue，连续续费仅延长原intent、普通关机/后续操作保护保持，autostart原策略恢复。PGmTLS真实路由/重放/故障/锁竞争等及types/build/相关6守卫通过；新增双架构原生到期→手动续费→正常worker→Running待CI。前IPv6/建站同批保留，旧quota browser断言sites已修并实浏览器过。未热更/发版，详见[记录](docs/manual-renewal-expiry-resume-2026-11-15.md)。

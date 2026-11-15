@@ -1,6 +1,7 @@
 export const pending = [], calls = []
 const defer = (kind, id, data) => new Promise((resolve, reject) => pending.push({ kind, id, data, resolve, reject }))
 export default {
+  billing: { getInstanceBilling: id => defer('billing', id), getUserBalance: () => defer('balance', 0) },
   auth: { async me() { calls.push('me'); return { user: { id: 1, username: 'fixture', role: 'user' } } } },
   systemConfig: { async getPublic() { return {} } },
   instances: {
