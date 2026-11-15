@@ -38,6 +38,7 @@ const USER_SEARCH_FIELD_OPTIONS = [
 ]
 const users = ref([])
 const usersLoading = ref(true)
+const usersLoaded = ref(false)
 const userSearch = ref('')
 const userSearchFields = ref([...USER_SEARCH_FIELDS])
 const userSearchExact = ref(false)
@@ -329,13 +330,13 @@ watch([userSearch, userSearchExact, () => normalizedUserSearchFields.value.join(
   }, 300)
 })
 
-async function loadUsers(acceptReceipt = () => true) {
+async function loadUsers(acceptReceipt = () => true, { background = false } = {}) {
   if (!dialogsAvailable.value) return
   // Template handlers may pass their click event instead of an explicit receipt guard.
   const accept = typeof acceptReceipt === 'function' ? acceptReceipt : () => true
   const sequence = ++userReadSequence, context = userReadContext.value
   const current = () => dialogsAvailable.value && sequence === userReadSequence && context === userReadContext.value && accept()
-  usersLoading.value = true
+  usersLoading.value = !background || !usersLoaded.value
   try {
     const response = await api.users.list({
       page: userPage.value,
@@ -345,10 +346,16 @@ async function loadUsers(acceptReceipt = () => true) {
       exact: userSearchExact.value
     })
     if (!current()) return
+    const totalPages = response.totalPages || 1
+    if (background && userPage.value > totalPages) {
+      userPage.value = totalPages
+      return await loadUsers(accept, { background: true })
+    }
     users.value = response.users || []
+    usersLoaded.value = true
     for (const user of users.value) { deletingUsers.value[user.id] = user.deleting === true; if (user.deleting) watchUserCleanup(user.id) }
     userTotal.value = response.total || 0
-    userTotalPages.value = response.totalPages || 1
+    userTotalPages.value = totalPages
   } catch (err) {
     if (current()) toast.error(t('admin.users.loadFailed') + ': ' + err.message)
   } finally {
@@ -545,7 +552,7 @@ function watchUserCleanup(id) {
       const status = await api.users.cleanupStatus(id)
       if (!dialogsAvailable.value || session !== dialogSession.value) return
       cleanupErrors.value[id] = status.error ? t('admin.users.deleteRetry') : ''
-      if (status.status === 'done') { deletingUsers.value[id] = false; cleanupErrors.value[id] = ''; await loadUsers(); return }
+      if (status.status === 'done') { deletingUsers.value[id] = false; cleanupErrors.value[id] = ''; await loadUsers(() => session === dialogSession.value, { background: true }); return }
     } catch { cleanupErrors.value[id] = t('admin.users.deleteRetry') }
     if (dialogsAvailable.value && session === dialogSession.value) cleanupTimers.set(id, setTimeout(poll, 5000))
   }
@@ -565,9 +572,10 @@ async function deleteUserAccount(user) {
     if(!dialogsAvailable.value||session!==dialogSession.value)return
     toast.success(t('admin.users.deleteAccepted'))
     watchUserCleanup(user.id)
-    await loadUsers()
+    await loadUsers(() => session === dialogSession.value, { background: true })
     const status = await api.users.cleanupStatus(user.id)
-    if (status.status === 'done') await loadUsers()
+    if (!dialogsAvailable.value || session !== dialogSession.value) return
+    if (status.status === 'done') await loadUsers(() => session === dialogSession.value, { background: true })
   } catch(error) {
     if(!dialogsAvailable.value||session!==dialogSession.value)return
     deletingUsers.value[user.id] = false
@@ -1517,7 +1525,22 @@ function _getQuotaPercent(used, limit) {
                   <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
                 </svg>
               </button>
-              <button v-if="user.role !== 'admin'" type="button" class="btn-ghost btn-sm text-red-600 dark:text-red-400" :disabled="deletingUsers[user.id] && !cleanupErrors[user.id]" @click="deleteUserAccount(user)">{{ t(deletingUsers[user.id] && !cleanupErrors[user.id] ? 'admin.users.deleting' : 'admin.users.deleteAccount') }}</button>
+              <button
+                v-if="user.role !== 'admin'"
+                type="button"
+                class="btn-ghost btn-sm user-delete-action text-red-600 dark:text-red-400"
+                :title="t('admin.users.deleteAccount')"
+                :aria-label="t('admin.users.deleteAccount')"
+                :aria-busy="!!(deletingUsers[user.id] && !cleanupErrors[user.id])"
+                :disabled="deletingUsers[user.id] && !cleanupErrors[user.id]"
+                @click="deleteUserAccount(user)"
+              >
+                <svg class="w-4 h-4" aria-hidden="true" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path v-if="deletingUsers[user.id] && !cleanupErrors[user.id]" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 3h14M5 21h14M7 3v4l5 5-5 5v4m10-18v4l-5 5 5 5v4" />
+                  <path v-else stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 6h18M9 6V4a1 1 0 011-1h4a1 1 0 011 1v2M5 6l1 14a1 1 0 001 1h10a1 1 0 001-1l1-14M10 10v7m4-7v7" />
+                </svg>
+                <span v-if="deletingUsers[user.id] && !cleanupErrors[user.id]" class="sr-only" role="status">{{ t('admin.users.deleting') }}</span>
+              </button>
               <p v-if="cleanupErrors[user.id]" class="text-xs text-amber-700 dark:text-amber-300" role="status">{{ cleanupErrors[user.id] }}</p>
             </div>
           </div>
@@ -1763,7 +1786,22 @@ function _getQuotaPercent(used, limit) {
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
                       </svg>
                     </button>
-                    <button v-if="user.role !== 'admin'" type="button" class="btn-ghost btn-sm text-red-600 dark:text-red-400" :disabled="deletingUsers[user.id] && !cleanupErrors[user.id]" @click="deleteUserAccount(user)">{{ t(deletingUsers[user.id] && !cleanupErrors[user.id] ? 'admin.users.deleting' : 'admin.users.deleteAccount') }}</button>
+                    <button
+                      v-if="user.role !== 'admin'"
+                      type="button"
+                      class="btn-ghost btn-sm user-delete-action text-red-600 dark:text-red-400"
+                      :title="t('admin.users.deleteAccount')"
+                      :aria-label="t('admin.users.deleteAccount')"
+                      :aria-busy="!!(deletingUsers[user.id] && !cleanupErrors[user.id])"
+                      :disabled="deletingUsers[user.id] && !cleanupErrors[user.id]"
+                      @click="deleteUserAccount(user)"
+                    >
+                      <svg class="w-4 h-4" aria-hidden="true" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path v-if="deletingUsers[user.id] && !cleanupErrors[user.id]" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 3h14M5 21h14M7 3v4l5 5-5 5v4m10-18v4l-5 5 5 5v4" />
+                        <path v-else stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 6h18M9 6V4a1 1 0 011-1h4a1 1 0 011 1v2M5 6l1 14a1 1 0 001 1h10a1 1 0 001-1l1-14M10 10v7m4-7v7" />
+                      </svg>
+                      <span v-if="deletingUsers[user.id] && !cleanupErrors[user.id]" class="sr-only" role="status">{{ t('admin.users.deleting') }}</span>
+                    </button>
                     <p v-if="cleanupErrors[user.id]" class="text-xs text-amber-700 dark:text-amber-300" role="status">{{ cleanupErrors[user.id] }}</p>
                   </div>
                 </td>
@@ -3392,6 +3430,8 @@ function _getQuotaPercent(used, limit) {
 </template>
 
 <style scoped>
+.user-delete-action { flex-shrink: 0; }
+@media (pointer: coarse), (max-width: 1023px) { .user-delete-action { min-width: 44px; min-height: 44px; } }
 .user-email-line { max-width: 18rem; }
 .user-email-edit { display: inline-flex; align-items: center; justify-content: flex-start; flex-shrink: 0; width: 24px; height: 24px; padding: 4px; margin-left: 2px; border: 0; border-radius: 4px; background: transparent; color: inherit; cursor: pointer; }
 .user-email-edit:hover { color: var(--text-primary, #171717); }

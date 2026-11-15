@@ -78,6 +78,14 @@ const sideNavUserItemsSource = readRepoFile('client/src/config/side-nav-items-us
 const sideNavAdminItemsSource = readRepoFile('client/src/config/side-nav-items-admin.ts')
 const passwordSectionSource = readRepoFile('client/src/components/profile/PasswordSection.vue')
 const adminUsersViewSource = readRepoFile('client/src/views/admin/UsersView.vue')
+assert.equal(countOccurrences(adminUsersViewSource, 'class="btn-ghost btn-sm user-delete-action text-red-600 dark:text-red-400"'), 2,
+  'desktop and mobile account deletion must use the same named outline icon control')
+assert.ok(adminUsersViewSource.includes(':aria-label="t(\'admin.users.deleteAccount\')"') &&
+  adminUsersViewSource.includes(':title="t(\'admin.users.deleteAccount\')"') && adminUsersViewSource.includes('window.confirm('),
+  'account deletion keeps accessible names, hover hints and native final confirmation')
+assert.ok(adminUsersViewSource.includes('usersLoading.value = !background || !usersLoaded.value') &&
+  adminUsersViewSource.includes('await loadUsers(() => session === dialogSession.value, { background: true })'),
+  'account deletion refresh must retain the loaded list and reject obsolete session receipts')
 const adminBillingViewSource = readRepoFile('client/src/views/admin/BillingView.vue')
 const adminHelpManageViewSource = readRepoFile('client/src/views/admin/HelpManageView.vue')
 const adminMailViewSource = readRepoFile('client/src/views/admin/AdminMailView.vue')
