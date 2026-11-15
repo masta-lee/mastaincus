@@ -1,6 +1,6 @@
 # 注册、管理员删除账户、通知与密码刷新
 
-本批仍在验收；没有将本批部署到主控，也没有发布新版本。前一版 v1.8.11 的发行与实测记录保持独立。
+本批源码与候选包、双架构升级、主控候选与现场流程已完成验收，正式 v1.8.12 发行待。前一版 v1.8.11 的发行与实测记录保持独立。
 
 ## 主控只读发现
 
@@ -35,6 +35,20 @@ Owner 提供的 IP 在 2026-11-13 21:17 至23:32北京时间有11条成功注册
 
 首轮完整224项221过/3失败（`account-full-tests-r5.log`）：分页、配置守卫仍匹配新增字段前文本，已修并定向通过；Windows十场景安装夹具60秒总时限失败，改外层180秒且产品内部限时保持，`account-agent-installer-final.log`十场景通过。新增快照续接曾使用数据库不允许的superseded，改合法cancelled并保留实例删除核验，已重新通过。浏览器早轮受编辑引起Vite reload及新增成功toast未清夹具影响，日志保留；稳定源码最后两轮通过。
 
-最终225项全套仍在运行；新增原生Incus账户删除已登记CI，以实际Running容器+快照+独立卷+forward验证全过程。双架构发行预览、v1.8.11原worker正常/已迁移/故障回滚再升级、实际签名包及目标主控验收仍待。全部完成之前不发布正式新版。
+上述为过程中的失败与等待记录，最终结果见下。
+
+## 最终候选与主控验收
+
+产品来源 `8cd82d858791ac78e60664ef5aa290104ea3bd01`，本地225全套通过后最后creating补修对应mTLS/类型/补偿/到期守卫通过。最后同来源完整CI[43666672521](https://github.com/mastalee928/payincus/actions/runs/43666672521)29/29成功，实际Incus job132667469473与全部本批注册/清理/TG步骤通过；Alpine[43666672557](https://github.com/mastalee928/payincus/actions/runs/43666672557)成功。
+
+无tag预览[43666670130](https://github.com/mastalee928/payincus/actions/runs/43666670130)双构建、双首装、六种真实v1.8.11原worker升级全部success，Release预期skipped。两实际tar均独立原pin、签名、完整source、244迁移、新模块和用户无删账户/改价入口通过。证据`account-final-arm-verification2.log`与`account-final-amd-verification.log`。
+
+主控候选任务54于2026-11-15 10:43:25北京时间success：`preview-8cd82d8`，备份`/opt/incudal.bak.20261115024109`；原worker/平台签名身份、DB支付就绪、唯一backend、双前端/API/WS、日志凭据扫描通过，244迁移。Owner自行此前更新了正式1.8.11，故此热更起点实际v1.8.11。更新前后#49–52原UUID、密码摘要、价格10/无改价、账期及镜像库完整清单保持。34host online/poolFaulted=false。
+
+实际Chrome加载主控发布的双端页面：管理员桌面/390手机删除入口正确；普通测试用户调用管理员删账户API403。通过正常管理员API新建专用#20测试账户、33测试余额、11元真实池购买#53于原host48；成功运行。页面原生确认取消不删，确认后真实stop/delete，容器/卷/forward不存在，账户/余额流水/实例账单/checkout全消失，资源0、host48实际allocator重新可售。不是删除恶意账户；恶意账户仅只读调查。证据`account-delete-live-browser2.log`和仓库外`compat-account-deletion-confirmed2.json`。
+
+原测试账户#49实际停止、重装Alpine3.21 TinyCloud完成，原页面未reload、可见新SSH密码自动显示；通过认证Incus读取客机SSH公钥后公网登录新密码成功。#50–52均Incus Running，价格/账期/密码摘要保持。`account-live-browser2.log`及仓库外`compat-account-final-live3.json`。测试账号余额及新临时账号清理分别记录；没有重跑全镜像。
+
+TG真外部群/用户未额外发测试消息，客户/管理员所有发送管道的真实payload＋本地HTTP超时及平台API回执已有专项与最终CI；此范围明确。正式发行后仅需验证公开资产，无需再次OTA相同产品代码。
 
 来源3ad63ecde847204fa1942472e819bc505de311de已推[草稿PR16](https://github.com/mastalee928/payincus/pull/16)。CI43664559570实际Incus job132660955563已success，真实Running客机/快照/LVM卷/forward删除→可售→余额账单账户删除日志完整；本批PG/注册HTTP/TG集成步骤132660955628也success，其余分片仍运行。预览43664562150双构建成功，两实际tar独立原签名、完整source、244迁移、新模块及用户无删除/改价入口通过。六旧worker在升级动作前失败：仍固定断言v1.8.10，而工作流已下载真实v1.8.11；修演练脚本从已校验旧包读取baseline版本、回滚同一baseline，不跳守卫。新预览待。主控未部署，正式未发行。

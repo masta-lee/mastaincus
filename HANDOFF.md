@@ -1,5 +1,7 @@
 # 版本与验证记录
 
+- 本批最终候选8cd82d85：同源码CI43666672521 29/29、Alpine43666672557及预览43666670130双首装/六v1.8.11原worker升级success。双实际签名tar244迁移/所有修复/用户边界核通过。主控原任务54于10:43:25北京时间success，preview-8cd82d8/备份incudal.bak.20261115024109，34在线无隔离、原49–52及图库升级保持。实际双端浏览器原生删#20专用测试用户，池购买#53 stop/delete/账单账户消除/host48重售全部确认；原#49真实重装新密码同页面自动刷新/公钥pin公网SSH成功。其余原实例/价格账期保持。现准备正式v1.8.12，未tag/公开，见[检查记录](docs/account-notification-reinstall-review-2026-11-15.md)。
+
 - creating专项补修：原pool开通失败补偿已释放的deleted记录再次claim会触发HOST_POOL_FAULTED；现沿poolProvision failed实证核远端absence/原回池后清账户，不重开库存。account-pool-creation-delete3.log含真实mTLS创建marker/503保占用/恢复补偿及全部六场景过，types过。此补充将入新来源；d3预览尚未主控部署/正式发行。
 
 - 最终本地225/225全绿（account-full-tests-final.log），后续排队task取消移入同一管理员权限事务、列表deletionMap分批性能修复的PG/mTLS/JWT/迁移与types再次通过（account-admin-admission-final.log）。原生Incus删除、双首装及双签名tar已过；旧worker基线修正版预览43665644538仍运行。准备v1.8.12候选版本号，未tag未发行未主控部署；原1.8.11保持。
