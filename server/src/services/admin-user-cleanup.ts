@@ -13,7 +13,6 @@ import { paymentTradeHash } from '../lib/deleted-payment-receipt.js'
 import { randomUUID } from 'node:crypto'
 import { cancelTransferForUserCleanup } from './transfer-cleanup.js'
 import { failPoolProvision } from './pool-provisioning.js'
-import { cancelInstanceTask } from '../db/instance-tasks.js'
 
 type CleanupIntent = { version: 1; revision?: string; actor: WriteActor; requestedAt: string; nextAttemptAt?: string; stage: string; error?: string }
 export class UserCleanupError extends Error {
@@ -64,8 +63,6 @@ export async function userCleanupStatus(userId: number) {
 }
 const active = new Set<number>()
 async function prepareInstanceCleanup(instanceId:number, userId:number, actor:WriteActor) {
-  const queued=await prisma.instanceTask.findMany({where:{instanceId,status:'PENDING'},select:{id:true}})
-  for(const task of queued)await cancelInstanceTask(task.id)
   await prisma.$transaction(async tx=>{
     await tx.$executeRaw`SET LOCAL lock_timeout = '5s'`
     if(!await tryAdvisoryTransactionLock(tx,INSTANCE_OPERATION_LOCK_NAMESPACE,instanceId))throw new UserCleanupError('USER_CLEANUP_INSTANCE_PENDING')
@@ -73,6 +70,7 @@ async function prepareInstanceCleanup(instanceId:number, userId:number, actor:Wr
     const row=await tx.instance.findUniqueOrThrow({where:{id:instanceId}})
     const user=await lockAdministrativeUserMutation(tx,userId,actor,true)
     if(row.userId!==userId || !user.deletionIntent || recoveryHeld())throw new UserCleanupError('USER_CLEANUP_TARGET_CHANGED')
+    await tx.instanceTask.updateMany({where:{instanceId,status:'PENDING',startedAt:null},data:{status:'FAILED',error:'管理员删除账户取消排队任务',finishedAt:new Date()}})
     if(await tx.instanceTask.count({where:{instanceId,status:{in:['PENDING','PROCESSING']}}}) ||
        await tx.restoreTask.count({where:{instanceId,status:{in:['PENDING','PROCESSING']}}}) ||
        await tx.backupUploadTask.count({where:{instanceId,status:{in:['PENDING','PROCESSING']}}}))throw new UserCleanupError('USER_CLEANUP_INSTANCE_PENDING')

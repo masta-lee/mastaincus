@@ -207,6 +207,7 @@ export default async function userRoutes(fastify: FastifyInstance) {
     const githubBindingMap = new Map(githubBindings.map(gb => [gb.userId, true]))
     const pointsMap = new Map(userPointsList.map(up => [up.userId, { points: up.points, totalEarned: up.totalEarned }]))
     const frozenHostingMap = new Map(frozenHostingBalances.map(f => [f.userId, Number(f._sum.amount || 0)]))
+    const deletionMap = new Map(userAccounts.map(account=>[account.id,Boolean(account.deletionIntent)]))
 
     return {
       users: result.items.map((u: unknown) => {
@@ -238,7 +239,7 @@ export default async function userRoutes(fastify: FastifyInstance) {
           email: user.email,
           role: user.role,
           status: user.status,
-          deleting: userAccounts.find(account=>account.id===user.id)?.deletionIntent !== null && Boolean(userAccounts.find(account=>account.id===user.id)?.deletionIntent),
+          deleting: deletionMap.get(user.id) || false,
           avatarStyle: user.avatar_style,
           avatarBadgeId: user.avatar_badge_id ?? null,
           twoFAEnabled: twoFAMap.get(user.id) || false,

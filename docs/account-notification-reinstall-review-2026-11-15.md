@@ -18,6 +18,8 @@ Owner 提供的 IP 在 2026-11-13 21:17 至23:32北京时间有11条成功注册
 
 ## 已取得的证据
 
+最终 `logs/account-full-tests-final.log` 225/225成功。随后小补充把PENDING任务取消移至同一个管理员权限事务及实例锁中，列表使用deletionMap避免逐用户搜索；`account-admin-admission-final.log`真PG/mTLS/JWT/迁移与 `account-authority-types.log`通过。产品候选版本号准备1.8.12，尚未tag/发布/主控部署；新同来源原生/包预览仍须通过。
+
 - `logs/account-guard-fixes-final.log`：注册源/实际限流、通知内容、前端路由/i18n、分页及配置守卫8项通过；原管理员/用户TG守卫也通过。
 - `logs/account-cleanup-final-r10.log`、`account-cleanup-stuck-final2.log`、`account-remaining-acceptance-final.log`：真实PostgreSQL并发源限额、实际JWT/角色/输入拒绝；HTTPS双向证书替身运行/旧deleted/creating实例、删除503保留库存、恢复续接、转让rename恢复、其他付款人账单保留通过。它们不是原生Incus容器验收。
 - `logs/account-finance-final-r9.log`：旧流水实际充值重放拒绝、checkout会话锁竞争、19种转让续接与签名迟到付款回归通过。

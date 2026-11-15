@@ -1,5 +1,7 @@
 # 版本与验证记录
 
+- 最终本地225/225全绿（account-full-tests-final.log），后续排队task取消移入同一管理员权限事务、列表deletionMap分批性能修复的PG/mTLS/JWT/迁移与types再次通过（account-admin-admission-final.log）。原生Incus删除、双首装及双签名tar已过；旧worker基线修正版预览43665644538仍运行。准备v1.8.12候选版本号，未tag未发行未主控部署；原1.8.11保持。
+
 - 注册/删除账户/TG/密码来源3ad63ecd已推PR16，CI43664559570真实Incus132660955563与本批PG/HTTP/TG步骤通过；双候选tar244迁移/模块/签名/用户边界独立核过。预览43664562150六旧worker在升级动作前baseline误断言1.8.10失败（旧包已是真1.8.11），修为从已核包版本动态基线，保留同一旧worker/回滚与原身份。原最终225和云端综合仍待，未热更未发行，见检查记录。
 
 - 2026-11-15新增四项批：注册限流实际onRoute顺序缺陷＋24h同源成功限额3、管理员原生确认删除/Incus与回池后清余额账单、用户TG剥宿主OCI内网及管理员详细HTML、重装密码自动失效并拒旧回执均实现。owner指定IP只读有11注册/7密集、全banned无实例；未代删生产。PG/mTLS运行/deleted/creating/转让原UUID恢复/其他payer账单保持与流水摘要防重放、实际HTTP注册/验证、TG全出口transport/timeout、Chrome双端交互及types/build通过。首全量224中3失败已修定向及installer十case复验；最终225全量运行。新增原生账户删除CI和v1.8.11旧worker双首装六升级待，未部署/未发行本批；详见[检查记录](docs/account-notification-reinstall-review-2026-11-15.md)。

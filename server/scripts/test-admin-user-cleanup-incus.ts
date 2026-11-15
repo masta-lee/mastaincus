@@ -43,6 +43,7 @@ if(sourceOwner)ids.push(sourceOwner.id)
 const instance=await prisma.instance.create({data:{userId:sourceOwner?.id||user.id,hostId:host.id,name:tag,incusId:tag+initial,image:'fixture',status:initial==='incoming_transfer'?'stopped':initial==='foreign_bill'?'running':initial as any,cpu:200,memory:768,disk:30720}})
 const foreignBill=initial==='foreign_bill'?await prisma.instanceBillingRecord.create({data:{userId:admin.id,instanceId:instance.id,type:'newPurchase',amount:11,months:1,periodStart:new Date(),periodEnd:new Date(Date.now()+86400000)}}):null
 if(initial==='running')await prisma.autoSnapshotOperation.create({data:{id:randomUUID(),instanceId:instance.id,ownerId:user.id,hostId:host.id,incusId:instance.incusId,identityHash:transferHostIdentity(host),snapshotName:'auto-'+randomUUID(),state:'blocked',stage:'prepared'}})
+if(initial==='running')await prisma.instanceTask.create({data:{instanceId:instance.id,hostId:host.id,userId:user.id,taskType:'restart',status:'PENDING'}})
 guests.set(instance.incusId,{name:instance.incusId,status:'Running',project:'default',created_at:'2020-01-01T00:00:00Z',config:{'volatile.uuid':randomUUID()}})
 if(sourceOwner){
  const remote=guests.get(instance.incusId);remote.status='Stopped';guests.delete(remote.name);remote.name=instance.incusId+'renamed';guests.set(remote.name,remote)
