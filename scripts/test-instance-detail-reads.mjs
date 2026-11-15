@@ -31,7 +31,7 @@ try {
   await page.goto('http://127.0.0.1:19665', { settleMs: 1200 })
   const check = async (fn, label) => {
     const end = Date.now() + 15000
-    while (!await page.eval(fn)) { if (Date.now() >= end) throw Error(label + ': ' + await page.eval(() => document.body.innerText)); await sleep(60) }
+    while (!await page.eval(fn)) { if (Date.now() >= end) throw Error(label + ': ' + await page.eval(() => document.body.innerText) + '\n' + page.consoleErrors.join('\n')); await sleep(60) }
   }
   const run = async (fn, arg) => { const result = await page.eval(fn, arg); await sleep(80); return result }
   const last = (kind, id) => page.eval(({ kind, id }) => window.detailHarness.pending.findLastIndex(item => item.kind === kind && (id === undefined || item.id === id)), { kind, id })
@@ -64,6 +64,30 @@ try {
   assert.equal(await page.eval(() => window.detailHarness.toastEvents.length), 0, JSON.stringify(await page.eval(() => window.detailHarness.toastEvents)))
   assert.equal(await page.eval(() => window.detailHarness.router.currentRoute.value.path), '/instances/3')
   await accept(newThree, instance(3)); await finish(3)
+  // Cached old credentials are replaced after a completed rebuild response,
+  // without reloading the page. An older password request cannot win the race.
+  const oldCredential=instance(3);oldCredential.instance.credentialRevision='old'
+  await run(()=>{void window.detailHarness.view().loadInstance()});await accept(await last('instance',3),oldCredential);await finish(3)
+  await run(()=>{void window.detailHarness.view().togglePasswordVisibility(3)})
+  await accept(await last('password',3),{rootPassword:'Old-Password-1'})
+  assert.equal(await page.eval(()=>window.detailHarness.view().instancePassword[3]),'Old-Password-1')
+  await run(()=>{void window.detailHarness.view().refreshVisiblePassword(3)});const stalePassword=await last('password',3)
+  const newCredential=instance(3);newCredential.instance.credentialRevision='new'
+  await run(()=>{void window.detailHarness.view().loadInstance()});await accept(await last('instance',3),newCredential);await finish(3)
+  const latestPassword=await last('password',3);assert.notEqual(stalePassword,latestPassword)
+  await accept(latestPassword,{rootPassword:'New-Password-2'});await accept(stalePassword,{rootPassword:'Old-Password-1'})
+  assert.equal(await page.eval(()=>window.detailHarness.view().instancePassword[3]),'New-Password-2')
+  console.log('PASS completed credential change refreshes visible password and rejects older password receipt')
+  const credentialId=await page.eval(()=>window.detailHarness.view().instance.id)
+  await run(id=>{void window.detailHarness.view().refreshVisiblePassword(id)},credentialId)
+  const oldPasswordRead=await last('password',credentialId)
+  await run(()=>{void window.detailHarness.view().handleResetPassword()})
+  const resetRead=await last('passwordReset',credentialId)
+  await accept(resetRead,{rootPassword:'reset-fixture-password'})
+  await accept(oldPasswordRead,{rootPassword:'obsolete-fixture-password'})
+  assert.equal(await page.eval(id=>window.detailHarness.view().instancePassword[id],credentialId),'reset-fixture-password')
+  console.log('PASS successful password reset also invalidates in-flight old credential reads')
+  await run(()=>{window.detailHarness.toastEvents.length=0})
   assert.equal(await page.eval(() => [...window.fixtureIntervals.values()].filter(timer => timer.delay === 5000).length), 1, 'late mount/route callbacks cannot create duplicate refresh intervals')
   await goto(5); await accept(await last('instance', 5), instance(5, 'Machine with package', 55))
   const oldPackage = await last('package', 55)

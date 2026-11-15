@@ -346,6 +346,7 @@ async function loadUsers(acceptReceipt = () => true) {
     })
     if (!current()) return
     users.value = response.users || []
+    for (const user of users.value) { deletingUsers.value[user.id] = user.deleting === true; if (user.deleting) watchUserCleanup(user.id) }
     userTotal.value = response.total || 0
     userTotalPages.value = response.totalPages || 1
   } catch (err) {
@@ -531,6 +532,49 @@ function copyLink() {
 }
 
 // 切换用户状态（封禁/解封）
+const deletingUsers = ref({})
+const cleanupErrors = ref({})
+const cleanupTimers = new Map()
+function watchUserCleanup(id) {
+  if (cleanupTimers.has(id)) return
+  const session = dialogSession.value
+  const poll = async () => {
+    cleanupTimers.delete(id)
+    if (!dialogsAvailable.value || session !== dialogSession.value) return
+    try {
+      const status = await api.users.cleanupStatus(id)
+      if (!dialogsAvailable.value || session !== dialogSession.value) return
+      cleanupErrors.value[id] = status.error ? t('admin.users.deleteRetry') : ''
+      if (status.status === 'done') { deletingUsers.value[id] = false; cleanupErrors.value[id] = ''; await loadUsers(); return }
+    } catch { cleanupErrors.value[id] = t('admin.users.deleteRetry') }
+    if (dialogsAvailable.value && session === dialogSession.value) cleanupTimers.set(id, setTimeout(poll, 5000))
+  }
+  cleanupTimers.set(id,setTimeout(poll,1000))
+}
+watch(() => dialogsAvailable.value, available => {
+  if (!available) { for (const timer of cleanupTimers.values()) clearTimeout(timer); cleanupTimers.clear() }
+})
+onUnmounted(()=>{for(const timer of cleanupTimers.values())clearTimeout(timer);cleanupTimers.clear()})
+async function deleteUserAccount(user) {
+  if (!dialogsAvailable.value || user.role === 'admin' || deletingUsers.value[user.id] && !cleanupErrors.value[user.id]) return
+  if (!window.confirm(t('admin.users.confirmDeleteAccount', {name:user.username}))) return
+  const session=dialogSession.value
+  deletingUsers.value[user.id] = true
+  try {
+    await api.users.cleanup(user.id)
+    if(!dialogsAvailable.value||session!==dialogSession.value)return
+    toast.success(t('admin.users.deleteAccepted'))
+    watchUserCleanup(user.id)
+    await loadUsers()
+    const status = await api.users.cleanupStatus(user.id)
+    if (status.status === 'done') await loadUsers()
+  } catch(error) {
+    if(!dialogsAvailable.value||session!==dialogSession.value)return
+    deletingUsers.value[user.id] = false
+    cleanupErrors.value[user.id] = error.code === 'USER_CLEANUP_OWNED_SERVICES' ? t('admin.users.deleteOwnedServices') : error.message
+    toast.error(cleanupErrors.value[user.id])
+  }
+}
 async function toggleUserStatus(user) {
   const newStatus = user.status === 'active' ? 'banned' : 'active'
   
@@ -1473,6 +1517,8 @@ function _getQuotaPercent(used, limit) {
                   <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
                 </svg>
               </button>
+              <button v-if="user.role !== 'admin'" type="button" class="btn-ghost btn-sm text-red-600 dark:text-red-400" :disabled="deletingUsers[user.id] && !cleanupErrors[user.id]" @click="deleteUserAccount(user)">{{ t(deletingUsers[user.id] && !cleanupErrors[user.id] ? 'admin.users.deleting' : 'admin.users.deleteAccount') }}</button>
+              <p v-if="cleanupErrors[user.id]" class="text-xs text-amber-700 dark:text-amber-300" role="status">{{ cleanupErrors[user.id] }}</p>
             </div>
           </div>
         </div>
@@ -1717,6 +1763,8 @@ function _getQuotaPercent(used, limit) {
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
                       </svg>
                     </button>
+                    <button v-if="user.role !== 'admin'" type="button" class="btn-ghost btn-sm text-red-600 dark:text-red-400" :disabled="deletingUsers[user.id] && !cleanupErrors[user.id]" @click="deleteUserAccount(user)">{{ t(deletingUsers[user.id] && !cleanupErrors[user.id] ? 'admin.users.deleting' : 'admin.users.deleteAccount') }}</button>
+                    <p v-if="cleanupErrors[user.id]" class="text-xs text-amber-700 dark:text-amber-300" role="status">{{ cleanupErrors[user.id] }}</p>
                   </div>
                 </td>
               </tr>

@@ -18,6 +18,7 @@ import { startHostOfflineAlertWorker, stopHostOfflineAlertWorker } from './worke
 import { startSystemImageCacheWorker, stopSystemImageCacheWorker } from './workers/systemImageCacheWorker.js'
 import { startPoolResourceReconciliation, stopPoolResourceReconciliation } from './services/pool-resource-reconciliation.js'
 import { startPoolDiskPreparation, stopPoolDiskPreparation } from './services/pool-disk-preparation.js'
+import { startUserCleanupWorker, stopUserCleanupWorker } from './services/admin-user-cleanup.js'
 // 确保环境变量被加载（必须在最前面）
 import './config/env.js'
 import adminAliyunOssRoutes from './routes/admin-aliyun-oss.js'
@@ -60,6 +61,7 @@ import {
 import {
   globalRateLimit,
   findRateLimitRule,
+  applyConfiguredRouteRateLimits,
   isWhitelisted,
   printRateLimitSummary
 } from './config/rate-limit.js'
@@ -321,6 +323,7 @@ await fastify.register(fastifyWebsocket, {
 })
 
 // 全局速率限制 (配置来自 config/rate-limit.ts)
+applyConfiguredRouteRateLimits(fastify)
 await fastify.register(rateLimit, {
   global: true,
   max: globalRateLimit.max,
@@ -350,20 +353,6 @@ await fastify.register(rateLimit, {
       return true
     }
     return isWhitelisted(request.url)
-  }
-})
-
-// 应用接口级别的速率限制配置
-fastify.addHook('onRoute', (routeOptions) => {
-  const rule = findRateLimitRule(routeOptions.url, routeOptions.method as string)
-  if (rule) {
-    routeOptions.config = {
-      ...routeOptions.config,
-      rateLimit: {
-        max: rule.max,
-        timeWindow: rule.timeWindow
-      }
-    }
   }
 })
 
@@ -574,6 +563,7 @@ fastify.addHook('onClose', async () => { stopHostOfflineAlertWorker() })
 fastify.addHook('onClose', stopSystemImageCacheWorker)
 fastify.addHook('onClose', stopPoolResourceReconciliation)
 fastify.addHook('onClose', stopPoolDiskPreparation)
+fastify.addHook('onClose', stopUserCleanupWorker)
 fastify.addHook('onClose', async () => { await stopHostPublicIpSync() })
 fastify.addHook('onClose', async () => { await stopHostPublicIpv6Sync() })
 fastify.addHook('onClose', async () => { await closeCaddyClients() })
@@ -869,6 +859,7 @@ const start = async (): Promise<void> => {
     startSystemImageCacheWorker()
     startPoolResourceReconciliation()
     startPoolDiskPreparation()
+    startUserCleanupWorker()
     startHostPublicIpSync()
     startHostPublicIpv6Sync()
     console.log('⚙️ 实例操作任务调度器已启动')

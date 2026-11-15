@@ -115,6 +115,7 @@ const form = ref({
   default_quota_friend: 0,
   default_quota_package: 0,
   registration_enabled: true,
+  registration_ip_daily_limit: 3,
   require_invite_code: true,
   invite_generation_costs: [
     { resource: 'balance', amount: 0, enabled: false },
@@ -249,7 +250,7 @@ const configMeta = computed(() => {
 
 // 数字类型的配置键
 // 注意：不再限制实例配额，已删除 default_quota_instance
-const numericConfigKeys = ['default_quota_host', 'default_quota_friend', 'default_quota_package', 'smtp_port', 'free_site_register_gift_points', 'invite_default_expire_days', 'ticket_auto_close_hours']
+const numericConfigKeys = ['registration_ip_daily_limit', 'default_quota_host', 'default_quota_friend', 'default_quota_package', 'smtp_port', 'free_site_register_gift_points', 'invite_default_expire_days', 'ticket_auto_close_hours']
 
 // 浮点数类型的配置键
 const floatConfigKeys = ['transfer_fee', 'free_site_register_gift_balance', 'aff_commission_rate', 'aff_discount_rate']
@@ -518,7 +519,7 @@ async function saveConfigGroup(keys: string[], savingRef: { value: boolean }): P
 }
 
 // 注册设置保存
-const registrationKeys = ['registration_enabled', 'require_invite_code']
+const registrationKeys = ['registration_enabled', 'require_invite_code', 'registration_ip_daily_limit']
 async function saveRegistration() {
   await saveConfigGroup(registrationKeys, savingRegistration)
 }
@@ -1099,6 +1100,11 @@ async function sendTestEmail() {
             </button>
           </div>
 
+          <div class="mb-4">
+            <label for="registration-source-limit" class="block text-sm font-medium text-themed mb-2">{{ t('admin.system.registrationIpLimit') }}</label>
+            <input id="registration-source-limit" v-model.number="form.registration_ip_daily_limit" type="number" min="1" max="100" class="input w-32" />
+            <p class="text-xs text-themed-muted mt-2">{{ t('admin.system.registrationIpLimitHint') }}</p>
+          </div>
           <div class="flex items-center justify-between p-4 rounded-lg bg-themed-secondary/50 mb-4">
             <div class="flex-1">
               <label class="text-sm font-medium text-themed">{{ t('admin.system.registrationEnabled') }}</label>

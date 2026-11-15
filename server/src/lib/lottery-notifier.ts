@@ -5,6 +5,7 @@
 import * as db from '../db/index.js'
 import { assertSafeWebhookUrl, safeFetch } from './outbound-security.js'
 import { sanitizeTokensInString } from './log-sanitizer.js'
+import { telegramMarkdownText } from './telegram-format.js'
 
 const LOTTERY_NOTIFICATION_FETCH_TIMEOUT_MS = 15_000
 const LOTTERY_NOTIFICATION_ERROR_PREVIEW_MAX_CHARS = 2_000
@@ -138,10 +139,6 @@ export async function sendLotteryWinNotification(data: LotteryWinNotification): 
 /**
  * 转义 Markdown 特殊字符
  */
-function escapeMarkdown(text: string): string {
-  return text.replace(/[_*[\]()~`>#+=|{}.!-]/g, '\\$&')
-}
-
 /**
  * 发送 Telegram 通知
  */
@@ -155,7 +152,7 @@ async function sendTelegram(
     throw new Error('Missing botToken or chatId')
   }
 
-  const text = `*${escapeMarkdown(title)}*\n\n${escapeMarkdown(message)}`
+  const text = telegramMarkdownText(title, message)
 
   const response = await fetch(`https://api.telegram.org/bot${botToken}/sendMessage`, {
     method: 'POST',
@@ -171,7 +168,7 @@ async function sendTelegram(
 
   const result = await response.json() as { ok: boolean; description?: string }
 
-  if (!result.ok) {
+  if (!response.ok || !result.ok) {
     throw new Error(result.description || 'Unknown Telegram error')
   }
 }

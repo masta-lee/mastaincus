@@ -2421,6 +2421,7 @@ export default async function instanceRoutes(fastify: FastifyInstance) {
       status: string
       image: string
       imageName?: string | null
+      credentialRevision?: string | null
       cpu: number
       memory: number
       disk: number
@@ -2528,6 +2529,7 @@ export default async function instanceRoutes(fastify: FastifyInstance) {
         }
       }),
       created_at: instance.created_at,
+      credentialRevision: (instance.user_id === user.id || user.role === 'admin') && instance.root_password ? (await import('node:crypto')).createHash('sha256').update(instance.root_password).digest('hex') : null,
       package_id: instance.package_id,
       packageName: pkg?.name || null,
       packagePlanId: (instance as any).package_plan_id ?? null,
@@ -2698,6 +2700,7 @@ export default async function instanceRoutes(fastify: FastifyInstance) {
   fastify.get<{ Params: { id: string } }>('/:id/password', {
     onRequest: [fastify.authenticate]
   }, async (request: FastifyRequest<{ Params: { id: string } }>, reply: FastifyReply) => {
+    reply.header('Cache-Control', 'no-store')
     const { id } = request.params
     const instanceId = parsePositiveRouteId(id)
 

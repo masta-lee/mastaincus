@@ -64,7 +64,7 @@ try {
     assert.equal(counts.get('/' + mode) || 0, mode === 'missing' ? 0 : 1)
   }
   assert.equal(counts.get('/must-not-follow'), undefined)
-  assert.deepEqual(payloads[0], { chat_id: 'fixture-chat', parse_mode: 'MarkdownV2',
+  assert.deepEqual(payloads[0], { chat_id: 'fixture-chat', parse_mode: 'MarkdownV2', link_preview_options:{is_disabled:true},
     text: '*Quota \\(released\\)*\n\nReady\\_1\n[Open \\[panel\\]](https://example.invalid/path?a=1&b=2)' })
   const stalled = await Promise.all(['headers', 'body'].map(fixture))
   await Promise.all(stalled.map(async channel => {

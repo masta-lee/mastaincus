@@ -9,6 +9,7 @@
 import * as db from '../db/index.js'
 import { prisma } from '../db/prisma.js'
 import { sanitizeTokensInString } from './log-sanitizer.js'
+import { telegramHtmlText } from './telegram-format.js'
 
 export const ADMIN_ALERT_CATEGORIES = ['ticket', 'host', 'payment', 'instance'] as const
 export type AdminAlertCategory = (typeof ADMIN_ALERT_CATEGORIES)[number]
@@ -22,10 +23,6 @@ const ADMIN_ALERT_LIST_MAX_LINES = 15
 interface SendAdminAlertResult {
   sent: number
   failed: number
-}
-
-function escapeHtml(value: string): string {
-  return value.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
 }
 
 function clip(value: string | null | undefined, max: number): string {
@@ -94,11 +91,13 @@ export async function sendAdminAlert(
 ): Promise<SendAdminAlertResult> {
   try {
     const channels = await prisma.notificationChannel.findMany({
-      where: { alertCategory: category, enabled: true }
+      where: { alertCategory: category, enabled: true, user:{role:'admin',status:'active'} }
     })
     if (channels.length === 0) return { sent: 0, failed: 0 }
 
-    const text = `<b>${escapeHtml(title)}</b>\n${escapeHtml(message)}`
+    title = sanitizeTokensInString(title)
+    message = sanitizeTokensInString(message)
+    const text = telegramHtmlText(title, message)
     let sent = 0
     let failed = 0
 
@@ -126,10 +125,10 @@ export async function sendAdminAlert(
               redirect: 'manual',
               signal: AbortSignal.timeout(ADMIN_ALERT_FETCH_TIMEOUT_MS),
               headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ chat_id: chatId, text, parse_mode: 'HTML' })
+              body: JSON.stringify({ chat_id: chatId, text, parse_mode: 'HTML', link_preview_options: {is_disabled:true} })
             })
             const json = await response.json() as { ok?: boolean; description?: string }
-            error = json.ok ? null : (json.description || `HTTP ${response.status}`)
+            error = response.ok && json.ok ? null : (json.description || `HTTP ${response.status}`)
           }
         }
       } catch (err) {
@@ -446,6 +445,7 @@ export async function notifyAdminInstanceCreated(input: {
       name: true,
       location: true,
       natPublicIp: true,
+      onboardingNode: { select: { batch: { select: { accountLabel: true } } } },
       user: { select: { username: true, role: true } }
     }
   }).catch(() => null)
@@ -469,6 +469,7 @@ export async function notifyAdminInstanceCreated(input: {
     `用户：${userLine(user, `用户 #${input.userId}`)}`,
     `实例：${clip(instance?.name || `#${input.instanceId}`, 80)}（#${input.instanceId}）`,
     `节点：${clip(host?.name || `节点 #${input.hostId}`, 80)}（${ownerLabelOf(host?.user)}）${host?.location ? ` ｜ ${clip(host.location, 40)}` : ''}`,
+    host?.onboardingNode?.batch.accountLabel ? `OCI账号：${clip(host.onboardingNode.batch.accountLabel,80)}` : null,
     `镜像：${clip(input.image, 80)}`,
     `配置：${input.cpu}% CPU ｜ ${formatSize(input.memory)} 内存 ｜ ${formatSize(input.disk)} 磁盘`,
     `网络：${input.networkMode} ｜ ${ipLine}`,

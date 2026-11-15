@@ -177,6 +177,17 @@ const actionLoading = ref<string>('')
 const copied = ref<string>('')
 const showPassword = ref<Record<string, boolean>>({})  // 用于控制密码显示/隐藏
 const instancePassword = ref<Record<string, string | null>>({})  // 存储实例密码
+let credentialGeneration = 0
+async function refreshVisiblePassword(id: number): Promise<void> {
+  const read = captureDetailRead('password'), current = credentialGeneration
+  if (read.id !== id || !read.current()) return
+  try {
+    const response = await api.instances.getPassword(id)
+    if (read.current() && current === credentialGeneration) instancePassword.value[id] = response.rootPassword || null
+  } catch (error) {
+    if (read.current() && current === credentialGeneration) toast.error(`${t('instance.detail.password.loadFailed')}: ${translateError(error)}`)
+  }
+}
 
 // 资源统计
 interface ResourceStats {
@@ -629,6 +640,9 @@ watch([() => route.params.id, () => route.name, detailSessionKey], async ([newId
     activeTask.value = null
     instancePassword.value = {}
     showPassword.value = {}
+    resetPasswordLoading.value = false
+    resetPasswordValue.value = ''
+    showResetPasswordModal.value = false
     if (taskPollingInterval) { clearInterval(taskPollingInterval); taskPollingInterval = null }
     if (cloudInitRetryTimer) { clearTimeout(cloudInitRetryTimer); cloudInitRetryTimer = null }
     // 如果路由参数从有效变为无效，或者路由名称变化，清除定时器
@@ -1004,7 +1018,16 @@ async function loadInstance(): Promise<void> {
     if (!read.current()) return
     const received = (response as { instance?: Instance }).instance
     if (received && received.id !== instanceId) throw new Error(t('instance.detail.loadFailed'))
+    const previousCredential = (instance.value as { credentialRevision?: string } | null)?.credentialRevision
+    const nextCredential = (received as { credentialRevision?: string } | null)?.credentialRevision
+    const credentialChanged = instance.value?.id === instanceId && previousCredential !== nextCredential
     instance.value = received || null
+    if (credentialChanged) {
+      credentialGeneration++
+      readSequences.password = (readSequences.password || 0) + 1
+      instancePassword.value[instanceId] = null
+      if (showPassword.value[instanceId]) void refreshVisiblePassword(instanceId)
+    }
     if (instance.value) {
       // 如果实例绑定了套餐，加载套餐信息以检查删除权限
       if (instance.value.package_id && instance.value.package_id > 0) {
@@ -1448,17 +1471,21 @@ function openResetPasswordModal(): void {
 
 async function handleResetPassword(): Promise<void> {
   if (!instance.value || resetPasswordLoading.value) return
+  const instanceId = instance.value.id, read = captureDetailRead('passwordReset')
   resetPasswordLoading.value = true
   try {
-    const response = await api.instances.resetPassword(instance.value.id)
+    const response = await api.instances.resetPassword(instanceId)
+    if (!read.current() || instance.value?.id !== instanceId) return
+    credentialGeneration++
+    readSequences.password = (readSequences.password || 0) + 1
     resetPasswordValue.value = response.rootPassword || ''
-    instancePassword.value[instance.value.id] = response.rootPassword || null
-    showPassword.value[instance.value.id] = true
+    instancePassword.value[instanceId] = response.rootPassword || null
+    showPassword.value[instanceId] = true
     toast.success(t('instance.detail.resetPassword.success'))
   } catch (err) {
-    toast.error(translateError(err))
+    if (read.current()) toast.error(translateError(err))
   } finally {
-    resetPasswordLoading.value = false
+    if (read.current()) resetPasswordLoading.value = false
   }
 }
 
@@ -2376,13 +2403,8 @@ async function togglePasswordVisibility(instanceId: number): Promise<void> {
 
   if (!isCurrentlyVisible && !instancePassword.value[instanceId]) {
     // 如果密码未加载，先加载密码
-    try {
-      const response = await api.instances.getPassword(instanceId)
-      instancePassword.value[instanceId] = (response as { rootPassword?: string | null }).rootPassword || null
-    } catch (error: any) {
-      toast.error(`${t('instance.detail.password.loadFailed')}: ${translateError(error)}`)
-      return
-    }
+    await refreshVisiblePassword(instanceId)
+    if (!instancePassword.value[instanceId] || instance.value?.id !== instanceId) return
   }
 
   showPassword.value[instanceId] = !showPassword.value[instanceId]

@@ -4,6 +4,8 @@
  */
 
 import { prisma } from './prisma.js'
+import { registrationSource } from '../lib/registration-source.js'
+import { USER_REGISTRATION_SOURCE_LOCK_NAMESPACE } from './advisory-locks.js'
 import { Prisma } from '@prisma/client'
 import type { User, UserQuota } from '../types/database.js'
 import { verifyCodeInTransaction } from './email-verification.js'
@@ -411,6 +413,7 @@ export async function createRegisteredUser(
     passwordHash: string
     inviteCode?: string
     emailCode?: string
+    registrationIp?: string
   }
 ): Promise<CreateRegisteredUserResult> {
   const { getDefaultQuotaConfig } = await import('./system-config.js')
@@ -423,6 +426,19 @@ export async function createRegisteredUser(
 
   try {
     const result = await prisma.$transaction(async (tx) => {
+      const origin = input.registrationIp ? registrationSource(input.registrationIp) : undefined
+      if (origin) {
+        await advisoryTransactionLockString(tx, USER_REGISTRATION_SOURCE_LOCK_NAMESPACE, origin.source)
+        const config = await tx.systemConfig.findMany({ where:{ key:{in:['registration_ip_daily_limit','registration_enabled','require_invite_code']} } })
+        const value = (key:string) => config.find(row=>row.key===key)?.value
+        if (value('registration_enabled') === 'false') throw Error('REGISTRATION_DISABLED')
+        if (value('require_invite_code') === 'true' && !input.inviteCode) throw Error('INVITE_CODE_UNAVAILABLE')
+        const configuredLimit = Number(value('registration_ip_daily_limit') ?? 3)
+        const dailyLimit = Number.isSafeInteger(configuredLimit) && configuredLimit >= 1 && configuredLimit <= 100 ? configuredLimit : 3
+        if (await tx.registrationReceipt.count({ where: { source: origin.source, createdAt: { gt: new Date(Date.now() - 86400000) } } }) >= dailyLimit) {
+          throw Error('REGISTRATION_SOURCE_LIMIT')
+        }
+      }
       if (normalizedEmail) {
         await advisoryTransactionLockString(tx, USER_EMAIL_REGISTRATION_LOCK_NAMESPACE, normalizedEmail)
       }
@@ -469,6 +485,7 @@ export async function createRegisteredUser(
           }
         }
       })
+      if (origin) await tx.registrationReceipt.create({ data: { source: origin.source, ip: origin.ip, userId: user.id } })
 
       if (input.inviteCode) {
         const inviteUpdate = await tx.inviteCode.updateMany({
@@ -726,6 +743,7 @@ export async function updateUserStatus(id: number, status: 'active' | 'banned', 
       const target = await lockAdministrativeUserMutation(tx, id, actor)
       if (actor.id === id) throw new Error('CANNOT_MODIFY_SELF')
       if (target.role === 'admin' && status === 'banned') throw new Error('CANNOT_BAN_ADMIN')
+      if (target.deletionIntent !== null) throw new Error('USER_CLEANUP_IN_PROGRESS')
     } else {
       await tx.$queryRaw(Prisma.sql`SELECT id FROM users WHERE id = ${id} FOR UPDATE`)
     }

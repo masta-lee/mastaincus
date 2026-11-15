@@ -10,8 +10,8 @@ export async function authorizeUserWrite(
   session: WriteSession | undefined,
   regularUserOnly = false
 ): Promise<boolean> {
-  const rows = await tx.$queryRaw<Array<{ status: string; role: string }>>(Prisma.sql`SELECT status, role FROM users WHERE id = ${userId} FOR UPDATE`)
-  if (rows[0]?.status !== 'active' || (regularUserOnly && rows[0].role !== 'user')) return false
+  const rows = await tx.$queryRaw<Array<{ status: string; role: string; deletion_intent: unknown }>>(Prisma.sql`SELECT status, role, deletion_intent FROM users WHERE id = ${userId} FOR UPDATE`)
+  if (rows[0]?.status !== 'active' || rows[0].deletion_intent != null || (regularUserOnly && rows[0].role !== 'user')) return false
   if (!session?.sid || !session.iat) return false
   const invalidations = await tx.tokenInvalidation.findMany({ where: {
     userId, sessionId: { in: [session.sid, '__USER_LEVEL__'] }
@@ -20,7 +20,7 @@ export async function authorizeUserWrite(
 }
 
 /** Serialize actor/target checks with bans, role updates, logout and account removal. */
-export async function lockAdministrativeUserMutation(tx: Prisma.TransactionClient, userId: number, actor: WriteActor) {
+export async function lockAdministrativeUserMutation(tx: Prisma.TransactionClient, userId: number, actor: WriteActor, allowDeleting = false) {
   const ids = [...new Set([actor.id, userId])].sort((a, b) => a - b)
   await tx.$queryRaw(Prisma.sql`SELECT id FROM users WHERE id IN (${Prisma.join(ids)}) ORDER BY id FOR UPDATE`)
   if (!await authorizeUserWrite(tx, actor.id, actor) ||
@@ -29,6 +29,7 @@ export async function lockAdministrativeUserMutation(tx: Prisma.TransactionClien
   }
   const target = await tx.user.findUnique({ where: { id: userId } })
   if (!target) throw new Error('USER_NOT_FOUND')
+  if (!allowDeleting && target.deletionIntent !== null) throw Error('USER_CLEANUP_IN_PROGRESS')
   return target
 }
 

@@ -30,6 +30,7 @@ type Specs = Record<string, unknown> & { poolProvision?: { version?: number; pha
 export async function beginPoolProvision(instanceId: number, host: Host, client: IncusClient, name: string) {
   const instance = await prisma.instance.findUniqueOrThrow({ where: { id: instanceId } })
   if (!instance.purchaseBatchId) return null
+  if ((await prisma.user.findUnique({where:{id:instance.userId},select:{deletionIntent:true}}))?.deletionIntent) throw new PoolProvisionOwnershipError('Customer account removal is in progress')
   const controller = new AbortController()
   const admittedAt = new Date()
   const endpoint = await prisma.host.findUniqueOrThrow({ where: { id: host.id }, include: hardeningIdentityInclude })
@@ -58,6 +59,7 @@ export async function beginPoolProvision(instanceId: number, host: Host, client:
   const check = async (database: Prisma.TransactionClient | typeof prisma = prisma) => {
     controller.signal.throwIfAborted()
     const current = await database.instance.findUnique({ where: { id: instanceId } })
+    if ((await database.user.findUnique({where:{id:instance.userId},select:{deletionIntent:true}}))?.deletionIntent) throw new PoolProvisionOwnershipError('Customer account removal is in progress')
     if (!current || current.status !== 'creating' || current.provisioningCleanupPending || current.hostId !== host.id ||
       current.incusId !== name || current.userId !== instance.userId ||
       (current.snapshottedSpecs as Specs)?.managedCleanup?.attempt !== attempt) throw new PoolProvisionOwnershipError('Pool creation was cancelled or replaced')

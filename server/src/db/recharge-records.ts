@@ -395,6 +395,7 @@ export async function completeRecharge(
   const result = await prisma.$transaction(async (tx) => {
     if (data.tradeNo) {
       await advisoryTransactionLockString(tx, PAYMENT_SETTLEMENT_LOCK_NAMESPACE, `${record.providerId}:${data.tradeNo.trim()}`)
+      await assertPaymentNotDeleted(tx, record.providerId, data.tradeNo)
     }
     await advisoryTransactionLock(tx, USER_BALANCE_LOCK_NAMESPACE, record.userId)
     if (data.tradeNo && await tx.checkoutReceipt.findUnique({ where: { providerId_tradeNo: { providerId: record.providerId, tradeNo: data.tradeNo.trim() } } })) {
@@ -787,3 +788,4 @@ export async function getSystemRechargeStats(dateRange?: { start: Date; end: Dat
     todayCount
   }
 }
+import { assertPaymentNotDeleted } from '../lib/deleted-payment-receipt.js'

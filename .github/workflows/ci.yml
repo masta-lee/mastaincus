@@ -568,6 +568,13 @@ jobs:
       - name: Public Turnstile availability matches all five authentication verifiers
         if: matrix.shard == 5
         run: pnpm --filter server test:review-turnstile-config
+      - name: Registration quotas and administrator cleanup preserve accounting and remote deletion
+        if: matrix.shard == 5
+        run: |
+          pnpm --filter server test:account-registration-cleanup
+          pnpm --filter server test:registration-http
+          pnpm --filter server test:customer-telegram-delivery
+          pnpm --filter server test:admin-user-cleanup-incus
       - name: Custom Telegram notifications cancel stalled responses and settle their logs
         if: matrix.shard == 0
         run: pnpm --filter server test:review-custom-telegram-transport

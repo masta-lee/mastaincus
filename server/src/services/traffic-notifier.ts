@@ -13,6 +13,7 @@ import {
 } from './traffic-bandwidth.js'
 import { assertSafeWebhookUrl, safeFetch } from '../lib/outbound-security.js'
 import { sanitizeTokensInString } from '../lib/log-sanitizer.js'
+import { telegramMarkdownText } from '../lib/telegram-format.js'
 
 // 重新导出 formatBytes 供其他模块使用
 export { formatBytes }
@@ -243,7 +244,7 @@ export async function sendTrafficThrottledNotification(
 
         const context = await resolveTrafficNotificationContext(userId, instanceName, hostName)
         const title = '🚫 流量限速通知'
-        const message = `您的实例 ${instanceName}（节点：${hostName}）已因流量超额被限速至 ${context.throttleSpeed}。\n\n` +
+        const message = `您的实例 ${instanceName}已因流量超额被限速至 ${context.throttleSpeed}。\n\n` +
             `您仍可通过 SSH 管理实例。\n` +
             `流量将于每月 ${context.resetDay} 日自动重置，届时带宽将恢复至 ${context.normalLineSpeed}。`
 
@@ -304,7 +305,7 @@ async function sendTelegram(
     }
 
     try {
-        const text = `*${escapeMarkdown(title)}*\n\n${escapeMarkdown(message)}`
+        const text = telegramMarkdownText(title, message)
 
         const response = await fetch(`https://api.telegram.org/bot${botToken}/sendMessage`, {
             method: 'POST',
@@ -314,13 +315,14 @@ async function sendTelegram(
             body: JSON.stringify({
                 chat_id: chatId,
                 text,
-                parse_mode: 'MarkdownV2'
+                parse_mode: 'MarkdownV2',
+                link_preview_options: { is_disabled: true }
             })
         })
 
         const result = await response.json() as { ok: boolean; description?: string }
 
-        if (!result.ok) {
+        if (!response.ok || !result.ok) {
             return { success: false, error: result.description || 'Unknown error' }
         }
 
@@ -379,6 +381,3 @@ async function sendDiscord(
 /**
  * 转义 Telegram MarkdownV2 特殊字符
  */
-function escapeMarkdown(text: string): string {
-    return text.replace(/([_*\[\]()~`>#+\-=|{}.!])/g, '\\$1')
-}

@@ -2,6 +2,8 @@ export const pending = []
 const defer = (kind, data) => new Promise((resolve, reject) => pending.push({ kind, data, resolve, reject }))
 export default { users: {
   list: params => defer('users', params),
+  cleanup: id => defer('cleanup',{id}),
+  cleanupStatus: id => defer('cleanup-status',{id}),
   getLoginRecords: (id, params) => defer('login', { id, ...params }),
 }, admin: {
   getUserBalance: id => defer('balance', { id }),

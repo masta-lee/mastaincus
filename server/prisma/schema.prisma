@@ -415,6 +415,7 @@ enum FriendshipStatus {
 // ==================== 用户相关模型 ====================
 
 model User {
+  deletionIntent Json? @map("deletion_intent")
   poolOrders PoolOrder[]
   checkoutOrders CheckoutOrder[]
   id           Int        @id @default(autoincrement())
@@ -569,6 +570,25 @@ model User {
   oauthGrants OAuthGrant[] @relation("OAuthGrantUser")
 
   @@map("users")
+}
+
+// Successful registrations survive account deletion, preventing quota reset.
+model RegistrationReceipt {
+  id String @id @default(uuid()) @db.Uuid
+  source String
+  ip String
+  userId Int? @map("user_id")
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz
+  @@index([source, createdAt])
+  @@map("registration_receipts")
+}
+
+model DeletedPaymentReceipt {
+  providerId Int @map("provider_id")
+  tradeHash String @map("trade_hash")
+  createdAt DateTime @default(now()) @map("created_at")
+  @@id([providerId, tradeHash])
+  @@map("deleted_payment_receipts")
 }
 
 model UserQuota {

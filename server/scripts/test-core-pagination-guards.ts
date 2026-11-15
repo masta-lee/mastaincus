@@ -67,7 +67,7 @@ const userList = sectionBetween(usersRouteSource, '// 获取用户列表 (管理
 assert.ok(!userList.includes('db.is2FAEnabled(') && !userList.includes('db.getInstancesByUserId(') &&
   !userList.includes('db.hasOAuthBinding(') && !userList.includes('db.getUserBalance(') &&
   userList.includes('prisma.instance.groupBy(') && userList.includes("status: { not: 'deleted' }") &&
-  userList.includes('select: { id: true, twoFactorEnabled: true, balance: true, hostingBalance: true }'),
+  userList.includes('select: { id: true, twoFactorEnabled: true, balance: true, hostingBalance: true, deletionIntent: true }'),
   'admin list must batch account fields and instance counts without per-user data queries')
 assert.ok(paginationSource.includes('avatar_badge_id: u.avatarBadgeId,'), 'user pagination must preserve avatar badges')
 const lastLogins = sectionBetween(loginRecordSource, 'export async function getLastLoginRecordsForUsers(', '/**\n * 获取被多个用户共享的IP组')

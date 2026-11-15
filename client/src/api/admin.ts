@@ -409,6 +409,8 @@ const api = {
     recalculateQuota: (id: number): Promise<UserQuota> =>
       http.post(`/users/${id}/quota/recalculate`),
     delete: (id: number): Promise<void> => http.delete(`/users/${id}`),
+    cleanup: (id: number): Promise<{accepted:boolean;pending:boolean}> => http.post(`/users/${id}/cleanup`, {confirm:true}),
+    cleanupStatus: (id: number): Promise<{status:string;stage?:string;error?:string;remainingInstances?:number}> => http.get(`/users/${id}/cleanup`),
     // 管理员重置用户密码
     resetPassword: (id: number, password: string): Promise<{ message: string; username: string }> =>
       http.post(`/users/${id}/reset-password`, { password }),

@@ -1,4 +1,5 @@
 import { randomUUID, createHash } from 'node:crypto'
+import { assertPaymentNotDeleted } from '../lib/deleted-payment-receipt.js'
 import { Prisma, type CheckoutOrder } from '@prisma/client'
 import { prisma } from '../db/prisma.js'
 import * as db from '../db/index.js'
@@ -171,6 +172,7 @@ export async function settleCheckoutPayment(paymentId: string, tradeNo: string, 
   if (amountCents !== payment.payableCents) throw new CheckoutError('支付金额与订单不符', 400)
   await prisma.$transaction(async tx => {
     await advisoryTransactionLockString(tx, PAYMENT_SETTLEMENT_LOCK_NAMESPACE, `${payment.providerId}:${tradeNo.trim()}`)
+    await assertPaymentNotDeleted(tx, payment.providerId, tradeNo)
     const order = await lockCheckout(tx, payment.orderId, payment.order.userId)
     const old = await tx.checkoutReceipt.findUnique({ where: { providerId_tradeNo: { providerId: payment.providerId, tradeNo: tradeNo.trim() } } })
     if (old) {
@@ -274,8 +276,8 @@ export async function materializeCheckout(id: string) {
     if (!['paid','fulfilling'].includes(order.status)) return []
     await tx.$queryRaw`SELECT id FROM users WHERE id=${order.userId} FOR UPDATE`
     const user = await tx.user.findUniqueOrThrow({ where: { id: order.userId } })
-    if (user.status !== 'active') throw new CheckoutError('账户已停用，无法开通')
     if (await tx.poolOrder.count({ where: { id } })) return []
+    if (user.status !== 'active' || user.deletionIntent) throw new CheckoutError('账户已停用，无法开通')
     // The accepted snapshot fixes price; identity and image/command ownership remain checked.
     await validatePreparedOrder(tx, order.userId, snapshot.input, snapshot.sshKey, snapshot.items, true)
     const holds = await tx.checkoutReservation.findMany({ where: { orderId: id }, orderBy: { ordinal: 'asc' } })

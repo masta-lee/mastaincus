@@ -244,7 +244,8 @@ async function sendTelegramMessage(botToken: string, chatId: number, text: strin
     })
   })
 
-  return response.ok
+  const body = await response.json().catch(()=>null) as {ok?:boolean} | null
+  return response.ok && body?.ok === true
 }
 
 async function callTelegramApi<T>(
