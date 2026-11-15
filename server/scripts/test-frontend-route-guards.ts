@@ -85,6 +85,7 @@ const adminImagesViewSource = readRepoFile('client/src/views/admin/ImagesView.vu
 const extensionsViewSource = readRepoFile('client/src/views/ExtensionsView.vue')
 const instancesViewSource = readRepoFile('client/src/views/InstancesView.vue')
 const publicIpv6AddressesSource = readRepoFile('client/src/components/PublicIpv6Addresses.vue')
+const instanceNetworkTabSource = readRepoFile('client/src/components/instance/InstanceNetworkTab.vue')
 const instanceInfoTabSource = readRepoFile('client/src/components/instance/InstanceInfoTab.vue')
 const destroyInstanceModalSource = readRepoFile('client/src/components/instance/modals/DestroyInstanceModal.vue')
 const instanceCreateViewSource = readRepoFile('client/src/views/InstanceCreateView.vue')
@@ -1231,10 +1232,15 @@ assert.ok(
   'customer instance cards must drop the network and traffic rows (the traffic usage helper survives only for the admin reset-traffic dialog)'
 )
 assert.ok(
-  publicIpv6AddressesSource.includes('<div class="min-w-0 py-1">') &&
+  publicIpv6AddressesSource.includes('<div class="min-w-0" :class="appearance === \'network\' ? \'\' : \'py-1\'">') &&
     !publicIpv6AddressesSource.includes('min-w-0 flex-1'),
   'IPv6 rows must keep the copy button hugging the address (no flex-1 spacer pushing it to the row edge)'
 )
+assert.ok(!instanceDetailViewSource.includes('InstanceSitesTab') && !instanceDetailViewSource.includes("key: 'sites'") &&
+  !instanceDetailViewSource.includes("activeTab === 'sites'"), 'both instance detail entries must omit the retired website tab and its component import')
+assert.ok(publicIpv6AddressesSource.includes("appearance === 'network'") && publicIpv6AddressesSource.includes('items-center justify-end') &&
+  instanceNetworkTabSource.includes('appearance="network"') && !instanceNetworkTabSource.includes('font-mono text-xs px-2 py-0.5 rounded truncate'),
+  'IPv6 network addresses must match IPv4 typography and right-aligned layout without truncation')
 assert.ok(
   instancesViewSource.includes("import { instanceCreatePath, instanceDetailPath, isAdminEntry, walletPath } from '@/utils/app-paths'") &&
     instancesViewSource.includes('interface CustomerBillingApi') &&

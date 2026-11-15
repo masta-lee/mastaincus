@@ -262,15 +262,17 @@ const canReassignIpv6 = computed(() => {
         <!-- NAT 模式: 显示内网 IPv4 和公网 IPv4（如果有） -->
         <template v-if="!instance.dedicatedIpv4 && ['nat', 'nat_ipv6', 'nat_ipv6_nat', 'ipv6_nat', 'ipv6_only'].includes(instance.network_mode || '')">
           <!-- 内网 IPv4 -->
-          <div class="flex justify-between items-center">
+          <div class="network-address-row flex justify-between items-center gap-4">
             <dt class="text-gray-500">{{ t('instance.detail.network.privateIpv4') }}</dt>
-            <dd v-if="instance.ipv4" class="flex items-center gap-2">
+            <dd v-if="instance.ipv4" class="flex min-w-0 items-center gap-2">
               <code
-                class="font-mono px-2 py-0.5 rounded"
+                class="network-address-value text-sm font-mono px-2 py-0.5 rounded break-all"
                 :class="themeStore.isDark ? 'text-gray-300 bg-gray-800' : 'text-gray-700 bg-gray-100'"
               >{{ instance.ipv4 }}</code>
               <button
+                type="button"
                 class="text-gray-500 hover:text-gray-400"
+                :aria-label="t('common.copy')"
                 :title="t('common.copy')"
                 @click="emit('copy', instance.ipv4, 'ipv4')"
               >
@@ -285,15 +287,17 @@ const canReassignIpv6 = computed(() => {
             <dd v-else class="text-gray-500">{{ t("dedicated.unassigned") }}</dd>
           </div>
           <!-- 只有真实公网 IPv4 时才显示 -->
-          <div v-if="publicIpv4Address" class="flex justify-between items-center mt-3">
+          <div v-if="publicIpv4Address" class="network-address-row flex justify-between items-center gap-4">
             <dt class="text-gray-500">{{ t('instance.detail.network.publicIpv4') }}</dt>
-            <dd class="flex items-center gap-2">
+            <dd class="flex min-w-0 items-center gap-2">
               <code
-                class="font-mono px-2 py-0.5 rounded"
+                class="network-address-value text-sm font-mono px-2 py-0.5 rounded break-all"
                 :class="themeStore.isDark ? 'text-gray-300 bg-gray-800' : 'text-gray-700 bg-gray-100'"
               >{{ publicIpv4Address }}</code>
               <button
+                type="button"
                 class="text-gray-500 hover:text-gray-400"
+                :aria-label="t('common.copy')"
                 :title="t('common.copy')"
                 @click="emit('copy', publicIpv4Address, 'nat_public_ip')"
               >
@@ -307,9 +311,9 @@ const canReassignIpv6 = computed(() => {
             </dd>
           </div>
           <!-- 公网 IPv6 -->
-          <div v-if="['nat_ipv6', 'nat_ipv6_nat', 'ipv6_nat', 'ipv6_only'].includes(instance.network_mode || '')" class="flex justify-between items-center mt-3">
+          <div v-if="['nat_ipv6', 'nat_ipv6_nat', 'ipv6_nat', 'ipv6_only'].includes(instance.network_mode || '')" class="network-address-row flex justify-between items-center gap-4">
             <dt class="text-gray-500">{{ t('instance.detail.network.publicIpv6') }}</dt>
-            <dd v-if="displayIpv6" class="flex items-center gap-2">
+            <dd v-if="displayIpv6" class="flex min-w-0 flex-wrap justify-end items-center gap-2">
               <!-- 重新获取 IPv6 按钮（仅 nat_ipv6 模式有独立 IPv6 可重新分配） -->
               <button
                 v-if="props.isInstanceOwner !== false && instance.network_mode === 'nat_ipv6'"
@@ -340,23 +344,27 @@ const canReassignIpv6 = computed(() => {
                 <span v-else-if="ipv6ReassignCooldown.inCooldown">{{ t('instance.detail.network.reassignIpv6CooldownShort', { hours: ipv6ReassignCooldown.remainingHours }) }}</span>
                 <span v-else>{{ t('instance.detail.network.reassignIpv6') }}</span>
               </button>
-              <code
-                class="font-mono text-xs px-2 py-0.5 rounded truncate max-w-[200px] sm:max-w-[300px]"
-                :class="themeStore.isDark ? 'text-gray-400 bg-gray-800/50' : 'text-gray-600 bg-gray-100'"
-                :title="displayIpv6 || undefined"
-              >{{ displayIpv6 }}</code>
-              <button
-                class="text-gray-500 hover:text-gray-400 flex-shrink-0"
-                :title="t('common.copy')"
-                @click="emit('copy', displayIpv6 || '', 'ipv6')"
-              >
-                <svg v-if="copied !== 'ipv6'" class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
-                </svg>
-                <svg v-else class="w-4 h-4 text-green-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" />
-                </svg>
-              </button>
+              <div class="flex min-w-0 items-center gap-2">
+                <code
+                  class="network-address-value min-w-0 text-sm font-mono px-2 py-0.5 rounded break-all"
+                  :class="themeStore.isDark ? 'text-gray-300 bg-gray-800' : 'text-gray-700 bg-gray-100'"
+                  :title="displayIpv6 || undefined"
+                >{{ displayIpv6 }}</code>
+                <button
+                  type="button"
+                  class="text-gray-500 hover:text-gray-400 flex-shrink-0"
+                  :aria-label="t('common.copy')"
+                  :title="t('common.copy')"
+                  @click="emit('copy', displayIpv6 || '', 'ipv6')"
+                >
+                  <svg v-if="copied !== 'ipv6'" class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
+                  </svg>
+                  <svg v-else class="w-4 h-4 text-green-500" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" />
+                  </svg>
+                </button>
+              </div>
             </dd>
             <dd v-else class="text-gray-500">{{ t("dedicated.unassigned") }}</dd>
           </div>
@@ -366,17 +374,19 @@ const canReassignIpv6 = computed(() => {
           <div v-if="authStore.user?.role === 'admin' && instance.publicIpUpdating" class="mb-3 text-sm" role="status">
             <p class="text-amber-600 dark:text-amber-400">{{ t(instance.status === 'stopped' ? 'hostIpSync.customerStopped' : 'hostIpSync.customerUpdating') }}</p>
           </div>
-          <div class="flex justify-between items-center">
+          <div class="network-address-row flex justify-between items-center gap-4">
             <dt class="text-gray-500">{{ t('instance.detail.network.publicIpv4') }}</dt>
-            <dd v-if="displayedIpv4Address" class="flex items-center gap-2">
+            <dd v-if="displayedIpv4Address" class="flex min-w-0 items-center gap-2">
               <code
-                class="font-mono px-2 py-0.5 rounded"
+                class="network-address-value text-sm font-mono px-2 py-0.5 rounded break-all"
                 :class="themeStore.isDark ? 'text-gray-300 bg-gray-800' : 'text-gray-700 bg-gray-100'"
                 :data-customer-observed-ip="instance.publicIpUpdating ? '' : undefined"
               >{{ displayedIpv4Address }}</code>
               <button
                 v-if="primaryIpv4Address"
+                type="button"
                 class="text-gray-500 hover:text-gray-400"
+                :aria-label="t('common.copy')"
                 :title="t('common.copy')"
                 @click="emit('copy', primaryIpv4Address, 'ipv4')"
               >
@@ -390,20 +400,22 @@ const canReassignIpv6 = computed(() => {
             </dd>
             <dd v-else class="text-gray-500">{{ instance.dedicatedIpv4 && instance.publicIpUpdating ? '—' : t('dedicated.unassigned') }}</dd>
           </div>
-          <div v-if="instance.dedicatedIpv4" class="mt-4 space-y-2">
+          <div v-if="instance.dedicatedIpv4" class="network-address-row flex justify-between items-center gap-4">
             <dt class="text-gray-500">{{ t('instance.detail.network.publicIpv6') }}</dt>
-            <dd><PublicIpv6Addresses :addresses="instance.publicIpv6Addresses ?? (instance.ipv6 ? [instance.ipv6] : [])" :status="instance.publicIpv6Status" show-empty /></dd>
+            <dd class="min-w-0 text-right"><PublicIpv6Addresses :addresses="instance.publicIpv6Addresses ?? (instance.ipv6 ? [instance.ipv6] : [])" :status="instance.publicIpv6Status" appearance="network" show-empty /></dd>
           </div>
-          <div v-else-if="instance.ipv6" class="flex justify-between items-center mt-3">
+          <div v-else-if="instance.ipv6" class="network-address-row flex justify-between items-center gap-4">
             <dt class="text-gray-500">{{ t('instance.detail.network.publicIpv6') }}</dt>
-            <dd v-if="instance.ipv6" class="flex items-center gap-2">
+            <dd v-if="instance.ipv6" class="flex min-w-0 items-center gap-2">
               <code
-                class="font-mono text-xs px-2 py-0.5 rounded truncate max-w-[300px]"
-                :class="themeStore.isDark ? 'text-gray-400 bg-gray-800/50' : 'text-gray-600 bg-gray-100'"
+                class="network-address-value text-sm font-mono px-2 py-0.5 rounded break-all"
+                :class="themeStore.isDark ? 'text-gray-300 bg-gray-800' : 'text-gray-700 bg-gray-100'"
                 :title="instance.ipv6"
               >{{ instance.ipv6 }}</code>
               <button
+                type="button"
                 class="text-gray-500 hover:text-gray-400 flex-shrink-0"
+                :aria-label="t('common.copy')"
                 :title="t('common.copy')"
                 @click="emit('copy', instance.ipv6, 'ipv6')"
               >
@@ -720,6 +732,8 @@ const canReassignIpv6 = computed(() => {
 <style scoped>
 .instance-network .card { background: var(--kawaii-surface) !important; box-shadow: none !important; }
 .instance-network .text-gray-500, .instance-network .text-gray-400 { color: var(--text-secondary) !important; }
+.instance-network :deep(.network-address-copy) { color: var(--text-secondary); }
+.network-address-row > dt { flex-shrink: 0; }
 .instance-network .text-amber-600 { color: #92400e !important; }
 .dark .instance-network .text-amber-600 { color: #fbbf24 !important; }
 </style>
