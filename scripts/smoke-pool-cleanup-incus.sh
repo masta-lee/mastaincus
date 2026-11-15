@@ -16,7 +16,7 @@ incus profile device add default root disk path=/ pool=cleanup-test
 incus profile device add default eth0 nic network=incusbr0 name=eth0
 root=$(mktemp -d /root/incudal-incus-cleanup-XXXXXX)
 trap 'rm -rf -- "$root"' EXIT
-mkdir -p "$root/image/rootfs/"{bin,proc,sys,dev,tmp,run,etc}
+mkdir -p "$root/image/rootfs/"{bin,sbin,proc,sys,dev,tmp,run,etc}
 cp /bin/busybox "$root/image/rootfs/bin/busybox"
 ln -s busybox "$root/image/rootfs/bin/sh"
 cat > "$root/image/rootfs/init" <<'INIT'
@@ -25,7 +25,8 @@ cat > "$root/image/rootfs/init" <<'INIT'
 exec /bin/busybox sleep 3600
 INIT
 chmod 755 "$root/image/rootfs/init"
-printf 'architecture: x86_64\ncreation_date: 1700000000\nproperties:\n  description: Disposable cleanup fixture\n' > "$root/image/metadata.yaml"
+ln -s /init "$root/image/rootfs/sbin/init"
+printf 'architecture: %s\ncreation_date: 1700000000\nproperties:\n  description: Disposable cleanup fixture\n' "$(uname -m)" > "$root/image/metadata.yaml"
 tar -C "$root/image" -czf "$root/image.tar.gz" metadata.yaml rootfs
 incus image import "$root/image.tar.gz" --alias cleanup-fixture
 incus init cleanup-fixture cleanup-guest -c raw.lxc='lxc.init.cmd = /init'
@@ -52,5 +53,9 @@ incus init cleanup-fixture cleanup-guest -c raw.lxc='lxc.init.cmd = /init'
 incus start cleanup-guest
 incus snapshot create cleanup-guest before-delete
 ACCOUNT_DELETION_WORKER=1 pnpm --filter server exec tsx scripts/smoke-pool-cleanup-incus.ts
+incus init cleanup-fixture cleanup-guest
+incus start cleanup-guest
+incus snapshot create cleanup-guest before-delete
+EXPIRY_RENEWAL_WORKER=1 pnpm --filter server exec tsx scripts/smoke-pool-cleanup-incus.ts
 incus list --format=json | python3 -c 'import json,sys; assert json.load(sys.stdin)==[]'
 echo 'Actual Incus running guest, snapshot, disk volume and forward deletion verified.'

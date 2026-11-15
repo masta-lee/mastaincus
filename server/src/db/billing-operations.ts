@@ -11,7 +11,7 @@ import { withInstanceBillingMutation } from '../lib/instance-billing-mutation.js
 import { lockRenewalRequest, saveRenewalItem, type RenewalRequest } from './renewal-requests.js'
 import { autoRenewEligibility, expiryRetentionEnded } from '../lib/instance-auto-renew.js'
 import { recoveryHeld } from '../services/platform-backup-core.js'
-import { queueRenewalResume } from '../services/renewal-resume.js'
+import { queueRenewalResume, extendPendingRenewalResume } from '../services/renewal-resume.js'
 import { Prisma, type Instance, type PackagePlan } from '@prisma/client'
 import { getInstanceAffBinding, processAffCommission } from './aff.js'
 import { getInstanceBillingLineageIds } from './billing-records.js'
@@ -715,7 +715,8 @@ async function performRenewalMutation(
         autoRenewAttempts: 0,
         lastAutoRenewAttemptAt: null,
         version: { increment: 1 },  // 增加版本号
-        // 如果因到期被封停，续费后解除封停（恢复为 stopped）
+        // Commit the paid term and unfreeze first. The durable resume task
+        // verifies actual Running after payment; ordinary stopped guests stay off.
         ...(instance.status === 'suspended' && instance.suspendReason === 'expired' ? {
           status: 'stopped',
           suspendedAt: null,
@@ -763,8 +764,10 @@ async function performRenewalMutation(
       }
     })
 
-    if (automatic && current.status === 'suspended' && current.suspendReason === 'expired' && current.suspendedBy === null) {
+    if (current.status === 'suspended' && current.suspendReason === 'expired' && current.suspendedBy === null) {
       await queueRenewalResume(tx, current, await tx.host.findUniqueOrThrow({ where: { id: current.hostId } }), newExpiresAt, balanceLog.id)
+    } else if (current.status === 'stopped' && current.suspendReason === null && current.suspendedBy === null) {
+      await extendPendingRenewalResume(tx,current,await tx.host.findUniqueOrThrow({where:{id:current.hostId}}),newExpiresAt,balanceLog.id)
     }
 
     // 如果有 AFF 绑定，给优惠码创建者返利

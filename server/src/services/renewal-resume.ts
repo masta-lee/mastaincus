@@ -26,7 +26,8 @@ const asJson = (value: Resume) => value as unknown as Prisma.InputJsonValue
 class ResumeBlocked extends Error {}
 class ResumeDeferred extends Error {}
 
-/** Called inside the same transaction as the one successful automatic debit. */
+/** Called inside the same transaction as a successful manual or automatic
+ * renewal of an expiry-suspended instance. Replays never enqueue another task. */
 export async function queueRenewalResume(tx: Prisma.TransactionClient, instance: Instance, host: Host, paidUntil: Date, billId: number): Promise<void> {
   const identity = await registeredGuestIdentity(tx, instance, host)
   const boot=record(record(instance.snapshottedSpecs).expiryBoot)
@@ -38,6 +39,21 @@ export async function queueRenewalResume(tx: Prisma.TransactionClient, instance:
   await tx.instanceTask.create({ data: { instanceId: instance.id, hostId: host.id, userId: instance.userId,
     taskType: 'start', status: 'PENDING', operationEntry: RENEWAL_RESUME_ENTRY, operationOwnerId: instance.userId,
     operationIdentity: state.hostIdentity, replacementState: asJson(state), progress: '续费已到账，等待自动开机' } })
+}
+
+/** A second paid extension must not strand the first pending start. Only update
+ * a live intent for the same guest; cancelled/terminal tasks stay cancelled. */
+export async function extendPendingRenewalResume(tx: Prisma.TransactionClient, instance: Instance, host: Host, paidUntil: Date, billId: number): Promise<void> {
+  const tasks = await tx.instanceTask.findMany({where:{instanceId:instance.id,operationEntry:RENEWAL_RESUME_ENTRY,taskType:'start',
+    status:{in:['PENDING','PROCESSING','FAILED']},replacementState:{path:['terminal'],equals:false},OR:[{error:null},{error:{not:'用户取消'}}]}})
+  for(const task of tasks){
+    let state:Resume
+    try{state=readResume(task.replacementState)}catch{continue}
+    if(state.ownerId!==instance.userId||state.incusId!==instance.incusId||state.hostIdentity!==transferHostIdentity(host)||task.operationIdentity!==state.hostIdentity||task.hostId!==host.id||task.userId!==instance.userId)continue
+    if(!instance.expiresAt||state.paidUntil!==instance.expiresAt.toISOString())continue
+    if(await tx.instanceTask.count({where:{instanceId:instance.id,id:{gt:task.id}}}))continue
+    await tx.instanceTask.update({where:{id:task.id},data:{replacementState:asJson({...state,paidUntil:paidUntil.toISOString(),billId})}})
+  }
 }
 
 function readResume(value: unknown): Resume {
@@ -187,15 +203,16 @@ export async function executeRenewalResume(taskId: number, attempt: { startedAt:
         await assertRemoteIdle(client, expected.incusId)
         const fresh = await read()
         if (!['Stopped', 'Running'].includes(fresh.remote.status)) throw new ResumeDeferred('客机状态尚未稳定，等待下次开机核验')
+        if (recoveryHeld()) throw new ResumeDeferred('平台处于恢复保护，暂缓开机')
+        // A prior stop can be unconfirmed even though expiry already disabled
+        // autostart. Restore the saved policy for both Running and Stopped.
+        await transport.restorePaidBootPolicy(expected.incusId)
+        // This exact locked guest's saved boot policy is our own change.
+        // Bind it before start; all other configuration fields stay protected.
+        expected.configurationHash=restoreConfigurationHash(await readCustomerIsolation(client,expected.incusId),expected.expiryAutostart!==undefined)
+        await tx.instanceTask.updateMany({where:attemptWhere,data:{replacementState:asJson(expected)}})
         if (fresh.remote.status === 'Stopped') {
-          if (recoveryHeld()) throw new ResumeDeferred('平台处于恢复保护，暂缓开机')
           startIssued = true
-          await transport.restorePaidBootPolicy(expected.incusId)
-          // This exact locked guest's saved boot policy is our own change.
-          // Bind the restored configuration before start, preserving all other
-          // protected fields and the previous receipt across a lost response.
-          expected.configurationHash=restoreConfigurationHash(await readCustomerIsolation(client,expected.incusId),expected.expiryAutostart!==undefined)
-          await tx.instanceTask.updateMany({where:attemptWhere,data:{replacementState:asJson(expected)}})
           await client.request('PUT', `${path}/state`, { action: 'start', timeout: 30 })
         }
         const after = await read()

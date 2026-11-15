@@ -65,11 +65,11 @@ for (const mode of process.argv.includes('--detail') ? ['detail'] : ['ticket', '
       }
       await run(data => { window.quotaHarness.view().instance = data; window.quotaHarness.view().showDetails = true }, data)
     } else {
-      assert.equal(await page.eval(() => window.quotaHarness.view().visibleTabs.some(tab => tab.key === 'sites')), true, 'unlimited sites must keep the sites tab')
+      assert.equal(await page.eval(() => window.quotaHarness.view().visibleTabs.some(tab => tab.key === 'sites')), false, 'retired website tab must stay absent regardless of site quota')
       assert.equal(await page.eval(() => window.quotaHarness.view().visibleTabs.some(tab => tab.key === 'snapshots')), false)
       for (const limit of [0, 1, null]) {
         await run(({ data, limit }) => { window.quotaHarness.view().instance = { ...data, effective_quota_limit: { site: limit, snapshot: limit }, site_limit: limit, snapshot_limit: limit } }, { data, limit })
-        assert.equal(await page.eval(() => window.quotaHarness.view().visibleTabs.some(tab => tab.key === 'sites')), true)
+        assert.equal(await page.eval(() => window.quotaHarness.view().visibleTabs.some(tab => tab.key === 'sites')), false)
         assert.equal(await page.eval(() => window.quotaHarness.view().visibleTabs.some(tab => tab.key === 'snapshots')), limit === 1)
       }
       await run(data => { window.quotaHarness.view().instance = data }, data)

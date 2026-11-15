@@ -6,6 +6,8 @@ import { mkdtemp, readFile, writeFile, unlink } from 'node:fs/promises'
 import { join } from 'node:path'
 import { tmpdir } from 'node:os'
 import { Client } from 'pg'
+import Fastify from 'fastify'
+import { randomBytes } from 'node:crypto'
 import { setTimeout as delay } from 'node:timers/promises'
 
 const database = new URL(process.env.DATABASE_URL || '')
@@ -26,6 +28,10 @@ const { retryRenewalResumes, RENEWAL_RESUME_ENTRY } = await import('../src/servi
 const { closeAllClients } = await import('../src/lib/incus/incus-pool.js')
 const { cancelInstanceTask, createInstanceTask, cleanupOldTasks } = await import('../src/db/instance-tasks.js')
 const { transferHostIdentity } = await import('../src/lib/transfer-host-identity.js')
+const { renewalRequest } = await import('../src/db/renewal-requests.js')
+const { default: billingRoutes } = await import('../src/routes/instance-billing.js')
+const { default: publicRoutes } = await import('../src/routes/public-api.js')
+const { hashPublicApiToken, getPublicApiTokenPrefix } = await import('../src/lib/public-api-auth.js')
 globalThis.setInterval = interval
 const tag = 'renew-start-' + randomUUID()
 const certificate = await readFile(join(root, 'cert.pem'), 'utf8')
@@ -50,6 +56,10 @@ const server = createServer({ cert: await readFile(join(root, 'cert.pem')), key:
   if (!match) return send({}, 404)
   const guest = remote.get(match[1]); if (!guest) return send({}, 404)
   if (req.method === 'GET') return send(guest)
+  if(req.method==='PATCH' && !match[2]){
+    let body='';for await(const chunk of req)body+=chunk
+    const config=JSON.parse(body).config;assert.deepEqual(Object.keys(config),['boot.autostart']);Object.assign(guest.config,config);return send({})
+  }
   assert.equal(req.method, 'PUT'); assert.equal(match[2], '/state')
   let body = ''; for await (const chunk of req) body += chunk
   assert.deepEqual(JSON.parse(body), { action: 'start', timeout: 30 })
@@ -126,10 +136,68 @@ try {
   for (const kind of ['stopped', 'running']) {
     const row = await make(kind); await renew(row.instance)
     assert.equal(await prisma.instanceTask.count({ where: { instanceId: row.instance.id } }), 0)
+    await performRenewal(row.user.id, await prisma.instance.findUniqueOrThrow({ where: { id: row.instance.id } }), 1)
+    assert.equal(await prisma.instanceTask.count({ where: { instanceId: row.instance.id } }), 0, 'manual renewal keeps an ordinary stopped/running instance in its existing state')
   }
-  const manual = await make(); await performRenewal(manual.user.id, manual.instance, 1)
-  assert.equal(await prisma.instanceTask.count({ where: { instanceId: manual.instance.id } }), 0)
-  console.log('PASS ordinary stopped/running and manual renewals do not enqueue automatic starts')
+  for (const arch of ['x86_64', 'aarch64']) {
+    const manual = await make('suspended', arch)
+    await prisma.instance.update({where:{id:manual.instance.id},data:{autoRenew:false}})
+    const original=await prisma.instance.findUniqueOrThrow({where:{id:manual.instance.id}})
+    const actor={id:manual.user.id,sid:'manual-renew-fixture',iat:Math.floor(Date.now()/1000)+1}
+    const request=renewalRequest(randomUUID(),'instance',[original.id],1)
+    await performRenewal(manual.user.id, original, 1, undefined, actor, undefined, request)
+    assert.equal((await taskFor(original.id)).status,'PENDING')
+    await performRenewal(manual.user.id, await prisma.instance.findUniqueOrThrow({where:{id:original.id}}),1,undefined,actor,undefined,request)
+    assert.equal(await prisma.instanceTask.count({where:{instanceId:original.id,operationEntry:RENEWAL_RESUME_ENTRY}}),1,'same paid request must not queue another start')
+    assert.equal((await run(original.id)).status,'COMPLETED');assert.equal(manual.guest.status,'Running')
+    await assertPaidOnce(original.id)
+  }
+  console.log('PASS manual expiry renewals with auto-renew disabled resume AMD/ARM guests; replay creates no new debit/start and ordinary stopped/running instances retain state')
+
+  for(const running of [false,true]){
+    const row=await make();row.guest.config['boot.autostart']='false'
+    await prisma.instance.update({where:{id:row.instance.id},data:{snapshottedSpecs:{recoveryIdentity:{uuid:row.guest.config['volatile.uuid'],createdAt:row.guest.created_at,project:'default'},
+      expiryBoot:{hostId:row.host.id,incusId:row.instance.incusId,uuid:row.guest.config['volatile.uuid'],autostart:'true',paidUntil:row.instance.expiresAt!.toISOString()}}}})
+    await performRenewal(row.user.id,await prisma.instance.findUniqueOrThrow({where:{id:row.instance.id}}),1)
+    if(running)row.guest.status='Running'
+    assert.equal((await run(row.instance.id)).status,'COMPLETED');assert.equal(row.guest.config['boot.autostart'],'true')
+    assert.equal(starts.get(row.instance.incusId)||0,running?0:1);await assertPaidOnce(row.instance.id)
+  }
+  console.log('PASS expiry saved autostart restored for Running and Stopped guests, without an extra start for an already-running guest')
+
+  const twice=await make();await prisma.instance.update({where:{id:twice.instance.id},data:{autoRenew:false}})
+  await performRenewal(twice.user.id,await prisma.instance.findUniqueOrThrow({where:{id:twice.instance.id}}),1)
+  await performRenewal(twice.user.id,await prisma.instance.findUniqueOrThrow({where:{id:twice.instance.id}}),1)
+  assert.equal(await prisma.instanceTask.count({where:{instanceId:twice.instance.id,operationEntry:RENEWAL_RESUME_ENTRY}}),1)
+  assert.equal((await run(twice.instance.id)).status,'COMPLETED');assert.equal(starts.get(twice.instance.incusId),1)
+  assert.equal(await prisma.instanceBillingRecord.count({where:{instanceId:twice.instance.id,type:'renew'}}),2)
+  const cancelledRenew=await make();await renew(cancelledRenew.instance);await cancelInstanceTask((await taskFor(cancelledRenew.instance.id)).id)
+  await performRenewal(cancelledRenew.user.id,await prisma.instance.findUniqueOrThrow({where:{id:cancelledRenew.instance.id}}),1)
+  await retryRenewalResumes();assert.equal((await taskFor(cancelledRenew.instance.id)).status,'FAILED');assert.equal(starts.get(cancelledRenew.instance.incusId)||0,0)
+  console.log('PASS additional paid renewal extends only the same pending intent; one start, and cancelled automatic start remains cancelled')
+
+  const web=Fastify(), routeActor={id:0,role:'user',username:tag,sid:tag,iat:Math.floor(Date.now()/1000)+1}
+  web.decorate('authenticate',async(request:any)=>{request.user={...routeActor}})
+  web.decorate('authenticateUser',web.authenticate)
+  web.decorate('requireAdmin',async(_request:any,reply:any)=>reply.code(403).send())
+  await web.register(billingRoutes,{prefix:'/instances'});await web.register(publicRoutes,{prefix:'/v1'})
+  try {
+    for(const route of ['single','batch','public']) {
+      const row=await make('suspended',route==='batch'?'aarch64':'x86_64')
+      await prisma.instance.update({where:{id:row.instance.id},data:{autoRenew:false}})
+      routeActor.id=row.user.id
+      const key=randomUUID(),raw='pat_'+randomBytes(32).toString('base64url')
+      if(route==='public')await prisma.publicApiToken.create({data:{userId:row.user.id,name:tag,tokenHash:hashPublicApiToken(raw),tokenPrefix:getPublicApiTokenPrefix(raw),scopes:['services:billing']}})
+      const invoke=()=>web.inject({method:'POST',url:route==='single'?`/instances/${row.instance.id}/renew`:route==='batch'?'/instances/batch/renew':`/v1/services/${row.instance.id}/renew`,
+        headers:{'idempotency-key':key,...(route==='public'?{authorization:'Bearer '+raw}:{})},payload:{months:1,...(route==='batch'?{instanceIds:[row.instance.id]}:{})}})
+      const first=await invoke();assert.equal(first.statusCode,200,first.body)
+      const replay=await invoke();assert.equal(replay.statusCode,200,replay.body)
+      assert.equal(await prisma.instanceTask.count({where:{instanceId:row.instance.id,operationEntry:RENEWAL_RESUME_ENTRY}}),1)
+      assert.equal((await run(row.instance.id)).status,'COMPLETED');assert.equal(row.guest.status,'Running')
+      await assertPaidOnce(row.instance.id)
+    }
+    console.log('PASS actual single/batch/PAT renewal routes commit one payment and one guarded start, with repeated HTTP request returning original result')
+  } finally {await web.close()}
 
   const fair = await make(); await renew(fair.instance)
   const template = await taskFor(fair.instance.id)

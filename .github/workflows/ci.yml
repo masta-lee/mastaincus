@@ -92,8 +92,12 @@ jobs:
           sudo env INCUDAL_NETWORK_NAMESPACE_TEST=1 unshare --net python3 -B scripts/test-onboarding-retirement-network.py
 
   cleanup-incus:
-    name: Actual Incus cleanup
-    runs-on: ubuntu-24.04
+    name: Actual Incus cleanup (${{ matrix.runner }})
+    strategy:
+      fail-fast: false
+      matrix:
+        runner: [ubuntu-24.04, ubuntu-24.04-arm]
+    runs-on: ${{ matrix.runner }}
     timeout-minutes: 12
     services:
       postgres:

@@ -13,6 +13,9 @@ import { dedicatedHostReadyWhere, HOST_OCCUPIED_INSTANCE_WHERE } from '../src/li
 import { requestInstanceDeletion, readDeletionIntent } from '../src/services/instance-deletion.js'
 import { requestUserCleanup, processUserCleanup } from '../src/services/admin-user-cleanup.js'
 import { executeExpiryEnforcement } from '../src/services/billing-scheduler.js'
+import { performRenewal } from '../src/db/billing-operations.js'
+import { claimLightTask, executeTask } from '../src/workers/instanceTaskWorker.js'
+import { RENEWAL_RESUME_ENTRY } from '../src/services/renewal-resume.js'
 assert.equal(process.env.GITHUB_ACTIONS, 'true')
 assert.equal(process.env.RUNNER_ENVIRONMENT, 'github-hosted')
 const serverCertificate = readFileSync('/var/lib/incus/server.crt', 'utf8')
@@ -25,7 +28,7 @@ try {
   assert.equal((await client.request<unknown[]>('GET', '/1.0/instances/cleanup-guest/snapshots?recursion=1')).length, 1)
   await ensureDedicatedForward(client, 'cleanup-guest', '192.0.2.99', '10.199.0.99')
   assert.equal((await client.request<unknown[]>('GET', '/1.0/networks/incusbr0/forwards?recursion=1')).length, 1)
-  if (process.env.POOL_CLEANUP_WORKER === '1' || process.env.INSTANCE_DELETION_WORKER === '1' || process.env.EXPIRY_DELETION_WORKER === '1' || process.env.ACCOUNT_DELETION_WORKER === '1') {
+  if (process.env.POOL_CLEANUP_WORKER === '1' || process.env.INSTANCE_DELETION_WORKER === '1' || process.env.EXPIRY_DELETION_WORKER === '1' || process.env.ACCOUNT_DELETION_WORKER === '1' || process.env.EXPIRY_RENEWAL_WORKER === '1') {
     const database = new URL(process.env.DATABASE_URL!)
     assert.equal(database.hostname, '127.0.0.1'); assert.ok(database.pathname.endsWith('_pool_test'))
     const actor = await prisma.user.create({ data: { username: 'actual-incus-fixture', role: 'admin', passwordHash: 'unused-fixture' } })
@@ -34,13 +37,39 @@ try {
       serverCertificate, serverFingerprint: new X509Certificate(serverCertificate).fingerprint256,
       status: 'online', poolFaulted: true, singleTenant: true, isInstalled: true, instanceType: 'container',
       natPublicIp: '192.0.2.99', natBindIp: '192.0.2.99', resourcePreset: 'E2', customerDiskGiB: 30,
-      architecture: 'x86_64', cpuAllowanceMax: 200, memoryMax: 768, storageSize: 34,
+      architecture: process.arch === 'arm64' ? 'aarch64' : 'x86_64', cpuAllowanceMax: 200, memoryMax: 768, storageSize: 34,
       cpuUsed: 200, memoryUsed: 768, diskUsed: 30720, natPortStart: 20000, natPortEnd: 30000,
       portProtocol: 'tcp', portProtocolRevision: 1, portProtocolApplied: 'tcp', portProtocolAppliedRevision: 1,
       agent: { create: { ...protectedAgentFixture([PORT_PROTOCOL_CAPABILITY]) } },
       storagePools: { create: { name: 'cleanup-test', driver: 'lvm', purpose: 'instance_data', config: { 'volume.block.filesystem': 'btrfs' } } } } })
     try {
-      if (process.env.ACCOUNT_DELETION_WORKER === '1') {
+      if (process.env.EXPIRY_RENEWAL_WORKER === '1') {
+        await prisma.host.update({where:{id:host.id},data:{poolFaulted:false}})
+        const guest=await client.request<{created_at:string;config:Record<string,string>}>('GET','/1.0/instances/cleanup-guest')
+        const customer=await prisma.user.create({data:{username:'native-expiry-renew-buyer',passwordHash:'fixture',balance:20}})
+        const pkg=await prisma.package.create({data:{userId:actor.id,name:'native-expiry-renew',cpuMax:200,memoryMax:768,diskMax:30720}})
+        const plan=await prisma.packagePlan.create({data:{packageId:pkg.id,name:'native-expiry-renew',cpu:200,memory:768,disk:30720,price:1000,portLimit:0,snapshotLimit:0,backupLimit:0,siteLimit:0,trafficLimit:0n}})
+        const instance=await prisma.instance.create({data:{userId:customer.id,hostId:host.id,packageId:pkg.id,packagePlanId:plan.id,name:'cleanup-guest',incusId:'cleanup-guest',
+          image:'cleanup-fixture',status:'running',cpu:200,memory:768,disk:30720,storagePoolName:'cleanup-test',billingPrice:10,billingCycle:1,autoRenew:false,expiresAt:new Date(Date.now()-60000),
+          snapshottedSpecs:{recoveryIdentity:{uuid:guest.config['volatile.uuid'],createdAt:guest.created_at,project:'default'}}}})
+        await executeExpiryEnforcement()
+        assert.equal((await client.request<{status:string}>('GET','/1.0/instances/cleanup-guest')).status,'Stopped')
+        const suspended=await prisma.instance.findUniqueOrThrow({where:{id:instance.id}});assert.equal(suspended.status,'suspended')
+        await performRenewal(customer.id,suspended,1,undefined,{sid:'native-manual-renew',iat:Math.floor(Date.now()/1000)+1})
+        const task=await prisma.instanceTask.findFirstOrThrow({where:{instanceId:instance.id,operationEntry:RENEWAL_RESUME_ENTRY}})
+        const claim=await claimLightTask(host.id,task.id);assert.ok(claim);await executeTask(task.id,claim)
+        assert.equal((await prisma.instanceTask.findUniqueOrThrow({where:{id:task.id}})).status,'COMPLETED')
+        assert.equal((await prisma.instance.findUniqueOrThrow({where:{id:instance.id}})).status,'running')
+        const running=await client.request<{status:string;config:Record<string,string>}>('GET','/1.0/instances/cleanup-guest')
+        assert.equal(running.status,'Running');assert.equal(running.config['volatile.uuid'],guest.config['volatile.uuid'])
+        assert.equal(await prisma.instanceBillingRecord.count({where:{instanceId:instance.id,type:'renew'}}),1)
+        assert.equal((await prisma.user.findUniqueOrThrow({where:{id:customer.id}})).balance.toNumber(),10)
+        await requestInstanceDeletion(await prisma.instance.findUniqueOrThrow({where:{id:instance.id}}),{id:actor.id,sid:'native-admin-cleanup',iat:Math.floor(Date.now()/1000)+1},{mode:'admin'})
+        for(let check=0;check<200&&(await prisma.host.findUniqueOrThrow({where:{id:host.id}})).poolFaulted;check++)await new Promise(resolve=>setTimeout(resolve,100))
+        assert.equal((await prisma.host.findUniqueOrThrow({where:{id:host.id}})).poolFaulted,false)
+        await prisma.instance.delete({where:{id:instance.id}});await prisma.package.delete({where:{id:pkg.id}});await prisma.user.delete({where:{id:customer.id}})
+        console.log('PASS native expiry -> Incus Stopped -> manual renewal with auto-renew off -> original worker resumes same guest Running; one debit and intact UUID')
+      } else if (process.env.ACCOUNT_DELETION_WORKER === '1') {
         await prisma.host.update({where:{id:host.id},data:{poolFaulted:false}})
         const customer=await prisma.user.create({data:{username:'actual-account-delete-fixture',passwordHash:'unused-fixture',balance:12.34,hostingBalance:4,affBalance:5}})
         const instance=await prisma.instance.create({data:{userId:customer.id,hostId:host.id,name:'cleanup-guest',incusId:'cleanup-guest',

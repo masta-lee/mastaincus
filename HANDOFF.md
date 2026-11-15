@@ -1,5 +1,7 @@
 # 版本与验证记录
 
+- Owner实测#51到期续费仍stopped：只读确认12:27到期/扣款，旧代码manual无resume任务；12:31普通手动start后running。已源码统一manual single/batch/PAT与auto在原expired封停付款同事务queue，连续续费仅延长原intent、普通关机/后续操作保护保持，autostart原策略恢复。PGmTLS真实路由/重放/故障/锁竞争等及types/build/相关6守卫通过；新增双架构原生到期→手动续费→正常worker→Running待CI。前IPv6/建站同批保留，旧quota browser断言sites已修并实浏览器过。未热更/发版，详见[记录](docs/manual-renewal-expiry-resume-2026-11-15.md)。
+
 - 2026-11-15两端实例网络UI局部修复：IPv6同IPv4字体/14px/颜色/右侧位置和复制16px，长地址完整换行，旧NAT重分配按钮旁复制同组。共享详情移除建站tab/import，两产物不再有建站组件/API。Chrome12组合/五网络模式/多地址状态及复制、原密码/生命周期回归、双端types/build与相关守卫已过。源码未主控热更/未发新版本；详见[记录](docs/instance-network-ui-cleanup-2026-11-15.md)。
 
 - v1.8.12已正式公开11:14:33北京时间，tag fc284676（产品8cd82d85），正式43670232244双首装/六v1.8.11旧worker/Release全部success；六公开资产和两tar原签名/source244迁移/权限/用户边界独立核过。主控task54候选同产品已热更/现场全部通过，不重复正式OTA。Owner授权两个恶意注册账户#9/#10已按原生确认删并核账户/账目无，其他九个保持banned，34host在线无隔离。main重复CI43670183718末段继续核；详见[正式证据](docs/release-v1.8.12-validation.md)。
