@@ -35,7 +35,7 @@ import {
 } from '../lib/security.js'
 import type { LoginRequest, RegisterRequest } from '../types/api.js'
 import { apiError, ErrorCode } from '../lib/errors.js'
-import { turnstileVerifier } from '../lib/turnstile.js'
+import { turnstileVerifier, registrationTurnstileVerifier } from '../lib/turnstile.js'
 import { isSmtpEnabled, sendVerificationEmail, sendLoginAlertEmail, sendFreeSiteRegisterGiftEmail } from '../lib/mailer.js'
 import { createVerificationCode } from '../db/email-verification.js'
 import { validateEmailDomain } from '../lib/email-domain.js'
@@ -434,7 +434,7 @@ export default async function authRoutes(fastify: FastifyInstance) {
 
   // 发送邮件验证码
   fastify.post<{ Body: { email: string; turnstileToken?: string } }>('/send-verification-code', {
-    preHandler: [turnstileVerifier],
+    preHandler: [registrationTurnstileVerifier],
     schema: {
       body: {
         type: 'object',
@@ -498,7 +498,7 @@ export default async function authRoutes(fastify: FastifyInstance) {
 
   // 用户注册 (支持邀请码可选，支持邮件验证码)
   fastify.post<{ Body: RegisterRequest & { turnstileToken?: string; emailCode?: string } }>('/register', {
-    preHandler: [turnstileVerifier],
+    preHandler: [registrationTurnstileVerifier],
     schema: {
       body: {
         type: 'object',
@@ -562,6 +562,9 @@ export default async function authRoutes(fastify: FastifyInstance) {
 
     // Check if email verification is required
     const smtpEnabled = await isSmtpEnabled()
+    if (await db.getSystemConfigBoolean('smtp_enabled', false) && !smtpEnabled) {
+      return reply.code(503).send({code:'REGISTRATION_VERIFICATION_UNAVAILABLE',error:'Registration verification is temporarily unavailable'})
+    }
     if (smtpEnabled) {
       if (!emailCode) {
         return reply.code(400).send(apiError(ErrorCode.EMAIL_CODE_REQUIRED))
@@ -621,12 +624,17 @@ export default async function authRoutes(fastify: FastifyInstance) {
         email: normalizedEmail,
         passwordHash,
         inviteCode: invite && inviteCode ? inviteCode : undefined,
-        emailCode: smtpEnabled ? emailCode : undefined
+        emailCode: smtpEnabled ? emailCode : undefined,
+        registrationIp: clientIp
       })
       userId = created.userId
       registerGift = created.registerGift
     } catch (createErr) {
       if (createErr instanceof Error) {
+        if (createErr.message === 'REGISTRATION_SOURCE_LIMIT') {
+          return reply.code(429).header('Retry-After', '86400').send({ code: 'REGISTRATION_SOURCE_LIMIT', error: '同一网络注册数量已达限制，请稍后再试' })
+        }
+        if (createErr.message === 'REGISTRATION_DISABLED') return reply.code(403).send(apiError(ErrorCode.REGISTRATION_DISABLED))
         if (createErr.message === 'INVALID_EMAIL_CODE') {
           return reply.code(400).send(apiError(ErrorCode.INVALID_EMAIL_CODE))
         }

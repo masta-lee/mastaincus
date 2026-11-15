@@ -12,6 +12,8 @@ import { sanitizeTokensInString } from './log-sanitizer.js'
 import { TICKET_REPLY_TITLE, formatTicketReplyNotice } from './ticket-notification.js'
 import { sendOperationVerificationEmail } from './mailer.js'
 import type { NotificationChannel as VerificationNotificationChannel } from '@prisma/client'
+import { customerNotificationData, customerNotificationText } from './customer-notification.js'
+import { telegramMarkdownText } from './telegram-format.js'
 
 // 重试配置
 const MAX_RETRIES = 3
@@ -627,7 +629,8 @@ const EVENT_TEMPLATES: Record<EventType, EventTemplate> = {
   ticket_created: {
     title: '📩 收到新工单',
     message: (data) => {
-      let msg = `用户「${data.username}」在节点「${data.hostName}」提交了新工单`
+      let msg = `用户「${data.username}」提交了新工单`
+      if(data.hostName) msg += `\n节点: ${data.hostName}`
       msg += `\n主题: ${data.subject}`
       if (data.instanceName) msg += `\n相关实例: ${data.instanceName}`
       msg += `\n请前往工单管理页面处理`
@@ -832,7 +835,8 @@ const EVENT_TEMPLATES: Record<EventType, EventTemplate> = {
   instances_batch_extended: {
     title: '🎁 管理员已为您的实例赠送时长',
     message: (data) => {
-      let msg = `您在节点「${data.hostName}」的付费实例已免费延期`
+      let msg = '您的付费实例已免费延期'
+      if(data.hostName) msg += `\n节点: ${data.hostName}`
       if (data.days) msg += `\n延期时长: ${data.days} 天`
       msg += `\n请前往面板查看最新到期时间`
       return msg
@@ -1059,7 +1063,8 @@ async function deliverSiteBotNotification(
  */
 export function getNotificationContent(eventType: EventType, data: EventData): { title: string; message: string } {
   const template = EVENT_TEMPLATES[eventType]
-  return { title: template.title, message: template.message(data) }
+  if (eventType === 'ticket_replied') data = {...data,message:undefined}
+  return { title: template.title, message: customerNotificationText(template.message(customerNotificationData(data))) }
 }
 
 export async function sendNotification(
@@ -1075,8 +1080,14 @@ export async function sendNotification(
       return { sent: 0, failed: 0 }
     }
 
+    const recipient = await prisma.user.findUnique({ where: { id: userId }, select: { role: true } })
+    if (!recipient) return { sent: 0, failed: 0 }
+    data = recipient.role === 'admin' ? data : customerNotificationData(data)
+    // A support reply may contain commands or topology from an administrator.
+    // Customers receive the event and read the actual reply in their ticket.
+    if (recipient.role !== 'admin' && eventType === 'ticket_replied') data = {...data,message:undefined} as EventData
     const title = template.title
-    const message = template.message(data)
+    const message = recipient.role === 'admin' ? template.message(data) : customerNotificationText(template.message(data))
 
     // 1. 创建站内信；业务事务已持久化时复用，避免重复写入。
     try {
@@ -1269,6 +1280,7 @@ export async function sendHostManagedInstanceNotification(
       hostName: host.name,
       ...data
     })
+    payload.message = customerNotificationText(payload.message)
 
     let sent = 0
     let failed = 0
@@ -1309,8 +1321,6 @@ export async function sendHostManagedInstanceNotification(
                 payload.title,
                 payload.message,
                 {
-                  hostId,
-                  hostName: host.name,
                   eventType,
                   ...data
                 }
@@ -1358,7 +1368,7 @@ async function sendTelegram(
   }
 
   try {
-    const text = `*${escapeMarkdown(title)}*\n\n${escapeMarkdown(message)}`
+    const text = telegramMarkdownText(title, message)
 
     const response = await fetch(`https://api.telegram.org/bot${botToken}/sendMessage`, {
       method: 'POST',
@@ -1368,13 +1378,14 @@ async function sendTelegram(
       body: JSON.stringify({
         chat_id: chatId,
         text,
-        parse_mode: 'MarkdownV2'
+        parse_mode: 'MarkdownV2',
+        link_preview_options: { is_disabled: true }
       })
     })
 
     const result = await response.json() as { ok: boolean; description?: string }
 
-    if (!result.ok) {
+    if (!response.ok || !result.ok) {
       return { success: false, error: result.description || 'Unknown Telegram error' }
     }
 
@@ -1503,10 +1514,6 @@ async function sendWebhook(
 /**
  * 转义 Telegram MarkdownV2 特殊字符
  */
-function escapeMarkdown(text: string): string {
-  return text.replace(/([_*\[\]()~`>#+\-=|{}.!])/g, '\\$1')
-}
-
 /**
  * 测试通知渠道（带重试）
  */
@@ -1643,6 +1650,11 @@ export async function sendToChannel(
     if (!channel) {
       return { success: false, error: 'Channel not found' }
     }
+    const adminRecipient = await prisma.user.findUnique({where:{id:channel.user_id},select:{role:true}})
+    if (adminRecipient?.role !== 'admin') {
+      title = customerNotificationText(title)
+      message = customerNotificationText(message)
+    }
 
     // 不检查 enabled 状态，因为资源释放通知渠道就是禁用状态的
     // 设计说明：禁用状态的渠道不会接收系统事件通知，但可以接收资源释放通知
@@ -1672,11 +1684,7 @@ export async function sendToChannel(
           break
         }
         try {
-          let text = `*${escapeMarkdown(title)}*\n\n${escapeMarkdown(message)}`
-          if (link) {
-            // [转义后的label](原始url) — URL 不转义，确保链接可点击
-            text += `\n[${escapeMarkdown(link.label)}](${link.url})`
-          }
+          const text = telegramMarkdownText(title, message, link)
           const response = await fetch(`https://api.telegram.org/bot${telegramConfig.botToken}/sendMessage`, {
             method: 'POST',
             redirect: 'manual',
@@ -1685,11 +1693,12 @@ export async function sendToChannel(
             body: JSON.stringify({
               chat_id: telegramConfig.chatId,
               text,
-              parse_mode: 'MarkdownV2'
+              parse_mode: 'MarkdownV2',
+              link_preview_options: { is_disabled: true }
             })
           })
           const json = await response.json() as { ok: boolean; description?: string }
-          result = json.ok
+          result = response.ok && json.ok
             ? { success: true, error: null }
             : { success: false, error: json.description || 'Unknown Telegram error' }
         } catch (err) {

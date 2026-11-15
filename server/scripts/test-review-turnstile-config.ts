@@ -16,7 +16,7 @@ process.env.PLATFORM_BACKUP_STATE_DIR = recoveryRoot
 const { prisma, closePrismaDatabase } = await import('../src/db/prisma.js')
 const { updateSystemConfigs } = await import('../src/db/system-config.js')
 const { invalidateAllConfigCache } = await import('../src/lib/config-cache.js')
-const { turnstileVerifier } = await import('../src/lib/turnstile.js')
+const { turnstileVerifier, registrationTurnstileVerifier } = await import('../src/lib/turnstile.js')
 const { default: authRoutes } = await import('../src/routes/auth.js')
 const { default: configRoutes } = await import('../src/routes/system-config.js')
 const { stopSessionCleanup } = await import('../src/lib/terminal-proxy.js')
@@ -39,7 +39,7 @@ app.addHook('onRoute', options => {
   if (options.method !== 'POST' || !endpoints.some(endpoint => options.url === '/auth' + endpoint.path)) return
   const hooks = Array.isArray(options.preHandler) ? options.preHandler : [options.preHandler]
   assert.equal(hooks.length, 1)
-  if (options.url !== '/auth/login') assert.deepEqual(hooks, [turnstileVerifier], 'Non-recovery auth routes use the original verifier')
+  if (options.url !== '/auth/login') assert.deepEqual(hooks, [['/auth/register','/auth/send-verification-code'].includes(options.url) ? registrationTurnstileVerifier : turnstileVerifier], 'Registration alone fails closed on incomplete enabled challenge settings')
   else assert.equal(typeof hooks[0], 'function', 'Login has a recovery-aware verifier; its ordinary behavior is exercised below')
   registered.add(options.url)
   // Stop after the real preHandler so this test cannot log in, send mail or change passwords.
@@ -73,11 +73,13 @@ try {
     const beforeReached = reached, beforeCalls = providerCalls
     for (const endpoint of endpoints) {
       const response = await post(endpoint)
-      assert.equal(response.statusCode, required ? 400 : 204, endpoint.path + ': ' + response.body)
+      const unavailable = enabled && !required && ['/register','/send-verification-code'].includes(endpoint.path)
+      assert.equal(response.statusCode, required ? 400 : unavailable ? 503 : 204, endpoint.path + ': ' + response.body)
+      if (unavailable) assert.equal(response.json().code,'REGISTRATION_VERIFICATION_UNAVAILABLE')
       if (required) assert.equal(response.json().code, 'TURNSTILE_TOKEN_MISSING')
     }
     assert.equal(providerCalls, beforeCalls)
-    assert.equal(reached - beforeReached, required ? 0 : 5)
+    assert.equal(reached - beforeReached, required ? 0 : enabled ? 3 : 5)
     if (required) {
       for (const mode of ['valid', 'rejected', 'malformed'] as const) {
         providerMode = mode

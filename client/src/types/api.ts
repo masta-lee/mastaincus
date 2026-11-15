@@ -882,6 +882,7 @@ export interface Instance {
 }
 
 export interface InstanceWithDetails extends Omit<Instance, 'host'> {
+  credentialRevision?: string | null
   ociAccountLabel?: string | null
   user?: Pick<User, 'id' | 'username' | 'email'>
   // 实例详情页面的宿主机信息（比列表更详细）

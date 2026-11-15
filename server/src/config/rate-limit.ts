@@ -13,6 +13,8 @@
  * - 敏感操作: 严格限制
  */
 
+import type { FastifyInstance } from 'fastify'
+
 export interface RateLimitRule {
     /** 路由路径 (支持通配符) */
     path: string
@@ -40,6 +42,7 @@ export const globalRateLimit = {
 // ==================== 接口级别配置 ====================
 
 export const rateLimitRules: RateLimitRule[] = [
+    { path: '/api/auth/send-verification-code', method: 'POST', max: 5, timeWindow: '1 hour', description: '注册验证码邮件 - 限制同IP发送次数' },
     // ========== 认证相关 (严格限制) ==========
     {
         path: '/api/auth/check-2fa',
@@ -656,6 +659,7 @@ export const rateLimitWhitelist = {
  * 根据请求路径和方法查找匹配的速率限制规则
  */
 export function findRateLimitRule(path: string, method: string): RateLimitRule | null {
+    path = path.split('?')[0]
     for (const rule of rateLimitRules) {
         // 检查方法匹配
         if (rule.method !== '*' && rule.method !== method) {
@@ -673,6 +677,15 @@ export function findRateLimitRule(path: string, method: string): RateLimitRule |
         }
     }
     return null
+}
+
+/** Register BEFORE the plugin: it snapshots each route's config in onRoute. */
+export function applyConfiguredRouteRateLimits(fastify: FastifyInstance): void {
+    fastify.addHook('onRoute', routeOptions => {
+        const methods = Array.isArray(routeOptions.method) ? routeOptions.method : [routeOptions.method]
+        const rule = methods.map(method => findRateLimitRule(routeOptions.url, method)).find(Boolean)
+        if (rule) routeOptions.config = { ...routeOptions.config, rateLimit: { max: rule.max, timeWindow: rule.timeWindow } }
+    })
 }
 
 /**

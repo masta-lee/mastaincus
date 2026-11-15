@@ -1,4 +1,4 @@
-// Disposable GitHub VM only. Runs the shipped v1.8.10 worker with real PG,
+// Disposable GitHub VM only. Runs the original published worker with real PG,
 // filesystem, systemd, migration, helper installation and health checks.
 // Only the not-yet-published candidate Release HTTP response is local.
 import assert from 'node:assert/strict'
@@ -26,6 +26,8 @@ const hash = bytes => createHash('sha256').update(bytes).digest('hex')
 const identities = ['/var/lib/incudal-gateway-controller/signing.pem', '/var/lib/incudal-gateway-controller/identity.json',
   '/etc/wireguard/incudal-mgmt.conf', '/root/.ssh/incudal-host-management', '/opt/incudal/.env']
 const { Client } = require('pg')
+const baseline = process.env.UPGRADE_DRILL_BASELINE_VERSION
+assert.match(baseline || '', /^v\d+\.\d+\.\d+$/)
 
 if (mode === 'migrate') {
   const candidateRequire = createRequire(archive + '/server/package.json')
@@ -35,7 +37,7 @@ if (mode === 'migrate') {
   await exec(process.execPath, [cli, 'migrate', 'deploy'], { cwd: archive + '/server', env: { ...process.env, ...env }, timeout: 300000 })
   console.log('PASS rollback-state setup: actual candidate Prisma migrations applied while old runtime stays installed')
 } else if (mode === 'before') {
-  assert.equal(JSON.parse(await readFile(app + '/version.json')).version, 'v1.8.10')
+  assert.equal(JSON.parse(await readFile(app + '/version.json')).version, baseline)
   const client = new Client({ connectionString: env.DATABASE_URL }); await client.connect()
   try {
     const admin = (await client.query("SELECT id FROM users WHERE role='admin' ORDER BY id LIMIT 1")).rows[0]
@@ -48,15 +50,15 @@ if (mode === 'migrate') {
     for (const file of identities) original[file] = hash(await readFile(file))
     const enrollment = JSON.parse(await readFile('/var/lib/incudal-gateway-controller/enrollment.json'))
     for (const component of Object.values(enrollment.components)) {
-      assert.equal(component.version, '1.8.10')
+      assert.equal(component.version, baseline.slice(1))
       const envelope = JSON.parse(await readFile(component.directory + '/manifest.json'))
       const manifest = JSON.parse(Buffer.from(envelope.payload, 'base64'))
       assert.equal(manifest.files.length, 21)
     }
     const applied = (await client.query("SELECT count(*)::int AS n FROM _prisma_migrations WHERE migration_name='20261111170000_instance_renewal_price' AND finished_at IS NOT NULL AND rolled_back_at IS NULL")).rows[0].n
     assert.equal(applied, 1)
-    await writeFile(stateFile, JSON.stringify({ taskId: task.id, target, original, atomic, oldApp: app, oldComponents: enrollment.components }), { mode: 0o600 })
-    console.log('PASS legacy baseline: genuine v1.8.10 installed, original 21-file components and controller/network identity recorded')
+    await writeFile(stateFile, JSON.stringify({ taskId: task.id, target, baseline, original, atomic, oldApp: app, oldComponents: enrollment.components }), { mode: 0o600 })
+    console.log(`PASS legacy baseline: genuine ${baseline} installed, original 21-file components and controller/network identity recorded`)
   } finally { await client.end() }
 } else if (mode === 'worker') {
   const state = JSON.parse(await readFile(stateFile))
@@ -93,10 +95,10 @@ if (mode === 'migrate') {
   try {
     const task = (await client.query('SELECT status FROM system_update_tasks WHERE id=$1', [state.taskId])).rows[0]
     assert.equal(task.status, 'rolled_back')
-    assert.equal(JSON.parse(await readFile(app + '/server/package.json')).version, '1.8.10')
+    assert.equal(JSON.parse(await readFile(app + '/server/package.json')).version, state.baseline.slice(1))
     for (const file of identities) assert.equal(hash(await readFile(file)), state.original[file])
     const enrollment = JSON.parse(await readFile('/var/lib/incudal-gateway-controller/enrollment.json'))
-    assert.ok(Object.values(enrollment.components).every(component => component.version === '1.8.10'))
+    assert.ok(Object.values(enrollment.components).every(component => component.version === state.baseline.slice(1)))
     await exec('python3', ['-I', '-B', app + '/scripts/enroll-gateway-controller.py', '--verify'])
     await exec('systemctl', ['is-active', '--quiet', 'incudal-backend'])
     console.log('PASS actual old worker recovered after post-install failure: old runtime and component enrollment restored, original identities preserved')
@@ -123,6 +125,6 @@ if (mode === 'migrate') {
     await exec('systemctl', ['is-enabled', '--quiet', 'incudal-time-sync.timer'])
     const { stdout } = await exec('curl', ['-fsS', '--max-time', '5', 'http://127.0.0.1:3001/api/health'])
     assert.equal(JSON.parse(stdout).status, 'ok')
-    console.log('PASS genuine v1.8.10 worker -> new complete archive -> original identities preserved -> migrations/helpers/clock installed -> one healthy backend; candidate HTTP transport was local')
+    console.log(`PASS genuine ${state.baseline} worker -> new complete archive -> original identities preserved -> migrations/helpers/clock installed -> one healthy backend; candidate HTTP transport was local`)
   } finally { await client.end() }
 }

@@ -9,6 +9,8 @@ export default {
     getStats: id => defer('stats', id),
     getSnapshots: id => defer('snapshots', id),
     getActiveTask: id => defer('task', id),
+    getPassword: id => defer('password', id),
+    resetPassword: id => defer('passwordReset', id),
     checkCloudInitStatus: id => defer('cloud-init', id),
   },
   packages: { get: id => defer('package', id) },

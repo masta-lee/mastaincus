@@ -1,5 +1,15 @@
 # 版本与验证记录
 
+- 本批最终候选8cd82d85：同源码CI43666672521 29/29、Alpine43666672557及预览43666670130双首装/六v1.8.11原worker升级success。双实际签名tar244迁移/所有修复/用户边界核通过。主控原任务54于10:43:25北京时间success，preview-8cd82d8/备份incudal.bak.20261115024109，34在线无隔离、原49–52及图库升级保持。实际双端浏览器原生删#20专用测试用户，池购买#53 stop/delete/账单账户消除/host48重售全部确认；原#49真实重装新密码同页面自动刷新/公钥pin公网SSH成功。其余原实例/价格账期保持。现准备正式v1.8.12，未tag/公开，见[检查记录](docs/account-notification-reinstall-review-2026-11-15.md)。
+
+- creating专项补修：原pool开通失败补偿已释放的deleted记录再次claim会触发HOST_POOL_FAULTED；现沿poolProvision failed实证核远端absence/原回池后清账户，不重开库存。account-pool-creation-delete3.log含真实mTLS创建marker/503保占用/恢复补偿及全部六场景过，types过。此补充将入新来源；d3预览尚未主控部署/正式发行。
+
+- 最终本地225/225全绿（account-full-tests-final.log），后续排队task取消移入同一管理员权限事务、列表deletionMap分批性能修复的PG/mTLS/JWT/迁移与types再次通过（account-admin-admission-final.log）。原生Incus删除、双首装及双签名tar已过；旧worker基线修正版预览43665644538仍运行。准备v1.8.12候选版本号，未tag未发行未主控部署；原1.8.11保持。
+
+- 注册/删除账户/TG/密码来源3ad63ecd已推PR16，CI43664559570真实Incus132660955563与本批PG/HTTP/TG步骤通过；双候选tar244迁移/模块/签名/用户边界独立核过。预览43664562150六旧worker在升级动作前baseline误断言1.8.10失败（旧包已是真1.8.11），修为从已核包版本动态基线，保留同一旧worker/回滚与原身份。原最终225和云端综合仍待，未热更未发行，见检查记录。
+
+- 2026-11-15新增四项批：注册限流实际onRoute顺序缺陷＋24h同源成功限额3、管理员原生确认删除/Incus与回池后清余额账单、用户TG剥宿主OCI内网及管理员详细HTML、重装密码自动失效并拒旧回执均实现。owner指定IP只读有11注册/7密集、全banned无实例；未代删生产。PG/mTLS运行/deleted/creating/转让原UUID恢复/其他payer账单保持与流水摘要防重放、实际HTTP注册/验证、TG全出口transport/timeout、Chrome双端交互及types/build通过。首全量224中3失败已修定向及installer十case复验；最终225全量运行。新增原生账户删除CI和v1.8.11旧worker双首装六升级待，未部署/未发行本批；详见[检查记录](docs/account-notification-reinstall-review-2026-11-15.md)。
+
 - 本批最终完成：mainCI43626317398终态29/29 success，正式面板43626345677与Agent43626317373全部success，v1.8.11/Agent1.0.15公开及九资产/两个tar已独立完整核验。本次磁盘隔离、缓存余量、#53回池短重试/核验按钮、全镜像操作、原价重卖和#16/#37任务提示恢复已闭环；主控同source候选preview-b463d9e、34在线无隔离，原测试删除及新49–52情况前文保持。长期OSS灾备等未验项不变；owner继续不等于认可LVM的声明已记OWNER。源码稳定tag b463d9e1不移动，后续本提交仅脱敏台账。
 
 - 2026-11-15 02:42北京时间正式资产闭环：v1.8.11六公开资产重新下载/API digest/size/checksum/双OTA一致、latest正确，两公开tar原pin签名/source b463d9e1/243迁移/磁盘缓存回池修复及用户边界再核通过。AMD214592974B SHA7e2493acabfec9580d76f14476e08dd879ad2aa7d829c01ae528f0803cc70717，ARM213806945B SHA9c99e15c930a9612cd0adaa37fb7594d580285ccda7a1d16f479be2f30688cb7。Agent15三公开资产与现场候选完全相同。正式面板/Agent已公开，主控同source候选已实测，不重复OTA或销毁新49–52。main重复CI43626317398仍24/29无失败，最后终态继续核；本批同sourcePR29/29、正式双首装六旧升级及现场已完成，长期OSS灾备等保持独立未验。

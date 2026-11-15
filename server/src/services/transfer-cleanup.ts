@@ -2,7 +2,7 @@ import { assertNoPendingSnapshotOperations, } from '../db/snapshot-operation-gua
 import { randomUUID } from 'node:crypto'
 import { Prisma, type Host } from '@prisma/client'
 import { prisma } from '../db/prisma.js'
-import { INSTANCE_OPERATION_LOCK_NAMESPACE, advisoryTransactionLock } from '../db/advisory-locks.js'
+import { INSTANCE_OPERATION_LOCK_NAMESPACE, USER_BALANCE_LOCK_NAMESPACE, advisoryTransactionLock } from '../db/advisory-locks.js'
 import { assertNoPendingProxySiteOperations } from '../db/proxy-site-operation-guards.js'
 import { cleanupProxySitesForLifecycle } from '../db/proxy-site-operations.js'
 import { redactAuditText } from '../lib/risk-audit.js'
@@ -38,6 +38,58 @@ const STAGES: TransferCleanupState['stage'][] = ['claimed', 'renamed', 'sites', 
 // The private backend is a single process. A restart drops only execution ownership,
 // while the persisted plan, UUID and completed stages remain authoritative.
 const activeTransfers = new Set<number>()
+
+/** Account removal cancels the original transfer, never transfers another user's
+ * instance into the account being deleted. Restore a completed rename by UUID. */
+export async function cancelTransferForUserCleanup(transferId: number, userId: number, actor: WriteActor): Promise<void> {
+  if (activeTransfers.has(transferId) || recoveryHeld()) throw Error('USER_CLEANUP_TRANSFER_PENDING')
+  activeTransfers.add(transferId)
+  try {
+    await prisma.$transaction(async tx => {
+      await tx.$executeRaw`SET LOCAL lock_timeout = '5s'`
+      const initial = await tx.instanceTransfer.findUniqueOrThrow({ where: { id: transferId } })
+      await advisoryTransactionLock(tx, INSTANCE_OPERATION_LOCK_NAMESPACE, initial.instanceId)
+      await tx.$queryRaw`SELECT id FROM instances WHERE id = ${initial.instanceId} FOR UPDATE`
+      await tx.$queryRaw`SELECT id FROM instance_transfers WHERE id = ${transferId} FOR UPDATE`
+      const transfer = await tx.instanceTransfer.findUniqueOrThrow({ where: { id: transferId } })
+      if (!['pending','processing'].includes(transfer.status)) return
+      const ids = [...new Set([actor.id, transfer.fromUserId, transfer.toUserId])].sort((a,b)=>a-b)
+      await advisoryTransactionLock(tx, USER_BALANCE_LOCK_NAMESPACE, transfer.fromUserId)
+      await tx.$queryRaw(Prisma.sql`SELECT id FROM users WHERE id IN (${Prisma.join(ids)}) ORDER BY id FOR UPDATE`)
+      const target = await tx.user.findUniqueOrThrow({ where: { id: userId } })
+      if (![transfer.fromUserId,transfer.toUserId].includes(userId) || !target.deletionIntent ||
+          !await authorizeUserWrite(tx, actor.id, actor) ||
+          (await tx.user.findUniqueOrThrow({ where: { id: actor.id } })).role !== 'admin' || recoveryHeld()) throw Error('USER_CLEANUP_AUTHORITY_CHANGED')
+      const instance = await tx.instance.findUniqueOrThrow({ where: { id: transfer.instanceId } })
+      if (instance.userId !== transfer.fromUserId) throw Error('USER_CLEANUP_TRANSFER_TARGET_CHANGED')
+      if (transfer.cleanupState) {
+        const state = decodeState(transfer.cleanupState)
+        await tx.$queryRaw`SELECT id FROM hosts WHERE id = ${state.hostId} FOR UPDATE`
+        const host = await tx.host.findUniqueOrThrow({ where: { id: state.hostId } })
+        if (instance.hostId !== state.hostId || instance.incusId !== state.oldIncusId ||
+            state.sourceOwnerId !== transfer.fromUserId || state.targetOwnerId !== transfer.toUserId ||
+            transferHostIdentity(host) !== state.hostIdentity) throw Error('USER_CLEANUP_TRANSFER_TARGET_CHANGED')
+        await withRemote(host, async client => {
+          const remote = await remoteIdentity(client, state, true)
+          if (recoveryHeld()) throw Error('PLATFORM_RECOVERY_HELD')
+          if (remote.name !== state.oldIncusId) {
+            await client.request('POST', `/1.0/instances/${encodeURIComponent(remote.name)}`, { name: state.oldIncusId }, 30000)
+            const restored = await remoteIdentity(client, state, true)
+            if (restored.name !== state.oldIncusId || restored.uuid !== remote.uuid) throw Error('USER_CLEANUP_TRANSFER_PENDING')
+          }
+        })
+      }
+      const fee = Number(transfer.fee)
+      if (fee > 0) {
+        const payer = await tx.user.update({ where: { id: transfer.fromUserId }, data: { balance: { increment: fee } }, select: { balance: true } })
+        await tx.balanceLog.create({ data: { userId: transfer.fromUserId, type: 'transfer_refund', amount: fee,
+          balanceBefore: Number(payer.balance)-fee, balanceAfter: payer.balance, instanceId: instance.id,
+          remark: `删除账户取消转让并退还手续费：${transfer.id}` } })
+      }
+      await tx.instanceTransfer.update({ where: { id: transferId }, data: { status: 'cancelled', cancelledAt: new Date(), cleanupState: Prisma.DbNull } })
+    }, { timeout: 110000 })
+  } finally { activeTransfers.delete(transferId) }
+}
 const safeName = (value: unknown): value is string => typeof value === 'string' && /^[a-zA-Z0-9][a-zA-Z0-9_.-]*$/.test(value)
 
 function decodeState(value: unknown): TransferCleanupState {

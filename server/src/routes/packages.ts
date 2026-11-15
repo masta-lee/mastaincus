@@ -2542,7 +2542,7 @@ export default async function packageRoutes(fastify: FastifyInstance) {
       if (globalChannel) {
         // 构建通知消息
         const hostDetails = results.map(r => 
-          `• ${r.hostName.toUpperCase()}: CPU ${r.cpuAvailable}% | 内存 ${formatMemory(r.memoryAvailable)}`
+          `• 可用 CPU ${r.cpuAvailable}% | 内存 ${formatMemory(r.memoryAvailable)}`
         ).join('\n')
 
         const notifyTitle = `📦 资源释放 - ${pkg.name}`

@@ -13,7 +13,9 @@ const env = Object.fromEntries(Object.entries(process.env).filter(([key]) =>
   !key.startsWith('INCUDAL_') && !['BASH_ENV', 'ENV', 'SHELLOPTS', 'BASHOPTS'].includes(key)))
 try {
   const result = spawnSync(bash, ['scripts/test-agent-installer.sh', work.replaceAll('\\', '/')], {
-    cwd: root, env, encoding: 'utf8', timeout: 60_000, maxBuffer: 4 * 1024 * 1024,
+    // Windows process startup and ten real file/staging cases share this outer
+    // budget. The installer retains its own bounded network/smoke timeouts.
+    cwd: root, env, encoding: 'utf8', timeout: 180_000, maxBuffer: 4 * 1024 * 1024,
   })
   process.stdout.write(result.stdout ?? '')
   process.stderr.write(result.stderr ?? '')

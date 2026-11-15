@@ -51,7 +51,7 @@ assert.ok(
 
 assert.ok(
   routeSource.includes("TICKET_AUTO_CLOSE_ENABLED_CONFIG_KEY, 'free_site_mode'") &&
-    routeSource.includes("const numberKeys = ['smtp_port'") &&
+    routeSource.includes("const numberKeys = ['registration_ip_daily_limit', 'smtp_port'") &&
     routeSource.includes("'telegram_vip_group_invite_expire_minutes', TICKET_AUTO_CLOSE_HOURS_CONFIG_KEY]") &&
     routeSource.includes('config.key === TICKET_AUTO_CLOSE_HOURS_CONFIG_KEY && num < 1'),
   'ticket auto-close enabled must be boolean and hours must be an integer of at least 1'

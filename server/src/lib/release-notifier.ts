@@ -59,7 +59,7 @@ export async function sendReleaseNotification(params: {
       if (h) {
         const cpuAvailable = (h.cpu_allowance_max || 0) - (h.cpu_used || 0)
         const memAvailable = (h.memory_max || 0) - (h.memory_used || 0)
-        hostDetails.push(`• ${h.name.toUpperCase()}: CPU ${cpuAvailable}% | 内存 ${formatMem(memAvailable)}`)
+        hostDetails.push(`• 可用 CPU ${cpuAvailable}% | 内存 ${formatMem(memAvailable)}`)
       }
     }
 

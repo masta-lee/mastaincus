@@ -1,6 +1,6 @@
 {
   "name": "payincus",
-  "version": "1.8.11",
+  "version": "1.8.12",
   "description": "PayIncus commercial Incus platform",
   "type": "module",
   "private": true,
@@ -217,6 +217,9 @@
     "pnpm --filter server test:recharge-state-transitions",
     "pnpm --filter server test:redeem-code-management-guards",
     "pnpm --filter server test:registration-concurrency-guards",
+    "pnpm --filter server test:registration-source-guards",
+    "pnpm --filter server test:registration-rate-limit-guards",
+    "pnpm --filter server test:customer-notification-guards",
     "pnpm --filter server test:recharge-accounting-guards",
     "pnpm --filter server test:checkout-payment-state",
     "pnpm --filter server test:epay-key-formats",

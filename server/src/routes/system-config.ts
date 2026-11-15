@@ -399,6 +399,7 @@ export default async function systemConfigRoutes(fastify: FastifyInstance) {
             'default_quota_friend',
             'default_quota_package',
             'registration_enabled',
+            'registration_ip_daily_limit',
             'require_invite_code',
             'invite_generation_costs',
             'invite_default_expire_days',
@@ -508,7 +509,7 @@ export default async function systemConfigRoutes(fastify: FastifyInstance) {
         ]
         const jsonKeys = ['invite_generation_costs', VIP_BENEFITS_CONFIG_KEY]
         // 数字类型配置键（包括配额配置）
-        const numberKeys = ['smtp_port', 'default_quota_host', 'default_quota_friend', 'default_quota_package', 'free_site_register_gift_points', 'invite_default_expire_days', 'telegram_group_invite_expire_minutes', 'telegram_vip_group_invite_expire_minutes', TICKET_AUTO_CLOSE_HOURS_CONFIG_KEY]
+        const numberKeys = ['registration_ip_daily_limit', 'smtp_port', 'default_quota_host', 'default_quota_friend', 'default_quota_package', 'free_site_register_gift_points', 'invite_default_expire_days', 'telegram_group_invite_expire_minutes', 'telegram_vip_group_invite_expire_minutes', TICKET_AUTO_CLOSE_HOURS_CONFIG_KEY]
         const decimalKeys = ['free_site_register_gift_balance', 'telegram_group_min_recharge', 'telegram_group_min_consume', 'telegram_vip_group_min_recharge', 'telegram_vip_group_min_consume']
         const rateKeys = [AFF_COMMISSION_RATE_CONFIG_KEY, AFF_DISCOUNT_RATE_CONFIG_KEY]
 
@@ -718,7 +719,8 @@ export default async function systemConfigRoutes(fastify: FastifyInstance) {
                 if (num === null) {
                     return reply.code(400).send(apiError(ErrorCode.CONFIG_INVALID_VALUE, config.key))
                 }
-                                                if (config.key === TICKET_AUTO_CLOSE_HOURS_CONFIG_KEY && num < 1) {
+                if (config.key === 'registration_ip_daily_limit' && (num < 1 || num > 100)) return reply.code(400).send(apiError(ErrorCode.CONFIG_INVALID_VALUE, config.key))
+                if (config.key === TICKET_AUTO_CLOSE_HOURS_CONFIG_KEY && num < 1) {
                     return reply.code(400).send(apiError(ErrorCode.CONFIG_INVALID_VALUE, config.key))
                 }
                 if ((config.key === 'telegram_group_invite_expire_minutes' || config.key === 'telegram_vip_group_invite_expire_minutes') && (num < 1 || num > 10080)) {

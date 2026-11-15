@@ -1,5 +1,9 @@
 # PayIncus 操作手册
 
+2026-11-15四项最终候选验收完成：8cd82d85 CI29/29、Alpine、预览双首装六v1.8.11旧worker与双签名tar通过；主控任务54success运行preview-8cd82d8，244迁移，34host online无隔离。原49–52/价格账期/图库升级保持；#49重装同页面新密码及pin公网SSH过；新#20临时测试账户实购#53/host48、原生取消/确认删除、远端卷forward与全账单账户清除/host48重售通过。正式1.8.12待发布，相同代码不重复OTA。下方为本批过程及上一版历史，详见docs/account-notification-reinstall-review-2026-11-15.md。
+
+2026-11-15新增注册/管理员删除账户/TG/重装密码四项：源码和隔离PG/mTLS、浏览器、双前端构建/后端build已验，主控仅只读查owner指定IP，未部署本批、未代删线上账户。owner确认注册24h限额3、运营资源所有者先转交再删。首轮224中3失败已修/复验，最终225全量在运行；原生Incus账号删除与v1.8.11旧worker双架构升级/预览待。详见docs/account-notification-reinstall-review-2026-11-15.md。v1.8.11已正式完成，下文为原证据，不混为本批已发布。
+
 本批最终状态：v1.8.11/Agent1.0.15正式公开与全部资产/签名/内容验收完成，source b463d9e1；mainCI43626317398最终29/29 success，正式面板/Agent全部success。主控preview-b463d9e同source候选正常部署和全部现场功能已验，不需重复热更；34host在线无隔离，新测试49–52正常，客户30GiB/原价/无旧数据正确。完整证据docs/release-v1.8.11-validation.md，下面为过程历史。
 
 2026-11-15 02:42北京时间最新正式：v1.8.11/Agent1.0.15已公开，产品source b463d9e1，六面板公开资产及三Agent资产、双tar原签名/内容均核过。主控preview-b463d9e同source候选已正常任务52部署并完成全部现场测试；未重复正式包OTA。34host在线无隔离，客户测试新49–52运行在原16/37/53/54、30GiB/原价10+1/无旧override或数据、SSH/IPv6正常；旧45–48已删除并1.5–3秒回池。全镜像两架构各24+最后缓存专项通过，图库保持。main重复CI43626317398尾段无失败继续核，公开正式面板43626345677与Agent43626317373全部success；详情docs/release-v1.8.11-validation.md。owner继续不代表认可LVM，用户无快照入口；长期完整OSS灾备不由本版替代。

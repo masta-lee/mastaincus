@@ -74,15 +74,17 @@ export async function assertDeletionAuthority(tx: Prisma.TransactionClient, inst
 }
 
 /** Admission persists intent before any remote operation. A failed HTTP response never erases it. */
-export async function requestInstanceDeletion(expected: Expected, actor: WriteActor, options: { mode: Mode; refund?: boolean; reason?: string; adminRefundType?: 'full' | 'remaining'; deferRemote?: boolean }) {
+export async function requestInstanceDeletion(expected: Expected, actor: WriteActor, options: { mode: Mode; refund?: boolean; reason?: string; adminRefundType?: 'full' | 'remaining'; deferRemote?: boolean; accountCleanup?: boolean }) {
   await withInstanceBillingMutation(expected.id, () => prisma.$transaction(async tx => {
     await tx.$queryRaw`SELECT id FROM hosts WHERE id = ${expected.hostId} FOR UPDATE`
     if (!await tryAdvisoryTransactionLock(tx, INSTANCE_OPERATION_LOCK_NAMESPACE, expected.id)) throw new DeletionAdmissionError('DELETE_WORKFLOW_BUSY')
     await tx.$queryRaw`SELECT id FROM instances WHERE id = ${expected.id} FOR UPDATE`
     const instance = await tx.instance.findUnique({ where: { id: expected.id } })
     const host = await tx.host.findUnique({ where: { id: expected.hostId } })
+    const cleanupAccount = options.accountCleanup && options.mode === 'admin' && instance && ['deleted','creating'].includes(instance.status) && !instance.deletionIntent &&
+      Boolean((await tx.user.findUnique({ where: { id: instance.userId }, select: { deletionIntent: true } }))?.deletionIntent)
     if (!instance || !host || instance.hostId !== expected.hostId || instance.userId !== expected.userId || instance.incusId !== expected.incusId ||
-        instance.status !== expected.status || ['deleted', 'creating'].includes(instance.status) || instance.deletionBillingPending ||
+        instance.status !== expected.status || (['deleted', 'creating'].includes(instance.status) && !cleanupAccount) || instance.deletionBillingPending ||
         iso(instance.expiresAt) !== iso(expected.expiresAt) || (expected.version !== undefined && instance.version !== expected.version)) throw new DeletionAdmissionError('DELETE_TARGET_CHANGED')
     if (recoveryHeld()) throw new DeletionAdmissionError('PLATFORM_RECOVERY_HELD')
     await assertNoPendingProxySiteOperations(tx, instance.id)

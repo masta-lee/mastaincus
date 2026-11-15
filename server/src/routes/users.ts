@@ -4,6 +4,7 @@
 
 import { randomInt } from 'node:crypto'
 import adminUserEmailRoutes from './admin-user-email.js'
+import { requestUserCleanup, userCleanupStatus, processUserCleanup, UserCleanupError } from '../services/admin-user-cleanup.js'
 import { Prisma } from '@prisma/client'
 
 // @ts-ignore - bcryptjs has its own types
@@ -48,6 +49,8 @@ function handleAdminMutationError(error: unknown, reply: FastifyReply): boolean 
     reply.code(400).send(apiError(ErrorCode[error.message as keyof typeof ErrorCode]))
   } else if (error.message === 'OAUTH_BINDING_NOT_FOUND') {
     reply.code(400).send(apiError(ErrorCode.INVALID_PARAMS, 'User has not bound this OAuth provider'))
+  } else if (error.message === 'USER_CLEANUP_IN_PROGRESS') {
+    reply.code(409).send({code:'USER_CLEANUP_IN_PROGRESS',error:'账户正在删除，请等待清理完成'})
   } else return false
   return true
 }
@@ -173,7 +176,7 @@ export default async function userRoutes(fastify: FastifyInstance) {
     const [userAccounts, instanceCounts, githubBindings, lastLoginMap, consumeMap, userPointsList, frozenHostingBalances] = await Promise.all([
       prisma.user.findMany({
         where: { id: { in: userIds } },
-        select: { id: true, twoFactorEnabled: true, balance: true, hostingBalance: true }
+        select: { id: true, twoFactorEnabled: true, balance: true, hostingBalance: true, deletionIntent: true }
       }),
       prisma.instance.groupBy({
         by: ['userId'],
@@ -204,6 +207,7 @@ export default async function userRoutes(fastify: FastifyInstance) {
     const githubBindingMap = new Map(githubBindings.map(gb => [gb.userId, true]))
     const pointsMap = new Map(userPointsList.map(up => [up.userId, { points: up.points, totalEarned: up.totalEarned }]))
     const frozenHostingMap = new Map(frozenHostingBalances.map(f => [f.userId, Number(f._sum.amount || 0)]))
+    const deletionMap = new Map(userAccounts.map(account=>[account.id,Boolean(account.deletionIntent)]))
 
     return {
       users: result.items.map((u: unknown) => {
@@ -235,6 +239,7 @@ export default async function userRoutes(fastify: FastifyInstance) {
           email: user.email,
           role: user.role,
           status: user.status,
+          deleting: deletionMap.get(user.id) || false,
           avatarStyle: user.avatar_style,
           avatarBadgeId: user.avatar_badge_id ?? null,
           twoFAEnabled: twoFAMap.get(user.id) || false,
@@ -1069,6 +1074,32 @@ export default async function userRoutes(fastify: FastifyInstance) {
   })
 
   // 删除用户 (管理员)
+  fastify.post<{ Params: { id: string }; Body: { confirm: boolean } }>('/:id/cleanup', {
+    onRequest: [fastify.authenticateAdmin],
+    schema: { body: { type: 'object', additionalProperties: false, required: ['confirm'], properties: { confirm: { const: true } } } },
+    config: { rateLimit: { max: 6, timeWindow: '1 minute' } }
+  }, async (request, reply) => {
+    const id = parsePositiveRouteId(request.params.id)
+    if (!id) return reply.code(400).send(apiError(ErrorCode.INVALID_ID))
+    const target = await db.findUserById(id)
+    if (!target) return reply.code(404).send(apiError(ErrorCode.USER_NOT_FOUND))
+    if (shouldProtectDemoAccount(request, target)) return reply.code(403).send({error:DEMO_ACCOUNT_PROTECTED_MESSAGE})
+    try {
+      const result = await requestUserCleanup(id, request.user)
+      void processUserCleanup(id).catch(()=>request.log.warn({userId:id},'Account cleanup will retry'))
+      return reply.code(202).send(result)
+    } catch (error) {
+      if (error instanceof UserCleanupError) return reply.code(error.status).send({code:error.code})
+      if (handleAdminMutationError(error,reply)) return
+      throw error
+    }
+  })
+  fastify.get<{ Params: { id: string } }>('/:id/cleanup', { onRequest: [fastify.authenticateAdmin] }, async (request, reply) => {
+    const id = parsePositiveRouteId(request.params.id)
+    if (!id) return reply.code(400).send(apiError(ErrorCode.INVALID_ID))
+    reply.header('Cache-Control','no-store')
+    return userCleanupStatus(id)
+  })
   fastify.delete<{ Params: { id: string } }>('/:id', {
     onRequest: [fastify.authenticateAdmin]
   }, async (request: FastifyRequest<{ Params: { id: string } }>, reply: FastifyReply) => {

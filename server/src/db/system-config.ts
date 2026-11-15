@@ -59,6 +59,7 @@ export async function initSystemConfig(): Promise<void> {
         { key: 'default_quota_friend', value: '0', type: 'number', label: '默认好友配额', description: '新用户默认可添加好友数量（0 = 未授权，需管理员开启）' },
         { key: 'default_quota_package', value: '0', type: 'number', label: '默认套餐配额', description: '新用户默认可创建套餐数量（0 = 未授权，需管理员开启）' },
         { key: 'registration_enabled', value: 'true', type: 'boolean', label: '开放注册', description: '是否允许新用户注册账号' },
+        { key: 'registration_ip_daily_limit', value: '3', type: 'number', label: '同网络每日注册上限', description: '同一公网IPv4或IPv6 /64网段在24小时内的成功注册上限' },
         { key: 'require_invite_code', value: 'true', type: 'boolean', label: '邀请码注册', description: '是否需要邀请码才能注册' },
         { key: 'invite_generation_costs', value: '[{"resource":"balance","amount":0,"enabled":false},{"resource":"points","amount":0,"enabled":false}]', type: 'json', label: '邀请码生成定价', description: '用户生成邀请码可选择的成本项，当前支持 balance 和 points' },
         { key: 'invite_default_expire_days', value: '0', type: 'number', label: '用户邀请码有效期', description: '用户生成邀请码的默认有效天数，0 表示永不过期' },

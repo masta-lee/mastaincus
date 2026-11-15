@@ -56,7 +56,7 @@ export async function verifyTurnstileToken(
 
         const result = await response.json() as TurnstileVerifyResponse
 
-        if (result.success) {
+        if (response.ok && result.success === true) {
             return { success: true }
         }
 
@@ -75,7 +75,7 @@ export async function verifyTurnstileToken(
  * 创建 Turnstile 验证 preHandler
  * @param _required 保留旧调用签名；是否强制验证由系统开关和完整密钥配置共同决定
  */
-export function createTurnstileVerifier(_required: boolean = true) {
+export function createTurnstileVerifier(_required: boolean = true, failClosed: boolean = false) {
     return async function verifyTurnstile(
         request: FastifyRequest,
         reply: FastifyReply
@@ -92,6 +92,7 @@ export function createTurnstileVerifier(_required: boolean = true) {
         // secret key 缺失时后端无法验证 token；两者都不能强制要求 token。
         if (!config.siteKey || !config.secretKey) {
             console.warn('Turnstile enabled but site key or secret key is not configured')
+            if (failClosed) return reply.code(503).send({ code: 'REGISTRATION_VERIFICATION_UNAVAILABLE', error: 'Registration verification is temporarily unavailable' })
             return // 跳过验证
         }
 
@@ -128,3 +129,5 @@ export function createTurnstileVerifier(_required: boolean = true) {
  * 预定义的验证器实例
  */
 export const turnstileVerifier = createTurnstileVerifier(true)
+// Registration must not bypass an enabled but incomplete challenge.
+export const registrationTurnstileVerifier = createTurnstileVerifier(true, true)
