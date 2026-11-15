@@ -1,6 +1,6 @@
 # v1.8.13 同批修复及发行验收
 
-产品源码`629dca1f6c70c9c9b497f36b8862b15bea0610c3`，PR17精确快进合入main，注释tag v1.8.13指向同源码。正式[43688994863](https://github.com/mastalee928/payincus/actions/runs/43688994863)已启动，公开Release及资产尚待核验；main重复CI43688988825待终态。
+产品源码`629dca1f6c70c9c9b497f36b8862b15bea0610c3`，PR17精确快进合入main，注释tag v1.8.13指向同源码，tag对象`8e2b317a47b35e335cfffe3de2f28d5c3bc72f99`。正式[43688994863](https://github.com/mastalee928/payincus/actions/runs/43688994863)双构建/双首装/六v1.8.12原worker/Release全部success，preview-agent预期skipped；main重复CI43688988825终态30/30 success。[公开v1.8.13](https://github.com/mastalee928/payincus/releases/tag/v1.8.13)于2026-11-15 15:31:34北京时间发布，非draft/非prerelease、latest已指向本版。
 
 本批包含手动单台/批量/PAT/自动续费恢复原到期封停客机、连续付款延长同一意图、详情页系统到期仍可续费；用户和管理员IPv4/IPv6同款排版、移除建站；管理员删除用户图标与悬停“删除用户”、后台列表刷新避免骨架闪烁，末页删除/旧会话回执保护。Agent保持v1.0.15，没有新增Agent发行。
 
@@ -12,4 +12,4 @@
 
 用户/管理员桌面/手机4组现场IPv4/IPv6计算字体、字号、颜色、行高与padding相等，无溢出/建站入口，4截图全部查看。管理员原生取消保留专用账户，确认后删除#21及两台54/55，真实MutationObserver证明其它用户行未卸载/不闪烁；最终核账户/实例/全账单与订单不存在、两原Incus客机及卷/转发无、host48/49可售，原13账户和四实例保持。日志`renewal-live-network-final.log`与`renewal-live-delete-browser.log`实际exit0；资金/远端终态私有脱敏回执保存在仓库外。
 
-正式公开包尚需继续下载/核API size/digest、SHA/checksum、OTA清单及原pin签名/来源。正式包与已实测候选同产品，不重复主控OTA和专用销毁。长期真实OSS公网DNS切换/整机失联灾备等原未验目标保持独立。
+六公开资产已重新下载，API size/digest、SHA/checksum和两份OTA清单核验通过。AMD包214608062B SHA256 `f4b1e4274d7d9d3beeff775346bac900a540d47eb57d6a9c4d24cefed7bd6d84`；ARM包213834007B SHA256 `d9114de77354731f8385a302ddb3c549a7617c738eaa85f2705326e0c37e072b`。两正式tar原pin双签名/来源629dca1f/244迁移/本批全部模块/无内置镜像库/用户边界独立核过，日志`renewal-public-assets-verified.json`和`renewal-public-archives-verified.log`自然exit0。正式包与已实测候选同产品，不重复主控OTA和专用销毁。主控仍preview-629dca1，不能称其已运行正式tag元数据。长期真实OSS公网DNS切换/整机失联灾备等原未验目标保持独立。
