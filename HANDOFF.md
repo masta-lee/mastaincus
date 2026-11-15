@@ -1,5 +1,7 @@
 # 版本与验证记录
 
+- 2026-11-15本批全部现场闭环，源码629dca1f/PR17精确快进main/tag v1.8.13已推，正式43688994863和main重复CI43688988825待终态。最终CI30/30、Alpine/预览双首装六v1.8.12原worker/双pin签名tar通过。主控任务56success14:41:36运行preview-629dca1；原四实例/13账户余额保持、34在线无隔离。专用#21实购54/55，实际到期Stopped后详情单台/列表批量各10元自动同UUID Running，一台一账单；原生删用户不闪、容器卷forward和全账单账户全清/48与49回池。两ARM库存占用保留原客户，以最终双原生CI为证。公开资产待核、未重复正式OTA，见[正式验收](docs/release-v1.8.13-validation.md)。
+
 - 2026-11-15候选533ff125双实际tar原pin签名/来源/244迁移/全部本批修复/用户边界过，预览43682328472双首装六v1.8.12原worker升级/回滚再升级success。现场准备追加发现详情续费错误沿用封停禁用，已局部修独立isRenewalDisabled；桌面/手机真实预览点击和原密码/生命周期浏览器、types/route/i18n双build过，生成最终新来源前未部署/公开。533完整产品CI继续核终态，不能用旧包替代最终补修验收。
 
 - 2026-11-15续费修复双原生98b7a3ad CI43679907784的AMD/ARM cleanup job均success，实际到期Stopped→手动续费/autoRenew=false→原worker同UUID Running/一次扣款→正常删除回池通过；本地225/225自然exit0。追加删用户图标和闪烁已源码修：同栏16px/title“删除用户”、处理中沙漏、后台刷新保留列表/滚动/同key行、末页修正及旧会话回执拒绝，18组浏览器和原生确认/完整轮询专项exit0，types/route/i18n过，最终双build进行中。全部同批保留，未热更/新版；CI其余分片终态及v1.8.12旧worker预览待，见[UI证据](docs/admin-user-delete-ui-2026-11-15.md)和[续费证据](docs/manual-renewal-expiry-resume-2026-11-15.md)。
