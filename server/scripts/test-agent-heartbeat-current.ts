@@ -121,6 +121,17 @@ try {
     const fresh = await app.inject({ method: 'POST', url: '/agent/heartbeat', headers: sign(pressureCredentials.agentId, pressureCredentials.agentSecret, liveness), payload: liveness })
     assert.equal(fresh.statusCode, 200, 'fresh signed liveness remains writable after a long held network lane')
   } finally { await holder.query('ROLLBACK') }
+  await prisma.host.update({ where: { id: host.id }, data: { portProtocolAppliedRevision: 1 } })
+  await holder.query('BEGIN')
+  await holder.query('SELECT id FROM hosts WHERE id = $1 FOR NO KEY UPDATE', [host.id])
+  try {
+    const pending = await app.inject({ method: 'POST', url: '/agent/heartbeat', headers: sign(pressureCredentials.agentId, pressureCredentials.agentSecret, liveness), payload: liveness })
+    assert.equal(pending.statusCode, 200, 'new protocol acknowledgement does not block heartbeat on slow host fields')
+    assert.equal((await prisma.host.findUniqueOrThrow({ where: { id: host.id } })).portProtocolAppliedRevision, 1, 'busy receipt is not falsely accepted')
+  } finally { await holder.query('ROLLBACK') }
+  const resumed = await app.inject({ method: 'POST', url: '/agent/heartbeat', headers: sign(pressureCredentials.agentId, pressureCredentials.agentSecret, liveness), payload: liveness })
+  assert.equal(resumed.statusCode, 200)
+  assert.equal((await prisma.host.findUniqueOrThrow({ where: { id: host.id } })).portProtocolAppliedRevision, 2, 'next fresh heartbeat confirms the actual applied rule')
   const credentials = await rotateHostAgentCredentials(host.id, true, { actor })
   const headers = sign(credentials.agentId, credentials.agentSecret)
   const accepted = await app.inject({ method: 'POST', url: '/agent/heartbeat', headers, payload: body })

@@ -59,6 +59,14 @@ export async function acceptPortProtocolReport(hostId: number, value: unknown, a
   }
   // A delayed acknowledgement must never overwrite a newer operator choice.
   await prisma.$transaction(async tx => {
+    const rows = await tx.$queryRaw<Array<{ id: number }>>`SELECT id FROM hosts WHERE id = ${hostId} FOR UPDATE SKIP LOCKED`
+    if (!rows.length) {
+      // Defer the protocol receipt, still authenticate the report under the
+      // current credential row lock. Non-key maintenance does not block this;
+      // real host deletion/credential rotation retains its stronger fence.
+      await lockCurrentHostAgent(tx, agent)
+      return
+    }
     await lockCurrentHostAgent(tx, agent, 'host')
     await tx.host.updateMany({
       where: { id: hostId, portProtocol: String(report.mode), portProtocolRevision: Number(report.revision) },
