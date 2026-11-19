@@ -5,7 +5,9 @@ umount -l /.oldroot
 mount -t proc proc /proc
 umount -l /sys/fs/cgroup
 mount -t cgroup2 cgroup2 /sys/fs/cgroup
-apk add --no-cache incus incus-client incus-openrc openrc apparmor-utils iproute2 python3 lxcfs lxcfs-openrc tar gzip xz squashfs-tools rsync util-linux lvm2 lvm2-extra device-mapper btrfs-progs btrfs-progs-extra wireguard-tools
+apk add --no-cache incus incus-client incus-openrc openrc apparmor apparmor-utils iproute2 python3 lxcfs lxcfs-openrc tar gzip xz squashfs-tools rsync util-linux lvm2 lvm2-extra device-mapper btrfs-progs btrfs-progs-extra wireguard-tools
+command -v apparmor_parser
+test -d /sys/kernel/security/apparmor
 mkdir -p /etc/network /run/openrc /run/dbus /run/incus
 printf 'auto lo\niface lo inet loopback\n' > /etc/network/interfaces
 touch /run/openrc/softlevel
