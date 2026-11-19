@@ -88,6 +88,27 @@ def proc_memory(pid):
     return {k: values.get(k, 0) for k in ['Rss', 'Pss', 'Anonymous', 'AnonHugePages', 'Swap']}
 
 
+def go_heap_mapping_small_pages(pid):
+    # Inspect real Go heap VMAs of the paired Go 1.26 daemon, not a test proxy.
+    regions = []
+    current = None
+    for line in P(f'/proc/{pid}/smaps').read_text().splitlines():
+        fields = line.split()
+        if not fields:
+            continue
+        if '-' in fields[0]:
+            current = {'name': ' '.join(fields[5:]), 'rss': 0, 'small': False}
+            regions.append(current)
+        elif current:
+            if fields[0] == 'Rss:':
+                current['rss'] = int(fields[1])
+            elif fields[0] == 'VmFlags:':
+                current['small'] = 'nh' in fields[1:]
+    heaps = [r for r in regions if 'Go: heap' in r['name'] and r['rss'] > 0]
+    assert heaps, 'paired daemon Go heap mapping not identified'
+    return any(r['small'] for r in heaps)
+
+
 def guest_cgroup(pid):
     groups = P(f'/proc/{pid}/cgroup').read_text().splitlines()
     group = next(v[3:] for v in groups if v.startswith('0::'))
@@ -153,6 +174,7 @@ try:
             print(f'FIXTURE_TOOL name={name} code={check.returncode} out={check.stdout[:400]}', flush=True)
         subprocess.run(['rc-service', 'lxcfs', 'start'], timeout=20)
         raise AssertionError('full Agent provisioning receipts not ready')
+    assert go_heap_mapping_small_pages(daemon_pid) == (os.environ.get('INCUDAL_MEMORY_TUNING') != 'explicit-daemon-settings'), 'actual daemon small-page default or override did not apply'
     idle = {'agent': proc_memory(agent.pid), 'incus': proc_memory(int(P('/run/incus/incusd.pid').read_text())), 'budget': cgroup_data(budget_group)}
     # Leave 8MiB for container exec/runtime metadata; its total cgroup charge
     # must still reach at least 752MiB of the unchanged 768MiB customer limit.
