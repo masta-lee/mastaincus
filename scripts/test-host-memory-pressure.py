@@ -118,9 +118,8 @@ guest = query('/1.0/instances/memory-customer')
 before = query('/1.0/instances/memory-customer/state')
 cg = guest_cgroup(before['pid'])
 daemon_pid = int(P('/run/incus/incusd.pid').read_text())
-# OpenRC creates host-root service cgroups. Re-enclose only this disposable
-# daemon after the tested reload so its C/Go allocations count in the budget.
-(budget_group / 'host' / 'cgroup.procs').write_text(str(daemon_pid))
+# The disposable OpenRC base was bounded before the daemon launch. Merely
+# moving a PID later would leave pre-existing allocations outside the budget.
 assert str(budget_group).removeprefix('/sys/fs/cgroup') in P(f'/proc/{daemon_pid}/cgroup').read_text()
 incus('exec', 'memory-customer', '--', 'sh', '-c', 'printf preserved >/root/memory-marker')
 incus('file', 'push', '--mode=0700', '/out/memory-holder', 'memory-customer/root/memory-holder')
