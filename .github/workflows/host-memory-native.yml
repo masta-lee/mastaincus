@@ -12,7 +12,10 @@ on:
       - 'scripts/setup-host-memory-pressure.sh'
       - '.github/workflows/host-memory-native.yml'
 jobs:
+  compatibility-build:
+    uses: ./.github/workflows/incus-sysinfo-compat.yml
   memory:
+    needs: compatibility-build
     permissions:
       contents: read
       actions: read
@@ -39,9 +42,7 @@ jobs:
       - name: Prepare same fixed-source daemon and full Agent
         env:
           GH_TOKEN: ${{ github.token }}
-          # This daemon input is unchanged; the complete six-scenario native
-          # matrix from this run passed before this additional pressure test.
-          INCUS_COMPAT_BUILD_RUN: '44561714405'
+          INCUS_COMPAT_BUILD_RUN: ${{ github.run_id }}
         run: |
           set -euo pipefail
           node scripts/prepare-incus-compat.mjs
