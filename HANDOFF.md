@@ -1,5 +1,11 @@
 # 版本与验证记录
 
+- 2026-11-20内存优化实施中：新分支codex/host-memory-optimization，已实现嵌入payload首次流式验证/周期已安装程序完整流式hash、安装与备份回滚小缓冲，以及Agent每次启动自动Go预算(物理/cgroup祖先1/16、32–256MiB、显式GOMEMLIMIT优先)。本地相同64MiB旧158MiB分配→新76.8KiB，损坏/超短长/双架构/取消测试及三相关守卫过；新增双原生旧daemon完整6场景+内存分配/RSS/GC验收待。本地QEMU启动前异常退出不算证据，生产只读/未发布升级，不改客户768MiB/配置；见[方案与证据范围](docs/host-memory-implementation-2026-11-20.md)。
+
+- 2026-11-19空闲E2内存只读诊断：134host中128空闲E2，最新资源72台available<256MiB，加固快照78台；135/136/56真实Agent RSS218–349MiB、Incus145–236MiB、THP匿名大页明显。定位Agent每30s已verified状态仍解压约61.6MiB嵌入Incus+整文件读取校验，暂未取heap profile，不断言泄漏。四运行客户实际68–185MiB/768MiB限额、宿主swap160–229MiB、OOM0，不能当满额已验。未改代码/配置/重启或压测客户，报告[证据与后续方向](docs/host-memory-audit-2026-11-19.md)，修复需owner明确开始。
+
+- 2026-11-16本轮仅只读调查/报告：两悉尼Alpine3.24的chronyd运行但8公网NTP无回包，ipinfoHTTPS同样超时；OCI内部NTP正常。Owner确认并自行放开VCN出站，随后公网NTP/HTTPS恢复，原任务第12次自然推进，sydney-amd-4/79于02:12:43、sydney-amd-3/80于02:17:02完成接入，两台管理IP .67/.68、Agent有效/无隔离/可售，实际chrony Normal/小于0.1ms、Australia/Sydney/AppArmorY/空Incus均回读通过。santiago74原等待为73→75→76全局单台维护排队，01:43已完成。另主控clock状态/chronyc访问与drift写权限异常只记待查；未改产品、未重启/调时/重试/OTA/commit/push。报告[详情](docs/host-onboarding-audit-2026-11-16.md)，后续修复等owner明确开始。
+
 - v1.8.13于2026-11-15 15:31:34北京时间正式公开，产品629dca1f/tag对象8e2b317a，正式43688994863双首装六v1.8.12原worker与Release全部success、main43688988825 30/30 success。六公开资产size/digest/checksum/OTA及双tar原pin双签名/244迁移/修复与用户边界独立核验自然exit0，latest正确。主控同source候选任务56已热更实测，仍preview-629dca1、不重复正式OTA；原四实例/13账户及34host保持，专用21/54/55已正常清理回池。全部本批完成，长期灾备未验范围独立保留，详见[正式证据](docs/release-v1.8.13-validation.md)。
 
 - 2026-11-15本批全部现场闭环，源码629dca1f/PR17精确快进main/tag v1.8.13已推，正式43688994863和main重复CI43688988825待终态。最终CI30/30、Alpine/预览双首装六v1.8.12原worker/双pin签名tar通过。主控任务56success14:41:36运行preview-629dca1；原四实例/13账户余额保持、34在线无隔离。专用#21实购54/55，实际到期Stopped后详情单台/列表批量各10元自动同UUID Running，一台一账单；原生删用户不闪、容器卷forward和全账单账户全清/48与49回池。两ARM库存占用保留原客户，以最终双原生CI为证。公开资产待核、未重复正式OTA，见[正式验收](docs/release-v1.8.13-validation.md)。

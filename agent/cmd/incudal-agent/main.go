@@ -15,6 +15,7 @@ import (
 	"incudal-agent/internal/dedicatedipv6"
 	"incudal-agent/internal/guestguard"
 	"incudal-agent/internal/ingress"
+	"incudal-agent/internal/memorybudget"
 	"incudal-agent/internal/panel"
 	"incudal-agent/internal/performance"
 	"incudal-agent/internal/provisioning"
@@ -36,6 +37,7 @@ func main() {
 		}
 		return
 	}
+	memorybudget.Configure()
 	configPath := flag.String("config", "/etc/incudal-agent/config.yaml", "agent config file")
 	once := flag.Bool("once", false, "send one heartbeat and exit")
 	restoreIngress := flag.Bool("restore-port-protocol", false, "restore saved ingress policy")

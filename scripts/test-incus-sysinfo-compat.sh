@@ -33,6 +33,19 @@ fi
 if test "${INCUDAL_COMPAT_RELOAD_SCENARIO:-}" = empty-pool; then
   printf '%s\n' "$old" > /run/incus/incusd.pid
   /out/provisioning-test -test.run '^TestNativeCompatibilityEmptyPoolReload$' -test.v
+  /out/provisioning-test -test.run '^TestNativeCompatibilityStatusAllocations$' -test.v
+  /out/provisioning-test -test.run '^(TestCompatibilityStreamRejectsCorruption|TestCompatibilityFileHashAndRollbackCopy)$' -test.v
+  INCUDAL_MEMORY_RUNTIME_TEST=1 /out/memory-budget-test -test.run '^TestNativeAgentBudgetRuntime$' -test.v
+  for mode in legacy stream; do
+    INCUDAL_MEMORY_WORKLOAD="$mode" /out/provisioning-test -test.run '^TestNativeCompatibilityMemoryWorkload$' -test.v > "/tmp/memory-$mode.log" 2>&1 &
+    memory_pid=$!
+    while kill -0 "$memory_pid" 2>/dev/null; do
+      awk -v mode="$mode" '/^(VmRSS|RssAnon|VmSwap):/{printf "MEMORY_SAMPLE mode=%s %s %s kB\n",mode,$1,$2}' "/proc/$memory_pid/status" || true
+      sleep 0.2
+    done
+    wait "$memory_pid"
+    cat "/tmp/memory-$mode.log"
+  done
   echo 'PASS actual empty-pool operations response and automatic daemon reload'
   exit 0
 fi

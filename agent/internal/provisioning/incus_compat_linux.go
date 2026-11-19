@@ -3,33 +3,17 @@
 package provisioning
 
 import (
-	"bytes"
-	"compress/gzip"
 	"context"
-	"crypto/sha256"
-	"embed"
-	"encoding/binary"
-	"encoding/hex"
 	"encoding/json"
 	"fmt"
-	"io"
 	"os"
 	"path/filepath"
-	"runtime"
 	"strconv"
 	"strings"
 	"syscall"
 	"time"
 )
 
-//go:embed compat/README.txt
-var compatibilityFiles embed.FS
-
-type compatManifest struct {
-	Purpose, IncusVersion, SourceSha256, Architecture, SHA256 string
-	LifecycleSourceSha256                                     string
-	Size                                                      int64
-}
 type compatGuest struct {
 	Name, Status string
 	Config       map[string]string
@@ -90,19 +74,19 @@ func incusCompatibilityStatus(ctx context.Context) (string, string, string) {
 			return "pending", j.RequestID, j.NewHash
 		}
 	}
-	data, e := compatibilityBinary()
+	manifest, e := compatibilityMetadata()
 	if e != nil {
 		return "", "", ""
 	}
-	b, e := os.ReadFile("/usr/sbin/incusd")
+	installedHash, e := hashCompatFile(ctx, "/usr/sbin/incusd")
 	if e != nil {
 		return "", "", ""
 	}
-	if compatHash(b) == compatHash(data) {
+	if installedHash == manifest.SHA256 {
 		if j.Phase == "verified" {
-			return "verified", j.RequestID, compatHash(data)
+			return "verified", j.RequestID, manifest.SHA256
 		}
-		return "needed", j.RequestID, compatHash(data)
+		return "needed", j.RequestID, manifest.SHA256
 	}
 	raw, e := run(ctx, "incus", "query", "/1.0")
 	if e != nil {
@@ -116,44 +100,8 @@ func incusCompatibilityStatus(ctx context.Context) (string, string, string) {
 	if json.Unmarshal(raw, &server) != nil || server.Environment.ServerVersion != "7.0.1" {
 		return "", "", ""
 	}
-	return "needed", j.RequestID, compatHash(data)
+	return "needed", j.RequestID, manifest.SHA256
 }
-
-func compatibilityBinary() ([]byte, error) {
-	m, e := compatibilityFiles.ReadFile("compat/manifest-" + runtime.GOARCH + ".json")
-	if e != nil {
-		return nil, e
-	}
-	var manifest compatManifest
-	arch := "x86_64"
-	machine := uint16(62)
-	if runtime.GOARCH == "arm64" {
-		arch = "aarch64"
-		machine = 183
-	}
-	if json.Unmarshal(m, &manifest) != nil || manifest.Purpose != "alpine-incus-sysinfo-compat" || manifest.IncusVersion != "7.0.1" || manifest.Architecture != arch || manifest.SourceSha256 != "5e415fa1684f0945d45ca780af6662f143b857681e18d29038725cde70c26ee6" || manifest.LifecycleSourceSha256 != "a60cea54e5d1e5397292556627fdcf7a808494e6abcbb180dd3b3710f03eb222" || manifest.Size <= 0 || manifest.Size > 96*1024*1024 {
-		return nil, fmt.Errorf("compatibility manifest invalid")
-	}
-	b, e := compatibilityFiles.ReadFile("compat/incusd-" + runtime.GOARCH + ".gz")
-	if e != nil {
-		return nil, e
-	}
-	reader, e := gzip.NewReader(bytes.NewReader(b))
-	if e != nil {
-		return nil, e
-	}
-	defer reader.Close()
-	data, e := io.ReadAll(io.LimitReader(reader, manifest.Size+1))
-	if e != nil {
-		return nil, e
-	}
-	hash := sha256.Sum256(data)
-	if int64(len(data)) != manifest.Size || len(data) < 20 || string(data[:4]) != "\x7fELF" || binary.LittleEndian.Uint16(data[18:20]) != machine || hex.EncodeToString(hash[:]) != manifest.SHA256 {
-		return nil, fmt.Errorf("compatibility artifact invalid")
-	}
-	return data, nil
-}
-func compatHash(b []byte) string { s := sha256.Sum256(b); return hex.EncodeToString(s[:]) }
 func saveCompatJournal(v compatJournal) error {
 	b, e := json.Marshal(v)
 	if e != nil {
@@ -226,24 +174,6 @@ func compatibleCurrentGuests(before, after []compatGuest) bool {
 		}
 	}
 	return true
-}
-func replaceCompatBinary(data []byte) error {
-	f, e := os.CreateTemp("/usr/sbin", ".incudal-incusd-*")
-	if e != nil {
-		return e
-	}
-	defer os.Remove(f.Name())
-	if e = f.Chmod(0755); e == nil {
-		_, e = f.Write(data)
-	}
-	if e == nil {
-		e = f.Sync()
-	}
-	f.Close()
-	if e != nil {
-		return e
-	}
-	return os.Rename(f.Name(), "/usr/sbin/incusd")
 }
 func waitCompatDaemonExit(ctx context.Context, pid int, expectedStart string) error {
 	for n := 0; n < 90; n++ {
@@ -333,11 +263,11 @@ func prepareIncusCompatibility(ctx context.Context, permit *CompatPermit) error 
 		return rollbackIncusCompatibility(ctx, journal)
 	}
 	if journal.Phase == "prepared" {
-		old, e := os.ReadFile(compatBackupPath)
-		if e != nil || compatHash(old) != journal.OldHash {
+		oldHash, e := hashCompatFile(ctx, compatBackupPath)
+		if e != nil || oldHash != journal.OldHash {
 			return fmt.Errorf("compatibility prepared rollback invalid")
 		}
-		if e = replaceCompatBinary(old); e != nil {
+		if e = copyCompatFile(ctx, compatBackupPath, "/usr/sbin/incusd", journal.OldHash, true); e != nil {
 			return e
 		}
 		journal.Phase = "rolled-back"
@@ -352,8 +282,8 @@ func prepareIncusCompatibility(ctx context.Context, permit *CompatPermit) error 
 		if e = waitCompatDaemonExit(ctx, journal.PID, journal.ProcessStart); e != nil {
 			return e
 		}
-		installed, e := os.ReadFile("/usr/sbin/incusd")
-		if e != nil || compatHash(installed) != journal.NewHash {
+		installedHash, e := hashCompatFile(ctx, "/usr/sbin/incusd")
+		if e != nil || installedHash != journal.NewHash {
 			return fmt.Errorf("compatibility reloading binary changed")
 		}
 		if e = startCompatDaemon(ctx); e != nil {
@@ -367,28 +297,28 @@ func prepareIncusCompatibility(ctx context.Context, permit *CompatPermit) error 
 		return saveCompatJournal(journal)
 	}
 	if journal.Phase == "verified" {
-		b, e := os.ReadFile("/usr/sbin/incusd")
+		installedHash, e := hashCompatFile(ctx, "/usr/sbin/incusd")
 		if e != nil {
 			return e
 		}
-		if compatHash(b) != journal.NewHash {
+		if installedHash != journal.NewHash {
 			return fmt.Errorf("compatibility installed daemon drifted")
 		}
-		newBinary, e := compatibilityBinary()
+		manifest, e := compatibilityMetadata()
 		if e != nil {
 			return e
 		}
-		if compatHash(newBinary) == journal.NewHash {
+		if manifest.SHA256 == journal.NewHash {
 			return nil
 		}
 		// Keep the previous rollback file immutable before a new repair generation.
-		if old, readErr := os.ReadFile(compatBackupPath); readErr == nil {
-			if compatHash(old) != journal.OldHash {
+		if oldHash, readErr := hashCompatFile(ctx, compatBackupPath); readErr == nil {
+			if oldHash != journal.OldHash {
 				return fmt.Errorf("previous compatibility rollback changed")
 			}
 			archive := compatBackupPath + "." + journal.NewHash
-			if saved, readErr := os.ReadFile(archive); readErr == nil {
-				if compatHash(saved) != journal.OldHash {
+			if savedHash, readErr := hashCompatFile(ctx, archive); readErr == nil {
+				if savedHash != journal.OldHash {
 					return fmt.Errorf("previous rollback archive changed")
 				}
 				if e = os.Remove(compatBackupPath); e != nil {
@@ -421,15 +351,15 @@ func prepareIncusCompatibility(ctx context.Context, permit *CompatPermit) error 
 	if server.Environment.ServerVersion != "7.0.1" {
 		return nil
 	}
-	data, e := compatibilityBinary()
+	manifest, e := compatibilityMetadata()
 	if e != nil {
 		return e
 	}
-	installed, e := os.ReadFile("/usr/sbin/incusd")
+	installedHash, e := hashCompatFile(ctx, "/usr/sbin/incusd")
 	if e != nil {
 		return e
 	}
-	if compatHash(installed) == compatHash(data) {
+	if installedHash == manifest.SHA256 {
 		rows, e := compatGuests(ctx)
 		if e != nil {
 			return e
@@ -446,7 +376,7 @@ func prepareIncusCompatibility(ctx context.Context, permit *CompatPermit) error 
 		if e != nil {
 			return e
 		}
-		return saveCompatJournal(compatJournal{Version: 1, OldHash: compatHash(installed), NewHash: compatHash(data), PID: pid, ProcessStart: start, RequestID: permit.RequestID, HostIdentity: permit.HostIdentity, Phase: "verified", Guests: rows})
+		return saveCompatJournal(compatJournal{Version: 1, OldHash: installedHash, NewHash: manifest.SHA256, PID: pid, ProcessStart: start, RequestID: permit.RequestID, HostIdentity: permit.HostIdentity, Phase: "verified", Guests: rows})
 	}
 	operations, e := run(ctx, "incus", "query", "--raw", "/1.0/operations?recursion=1")
 	if e != nil {
@@ -486,60 +416,51 @@ func prepareIncusCompatibility(ctx context.Context, permit *CompatPermit) error 
 	if e != nil {
 		return fmt.Errorf("compatibility daemon executable unavailable")
 	}
-	runningBinary, e := io.ReadAll(io.LimitReader(executable, int64(len(installed))+1))
+	runningHash, e := hashCompatReader(ctx, executable)
 	executable.Close()
 	currentStart, startErr := compatProcessStart(pid)
-	if e != nil || startErr != nil || currentStart != processStart || compatHash(runningBinary) != compatHash(installed) {
+	if e != nil || startErr != nil || currentStart != processStart || runningHash != installedHash {
 		return fmt.Errorf("compatibility original daemon content changed")
 	}
 	if s, e := os.Lstat("/usr/sbin/incusd"); e != nil || !s.Mode().IsRegular() || s.Mode()&0022 != 0 || s.Sys().(*syscall.Stat_t).Uid != 0 {
 		return fmt.Errorf("compatibility original binary unsafe")
 	}
-	temp, e := os.CreateTemp("/usr/sbin", ".incus-compat-library-check-*")
+	staged, e := stageCompatibilityBinary(ctx)
 	if e != nil {
 		return e
 	}
-	_, e = temp.Write(data)
-	temp.Close()
-	if e != nil {
-		os.Remove(temp.Name())
-		return e
-	}
-	_, e = run(ctx, "ldd", temp.Name())
-	os.Remove(temp.Name())
+	defer os.Remove(staged)
+	_, e = run(ctx, "ldd", staged)
 	if e != nil {
 		return fmt.Errorf("compatibility libraries unavailable")
 	}
 	if journal.Phase == "rolled-back" {
-		b, e := os.ReadFile(compatBackupPath)
-		if e != nil || compatHash(b) != journal.OldHash || compatHash(installed) != journal.OldHash {
+		backupHash, e := hashCompatFile(ctx, compatBackupPath)
+		if e != nil || backupHash != journal.OldHash || installedHash != journal.OldHash {
 			return fmt.Errorf("compatibility original rollback changed")
 		}
 		if e = os.Remove(compatBackupPath); e != nil {
 			return e
 		}
 	}
-	f, e := os.OpenFile(compatBackupPath, os.O_CREATE|os.O_EXCL|os.O_WRONLY, 0700)
-	if e != nil {
-		return e
-	}
-	_, e = f.Write(installed)
-	if e == nil {
-		e = f.Sync()
-	}
-	f.Close()
-	if e != nil {
+	if e = copyCompatFile(ctx, "/usr/sbin/incusd", compatBackupPath, installedHash, false); e != nil {
 		return e
 	}
 	start, e := compatProcessStart(pid)
 	if e != nil {
 		return e
 	}
-	journal = compatJournal{Version: 1, OldHash: compatHash(installed), NewHash: compatHash(data), PID: pid, ProcessStart: start, RequestID: permit.RequestID, HostIdentity: permit.HostIdentity, Phase: "prepared", Guests: guests}
+	journal = compatJournal{Version: 1, OldHash: installedHash, NewHash: manifest.SHA256, PID: pid, ProcessStart: start, RequestID: permit.RequestID, HostIdentity: permit.HostIdentity, Phase: "prepared", Guests: guests}
 	if e = saveCompatJournal(journal); e != nil {
 		return e
 	}
-	if e = replaceCompatBinary(data); e != nil {
+	// ldd may succeed on a changed file. Bind the exact staged bytes again
+	// before the atomic replacement; no unverified content reaches the daemon.
+	stagedHash, e := hashCompatFile(ctx, staged)
+	if e != nil || stagedHash != manifest.SHA256 {
+		return fmt.Errorf("compatibility staged binary changed")
+	}
+	if e = os.Rename(staged, "/usr/sbin/incusd"); e != nil {
 		return e
 	}
 	journal.Phase = "reloading"
@@ -591,15 +512,15 @@ func compatOperationsIdle(response []byte) bool {
 	return true
 }
 func rollbackIncusCompatibility(ctx context.Context, journal compatJournal) error {
-	b, e := os.ReadFile(compatBackupPath)
-	if e != nil || compatHash(b) != journal.OldHash {
+	backupHash, e := hashCompatFile(ctx, compatBackupPath)
+	if e != nil || backupHash != journal.OldHash {
 		return fmt.Errorf("compatibility rollback identity invalid")
 	}
 	journal.Phase = "rolling-back"
 	if e = saveCompatJournal(journal); e != nil {
 		return e
 	}
-	if e = replaceCompatBinary(b); e != nil {
+	if e = copyCompatFile(ctx, compatBackupPath, "/usr/sbin/incusd", journal.OldHash, true); e != nil {
 		return e
 	}
 	if e = startCompatDaemon(ctx); e != nil {
