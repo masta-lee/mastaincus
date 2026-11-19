@@ -25,7 +25,15 @@ guest = None
 
 
 def incus(*args, timeout=30):
-    return subprocess.check_output(['incus', *args], text=True, timeout=timeout)
+    try:
+        return subprocess.check_output(['incus', *args], text=True, timeout=timeout)
+    except subprocess.CalledProcessError:
+        # Disposable logs only, preserve native launch errors before teardown.
+        if args and args[0] in ['start', 'restart', 'rebuild']:
+            subprocess.run(['incus', 'info', '--show-log', 'memory-customer'], timeout=10)
+            print('FIXTURE_CGROUP:'+P('/proc/self/cgroup').read_text(), flush=True)
+            print('FIXTURE_CONTROLLERS:'+P('/sys/fs/cgroup/cgroup.controllers').read_text(), flush=True)
+        raise
 
 
 def query(path):
