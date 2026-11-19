@@ -17,8 +17,11 @@ s=p.read_text()
 old='unified) printf "/sys/fs/cgroup" ;;'
 assert s.count(old)==1
 p.write_text(s.replace(old, 'unified) printf "/sys/fs/cgroup/incudal-memory-fixture" ;;'))
+s=p.read_text()
+old='mountinfo -q "${cgroup_path}"|| return 0'
+assert s.count(old)==1
+p.write_text(s.replace(old, '[ -f "${cgroup_path}/cgroup.controllers" ] || return 0'))
 PY
-mount --bind /sys/fs/cgroup/incudal-memory-fixture /sys/fs/cgroup/incudal-memory-fixture
 mkdir -p /etc/network /run/openrc/started /run/dbus /run/incus
 # The fixture already mounted and delegated cgroups; record this actual setup
 # before OpenRC dependencies, which otherwise mount a fresh cgroup root over it.

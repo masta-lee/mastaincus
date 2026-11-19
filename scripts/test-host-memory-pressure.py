@@ -33,6 +33,9 @@ def incus(*args, timeout=30):
         # Disposable logs only, preserve native launch errors before teardown.
         if args and args[0] in ['start', 'restart', 'rebuild']:
             subprocess.run(['incus', 'info', '--show-log', 'memory-customer'], timeout=10)
+            for path in [P('/var/log/incus/memory-customer/lxc.log'), P('/var/log/incus/incusd.log')]:
+                if path.exists():
+                    print('FIXTURE_NATIVE_LOG:'+path.read_text()[-6000:], flush=True)
             print('FIXTURE_CGROUP:'+P('/proc/self/cgroup').read_text(), flush=True)
             print('FIXTURE_CONTROLLERS:'+P('/sys/fs/cgroup/cgroup.controllers').read_text(), flush=True)
         raise
