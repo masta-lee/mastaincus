@@ -18,6 +18,8 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"incudal-agent/internal/localincus"
 )
 
 const statePath = "/var/lib/incudal-agent/guest-guard.json"
@@ -73,6 +75,19 @@ func commandWithin(ctx context.Context, limit time.Duration, name, input string,
 func commandOutputWithin(ctx context.Context, limit time.Duration, name, input string, args ...string) (string, string, error) {
 	ctx, cancel := context.WithTimeout(ctx, limit)
 	defer cancel()
+	if name == "incus" && input == "" {
+		path := ""
+		if len(args) == 3 && args[0] == "network" && args[1] == "list" && args[2] == "--format=json" {
+			path = "/1.0/networks?recursion=1"
+		}
+		if len(args) == 3 && args[0] == "list" && args[1] == "--all-projects" && args[2] == "--format=json" {
+			path = "/1.0/instances?recursion=1&all-projects=true"
+		}
+		if path != "" {
+			data, err := localincus.Query(ctx, path, false)
+			return string(data), "", err
+		}
+	}
 	if name == "nft" && input != "" {
 		// nft 1.0.9 probes JSON input before falling back to its native grammar.
 		// A pipe cannot be rewound: the prefix is consumed and valid rules fail

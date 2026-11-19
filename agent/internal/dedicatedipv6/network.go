@@ -16,6 +16,8 @@ import (
 	"sort"
 	"strings"
 	"sync"
+
+	"incudal-agent/internal/localincus"
 )
 
 const Table = "incudal_dedicated_ipv6"
@@ -125,7 +127,7 @@ func Rules(mappings []Mapping) (string, error) {
 }
 
 func query(ctx context.Context, path string, result any) error {
-	output, err := exec.CommandContext(ctx, "incus", "query", path).Output()
+	output, err := localincus.Query(ctx, path, false)
 	if err != nil {
 		return fmt.Errorf("read Incus IPv6 network: %w", err)
 	}

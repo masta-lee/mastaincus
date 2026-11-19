@@ -4,7 +4,10 @@ on:
   pull_request:
     paths:
       - 'agent/internal/memorybudget/**'
-      - 'agent/internal/provisioning/compat*'
+      - 'agent/internal/provisioning/**'
+      - 'agent/internal/localincus/**'
+      - 'agent/internal/guestguard/**'
+      - 'agent/internal/dedicatedipv6/**'
       - 'agent/cmd/incudal-agent/main.go'
       - 'scripts/test-host-memory-pressure.py'
       - 'scripts/host-memory-holder.go'

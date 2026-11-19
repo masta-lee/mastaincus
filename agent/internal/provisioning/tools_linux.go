@@ -12,6 +12,8 @@ import (
 	"regexp"
 	"strings"
 	"syscall"
+
+	"incudal-agent/internal/localincus"
 )
 
 // Resolve only root-owned system executables. PATH supplied by a service or
@@ -43,6 +45,17 @@ func run(ctx context.Context, name string, args ...string) ([]byte, error) {
 	return runWithFiles(ctx, name, nil, args...)
 }
 func runWithFiles(ctx context.Context, name string, files []*os.File, args ...string) ([]byte, error) {
+	if name == "incus" && len(files) == 0 {
+		if len(args) == 2 && args[0] == "query" {
+			return localincus.Query(ctx, args[1], false)
+		}
+		if len(args) == 3 && args[0] == "query" && args[1] == "--raw" {
+			return localincus.Query(ctx, args[2], true)
+		}
+		if len(args) == 2 && args[0] == "list" && args[1] == "--format=json" {
+			return localincus.Query(ctx, "/1.0/instances?recursion=1", false)
+		}
+	}
 	p, e := systemTool(name)
 	if e != nil {
 		return nil, e
