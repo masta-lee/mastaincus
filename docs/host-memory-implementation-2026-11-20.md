@@ -29,7 +29,7 @@ Incus高占用后续按原生堆/压力证据判断，当前不盲目重启、�
 
 ## 双架构原生阶段结果
 
-源码97ae0734的Alpine运行44561714405全部14job自然success，含两构建与两架构各6场景。Agent运行44561714476全部7job success（PR，不公开发行）；SSH运行44561714588全部9job success。完整CI44561714849尚在运行，不提前记通过。
+源码97ae0734的Alpine运行44561714405全部14job自然success，含两构建与两架构各6场景。Agent运行44561714476全部7job success（PR，不公开发行）；SSH运行44561714588全部9job success。完整CI44561714849最终30/30自然success；后续产品源码输入未改变。
 
 | 实际同payload工作负载（20轮） | AMD64 | ARM64 |
 |---|---:|---:|
@@ -43,4 +43,25 @@ Incus高占用后续按原生堆/压力证据判断，当前不盲目重启、�
 
 补只读线上同一时点Incus /1.0/metrics与smaps：135/136/56/21的活跃Go堆约6–13MiB，Go保留Sys约56–63MiB，但RSS约150–241MiB，匿名THP约68–130MiB；ARM53的Go活跃堆约8MiB而RSS325MiB、匿名THP162MiB。文件映射、Go及C/SQLite/LXC等匿名内存共同构成RSS，尚不具备逐C分配归因，不将其一概称Go泄漏。证据为仓库外compat-host-memory-20261120-incus.json。
 
-新增隔离压力工作流host-memory-native.yml：实际完整Agent、原固定来源Incus、aggregate cgroup memory.max=966MiB及宿主swap=1GiB，真实客户容器仍768MiB且swap禁止，持续至少752MiB charge三分钟；校验签名心跳/完整compat核验/原UUID/PID/磁盘/无OOM及停启重启重装删除。它使用共享runner内核，不是原生1GiB OCI整机；真实物理E2的内核余量/长期满载验收仍需后续专用机器。两个既有专用SSH入口本轮未通过原pin连接，未绕过身份。新增测试尚未运行，生产未更新。
+新增隔离压力工作流host-memory-native.yml：实际完整Agent、原固定来源Incus、aggregate cgroup memory.max=966MiB及宿主swap=1GiB，真实客户容器仍768MiB且swap禁止，持续至少752MiB charge三分钟；校验签名心跳/完整compat核验/原UUID/PID/磁盘/无OOM及停启重启重装删除。它使用共享runner内核，不是原生1GiB OCI整机；真实物理E2的内核余量/长期满载验收仍需后续专用机器。两个既有专用SSH入口本轮未通过原pin连接，未绕过身份。生产未更新。
+
+## 严格总预算压力结果与实施次序
+
+fdd2f9b9的44573115485双job自然success。先前环境错误（AppArmor独立解析器/官方includes缺失、LXC父cgroup视图、FUSE模块目录缺失）均保留失败日志，并通过完善隔离环境闭环，不跳过实际保护；4c9718a2虽双通过，但Incus启动页在移组前计量不完整，不能作为最终总预算证据。最终隔离OpenRC从启动便在总组创建服务，原LXC客户同组、同一原生cgroup挂载，保留严格768MiB/禁止客户swap。
+
+| 三分钟连续压力 | AMD64 | ARM64 |
+|---|---:|---:|
+| 客户总charge（前10秒预热后） | 765.0–765.5MiB | 767.6–768.0MiB |
+| 完整Agent采样RSS峰值 | 33.5MiB | 31.8MiB |
+| Incus采样RSS峰值 | 95.0MiB | 96.6MiB |
+| 总组swap峰值 | 44.4MiB | 39.5MiB |
+| 实际签名心跳/无超45秒间隔 | 6次/通过 | 6次/通过 |
+| 总组/客户OOM和OOM kill | 均0 | 均0 |
+| 压力期间UUID/PID/磁盘标记保持 | 通过 | 通过 |
+| 停止/启动/重启/重装/删除核验 | 通过 | 通过 |
+
+宿主总组接近966MiB硬上限，使用了少量宿主swap；因此不能承诺客户满额时宿主完全不使用swap。客户没有使用swap。没有修改产品内核THP、服务MemoryMax或Incus参数。
+
+自动优化适用于最终Agent首次安装/升级/每次重启：先核内置来源与完整payload，再仅以小缓冲检查已安装内容；依据物理或cgroup祖先容量设置软Go预算，显式GOMEMLIMIT保持。不是定时清缓存或靠重启释放内存，也不减少客户配额。未来压力工作流每次从原固定来源独立构建daemon，不依赖90天过期的某次CI artifact；该持久工作流aa61333f/44574960028仍待终态，fdd2完整CI44573115465待终态。
+
+部署次序：①完成以上最终CI和审查；②仅一台确认空闲的真实E2候选验收，原签名/SSH/Incus身份、Agent升级路径、768MiB客户持续负载与心跳/控制/启动重装/清理全部核；③观察后沿现有随机错峰Agent升级通道分批覆盖存量，新装自动适用；④以实际RSS/PSS、MemAvailable、swap、OOM和任务结果核全池，不按旧加固历史快照认定成功。真实E2候选写入与全池升级当前未执行，owner只读边界保持。已请求一台空闲E2授权，未收到明确答复前不进行该步骤。

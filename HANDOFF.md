@@ -1,5 +1,7 @@
 # 版本与验证记录
 
+- 2026-11-20严格内存压力fdd2f9b9/44573115485双job自然success：完整Agent RSS峰33.5/31.8MiB、实际768MiB客户charge约765–768MiB、六签名心跳及原UUID/PID/磁盘保持、停启/重启/重装/删除与OOM0。真实总cgroup966MiB，Incus从启动计量，宿主swap峰44.4/39.5MiB，共享runner不是物理E2/长期满载。97ae完整CI44561714849 30/30与fdd2原生44573115541/Agent44573115621/SSH44573115376过；fdd2完整CI44573115465和持久每次重建压力aa61333f/44574960028仍待。生产未更新/发版，单空闲E2测试写入已询问、待授权；详见[方案](docs/host-memory-implementation-2026-11-20.md)。
+
 - 2026-11-20内存原生阶段：97ae0734的Alpine44561714405 14/14、Agent44561714476 7/7、SSH44561714588 9/9自然success；20轮同真实payload分配旧AMD9.73GB/ARM7.98GB→新676/675KB，采样RSS峰旧316/228MiB→新29/27MiB，仅核验测试进程。线上Incus活跃堆6–13MiB、RSS150–241MiB与THP/非Go占用并存，未断言泄漏。新增966MiB总cgroup+原768MiB客户真实完整Agent压力验收待；共享runner不是物理E2。完整CI44561714849仍待，未生产更新/发版，见[实施证据](docs/host-memory-implementation-2026-11-20.md)。
 
 - 2026-11-20内存优化实施中：新分支codex/host-memory-optimization，已实现嵌入payload首次流式验证/周期已安装程序完整流式hash、安装与备份回滚小缓冲，以及Agent每次启动自动Go预算(物理/cgroup祖先1/16、32–256MiB、显式GOMEMLIMIT优先)。本地相同64MiB旧158MiB分配→新76.8KiB，损坏/超短长/双架构/取消测试及三相关守卫过；新增双原生旧daemon完整6场景+内存分配/RSS/GC验收待。本地QEMU启动前异常退出不算证据，生产只读/未发布升级，不改客户768MiB/配置；见[方案与证据范围](docs/host-memory-implementation-2026-11-20.md)。
