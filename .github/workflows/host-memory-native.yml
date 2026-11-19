@@ -59,6 +59,13 @@ jobs:
           printf '${{ matrix.digest }}  alpine.tar.gz\n' | sha256sum -c -
           sudo tar -xzf alpine.tar.gz -C "$root"
           sudo cp /etc/resolv.conf "$root/etc/resolv.conf"
+          # Chroot uses the runner kernel: give modprobe that exact kernel's
+          # signed distro modules, rather than an unrelated Alpine kernel.
+          sudo mkdir -p "$root/lib/modules"
+          sudo mount --bind /lib/modules "$root/lib/modules"
+          sudo modprobe fuse
+          sudo modprobe btrfs
+          sudo modprobe dm_thin_pool
           sudo mkdir -p "$root/out"
           sudo cp output/* "$root/out/"
           sudo cp scripts/test-host-memory-pressure.py "$root/out/pressure.py"
