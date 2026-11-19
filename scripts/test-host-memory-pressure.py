@@ -109,7 +109,10 @@ private = subprocess.check_output(['wg', 'genkey'])
 public = subprocess.check_output(['wg', 'pubkey'], input=private).decode().strip()
 subprocess.run(['wg', 'set', 'incudal-mgmt', 'peer', public, 'endpoint', '198.51.100.1:51820', 'allowed-ips', '10.199.42.1/32'], check=True)
 incus('init', 'images:alpine/3.24/tinycloud', 'memory-customer', '-s', 'default', '-c', 'limits.memory=768MiB', '-c', 'limits.memory.swap=false',
-      '-c', 'security.syscalls.intercept.sysinfo=true', timeout=120)
+      '-c', 'security.syscalls.intercept.sysinfo=true',
+      # Root LXC intentionally escapes to PID1's cgroup on a real host. Place
+      # only this disposable fixture below our aggregate test budget explicitly.
+      '-c', 'raw.lxc=lxc.cgroup.dir = incudal-memory-fixture', timeout=120)
 incus('start', 'memory-customer')
 guest = query('/1.0/instances/memory-customer')
 before = query('/1.0/instances/memory-customer/state')
