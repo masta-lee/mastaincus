@@ -106,7 +106,10 @@ def go_heap_mapping_small_pages(pid):
                 current['small'] = 'nh' in fields[1:]
     heaps = [r for r in regions if 'Go: heap' in r['name'] and r['rss'] > 0]
     assert heaps, 'paired daemon Go heap mapping not identified'
-    return any(r['small'] for r in heaps)
+    # Go may mark reclaimed edge spans NOHUGEPAGE even when huge pages are
+    # allowed. The compiled default applies to every populated Go heap VMA.
+    print('DAEMON_HEAP_PAGE_PROOF:'+json.dumps(heaps), flush=True)
+    return all(r['small'] for r in heaps)
 
 
 def guest_cgroup(pid):
