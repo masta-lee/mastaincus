@@ -9,6 +9,10 @@ on:
       - 'agent/internal/guestguard/**'
       - 'agent/internal/dedicatedipv6/**'
       - 'agent/cmd/incudal-agent/main.go'
+      - 'scripts/incus-memory-default.go'
+      - 'scripts/incus-memory-default_test.go'
+      - 'scripts/build-incus-sysinfo-compat.py'
+      - 'scripts/prepare-incus-compat.mjs'
       - 'scripts/test-host-memory-pressure.py'
       - 'scripts/host-memory-holder.go'
       - 'scripts/enter-host-memory-pressure.sh'
@@ -26,7 +30,7 @@ jobs:
       fail-fast: false
       matrix:
         runner: [ubuntu-24.04, ubuntu-24.04-arm]
-        tuning: [baseline, daemon-soft-budget, daemon-small-pages]
+        tuning: [automatic, explicit-daemon-settings]
         include:
           - runner: ubuntu-24.04
             arch: x86_64

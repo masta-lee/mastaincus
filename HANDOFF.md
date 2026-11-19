@@ -1,5 +1,7 @@
 # 版本与验证记录
 
+- 2026-11-20Incus自动内存方案本地阶段：三组旧daemon双架构隔离44586857440全部success，软预算略降RSS，小页降THP/swap但ARM总RSS收益非固定。配套固定来源daemon新增仅正常run入口Go预算（物理/cgroup祖先1/24，48–256MiB，显式GOMEMLIMIT优先），编译内置disablethp=1只管Go堆、显式设置优先、客户环境不添加；新增source hash/default/revision精确核打包链路。独立预算/祖先/显式设置测试、编译/vet及三业务守卫过，最终双构建/安装回滚/自动与显式参数压力待，生产未改Incus/全池/发行。
+
 - 2026-11-20心跳回执再精修：协议真实变化遇宿主busy时只延后写回执，仍在当前Agent凭据锁核认证；不会返回500/伪装已应用，下轮真实回执完成。更新types、真实PG旧身份五锁/长非键锁/新协议busy与次轮恢复、凭据/协议审计通过。此前新增本机Unix API已原生Agent完整测试过，最终CLI/Incus三组压力与兼容测试待终态。
 
 - 2026-11-20继续近满额精修：新增Agent本机root-owned Unix socket有界GET，替换安全工具/客户网络/IPv6的周期只读Incus CLI启动，保留完整sync envelope、错误/截断/取消/redirect拒绝和大小边界；所有写操作仍沿原命令/身份路径。Linux编译/vet与工具/客户隔离/磁盘守卫通过，新增真实Unix socket单测和原生状态/完整压力待；未部署，Incus参数三组对照仍44586857440运行。

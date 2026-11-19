@@ -179,11 +179,11 @@ try:
     # Incus parameters are scoped to its daemon; native client calls must not
     # leak those environment defaults into customer processes on exec/start.
     daemon_env = P(f'/proc/{daemon_pid}/environ').read_bytes().split(b'\0')
-    tuning = os.environ.get('INCUDAL_MEMORY_TUNING','baseline')
-    if tuning != 'baseline':
-        assert b'GOMEMLIMIT=48MiB' in daemon_env
-    if tuning == 'daemon-small-pages':
-        assert b'GODEBUG=disablethp=1' in daemon_env
+    tuning = os.environ.get('INCUDAL_MEMORY_TUNING','automatic')
+    if tuning == 'explicit-daemon-settings':
+        assert b'GOMEMLIMIT=80MiB' in daemon_env and b'GODEBUG=disablethp=0' in daemon_env
+    else:
+        assert not any(e.startswith((b'GOMEMLIMIT=', b'GODEBUG=')) for e in daemon_env), 'default config was implemented by leaking environment'
     assert query('/1.0/instances/memory-customer')['config']['volatile.uuid'] == guest['config']['volatile.uuid']
     assert incus('exec', 'memory-customer', '--', 'cat', '/root/memory-marker').strip() == 'preserved'
     assert incus('exec', 'memory-customer', '--', 'sh', '-c', 'test -z "${GODEBUG-}" && test -z "${GOMEMLIMIT-}" && echo GUEST_ENV_UNCHANGED').strip() == 'GUEST_ENV_UNCHANGED'

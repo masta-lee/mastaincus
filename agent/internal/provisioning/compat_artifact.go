@@ -19,9 +19,10 @@ import (
 var compatibilityFiles embed.FS
 
 type compatManifest struct {
-	Purpose, IncusVersion, SourceSha256, Architecture, SHA256 string
-	LifecycleSourceSha256                                     string
-	Size                                                      int64
+	Purpose, IncusVersion, SourceSha256, Architecture, SHA256    string
+	LifecycleSourceSha256                                        string
+	MemorySourceSha256, MemoryBuildDefault, MemoryBudgetRevision string
+	Size                                                         int64
 }
 
 const compatMaxBinaryBytes = 96 * 1024 * 1024
@@ -50,6 +51,8 @@ func validateCompatibilityArtifact(files fs.FS, arch string) (compatManifest, er
 		manifest.Purpose != "alpine-incus-sysinfo-compat" || manifest.IncusVersion != "7.0.1" ||
 		manifest.SourceSha256 != "5e415fa1684f0945d45ca780af6662f143b857681e18d29038725cde70c26ee6" ||
 		manifest.LifecycleSourceSha256 != "a60cea54e5d1e5397292556627fdcf7a808494e6abcbb180dd3b3710f03eb222" ||
+		manifest.MemorySourceSha256 != "fb313cde5dd6d3aeb8a0adc5597726f0625aa404839e38fcf7a12f772dd6eb3c" ||
+		manifest.MemoryBuildDefault != "disablethp=1" || manifest.MemoryBudgetRevision != "daemon-memory-v1" ||
 		manifest.Size < 20 || manifest.Size > compatMaxBinaryBytes || len(manifest.SHA256) != 64 {
 		return manifest, fmt.Errorf("compatibility manifest invalid")
 	}

@@ -164,16 +164,33 @@ func TestIncudalMonitorCgroup(t *testing.T) {
 }
 ''')
 subprocess.run(['gofmt','-w',str(target),str(lxc_target),str(btrfs_target),str(source/'cmd/incusd/incudal_monitor_test.go')],check=True)
+
+# Only the daemon run entry applies the memory budget. Fork/guest helpers and
+# guest processes do not inherit an environment setting or process-wide prctl.
+memory_target=source/'cmd/incusd/incudal_memory.go'
+memory_target.write_bytes(pathlib.Path('/incus-memory-default.go').read_bytes())
+(source/'cmd/incusd/incudal_memory_test.go').write_bytes(pathlib.Path('/incus-memory-default_test.go').read_bytes())
+daemon_target=source/'cmd/incusd/main_daemon.go'
+daemon_text=daemon_target.read_text()
+memory_marker='\tneededPrograms := []string{"ip", "rsync", "setfattr", "tar", "unsquashfs", "xz"}'
+assert daemon_text.count(memory_marker)==1
+daemon_target.write_text(daemon_text.replace(memory_marker,'\tincudalConfigureDaemonMemory()\n\n'+memory_marker))
+subprocess.run(['gofmt','-w',str(memory_target),str(source/'cmd/incusd/incudal_memory_test.go'),str(daemon_target)],check=True)
 env={**os.environ,'CGO_ENABLED':'1','CGO_CFLAGS':'-I/usr/include/raft -I/usr/include/cowsql','CGO_LDFLAGS':'-lintl','CGO_LDFLAGS_ALLOW':'(-Wl,-wrap,pthread_create)|(-Wl,-z,now)'}
-subprocess.run(['go','test','-tags=libsqlite3','-run=^TestIncudalMonitorCgroup$','./cmd/incusd'],cwd=source,env=env,check=True)
+subprocess.run(['go','test','-tags=libsqlite3','-run=^(TestIncudalMonitorCgroup|TestIncudalDaemonMemoryBudget)$','./cmd/incusd'],cwd=source,env=env,check=True)
 output=pathlib.Path('/out');output.mkdir(exist_ok=True)
 binary=output/'incusd'
-subprocess.run(['go','build','-tags=libsqlite3','-trimpath','-buildvcs=false','-ldflags=-s -w','-o',str(binary),'./cmd/incusd'],cwd=source,env=env,check=True)
+defaults=subprocess.check_output(['go','list','-tags=libsqlite3','-f','{{.DefaultGODEBUG}}','./cmd/incusd'],cwd=source,env=env,text=True).strip()
+defaults=','.join(filter(None,[defaults,'disablethp=1']))
+subprocess.run(['go','build','-tags=libsqlite3','-trimpath','-buildvcs=false','-ldflags=-s -w -X runtime.godebugDefault='+defaults,'-o',str(binary),'./cmd/incusd'],cwd=source,env=env,check=True)
+assert 'disablethp=1' in subprocess.check_output(['go','version','-m',str(binary)],text=True), 'runtime memory default missing from compiled daemon'
 subprocess.run(['ldd',str(binary)],check=True)
 manifest={'schemaVersion':1,'purpose':'alpine-incus-sysinfo-compat','incusVersion':'7.0.1','sourceUrl':SOURCE_URL,'sourceSha256':SOURCE_SHA,
  'upstreamFixes':['5daa427d330004609859ab6f19b6101d3479d59c','83eaa5e19345a4719df46bcdb2850547d069b88e'],
  'architecture':os.uname().machine,'sha256':hashlib.sha256(binary.read_bytes()).hexdigest(),'size':binary.stat().st_size,
  'patchedSourceSha256':hashlib.sha256(target.read_bytes()).hexdigest(),
- 'lifecycleSourceSha256':hashlib.sha256(lxc_target.read_bytes()+btrfs_target.read_bytes()).hexdigest()}
+ 'lifecycleSourceSha256':hashlib.sha256(lxc_target.read_bytes()+btrfs_target.read_bytes()).hexdigest(),
+ 'memorySourceSha256':hashlib.sha256(memory_target.read_bytes()).hexdigest(),
+ 'memoryBuildDefault':'disablethp=1', 'memoryBudgetRevision':'daemon-memory-v1'}
 (output/'incusd-manifest.json').write_text(json.dumps(manifest,indent=2))
 print(json.dumps(manifest))

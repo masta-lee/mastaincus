@@ -5,6 +5,9 @@ on:
     paths:
       - 'scripts/test-incus-sysinfo-compat.sh'
       - 'scripts/prepare-incus-compat.mjs'
+      - 'scripts/build-incus-sysinfo-compat.py'
+      - 'scripts/incus-memory-default.go'
+      - 'scripts/incus-memory-default_test.go'
       - 'agent/internal/provisioning/**'
       - 'agent/internal/memorybudget/**'
       - '.github/workflows/incus-sysinfo-native.yml'
@@ -47,6 +50,8 @@ jobs:
           assert m['sourceSha256']=='5e415fa1684f0945d45ca780af6662f143b857681e18d29038725cde70c26ee6'
           assert m['patchedSourceSha256']=='bad35c2986663bddeddb94e088969ba1671446dc08875da6a6727e996334f12a'
           assert m['lifecycleSourceSha256']=='a60cea54e5d1e5397292556627fdcf7a808494e6abcbb180dd3b3710f03eb222'
+          assert m['memorySourceSha256']=='fb313cde5dd6d3aeb8a0adc5597726f0625aa404839e38fcf7a12f772dd6eb3c'
+          assert m['memoryBuildDefault']=='disablethp=1' and m['memoryBudgetRevision']=='daemon-memory-v1'
           assert hashlib.sha256(b).hexdigest()==m['sha256'] and len(b)==m['size']
           PY
       - name: Original daemon reload retains guest and corrects real sysinfo
