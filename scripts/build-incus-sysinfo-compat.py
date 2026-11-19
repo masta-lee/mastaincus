@@ -183,7 +183,13 @@ binary=output/'incusd'
 defaults=subprocess.check_output(['go','list','-tags=libsqlite3','-f','{{.DefaultGODEBUG}}','./cmd/incusd'],cwd=source,env=env,text=True).strip()
 defaults=','.join(filter(None,[defaults,'disablethp=1']))
 subprocess.run(['go','build','-tags=libsqlite3','-trimpath','-buildvcs=false','-ldflags=-s -w -X runtime.godebugDefault='+defaults,'-o',str(binary),'./cmd/incusd'],cwd=source,env=env,check=True)
-assert 'disablethp=1' in subprocess.check_output(['go','version','-m',str(binary)],text=True), 'runtime memory default missing from compiled daemon'
+# trimpath intentionally omits link flags from build information. Verify the
+# exact runtime flag on actual touched Go heap mappings, including override.
+probe=output/'incus-memory-probe'
+subprocess.run(['go','build','-trimpath','-ldflags=-X runtime.godebugDefault='+defaults,'-o',str(probe),'/test-incus-memory-runtime.go'],env=env,check=True)
+subprocess.run([str(probe)],env={**env,'INCUDAL_EXPECT_SMALL_PAGES':'1'},check=True)
+subprocess.run([str(probe)],env={**env,'GODEBUG':'disablethp=0','INCUDAL_EXPECT_SMALL_PAGES':'0'},check=True)
+probe.unlink()
 subprocess.run(['ldd',str(binary)],check=True)
 manifest={'schemaVersion':1,'purpose':'alpine-incus-sysinfo-compat','incusVersion':'7.0.1','sourceUrl':SOURCE_URL,'sourceSha256':SOURCE_SHA,
  'upstreamFixes':['5daa427d330004609859ab6f19b6101d3479d59c','83eaa5e19345a4719df46bcdb2850547d069b88e'],

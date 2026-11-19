@@ -11,6 +11,7 @@ on:
       - 'agent/cmd/incudal-agent/main.go'
       - 'scripts/incus-memory-default.go'
       - 'scripts/incus-memory-default_test.go'
+      - 'scripts/test-incus-memory-runtime.go'
       - 'scripts/build-incus-sysinfo-compat.py'
       - 'scripts/prepare-incus-compat.mjs'
       - 'scripts/test-host-memory-pressure.py'

@@ -8,6 +8,7 @@ on:
       - 'scripts/build-incus-sysinfo-compat.py'
       - 'scripts/incus-memory-default.go'
       - 'scripts/incus-memory-default_test.go'
+      - 'scripts/test-incus-memory-runtime.go'
       - 'agent/internal/provisioning/**'
       - 'agent/internal/memorybudget/**'
       - '.github/workflows/incus-sysinfo-native.yml'

@@ -1,5 +1,7 @@
 # 版本与验证记录
 
+- 2026-11-20新daemon构建门禁发现trimpath不保留ldflags，因此不能用go version -m验证小页默认；9524构建已失败保留日志，未发布。改为同链接设置原生32MiB触页探针核实际VmFlags nh，并核显式disablethp=0恢复；探针编译过、原生待。固定源码/完整签名与后续真实daemon映射验收保持，不放宽内存门禁。
+
 - 2026-11-20Incus自动内存方案本地阶段：三组旧daemon双架构隔离44586857440全部success，软预算略降RSS，小页降THP/swap但ARM总RSS收益非固定。配套固定来源daemon新增仅正常run入口Go预算（物理/cgroup祖先1/24，48–256MiB，显式GOMEMLIMIT优先），编译内置disablethp=1只管Go堆、显式设置优先、客户环境不添加；新增source hash/default/revision精确核打包链路。独立预算/祖先/显式设置测试、编译/vet及三业务守卫过，最终双构建/安装回滚/自动与显式参数压力待，生产未改Incus/全池/发行。
 
 - 2026-11-20心跳回执再精修：协议真实变化遇宿主busy时只延后写回执，仍在当前Agent凭据锁核认证；不会返回500/伪装已应用，下轮真实回执完成。更新types、真实PG旧身份五锁/长非键锁/新协议busy与次轮恢复、凭据/协议审计通过。此前新增本机Unix API已原生Agent完整测试过，最终CLI/Incus三组压力与兼容测试待终态。
