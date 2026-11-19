@@ -95,7 +95,7 @@ async function reconcile(hostId: number, settings: PublicIpSettings | undefined,
     for (const instance of occupants) await advisoryTransactionLock(tx, INSTANCE_OPERATION_LOCK_NAMESPACE, instance.id)
     // Only contenders for the same address serialize; slow hosts do not lock all hosts.
     if (isOnboardingPublicIPv4(selectedIp)) await lockOnboardingAddresses(tx, [selectedIp])
-    const locked = await tx.$queryRaw<Array<{ id: number }>>`SELECT id FROM hosts WHERE id = ${hostId} FOR UPDATE`
+    const locked = await tx.$queryRaw<Array<{ id: number }>>`SELECT id FROM hosts WHERE id = ${hostId} FOR NO KEY UPDATE`
     if (!locked.length) throw new PublicIpSyncError('HOST_NOT_FOUND')
     const host = await tx.host.findUniqueOrThrow({ where: { id: hostId }, include })
     // Registration and this reconciliation share the host row lock. Preserve

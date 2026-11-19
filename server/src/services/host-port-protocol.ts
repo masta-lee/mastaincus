@@ -44,6 +44,19 @@ export async function acceptPortProtocolReport(hostId: number, value: unknown, a
   if (!value || typeof value !== 'object') return
   const report = value as Record<string, unknown>
   if (typeof report.mode !== 'string' || !['tcp', 'tcp_udp'].includes(report.mode) || !Number.isSafeInteger(report.revision) || Number(report.revision) < 1 || Number(report.revision) > 2147483647 || typeof report.applied !== 'boolean') return
+  const unchanged = (current: ProtocolRecord | null) => !current || current.portProtocol !== report.mode || current.portProtocolRevision !== report.revision ||
+    (report.applied === true && current.portProtocolApplied === report.mode && current.portProtocolAppliedRevision === report.revision && current.portProtocolError === null) ||
+    (report.applied === false && current.portProtocolError === 'Agent could not apply the ingress protocol rule; check the host Agent log.')
+  const before = await prisma.host.findUnique({ where: { id: hostId }, select: portProtocolSelect })
+  if (unchanged(before)) {
+    const stillUnchanged = await prisma.$transaction(async tx => {
+      await lockCurrentHostAgent(tx, agent)
+      return unchanged(await tx.host.findUnique({ where: { id: hostId }, select: portProtocolSelect }))
+    })
+    // No lock upgrade: if a concurrent choice needs a write, leave this read
+    // transaction before reacquiring host -> Agent in the original write order.
+    if (stillUnchanged) return
+  }
   // A delayed acknowledgement must never overwrite a newer operator choice.
   await prisma.$transaction(async tx => {
     await lockCurrentHostAgent(tx, agent, 'host')

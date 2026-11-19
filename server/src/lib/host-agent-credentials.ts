@@ -32,7 +32,11 @@ const agentInstallTokenTtlMs = 30 * 60 * 1000
 export async function lockCurrentHostAgent(tx: Prisma.TransactionClient, agent: HostAgentRecord, writing: 'report' | 'host' | 'agent' = 'report'): Promise<void> {
   // Match the credential-rotation lock order. Hold authority through each report write.
   if (writing === 'host') await tx.$queryRaw`SELECT id FROM hosts WHERE id = ${agent.hostId} FOR UPDATE`
-  else await tx.$queryRaw`SELECT id FROM hosts WHERE id = ${agent.hostId} FOR SHARE`
+  // Reports protect the host's existence/key, while credential authority is
+  // held on the Agent row below. Non-key maintenance fields may change while
+  // a read-only signed report commits; FOR SHARE would wait behind every slow
+  // remote reconciliation holding the host's non-key update lock.
+  else await tx.$queryRaw`SELECT id FROM hosts WHERE id = ${agent.hostId} FOR KEY SHARE`
   if (writing === 'agent') await tx.$queryRaw`SELECT id FROM host_agents WHERE id = ${agent.id} FOR UPDATE`
   else await tx.$queryRaw`SELECT id FROM host_agents WHERE id = ${agent.id} FOR SHARE`
   const current = await tx.hostAgent.findFirst({ where: {

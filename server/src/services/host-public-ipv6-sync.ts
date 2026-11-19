@@ -54,7 +54,7 @@ async function reconcileHost(hostId: number, force: boolean, deps: typeof public
     const signal = AbortSignal.timeout(90000)
     for (const instance of occupants) await advisoryTransactionLock(tx, INSTANCE_OPERATION_LOCK_NAMESPACE, instance.id)
     await advisoryTransactionLockString(tx, HOST_PUBLIC_IP_SYNC_LOCK_NAMESPACE, 'public-ipv6-sync')
-    const locked = await tx.$queryRaw<Array<{ id: number }>>`SELECT id FROM hosts WHERE id = ${hostId} FOR UPDATE`
+    const locked = await tx.$queryRaw<Array<{ id: number }>>`SELECT id FROM hosts WHERE id = ${hostId} FOR NO KEY UPDATE`
     if (!locked.length) throw new PublicIpv6SyncError('HOST_NOT_FOUND')
     const host = await tx.host.findUniqueOrThrow({ where: { id: hostId }, include })
     // A planned boot must not retire customer addresses or alter forwarding

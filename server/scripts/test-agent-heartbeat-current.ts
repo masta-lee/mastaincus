@@ -98,6 +98,29 @@ try {
     if (phase <= 3) assert.equal(await prisma.trafficSnapshot.count({ where: { instanceId: instance.id } }), 0)
   }
   assert.equal(blocked, 5)
+  // Reproduce the live failure: a network reconciliation holds a host row
+  // longer than the default 5s transaction. Repeated protocol acknowledgements
+  // and signed liveness must finish without waiting for non-key host fields.
+  const pressureCredentials = await rotateHostAgentCredentials(host.id, true, { actor })
+  await prisma.host.update({ where: { id: host.id }, data: { portProtocol: 'tcp_udp', portProtocolApplied: 'tcp_udp',
+    portProtocolRevision: 2, portProtocolAppliedRevision: 2, portProtocolError: null } })
+  const liveness = { ...body, portProtocolStatus: { mode: 'tcp_udp', revision: 2, applied: true } }
+  await holder.query('BEGIN')
+  await holder.query('SELECT id FROM hosts WHERE id = $1 FOR NO KEY UPDATE', [host.id])
+  const heldUntil = Date.now() + 6000
+  try {
+    const started = Date.now()
+    const response = await Promise.race([
+      app.inject({ method: 'POST', url: '/agent/heartbeat', headers: sign(pressureCredentials.agentId, pressureCredentials.agentSecret, liveness), payload: liveness }),
+      new Promise<never>((_resolve, reject) => setTimeout(() => reject(Error('signed liveness blocked behind host network maintenance')), 1500))
+    ])
+    assert.equal(response.statusCode, 200, response.body)
+    assert.ok(Date.now() - started < 1500)
+    assert.ok((await prisma.hostAgent.findUniqueOrThrow({ where: { hostId: host.id } })).lastSeenAt)
+    await new Promise(resolve => setTimeout(resolve, Math.max(0, heldUntil - Date.now())))
+    const fresh = await app.inject({ method: 'POST', url: '/agent/heartbeat', headers: sign(pressureCredentials.agentId, pressureCredentials.agentSecret, liveness), payload: liveness })
+    assert.equal(fresh.statusCode, 200, 'fresh signed liveness remains writable after a long held network lane')
+  } finally { await holder.query('ROLLBACK') }
   const credentials = await rotateHostAgentCredentials(host.id, true, { actor })
   const headers = sign(credentials.agentId, credentials.agentSecret)
   const accepted = await app.inject({ method: 'POST', url: '/agent/heartbeat', headers, payload: body })

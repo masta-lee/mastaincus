@@ -175,7 +175,7 @@ try {
   try {
     let waiting=false
     for(let i=0;i<100;i++) {
-      const rows=await prisma.$queryRaw<Array<{waiting:boolean}>>`SELECT EXISTS(SELECT 1 FROM pg_stat_activity WHERE datname=current_database() AND wait_event_type='Lock' AND query LIKE '%hosts%FOR UPDATE%') AS waiting`
+      const rows=await prisma.$queryRaw<Array<{waiting:boolean}>>`SELECT EXISTS(SELECT 1 FROM pg_stat_activity WHERE datname=current_database() AND wait_event_type='Lock' AND query LIKE '%hosts%FOR NO KEY UPDATE%') AS waiting`
       if(rows[0]?.waiting){waiting=true;break}
       await new Promise(resolve=>setTimeout(resolve,20))
     }
