@@ -1,5 +1,7 @@
 # 版本与验证记录
 
+- 2026-11-20持久压力工作流aa61333f/44574960028四job自然success：每次重建原固定来源双daemon，再完整Agent+768MiB客户在966MiB总预算复验，客户764.4–765.8MiB、Agent34.2/31.8MiB、宿主swap28.0/42.3MiB、六签名心跳/全操作/OOM0。只影响验证工作流，产品输入等同97ae0734；fdd2完整CI44573115465末六分片待，原97ae完整30/30过。单空闲E2写入授权仍待，未主控/池升级/发版，详见[结果与方案](docs/host-memory-implementation-2026-11-20.md)。
+
 - 2026-11-20严格内存压力fdd2f9b9/44573115485双job自然success：完整Agent RSS峰33.5/31.8MiB、实际768MiB客户charge约765–768MiB、六签名心跳及原UUID/PID/磁盘保持、停启/重启/重装/删除与OOM0。真实总cgroup966MiB，Incus从启动计量，宿主swap峰44.4/39.5MiB，共享runner不是物理E2/长期满载。97ae完整CI44561714849 30/30与fdd2原生44573115541/Agent44573115621/SSH44573115376过；fdd2完整CI44573115465和持久每次重建压力aa61333f/44574960028仍待。生产未更新/发版，单空闲E2测试写入已询问、待授权；详见[方案](docs/host-memory-implementation-2026-11-20.md)。
 
 - 2026-11-20内存原生阶段：97ae0734的Alpine44561714405 14/14、Agent44561714476 7/7、SSH44561714588 9/9自然success；20轮同真实payload分配旧AMD9.73GB/ARM7.98GB→新676/675KB，采样RSS峰旧316/228MiB→新29/27MiB，仅核验测试进程。线上Incus活跃堆6–13MiB、RSS150–241MiB与THP/非Go占用并存，未断言泄漏。新增966MiB总cgroup+原768MiB客户真实完整Agent压力验收待；共享runner不是物理E2。完整CI44561714849仍待，未生产更新/发版，见[实施证据](docs/host-memory-implementation-2026-11-20.md)。
