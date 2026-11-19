@@ -1,5 +1,7 @@
 # 版本与验证记录
 
+- 2026-11-20内存原生阶段：97ae0734的Alpine44561714405 14/14、Agent44561714476 7/7、SSH44561714588 9/9自然success；20轮同真实payload分配旧AMD9.73GB/ARM7.98GB→新676/675KB，采样RSS峰旧316/228MiB→新29/27MiB，仅核验测试进程。线上Incus活跃堆6–13MiB、RSS150–241MiB与THP/非Go占用并存，未断言泄漏。新增966MiB总cgroup+原768MiB客户真实完整Agent压力验收待；共享runner不是物理E2。完整CI44561714849仍待，未生产更新/发版，见[实施证据](docs/host-memory-implementation-2026-11-20.md)。
+
 - 2026-11-20内存优化实施中：新分支codex/host-memory-optimization，已实现嵌入payload首次流式验证/周期已安装程序完整流式hash、安装与备份回滚小缓冲，以及Agent每次启动自动Go预算(物理/cgroup祖先1/16、32–256MiB、显式GOMEMLIMIT优先)。本地相同64MiB旧158MiB分配→新76.8KiB，损坏/超短长/双架构/取消测试及三相关守卫过；新增双原生旧daemon完整6场景+内存分配/RSS/GC验收待。本地QEMU启动前异常退出不算证据，生产只读/未发布升级，不改客户768MiB/配置；见[方案与证据范围](docs/host-memory-implementation-2026-11-20.md)。
 
 - 2026-11-19空闲E2内存只读诊断：134host中128空闲E2，最新资源72台available<256MiB，加固快照78台；135/136/56真实Agent RSS218–349MiB、Incus145–236MiB、THP匿名大页明显。定位Agent每30s已verified状态仍解压约61.6MiB嵌入Incus+整文件读取校验，暂未取heap profile，不断言泄漏。四运行客户实际68–185MiB/768MiB限额、宿主swap160–229MiB、OOM0，不能当满额已验。未改代码/配置/重启或压测客户，报告[证据与后续方向](docs/host-memory-audit-2026-11-19.md)，修复需owner明确开始。

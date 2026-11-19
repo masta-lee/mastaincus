@@ -1,0 +1,86 @@
+name: Host memory pressure runtime
+on:
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - 'agent/internal/memorybudget/**'
+      - 'agent/internal/provisioning/compat*'
+      - 'agent/cmd/incudal-agent/main.go'
+      - 'scripts/test-host-memory-pressure.py'
+      - 'scripts/host-memory-holder.go'
+      - 'scripts/enter-host-memory-pressure.sh'
+      - 'scripts/setup-host-memory-pressure.sh'
+      - '.github/workflows/host-memory-native.yml'
+jobs:
+  memory:
+    permissions:
+      contents: read
+      actions: read
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: ubuntu-24.04
+            arch: x86_64
+            digest: cdaa38cb8de3537967ee5b6c9b6cd00cc962da2b018e6eea48696bb274923012
+          - runner: ubuntu-24.04-arm
+            arch: aarch64
+            digest: 4b14c18f7e90a063b61462ea1462a5732c154bf6adad594974fe6487cd98a8de
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.22.x'
+      - name: Prepare same fixed-source daemon and full Agent
+        env:
+          GH_TOKEN: ${{ github.token }}
+          # This daemon input is unchanged; the complete six-scenario native
+          # matrix from this run passed before this additional pressure test.
+          INCUS_COMPAT_BUILD_RUN: '44561714405'
+        run: |
+          set -euo pipefail
+          node scripts/prepare-incus-compat.mjs
+          mkdir -p output
+          (cd agent && CGO_ENABLED=0 go build -o ../output/incudal-agent ./cmd/incudal-agent)
+          (cd agent && CGO_ENABLED=0 go test -c -o ../output/provisioning-test ./internal/provisioning)
+          CGO_ENABLED=0 go build -o output/memory-holder scripts/host-memory-holder.go
+      - name: Native Alpine aggregate 966MiB and customer 768MiB
+        run: |
+          set -euo pipefail
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq wireguard-tools
+          root=$(mktemp -d)
+          curl -fsSLo alpine.tar.gz 'https://dl-cdn.alpinelinux.org/alpine/v3.24/releases/${{ matrix.arch }}/alpine-minirootfs-3.24.4-${{ matrix.arch }}.tar.gz'
+          printf '${{ matrix.digest }}  alpine.tar.gz\n' | sha256sum -c -
+          sudo tar -xzf alpine.tar.gz -C "$root"
+          sudo cp /etc/resolv.conf "$root/etc/resolv.conf"
+          sudo mkdir -p "$root/out"
+          sudo cp output/* "$root/out/"
+          sudo cp scripts/test-host-memory-pressure.py "$root/out/pressure.py"
+          sudo cp scripts/setup-host-memory-pressure.sh "$root/out/setup.sh"
+          sudo mount --rbind /dev "$root/dev"
+          sudo mount --make-rslave "$root/dev"
+          sudo mount -t proc proc "$root/proc"
+          sudo mount --rbind /sys "$root/sys"
+          sudo mount --make-rslave "$root/sys"
+          sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0
+          # Fixture only: reproduce the production THP setting without altering
+          # product/customer policy. Swap covers host pages, never guest pages.
+          echo always | sudo tee /sys/kernel/mm/transparent_hugepage/enabled
+          sudo fallocate -l 1G /tmp/memory-fixture.swap
+          sudo chmod 600 /tmp/memory-fixture.swap
+          sudo mkswap /tmp/memory-fixture.swap
+          sudo swapon /tmp/memory-fixture.swap
+          group=/sys/fs/cgroup/incudal-memory-fixture
+          sudo mkdir "$group" "$group/host"
+          echo $((966*1024*1024)) | sudo tee "$group/memory.max"
+          echo $((1024*1024*1024)) | sudo tee "$group/memory.swap.max"
+          sudo env INCUDAL_SYSINFO_COMPAT_TEST=disposable INCUDAL_COMPAT_RELOAD_SCENARIO=empty-pool INCUDAL_MEMORY_PRESSURE_TEST=disposable bash -c '
+            echo $$ > "$2/cgroup.procs"
+            exec unshare --cgroup --mount --propagation private bash "$3" "$1" "$2"
+          ' -- "$root" "$group" "$PWD/scripts/enter-host-memory-pressure.sh"
