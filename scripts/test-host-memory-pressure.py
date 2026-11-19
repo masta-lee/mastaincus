@@ -145,6 +145,11 @@ try:
         print('FIXTURE_AGENT_LOG:'+ (root / 'agent.log').read_text(), flush=True)
         subprocess.run(['rc-service', 'lxcfs', 'status'], timeout=10)
         print('FIXTURE_LXCFS:'+str(P('/var/lib/lxcfs/proc/meminfo').exists()), flush=True)
+        for name in ['aa-exec','tar','gzip','xz','unsquashfs','rsync','nsenter','lvm','btrfs','btrfstune','mkfs.btrfs']:
+            flag = '-version' if name == 'unsquashfs' else '--help'
+            check = subprocess.run([name, flag], text=True, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, timeout=10)
+            print(f'FIXTURE_TOOL name={name} code={check.returncode} out={check.stdout[:400]}', flush=True)
+        subprocess.run(['rc-service', 'lxcfs', 'start'], timeout=20)
         raise AssertionError('full Agent provisioning receipts not ready')
     idle = {'agent': proc_memory(agent.pid), 'incus': proc_memory(int(P('/run/incus/incusd.pid').read_text())), 'budget': cgroup_data(budget_group)}
     # Leave 8MiB for container exec/runtime metadata; its total cgroup charge
