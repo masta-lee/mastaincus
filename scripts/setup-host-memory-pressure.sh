@@ -20,6 +20,9 @@ p.write_text(s.replace(old, 'unified) printf "/sys/fs/cgroup/incudal-memory-fixt
 PY
 mount --bind /sys/fs/cgroup/incudal-memory-fixture /sys/fs/cgroup/incudal-memory-fixture
 mkdir -p /etc/network /run/openrc /run/dbus /run/incus
+# The fixture already mounted and delegated cgroups; record this actual setup
+# before OpenRC dependencies, which otherwise mount a fresh cgroup root over it.
+touch /run/openrc/started/cgroups
 printf 'auto lo\niface lo inet loopback\n' > /etc/network/interfaces
 touch /run/openrc/softlevel
 dbus-daemon --system --fork
