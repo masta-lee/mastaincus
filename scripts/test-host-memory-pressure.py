@@ -14,7 +14,9 @@ import time
 P = pathlib.Path
 assert os.environ.get('INCUDAL_MEMORY_PRESSURE_TEST') == 'disposable'
 assert P('/out/incudal-agent').is_file() and not P('/etc/incudal-onboarding-id').exists()
-assert int(P('/sys/fs/cgroup/memory.max').read_text()) == 966 * 1024 * 1024
+budget_group = P('/sys/fs/cgroup/incudal-memory-fixture')
+assert os.environ.get('INCUDAL_MEMORY_CGROUP') == str(budget_group)
+assert int((budget_group / 'memory.max').read_text()) == 966 * 1024 * 1024
 assert json.loads(subprocess.check_output(['incus', 'list', '--format=json'])) == []
 root = P('/tmp/host-memory-pressure')
 root.mkdir(mode=0o700)
@@ -87,7 +89,7 @@ def guest_cgroup(pid):
     groups = P(f'/proc/{pid}/cgroup').read_text().splitlines()
     group = next(v[3:] for v in groups if v.startswith('0::'))
     path = P('/sys/fs/cgroup') / group.lstrip('/')
-    assert path.is_relative_to('/sys/fs/cgroup') and '..' not in path.parts
+    assert path.is_relative_to(budget_group) and '..' not in path.parts, 'guest escaped aggregate pressure budget'
     assert int((path / 'memory.max').read_text()) == 768 * 1024 * 1024
     assert int((path / 'memory.swap.max').read_text()) == 0
     return path
@@ -132,7 +134,7 @@ try:
         time.sleep(1)
     else:
         raise AssertionError('full Agent provisioning receipts not ready')
-    idle = {'agent': proc_memory(agent.pid), 'incus': proc_memory(int(P('/run/incus/incusd.pid').read_text())), 'budget': cgroup_data(P('/sys/fs/cgroup'))}
+    idle = {'agent': proc_memory(agent.pid), 'incus': proc_memory(int(P('/run/incus/incusd.pid').read_text())), 'budget': cgroup_data(budget_group)}
     # Leave 8MiB for container exec/runtime metadata; its total cgroup charge
     # must still reach at least 752MiB of the unchanged 768MiB customer limit.
     baseline = cgroup_data(cg)['current']
@@ -145,7 +147,7 @@ try:
         assert agent.poll() is None and holder.poll() is None, 'Agent or memory holder exited under pressure'
         state = query('/1.0/instances/memory-customer/state')
         assert state['status'] == 'Running' and state['pid'] == before['pid']
-        row = {'seconds': round(time.monotonic()-start, 1), 'guest': cgroup_data(cg), 'budget': cgroup_data(P('/sys/fs/cgroup')),
+        row = {'seconds': round(time.monotonic()-start, 1), 'guest': cgroup_data(cg), 'budget': cgroup_data(budget_group),
                'agent': proc_memory(agent.pid), 'incus': proc_memory(int(P('/run/incus/incusd.pid').read_text()))}
         assert row['guest']['oomKill'] == row['budget']['oomKill'] == 0
         samples.append(row)

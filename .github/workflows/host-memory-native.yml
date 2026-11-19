@@ -80,7 +80,7 @@ jobs:
           sudo mkdir "$group" "$group/host"
           echo $((966*1024*1024)) | sudo tee "$group/memory.max"
           echo $((1024*1024*1024)) | sudo tee "$group/memory.swap.max"
-          sudo env INCUDAL_SYSINFO_COMPAT_TEST=disposable INCUDAL_COMPAT_RELOAD_SCENARIO=empty-pool INCUDAL_MEMORY_PRESSURE_TEST=disposable bash -c '
+          sudo env INCUDAL_SYSINFO_COMPAT_TEST=disposable INCUDAL_COMPAT_RELOAD_SCENARIO=empty-pool INCUDAL_MEMORY_PRESSURE_TEST=disposable INCUDAL_MEMORY_CGROUP="$group" bash -c '
             echo $$ > "$2/cgroup.procs"
-            exec unshare --cgroup --mount --propagation private bash "$3" "$1" "$2"
+            exec unshare --mount --propagation private bash "$3" "$1" "$2"
           ' -- "$root" "$group" "$PWD/scripts/enter-host-memory-pressure.sh"
