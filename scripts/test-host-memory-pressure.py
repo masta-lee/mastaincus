@@ -178,6 +178,10 @@ try:
         subprocess.run(['rc-service', 'lxcfs', 'start'], timeout=20)
         raise AssertionError('full Agent provisioning receipts not ready')
     assert go_heap_mapping_small_pages(daemon_pid) == (os.environ.get('INCUDAL_MEMORY_TUNING') != 'explicit-daemon-settings'), 'actual daemon small-page default or override did not apply'
+    daemon_status = P(f'/proc/{daemon_pid}/status').read_text()
+    expected_thp = '1' if os.environ.get('INCUDAL_MEMORY_TUNING') == 'explicit-daemon-settings' else '0'
+    thp_line = next(l for l in daemon_status.splitlines() if l.startswith('THP_enabled:'))
+    assert thp_line.split()[-1] == expected_thp, 'native daemon mm policy did not apply or override'
     idle = {'agent': proc_memory(agent.pid), 'incus': proc_memory(int(P('/run/incus/incusd.pid').read_text())), 'budget': cgroup_data(budget_group)}
     # Leave 8MiB for container exec/runtime metadata; its total cgroup charge
     # must still reach at least 752MiB of the unchanged 768MiB customer limit.
@@ -212,6 +216,10 @@ try:
     assert query('/1.0/instances/memory-customer')['config']['volatile.uuid'] == guest['config']['volatile.uuid']
     assert incus('exec', 'memory-customer', '--', 'cat', '/root/memory-marker').strip() == 'preserved'
     assert incus('exec', 'memory-customer', '--', 'sh', '-c', 'test -z "${GODEBUG-}" && test -z "${GOMEMLIMIT-}" && echo GUEST_ENV_UNCHANGED').strip() == 'GUEST_ENV_UNCHANGED'
+    guest_thp = incus('exec', 'memory-customer', '--', 'sh', '-c', 'grep THP_enabled /proc/self/status')
+    assert guest_thp.split()[-1] == '1', 'daemon policy was inherited by customer exec'
+    init_status = incus('exec', 'memory-customer', '--', 'sh', '-c', 'grep THP_enabled /proc/1/status')
+    assert init_status.split()[-1] == '1', 'daemon policy was inherited by customer init'
     incus('exec', 'memory-customer', '--', 'pkill', 'memory-holder')
     holder.wait(timeout=20)
     holder = None

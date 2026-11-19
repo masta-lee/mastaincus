@@ -28,7 +28,7 @@ func compatFixture(arch string, size int) (fstest.MapFS, compatManifest, []byte)
 		architecture = "aarch64"
 	}
 	binary.LittleEndian.PutUint16(b[18:20], machine)
-	m := compatManifest{Purpose: "alpine-incus-sysinfo-compat", IncusVersion: "7.0.1", SourceSha256: "5e415fa1684f0945d45ca780af6662f143b857681e18d29038725cde70c26ee6", LifecycleSourceSha256: "a60cea54e5d1e5397292556627fdcf7a808494e6abcbb180dd3b3710f03eb222", MemorySourceSha256: "fb313cde5dd6d3aeb8a0adc5597726f0625aa404839e38fcf7a12f772dd6eb3c", MemoryBuildDefault: "disablethp=1", MemoryBudgetRevision: "daemon-memory-v1", Architecture: architecture, SHA256: compatArtifactHash(b), Size: int64(size)}
+	m := compatManifest{Purpose: "alpine-incus-sysinfo-compat", IncusVersion: "7.0.1", SourceSha256: "5e415fa1684f0945d45ca780af6662f143b857681e18d29038725cde70c26ee6", LifecycleSourceSha256: "a60cea54e5d1e5397292556627fdcf7a808494e6abcbb180dd3b3710f03eb222", MemorySourceSha256: "56b95831a97677406958326f0a2d42a1aebc4589ebab8c616d9e735df2194f63", MemoryNamespaceSourceSha256: "917e33a02226b436dd6724c59fdc04735cc7958a1ffa33bd80f5084b39fa2ed1", MemoryBuildDefault: "disablethp=1", MemoryBudgetRevision: "daemon-memory-v2", Architecture: architecture, SHA256: compatArtifactHash(b), Size: int64(size)}
 	metadata, _ := json.Marshal(m)
 	var compressed bytes.Buffer
 	z := gzip.NewWriter(&compressed)

@@ -165,17 +165,39 @@ func TestIncudalMonitorCgroup(t *testing.T) {
 ''')
 subprocess.run(['gofmt','-w',str(target),str(lxc_target),str(btrfs_target),str(source/'cmd/incusd/incudal_monitor_test.go')],check=True)
 
-# Only the daemon run entry applies the memory budget. Fork/guest helpers and
-# guest processes do not inherit an environment setting or process-wide prctl.
+# Only the daemon run entry applies the memory defaults. Fork helpers restore
+# the native policy before customer namespace entry; environment is unchanged.
 memory_target=source/'cmd/incusd/incudal_memory.go'
 memory_target.write_bytes(pathlib.Path('/incus-memory-default.go').read_bytes())
+native_memory_target=source/'cmd/incusd/incudal_native_memory.go'
+native_memory_target.write_bytes(pathlib.Path('/incus-native-memory.go').read_bytes())
 (source/'cmd/incusd/incudal_memory_test.go').write_bytes(pathlib.Path('/incus-memory-default_test.go').read_bytes())
 daemon_target=source/'cmd/incusd/main_daemon.go'
 daemon_text=daemon_target.read_text()
 memory_marker='\tneededPrograms := []string{"ip", "rsync", "setfattr", "tar", "unsquashfs", "xz"}'
 assert daemon_text.count(memory_marker)==1
-daemon_target.write_text(daemon_text.replace(memory_marker,'\tincudalConfigureDaemonMemory()\n\n'+memory_marker))
-subprocess.run(['gofmt','-w',str(memory_target),str(source/'cmd/incusd/incudal_memory_test.go'),str(daemon_target)],check=True)
+daemon_target.write_text(daemon_text.replace(memory_marker,'\tincudalNativeMemoryDefault()\n\tincudalConfigureDaemonMemory()\n\n'+memory_marker))
+# Reset mm THP inheritance in the original C constructor, before its forkexec
+# and namespace code can enter a guest. All non-daemon helper commands reset,
+# including Go-managed forklxc/forkqemu and callhook paths.
+namespace_target=source/'cmd/incusd/main_nsexec.go'
+namespace_text=namespace_target.read_text()
+include='#include <sys/prctl.h>\n'
+if include not in namespace_text: namespace_text=namespace_text.replace('#include <sys/stat.h>\n',include+'#include <sys/stat.h>\n')
+constructor_marker='\t// Intercepts some subcommands'
+assert namespace_text.count(constructor_marker)==1
+namespace_text=namespace_text.replace(constructor_marker,'''    // Daemon-only small-host THP policy must never enter customer processes.
+    // This executes before forkexec/forkfile namespace transitions.
+    if (strcmp(cmdline_cur, "daemon") != 0 && prctl(PR_GET_THP_DISABLE, 0, 0, 0, 0) > 0) {
+        if (prctl(PR_SET_THP_DISABLE, 0, 0, 0, 0) != 0) {
+            fprintf(stderr, "Unable to restore helper THP policy\\n");
+            _exit(233);
+        }
+    }
+
+'''+constructor_marker)
+namespace_target.write_text(namespace_text)
+subprocess.run(['gofmt','-w',str(memory_target),str(native_memory_target),str(namespace_target),str(source/'cmd/incusd/incudal_memory_test.go'),str(daemon_target)],check=True)
 env={**os.environ,'CGO_ENABLED':'1','CGO_CFLAGS':'-I/usr/include/raft -I/usr/include/cowsql','CGO_LDFLAGS':'-lintl','CGO_LDFLAGS_ALLOW':'(-Wl,-wrap,pthread_create)|(-Wl,-z,now)'}
 subprocess.run(['go','test','-tags=libsqlite3','-run=^(TestIncudalMonitorCgroup|TestIncudalDaemonMemoryBudget)$','./cmd/incusd'],cwd=source,env=env,check=True)
 output=pathlib.Path('/out');output.mkdir(exist_ok=True)
@@ -196,7 +218,8 @@ manifest={'schemaVersion':1,'purpose':'alpine-incus-sysinfo-compat','incusVersio
  'architecture':os.uname().machine,'sha256':hashlib.sha256(binary.read_bytes()).hexdigest(),'size':binary.stat().st_size,
  'patchedSourceSha256':hashlib.sha256(target.read_bytes()).hexdigest(),
  'lifecycleSourceSha256':hashlib.sha256(lxc_target.read_bytes()+btrfs_target.read_bytes()).hexdigest(),
- 'memorySourceSha256':hashlib.sha256(memory_target.read_bytes()).hexdigest(),
- 'memoryBuildDefault':'disablethp=1', 'memoryBudgetRevision':'daemon-memory-v1'}
+ 'memorySourceSha256':hashlib.sha256(memory_target.read_bytes()+native_memory_target.read_bytes()).hexdigest(),
+ 'memoryNamespaceSourceSha256':hashlib.sha256(namespace_target.read_bytes()).hexdigest(),
+ 'memoryBuildDefault':'disablethp=1', 'memoryBudgetRevision':'daemon-memory-v2'}
 (output/'incusd-manifest.json').write_text(json.dumps(manifest,indent=2))
 print(json.dumps(manifest))

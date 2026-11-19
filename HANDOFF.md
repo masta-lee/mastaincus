@@ -1,5 +1,7 @@
 # 版本与验证记录
 
+- 2026-11-20#56第二轮实机新Go预算/小页与本机API后仍近满额换页严重，非Go匿名大页约130MiB，API双查询>10秒，未通过；停止holder后原Agent/Incus/配置逐SHA复原、容器镜像卷及暂存全清，原公网19:36UTC再次synced/stockReady。初次OpenRC返回成功但waitready超时，同文件直接/后续服务debug启动正常，唯一根因仍待，自动启动/复原确认继续修。新方案仅小宿主daemon mm禁THP，子命令原C构造器先恢复、客户PID1/exec原THP和环境核验；源码/完整双pin/hash门禁新增v2，Linux编译/vet过，CGO双架构原生与实机待。未主控/全池升级或发行。
+
 - 2026-11-20新daemon构建门禁发现trimpath不保留ldflags，因此不能用go version -m验证小页默认；9524构建已失败保留日志，未发布。改为同链接设置原生32MiB触页探针核实际VmFlags nh，并核显式disablethp=0恢复；探针编译过、原生待。固定源码/完整签名与后续真实daemon映射验收保持，不放宽内存门禁。
 
 - 2026-11-20Incus自动内存方案本地阶段：三组旧daemon双架构隔离44586857440全部success，软预算略降RSS，小页降THP/swap但ARM总RSS收益非固定。配套固定来源daemon新增仅正常run入口Go预算（物理/cgroup祖先1/24，48–256MiB，显式GOMEMLIMIT优先），编译内置disablethp=1只管Go堆、显式设置优先、客户环境不添加；新增source hash/default/revision精确核打包链路。独立预算/祖先/显式设置测试、编译/vet及三业务守卫过，最终双构建/安装回滚/自动与显式参数压力待，生产未改Incus/全池/发行。
