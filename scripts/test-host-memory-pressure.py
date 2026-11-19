@@ -176,8 +176,17 @@ try:
     assert len(pressure_receipts) >= 5
     assert all(r['tools'].get('ready') and r['tools'].get('incusCompat') == 'verified' for r in pressure_receipts)
     assert max(b['at']-a['at'] for a,b in zip(pressure_receipts, pressure_receipts[1:])) < 45, 'heartbeat delayed by GC/pressure'
+    # Incus parameters are scoped to its daemon; native client calls must not
+    # leak those environment defaults into customer processes on exec/start.
+    daemon_env = P(f'/proc/{daemon_pid}/environ').read_bytes().split(b'\0')
+    tuning = os.environ.get('INCUDAL_MEMORY_TUNING','baseline')
+    if tuning != 'baseline':
+        assert b'GOMEMLIMIT=48MiB' in daemon_env
+    if tuning == 'daemon-small-pages':
+        assert b'GODEBUG=disablethp=1' in daemon_env
     assert query('/1.0/instances/memory-customer')['config']['volatile.uuid'] == guest['config']['volatile.uuid']
     assert incus('exec', 'memory-customer', '--', 'cat', '/root/memory-marker').strip() == 'preserved'
+    assert incus('exec', 'memory-customer', '--', 'sh', '-c', 'test -z "${GODEBUG-}" && test -z "${GOMEMLIMIT-}" && echo GUEST_ENV_UNCHANGED').strip() == 'GUEST_ENV_UNCHANGED'
     incus('exec', 'memory-customer', '--', 'pkill', 'memory-holder')
     holder.wait(timeout=20)
     holder = None
@@ -194,7 +203,7 @@ try:
     assert query('/1.0/instances/memory-customer')['config']['volatile.uuid'] == guest['config']['volatile.uuid']
     incus('delete', 'memory-customer', '--force')
     assert json.loads(incus('list', '--format=json')) == []
-    print('MEMORY_PRESSURE_RESULT:'+json.dumps({'scope': '966MiB aggregate cgroup, shared runner kernel, not physical OCI', 'idleKiB': idle,
+    print('MEMORY_PRESSURE_RESULT:'+json.dumps({'scope': '966MiB aggregate cgroup, shared runner kernel, not physical OCI', 'tuning': os.environ.get('INCUDAL_MEMORY_TUNING','baseline'), 'idleKiB': idle,
           'samples': samples, 'signedPressureHeartbeats': len(pressure_receipts), 'limitsUnchanged': True,
           'sameUuidPidDiskDuringPressure': True, 'stopStartRestartRebuildDelete': True}))
 finally:

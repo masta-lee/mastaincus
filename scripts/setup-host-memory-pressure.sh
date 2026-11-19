@@ -29,6 +29,16 @@ touch /run/openrc/started/cgroups
 printf 'auto lo\niface lo inet loopback\n' > /etc/network/interfaces
 touch /run/openrc/softlevel
 dbus-daemon --system --fork
+case "${INCUDAL_MEMORY_TUNING:-baseline}" in
+  baseline) ;;
+  daemon-soft-budget)
+    printf '\nexport GOMEMLIMIT=48MiB\n' >> /etc/conf.d/incusd
+    ;;
+  daemon-small-pages)
+    printf '\nexport GOMEMLIMIT=48MiB\nexport GODEBUG=disablethp=1\n' >> /etc/conf.d/incusd
+    ;;
+  *) echo 'Unknown disposable memory experiment'; exit 1 ;;
+esac
 /usr/sbin/incusd --group incus >/tmp/incusd-original.log 2>&1 &
 echo $! > /run/incus/incusd.pid
 incus admin waitready --timeout=60

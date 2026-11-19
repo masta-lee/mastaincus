@@ -22,6 +22,8 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
+        runner: [ubuntu-24.04, ubuntu-24.04-arm]
+        tuning: [baseline, daemon-soft-budget, daemon-small-pages]
         include:
           - runner: ubuntu-24.04
             arch: x86_64
@@ -30,7 +32,7 @@ jobs:
             arch: aarch64
             digest: 4b14c18f7e90a063b61462ea1462a5732c154bf6adad594974fe6487cd98a8de
     runs-on: ${{ matrix.runner }}
-    timeout-minutes: 15
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -88,7 +90,7 @@ jobs:
           sudo mkdir "$group" "$group/host"
           echo $((966*1024*1024)) | sudo tee "$group/memory.max"
           echo $((1024*1024*1024)) | sudo tee "$group/memory.swap.max"
-          sudo env INCUDAL_SYSINFO_COMPAT_TEST=disposable INCUDAL_COMPAT_RELOAD_SCENARIO=empty-pool INCUDAL_MEMORY_PRESSURE_TEST=disposable INCUDAL_MEMORY_CGROUP="$group" bash -c '
+          sudo env INCUDAL_SYSINFO_COMPAT_TEST=disposable INCUDAL_COMPAT_RELOAD_SCENARIO=empty-pool INCUDAL_MEMORY_PRESSURE_TEST=disposable INCUDAL_MEMORY_CGROUP="$group" INCUDAL_MEMORY_TUNING='${{ matrix.tuning }}' bash -c '
             echo $$ > "$2/cgroup.procs"
             exec unshare --mount --propagation private bash "$3" "$1" "$2"
           ' -- "$root" "$group" "$PWD/scripts/enter-host-memory-pressure.sh"
