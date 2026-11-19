@@ -4,7 +4,7 @@ import{execFileSync}from'node:child_process'
 import{gzipSync}from'node:zlib'
 import{resolve}from'node:path'
 const input=process.argv[2]||'incus-compat-input',destination='agent/internal/provisioning/compat'
-const runId=process.env.INCUS_COMPAT_BUILD_RUN||'43510197753'
+const runId=process.env.INCUS_COMPAT_BUILD_RUN||''
 if(!/^[1-9]\d+$/.test(runId))throw Error('INCUS_COMPAT_BUILD_RUN_INVALID')
 await mkdir(destination,{recursive:true})
 for(const arch of['amd64','arm64']){
