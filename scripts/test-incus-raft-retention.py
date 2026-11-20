@@ -49,6 +49,13 @@ def log_bytes():
                if f.is_file() and (f.name.startswith('open-') or '-' in f.name and f.name[0].isdigit()))
 
 
+def retained_history_bytes():
+    # The three preallocated open-* writer segments are a fixed floor and are
+    # not historical retention. Compare immutable closed history independently.
+    return sum(f.stat().st_size for f in P('/var/lib/incus/database/global').iterdir()
+               if f.is_file() and '-' in f.name and f.name[0].isdigit())
+
+
 payload = (b'preserve-raft-database-memory-fixture-' * 512)[:16384]
 payload_hex = payload.hex()
 started = time.monotonic()
@@ -61,7 +68,7 @@ if sys.argv[1] == 'seed':
         # Distinct writes retain real page-bearing raft entries across many
         # normal snapshot cycles, reproducing a long-lived small standalone.
         sql(f"UPDATE incudal_memory_fixture SET seq={n},payload=X'{payload_hex}' WHERE id=1")
-    result = {'seq': 9216, 'sha256': hashlib.sha256(payload).hexdigest(), 'logBytes': log_bytes(),
+    result = {'seq': 9216, 'sha256': hashlib.sha256(payload).hexdigest(), 'logBytes': log_bytes(), 'retainedHistoryBytes': retained_history_bytes(),
               'memory': process_memory(), 'seconds': round(time.monotonic()-started, 2)}
     (root/'before.json').write_text(json.dumps(result))
     print('AGED_RAFT_BEFORE:'+json.dumps(result), flush=True)
@@ -73,12 +80,13 @@ else:
         sql(f"UPDATE incudal_memory_fixture SET seq={n},payload=X'{payload_hex}' WHERE id=1")
     deadline = time.monotonic()+40
     while time.monotonic() < deadline:
-        if log_bytes() < before['logBytes'] / 2:
+        if retained_history_bytes() < before['retainedHistoryBytes'] / 2:
             break
         time.sleep(1)
     rows = sql('SELECT seq,hex(payload) FROM incudal_memory_fixture WHERE id=1')[0]['rows']
     assert rows == [[10241, payload_hex.upper()]], 'committed data lost during normal compaction'
-    result = {'seq': 10241, 'logBytes': log_bytes(), 'memory': process_memory(), 'seconds': round(time.monotonic()-started,2)}
-    assert result['logBytes'] < before['logBytes']/2, 'standalone normal raft compaction did not reduce retained logs'
-    (root/'after.json').write_text(json.dumps(result))
+    result = {'seq': 10241, 'logBytes': log_bytes(), 'retainedHistoryBytes': retained_history_bytes(), 'memory': process_memory(), 'seconds': round(time.monotonic()-started,2),
+              'logFiles': {f.name:f.stat().st_size for f in P('/var/lib/incus/database/global').iterdir() if f.is_file() and (f.name.startswith('open-') or '-' in f.name and f.name[0].isdigit())}}
     print('AGED_RAFT_AFTER:'+json.dumps(result), flush=True)
+    assert result['retainedHistoryBytes'] < before['retainedHistoryBytes']/2, 'standalone normal raft compaction did not reduce retained history'
+    (root/'after.json').write_text(json.dumps(result))
