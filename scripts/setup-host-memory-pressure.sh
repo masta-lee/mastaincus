@@ -66,5 +66,5 @@ PY
 rc-service incusd zap
 rc-service incusd start
 incus admin waitready --timeout=60
-incus admin sql global 'SELECT seq,length(payload) FROM incudal_memory_fixture WHERE id=1'
+python3 /out/raft-recovery.py
 python3 /out/pressure.py
