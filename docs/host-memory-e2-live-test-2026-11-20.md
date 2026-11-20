@@ -10,6 +10,8 @@ Owner授权仅一台空闲E2安装测试分支Agent、创建临时测试容器�
 
 实机runner首次profile返回HTTP201误当失败、生成文件换行SHA误算及OpenRC僵尸PID漏判均已留下失败与修正记录；不以之后通过抹去。原身份/配额/客户/生产版本保持，未正式发行或全池升级。
 
+第六轮使用最终aa24a6ec本地构建Agent与经核验v3固定daemon，正常Agent自动写入8192持久策略和本boot回执（原45056），无需手工应用。十分钟120采样、预热后客户至少748MiB、120次合并API峰964ms、客户swap0与OOM0、原UUID/PID/磁盘和stop/start/restart/rebuild/delete全通过。原程序/全部配置及45056水位独立核逐hash一致，精确实例/卷/镜像/profile/cgroup/AppArmor/暂存清理，03:30UTC online/stockReady。此轮是真实单E2与最终自动代码，不是正式发行/全池/长期满额；程序版本字符串仍v1.0.15，按SHA区分候选。
+
 ## 第一轮结论
 
 Agent周期流式校验的真实收益已验证：旧Agent空闲RSS约311–347MiB，新Agent完整巡检后约34–35MiB；可用内存约193–224MiB升至500–523MiB。原Incus进程保持，未靠重启Incus或清缓存制造下降。
