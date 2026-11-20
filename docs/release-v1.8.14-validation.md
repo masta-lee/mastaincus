@@ -1,0 +1,11 @@
+# v1.8.14 内存优化发行验证
+
+产品来源 ced7c10cd17de34107b7281f8846702609ab4f32，PR18精确快进合入main，注释tag v1.8.14对象6b6548c24c9dad6cd53e1ae711c6e852bbd0326a。面板正式44672454450和Agent正式44672449503全部success。Agent于04:14:19UTC公开，面板v1.8.14于04:24:42UTC（北京时间12:24:42）公开、latest正确。main重复CI44672449465仍24/30无失败，继续核终态；最终PR同源码44668411193已30/30成功。
+
+本批修复Agent重复约62MiB解压和整文件校验、流式备份/安装/恢复、启动Go软预算，周期只读Incus改有界root-owned Unix API。固定官方Incus7.0.1增加daemon自身Go预算、小机原生THP且namespace前恢复客户继承、单机小内存Raft正常保留和压缩；小内存Alpine单机8192最低水位自动持久回执，新boot/幂等/管理员覆盖优先。签名心跳锁与busy协议回执精修，官方镜像暂时错误重试，OpenRC旧PID/zombie精确退休。客户768MiB配额、真实身份/数据/网络/密码/账期保持，错误不使宿主因BBR或可选内存优化无法销售。
+
+本地225/225全量自然exit0。最终候选CI44668411193 30/30、Agent44668411322 7项（含预期不发布）、压力44668411345全部6、原生兼容44668411359全部14、SSH44668411414成功。最终预览44668434811实际双包、双首装、六个v1.8.13原worker clean/migrated-atomic/rollback全部success，Release预期skipped。双实际tar原pin双签名/source/244迁移/全部本批服务模块/用户改价边界已独立核过。
+
+唯一授权空闲E2 phx-amd-2/#56共保留各轮失败。前AgentRSS311–347MiB，修复后约34MiB；Go小页与原生THP还不足，真实历史128MiB正常压缩到13MiB、Incus229→101MiB仍在原44MiB最低水位下近满额API9.15s失败。第五轮临时8192水位对照、第六轮最终自动程序、第七轮实际发行Agent08e2dd4cb9a9939a1987b014a6c1f527c6a7f10c8aa819186efe5ef991c34a21均十分钟120采样/客户预热后至少748MiB且配置768MiB/客户swap0/OOM0/原UUID/PID/磁盘保持，全部stop/start/restart/rebuild/delete确认。第七轮合并API峰1090ms、宿主swap峰约145MiB，不能称宿主零swap。每轮原Agent/Incus/配置/45056水位逐hash复原，精确测试实例/镜像/卷/profile/AppArmor/cgroup与宿主主控暂存全清，04:04UTC最后online/stockReady。
+
+发行不等生产主控OTA或全池实证，本轮未代主控更新。长期满额、千台并行与真实OSS公网灾备保持未验范围。六面板与三Agent公开资产均已重新下载、API size/digest/sha/checksum及两OTA清单一致，公开双tar原pin双签名/source244迁移/本批模块和用户边界再次过。AMD包214617555B SHA9cfd05408aa6ddd0ec0d7872099c2a0b550d96bce2beb2a063f220f55dd85ee4；ARM包213831970B SHA03bfb27d636d628048761a44e3bdca8f5d55b1f33183e2466465dfdd98657eaf。Agent公开AMD SHA08e2dd4cb9a9939a1987b014a6c1f527c6a7f10c8aa819186efe5ef991c34a21与实机完全相同。核验日志memory-v1814-public-verified.json/memory-public-package-verified.log与memory-agent16-public-verified.json自然exit0。发布说明明确范围，没执行生产主控OTA/全池升级。

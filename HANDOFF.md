@@ -1,5 +1,7 @@
 # 版本与验证记录
 
+- v1.8.14于2026-11-20 12:24:42北京时间正式公开/latest正确，Agentv1.0.16于12:14:19公开；产品ced7c10c/PR18精确快进main、注释tag对象6b6548c2，面板正式44672454450双首装/六v1.8.13原worker/Release与Agent44672449503全部success。225本地/最终PR CI44668411193 30/30、同源双原生/压力/完整预览全部success。六面板/三Agent公开资产size/digest/checksum/OTA与双tar原pin双签名/source244迁移/所有修复/用户改价边界核过，自然exit0。唯一#56第七轮实际发行Agent十分钟120采样/客户768配额/swap0/OOM0/API峰1090ms/原UUID/PID/磁盘及全操作成功，原Agent/Incus/配置/45056水位逐hash复原、全部垃圾清理，04:04UTC原版online/stockReady。没有代主控OTA或全池升级；main重复CI44672449465仍25/30无failure，继续核终态。长期满额/千台/完整OSS公网灾备未验范围保持，详见[正式验证](docs/release-v1.8.14-validation.md)。
+
 - 2026-11-20第六轮最终aa24自动Agent+#56实机全部过：自动8192持久config/本boot回执、十分钟120采样客户预热后至少748MiB/768配额/客户swap0/OOM0、合并API峰964ms、原UUID/PID/磁盘与stop/start/restart/rebuild/delete确认。原Agent/Incus/全部配置/45056水位独立恢复、容器镜像卷/profile/AppArmor/cgroup/宿主主控暂存清理，03:30UTC online/stockReady、03:31原公网再次synced。225本地全量自然exit0；aa24双架构44664527851全成功、Agent44664527796成功；实际8d双tar原pin双签名/source244迁移/心跳锁镜像重试等模块/用户改价边界核过。预览44666629394双构建和三旧worker成功、余首装/回滚在途；最终综合CI44664527779仍待。现准备面板v1.8.14/Agentv1.0.16候选（版本/来源守卫过），无tag/正式发行/主控OTA/全池升级。
 
 - 2026-11-20最终aa24自动Agent在#56第六轮：原配置备份、维护停售后自动生成memory-watermark回执(原45056→8192、本boot)与持久sysctl文件，正常空闲可用约773MiB，持续压力/操作/复原在途。新boot原生AMD专项44664527851/136052739264通过（其它三运行待），1a旧boot压力44663846882成功，aaAgent44664527796成功。27037725磁盘extent双Alpine通过、综合CI30终态cancelled无failure，不作为完整全过，最终aa全量CI待。本地225全量执行中。发行旧worker门槛更新为当前公开v1.8.13，原worker三场景/双首装仍待；不会用旧v1.8.12起点代替当前兼容。未正式发行/全池升级。

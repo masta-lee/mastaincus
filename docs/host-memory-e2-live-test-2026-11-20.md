@@ -12,6 +12,8 @@ Owner授权仅一台空闲E2安装测试分支Agent、创建临时测试容器�
 
 第六轮使用最终aa24a6ec本地构建Agent与经核验v3固定daemon，正常Agent自动写入8192持久策略和本boot回执（原45056），无需手工应用。十分钟120采样、预热后客户至少748MiB、120次合并API峰964ms、客户swap0与OOM0、原UUID/PID/磁盘和stop/start/restart/rebuild/delete全通过。原程序/全部配置及45056水位独立核逐hash一致，精确实例/卷/镜像/profile/cgroup/AppArmor/暂存清理，03:30UTC online/stockReady。此轮是真实单E2与最终自动代码，不是正式发行/全池/长期满额；程序版本字符串仍v1.0.15，按SHA区分候选。
 
+第七轮使用实际发行Agent v1.0.16 AMD文件（SHA08e2dd4cb9a9939a1987b014a6c1f527c6a7f10c8aa819186efe5ef991c34a21），再次完成十分钟120采样、原768MiB配额/客户swap0/OOM0/合并API峰1090ms/原UUID/PID/磁盘及全部操作。原程序/配置/45056水位逐hash复原、测试垃圾全清，04:04UTC原版online/stockReady。v1.8.14及Agent1.0.16现已正式公开，具体安装包与公开资产证据见[发行记录](release-v1.8.14-validation.md)；本轮没有代主控OTA或升级全池。
+
 ## 第一轮结论
 
 Agent周期流式校验的真实收益已验证：旧Agent空闲RSS约311–347MiB，新Agent完整巡检后约34–35MiB；可用内存约193–224MiB升至500–523MiB。原Incus进程保持，未靠重启Incus或清缓存制造下降。
