@@ -42,6 +42,7 @@ incus admin waitready --timeout=60
 incus storage create default dir
 python3 /out/raft-retention.py seed
 /out/provisioning-test -test.run '^TestNativeCompatibilityEmptyPoolReload$' -test.v
+/out/provisioning-test -test.run '^TestNativeMemoryReservePersistenceAndOverrides$' -test.v
 python3 /out/raft-retention.py verify
 # A real service restart reopens the compacted logs. No data files are removed
 # by the fixture, and the following pressure test still uses the same DB.

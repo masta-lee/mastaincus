@@ -5,6 +5,7 @@ package provisioning
 import (
 	"context"
 	"fmt"
+	"log"
 	"os"
 	"strings"
 	"sync"
@@ -56,6 +57,7 @@ func (e *Engine) SetGuests(v []Guest) {
 }
 func (e *Engine) Status() Status { e.mu.Lock(); defer e.mu.Unlock(); return e.status }
 func (e *Engine) Run(ctx context.Context) {
+	previousMemoryError := ""
 	for ctx.Err() == nil {
 		e.mu.Lock()
 		enabled := e.enabled != nil && *e.enabled
@@ -70,6 +72,16 @@ func (e *Engine) Run(ctx context.Context) {
 					_ = prepareIncusCompatibility(c, permit)
 					compatStatus, compatRequest, compatHashValue = incusCompatibilityStatus(c)
 				}
+			}
+			if compatStatus == "verified" {
+				memoryError := ""
+				if err := reconcileMemoryWatermark(c); err != nil && c.Err() == nil {
+					memoryError = err.Error()
+				}
+				if memoryError != "" && memoryError != previousMemoryError {
+					log.Printf("optional host memory reserve: %s", memoryError)
+				}
+				previousMemoryError = memoryError
 			}
 			err := repair(c)
 			if err == nil {

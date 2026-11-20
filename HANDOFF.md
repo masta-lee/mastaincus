@@ -1,5 +1,7 @@
 # 版本与验证记录
 
+- 2026-11-20#56第五轮第二次十分钟120采样完成、客户预热后约753–757MiB/禁止swap/OOM0、合并API最大1106ms、原UUID/PID/磁盘/stop/start/restart/rebuild/delete全通过；临时8192水位对照，原Agent/Incus/配置/45056水位独立恢复、容器卷镜像/profile及暂存全清，02:47UTC online/stockReady。非最终自动程序/长期验收。现新增仅900MiB–1GiB Alpine且当前已verified单机host内存水位8192自动持久回执/范围/管理员显式配置与后续运行时override保护，不改客户/THP/swap/售卖就绪；错误仍重试并独立日志。新增真实sysctl持久/重复/覆盖/漂移测试、双架构编译/vet/工具守卫过、原生及自动程序实机待。74bd完整CI44659412671最终30/30、458d root双原生44661037815 14/14、ef665 Agent44660687398/压力44660687462成功。27037725最终磁盘extent CI44662410787仍待，无产品发行/全池升级。
+
 - 2026-11-20内存第五轮第二次#56临时8192水位对照已进入压力，客户约754–763MiB、当前API几十至数百毫秒/OOM0，十分钟与操作/复原仍在途，不发布该水位默认。ef665ca5的CI44660687471 Alpine已真实完成开通/重装/SSH，后面的10GiB独立盘写11GiB耗时120秒被截断；区别于49ed官方目录连接失败。替换fixture为实际fallocate 11GiB→私有10GiB设备ENOSPC/EDQUOT、保持stat容量/回池/原生双架构，不扩大超时或改产品配额，Linux编译/YAML/磁盘守卫过、原生待。458d源码双原生root旧PID回归44661037815仍待；74bd完整CI44659412671当前无失败、末分片在途。文档已补前三/第四失败和真实复原，未全池升级/发行。
 
 - 2026-11-20#56内存水位对照第一次未进入压力：OpenRC start因旧pidfile仍指已退出/zombie而报already running；仅依赖/proc/exe消失不足以清OpenRC判断。原Agent/Incus/配置及45056原水位恢复，Incus空实例/镜像/卷/profile全核，02:22UTC原版online/stockReady。源码启动前新增仅root普通/未变化pidfile且原PID已消失或zombie的精确退休；活PID/复用/权限/内容变化仍拒绝，不启动第二daemon。新增真实未reap子进程回归，Linux编译/vet及工具守卫过，原生待。水位8192对照仍无有效结果，不写产品默认。74bd镜像网络重试types/cache/mTLS与server build已过，同源新CI44659412671仍在途、当前无失败，旧49ed CI目录网络失败保留。
