@@ -45,7 +45,24 @@ python3 /out/raft-retention.py seed
 python3 /out/raft-retention.py verify
 # A real service restart reopens the compacted logs. No data files are removed
 # by the fixture, and the following pressure test still uses the same DB.
+old_pid=$(cat /run/incus/incusd.pid)
+old_start=$(python3 -c 'import pathlib,sys; s=pathlib.Path("/proc/"+sys.argv[1]+"/stat").read_text(); print(s[s.rfind(") ")+2:].split()[19])' "$old_pid")
 rc-service incusd quit
+python3 - "$old_pid" "$old_start" <<'PY'
+import pathlib,sys,time
+pid,start=sys.argv[1:]
+for _ in range(120):
+    try:
+        text=pathlib.Path('/proc/'+pid+'/stat').read_text()
+        fields=text[text.rfind(') ')+2:].split()
+        if fields[0]=='Z' or fields[19]!=start:
+            break
+    except FileNotFoundError:
+        break
+    time.sleep(.5)
+else:
+    raise RuntimeError('Original fixture daemon did not finish graceful quit')
+PY
 rc-service incusd zap
 rc-service incusd start
 incus admin waitready --timeout=60
