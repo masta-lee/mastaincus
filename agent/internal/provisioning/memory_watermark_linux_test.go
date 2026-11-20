@@ -4,6 +4,7 @@ package provisioning
 
 import (
 	"context"
+	"encoding/json"
 	"os"
 	"testing"
 )
@@ -75,6 +76,22 @@ func TestNativeMemoryReservePersistenceAndOverrides(t *testing.T) {
 	currentReceipt, _ := os.ReadFile(memoryWatermarkJournal)
 	if string(receipt) != string(currentReceipt) {
 		t.Fatal("normal periodic pass rewrote original receipt")
+	}
+	var previousBoot memoryWatermarkReceipt
+	if err := json.Unmarshal(receipt, &previousBoot); err != nil {
+		t.Fatal(err)
+	}
+	previousBoot.BootID = "11111111-1111-4111-8111-111111111111"
+	stale, _ := json.Marshal(previousBoot)
+	os.WriteFile(memoryWatermarkJournal, stale, 0600)
+	if err := applyStandaloneMemoryWatermark(ctx, 8192); err != nil {
+		t.Fatal("new boot receipt", err)
+	}
+	currentReceipt, _ = os.ReadFile(memoryWatermarkJournal)
+	var newBoot memoryWatermarkReceipt
+	json.Unmarshal(currentReceipt, &newBoot)
+	if newBoot.BootID == previousBoot.BootID {
+		t.Fatal("boot-applied policy left stale receipt and could overwrite later operator changes")
 	}
 	os.WriteFile("/proc/sys/vm/min_free_kbytes", []byte("20000"), 0644)
 	if err := applyStandaloneMemoryWatermark(ctx, 8192); err != nil {

@@ -223,7 +223,7 @@ func applyStandaloneMemoryWatermark(ctx context.Context, target int64) error {
 	if current < target {
 		return nil
 	}
-	if current == target && receipt.Target == target && configErr == nil {
+	if current == target && receipt.Target == target && configErr == nil && receipt.BootID == strings.TrimSpace(string(boot)) {
 		return nil
 	}
 	if err := ctx.Err(); err != nil {
