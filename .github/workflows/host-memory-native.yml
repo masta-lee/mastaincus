@@ -12,10 +12,13 @@ on:
       - 'scripts/incus-memory-default.go'
       - 'scripts/incus-memory-default_test.go'
       - 'scripts/incus-native-memory.go'
+      - 'scripts/incus-raft-memory.go'
+      - 'scripts/incus-raft-memory_test.go'
       - 'scripts/test-incus-memory-runtime.go'
       - 'scripts/build-incus-sysinfo-compat.py'
       - 'scripts/prepare-incus-compat.mjs'
       - 'scripts/test-host-memory-pressure.py'
+      - 'scripts/test-incus-raft-retention.py'
       - 'scripts/host-memory-holder.go'
       - 'scripts/enter-host-memory-pressure.sh'
       - 'scripts/setup-host-memory-pressure.sh'
@@ -41,7 +44,7 @@ jobs:
             arch: aarch64
             digest: 4b14c18f7e90a063b61462ea1462a5732c154bf6adad594974fe6487cd98a8de
     runs-on: ${{ matrix.runner }}
-    timeout-minutes: 20
+    timeout-minutes: 25
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -81,6 +84,7 @@ jobs:
           sudo mkdir -p "$root/out"
           sudo cp output/* "$root/out/"
           sudo cp scripts/test-host-memory-pressure.py "$root/out/pressure.py"
+          sudo cp scripts/test-incus-raft-retention.py "$root/out/raft-retention.py"
           sudo cp scripts/setup-host-memory-pressure.sh "$root/out/setup.sh"
           sudo mount --rbind /dev "$root/dev"
           sudo mount --make-rslave "$root/dev"

@@ -8,6 +8,8 @@ on:
       - 'scripts/incus-memory-default.go'
       - 'scripts/incus-memory-default_test.go'
       - 'scripts/incus-native-memory.go'
+      - 'scripts/incus-raft-memory.go'
+      - 'scripts/incus-raft-memory_test.go'
       - 'scripts/test-incus-memory-runtime.go'
       - '.github/workflows/incus-sysinfo-compat.yml'
 jobs:
@@ -29,7 +31,7 @@ jobs:
       - name: Build pinned official daemon with anchored upstream monitor fix
         run: |
           mkdir -p output
-          docker run --rm -v "$PWD/scripts/build-incus-sysinfo-compat.py:/build.py:ro" -v "$PWD/scripts/incus-memory-default.go:/incus-memory-default.go:ro" -v "$PWD/scripts/incus-native-memory.go:/incus-native-memory.go:ro" -v "$PWD/scripts/incus-memory-default_test.go:/incus-memory-default_test.go:ro" -v "$PWD/scripts/test-incus-memory-runtime.go:/test-incus-memory-runtime.go:ro" -v "$PWD/output:/out" alpine:3.24 sh -ec '
+          docker run --rm -v "$PWD/scripts/build-incus-sysinfo-compat.py:/build.py:ro" -v "$PWD/scripts/incus-memory-default.go:/incus-memory-default.go:ro" -v "$PWD/scripts/incus-native-memory.go:/incus-native-memory.go:ro" -v "$PWD/scripts/incus-raft-memory.go:/incus-raft-memory.go:ro" -v "$PWD/scripts/incus-raft-memory_test.go:/incus-raft-memory_test.go:ro" -v "$PWD/scripts/incus-memory-default_test.go:/incus-memory-default_test.go:ro" -v "$PWD/scripts/test-incus-memory-runtime.go:/test-incus-memory-runtime.go:ro" -v "$PWD/output:/out" alpine:3.24 sh -ec '
             apk add --no-cache go python3 build-base acl-dev cowsql-dev raft-cowsql-dev eudev-dev libcap-dev libuv-dev linux-headers lxc-dev lz4-dev sqlite-dev gettext-dev
             python3 /build.py
           '

@@ -23,6 +23,7 @@ type compatManifest struct {
 	LifecycleSourceSha256                                        string
 	MemorySourceSha256, MemoryBuildDefault, MemoryBudgetRevision string
 	MemoryNamespaceSourceSha256                                  string
+	MemoryRaftSourceSha256                                       string
 	Size                                                         int64
 }
 
@@ -54,7 +55,8 @@ func validateCompatibilityArtifact(files fs.FS, arch string) (compatManifest, er
 		manifest.LifecycleSourceSha256 != "a60cea54e5d1e5397292556627fdcf7a808494e6abcbb180dd3b3710f03eb222" ||
 		manifest.MemorySourceSha256 != "56b95831a97677406958326f0a2d42a1aebc4589ebab8c616d9e735df2194f63" ||
 		manifest.MemoryNamespaceSourceSha256 != "917e33a02226b436dd6724c59fdc04735cc7958a1ffa33bd80f5084b39fa2ed1" ||
-		manifest.MemoryBuildDefault != "disablethp=1" || manifest.MemoryBudgetRevision != "daemon-memory-v2" ||
+		manifest.MemoryRaftSourceSha256 != "1ff2c7651926aab3f7a5eb78d5cb481a5c2902a0b4ca102253e50e4c3fb99136" ||
+		manifest.MemoryBuildDefault != "disablethp=1" || manifest.MemoryBudgetRevision != "daemon-memory-v3" ||
 		manifest.Size < 20 || manifest.Size > compatMaxBinaryBytes || len(manifest.SHA256) != 64 {
 		return manifest, fmt.Errorf("compatibility manifest invalid")
 	}

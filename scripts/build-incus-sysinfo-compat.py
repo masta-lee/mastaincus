@@ -197,9 +197,23 @@ namespace_text=namespace_text.replace(constructor_marker,'''    // Daemon-only s
 
 '''+constructor_marker)
 namespace_target.write_text(namespace_text)
-subprocess.run(['gofmt','-w',str(memory_target),str(native_memory_target),str(namespace_target),str(source/'cmd/incusd/incudal_memory_test.go'),str(daemon_target)],check=True)
+raft_memory_target=source/'internal/server/cluster/incudal_raft_memory.go'
+raft_memory_target.write_bytes(pathlib.Path('/incus-raft-memory.go').read_bytes())
+(source/'internal/server/cluster/incudal_raft_memory_test.go').write_bytes(pathlib.Path('/incus-raft-memory_test.go').read_bytes())
+gateway_target=source/'internal/server/cluster/gateway.go'
+gateway_text=gateway_target.read_text()
+raft_marker='\t\t\tg.memoryDial = cowsqlMemoryDial(g.bindAddress)'
+assert gateway_text.count(raft_marker)==1
+gateway_target.write_text(gateway_text.replace(raft_marker,'''            // Only a standalone small host changes retention; cluster policy
+            // and recovery formats remain the original cowsql defaults.
+            if option := incudalStandaloneRaftOption(info.Address); option != nil {
+                options = append(options, option)
+            }
+'''+raft_marker))
+subprocess.run(['gofmt','-w',str(memory_target),str(native_memory_target),str(namespace_target),str(source/'cmd/incusd/incudal_memory_test.go'),str(daemon_target),str(raft_memory_target),str(gateway_target),str(source/'internal/server/cluster/incudal_raft_memory_test.go')],check=True)
 env={**os.environ,'CGO_ENABLED':'1','CGO_CFLAGS':'-I/usr/include/raft -I/usr/include/cowsql','CGO_LDFLAGS':'-lintl','CGO_LDFLAGS_ALLOW':'(-Wl,-wrap,pthread_create)|(-Wl,-z,now)'}
 subprocess.run(['go','test','-tags=libsqlite3','-run=^(TestIncudalMonitorCgroup|TestIncudalDaemonMemoryBudget)$','./cmd/incusd'],cwd=source,env=env,check=True)
+subprocess.run(['go','test','-tags=libsqlite3','-run=^TestIncudalStandaloneRaftMemory$','./internal/server/cluster'],cwd=source,env=env,check=True)
 output=pathlib.Path('/out');output.mkdir(exist_ok=True)
 binary=output/'incusd'
 defaults=subprocess.check_output(['go','list','-tags=libsqlite3','-f','{{.DefaultGODEBUG}}','./cmd/incusd'],cwd=source,env=env,text=True).strip()
@@ -220,6 +234,7 @@ manifest={'schemaVersion':1,'purpose':'alpine-incus-sysinfo-compat','incusVersio
  'lifecycleSourceSha256':hashlib.sha256(lxc_target.read_bytes()+btrfs_target.read_bytes()).hexdigest(),
  'memorySourceSha256':hashlib.sha256(memory_target.read_bytes()+native_memory_target.read_bytes()).hexdigest(),
  'memoryNamespaceSourceSha256':hashlib.sha256(namespace_target.read_bytes()).hexdigest(),
- 'memoryBuildDefault':'disablethp=1', 'memoryBudgetRevision':'daemon-memory-v2'}
+ 'memoryRaftSourceSha256':hashlib.sha256(raft_memory_target.read_bytes()+gateway_target.read_bytes()).hexdigest(),
+ 'memoryBuildDefault':'disablethp=1', 'memoryBudgetRevision':'daemon-memory-v3'}
 (output/'incusd-manifest.json').write_text(json.dumps(manifest,indent=2))
 print(json.dumps(manifest))

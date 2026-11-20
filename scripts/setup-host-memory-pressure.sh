@@ -40,5 +40,14 @@ esac
 echo $! > /run/incus/incusd.pid
 incus admin waitready --timeout=60
 incus storage create default dir
+python3 /out/raft-retention.py seed
 /out/provisioning-test -test.run '^TestNativeCompatibilityEmptyPoolReload$' -test.v
+python3 /out/raft-retention.py verify
+# A real service restart reopens the compacted logs. No data files are removed
+# by the fixture, and the following pressure test still uses the same DB.
+rc-service incusd quit
+rc-service incusd zap
+rc-service incusd start
+incus admin waitready --timeout=60
+incus admin sql global 'SELECT seq,length(payload) FROM incudal_memory_fixture WHERE id=1'
 python3 /out/pressure.py
