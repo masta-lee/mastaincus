@@ -1,5 +1,7 @@
 # 版本与验证记录
 
+- 2026-11-20#56内存水位对照第一次未进入压力：OpenRC start因旧pidfile仍指已退出/zombie而报already running；仅依赖/proc/exe消失不足以清OpenRC判断。原Agent/Incus/配置及45056原水位恢复，Incus空实例/镜像/卷/profile全核，02:22UTC原版online/stockReady。源码启动前新增仅root普通/未变化pidfile且原PID已消失或zombie的精确退休；活PID/复用/权限/内容变化仍拒绝，不启动第二daemon。新增真实未reap子进程回归，Linux编译/vet及工具守卫过，原生待。水位8192对照仍无有效结果，不写产品默认。74bd镜像网络重试types/cache/mTLS与server build已过，同源新CI44659412671仍在途、当前无失败，旧49ed CI目录网络失败保留。
+
 - 2026-11-20#56第四轮：正常profile配置写触发closed历史134,069,088→13,620,008B，Incus RSS229→100.7MiB，可用约650MiB；客户752.5–754.3MiB仍合并API9.15秒，稳定失败/未跑完10分钟与操作。原Agent/Incus/配置逐hash恢复、容器卷镜像/profile及宿主主控暂存全清，02:12UTC online/stockReady。前一次fixture误只收200而profile创建201，已精确清测试profile、原版回池后修脚本重验，失败保留。49ed6f93新隔离44657435181双构建四runtime全success，含全payload/旧daemon回退再升级/SIGKILL/坏最新快照CRC→前快照恢复，原生兼容44657435213 14/14和Agent/SSH成功。新CI44657435198 Alpine首次官方catalog网络ETIMEDOUT/IPv6 ENETUNREACH失败（其它仍在途），源码缓存路径补总20秒/300秒内至多三次仅暂时连接或408/429/5xx重试，证书/取消/大小hash/磁盘错误不重试，原pin与部分文件清理保持；重试/离线缓存/mTLS双架构测试与types过，最终CI待。本轮实机进一步核min_free_kbytes=45056且normal high watermark约65MiB，系统余量仍研究，未发行/全池升级。
 
 - 2026-11-20 Raft v3来源89898c64完整CI44653709724最终30/30、native44653709858 14/14、Agent44653709794 7/7全部success。29c5fecb压力44655395065双构建四运行全部success：closed历史39,392,928→8,601,672B，真实重启回读；客户764.6–766.0MiB、Agent31.2–35.6MiB、6心跳/原UUID/PID/磁盘与全操作/OOM0。#56第四轮已原文件备份/维护停售、候选89898c64正常启动，实机压缩与10分钟压力仍在途，不能报稳定完成。补隔离完整payload回读、旧daemon回退再升级、SIGKILL重开及最新快照CRC损坏→前一快照恢复专项，语法/YAML/工具守卫过，原生待；产品无新变动，未发行/全池升级。

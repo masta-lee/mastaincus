@@ -5,7 +5,9 @@ package provisioning
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strconv"
 	"strings"
@@ -57,6 +59,61 @@ func TestCompatibilityStartingDaemonRequiresCurrentExecutable(t *testing.T) {
 	cancel()
 	if err := waitCompatReady(ctx, hash); err == nil {
 		t.Fatal("cancelled readiness accepted")
+	}
+}
+
+func TestCompatibilityRetiresOnlyExitedPIDReceipt(t *testing.T) {
+	if os.Geteuid() != 0 {
+		t.Skip("root-owned service receipt; native CI")
+	}
+	ctx := context.Background()
+	path := filepath.Join(t.TempDir(), "incusd.pid")
+	if err := retireExitedCompatPID(ctx, path, strings.Repeat("0", 64)); err != nil {
+		t.Fatal("absent receipt", err)
+	}
+	if err := os.WriteFile(path, []byte(strconv.Itoa(os.Getpid())), 0600); err != nil {
+		t.Fatal(err)
+	}
+	if err := retireExitedCompatPID(ctx, path, strings.Repeat("0", 64)); err == nil {
+		t.Fatal("live reused PID receipt removed")
+	}
+	command := exec.Command("/bin/true")
+	if err := command.Start(); err != nil {
+		t.Fatal(err)
+	}
+	defer command.Wait()
+	deadline := time.Now().Add(5 * time.Second)
+	for {
+		stat, err := os.ReadFile(fmt.Sprintf("/proc/%d/stat", command.Process.Pid))
+		if err != nil {
+			t.Fatal(err)
+		}
+		at := strings.LastIndex(string(stat), ") ")
+		if at >= 0 && strings.HasPrefix(string(stat)[at+2:], "Z ") {
+			break
+		}
+		if time.Now().After(deadline) {
+			t.Fatal("fixture child did not become zombie")
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	if err := os.WriteFile(path, []byte(strconv.Itoa(command.Process.Pid)), 0600); err != nil {
+		t.Fatal(err)
+	}
+	if err := retireExitedCompatPID(ctx, path, strings.Repeat("0", 64)); err != nil {
+		t.Fatal("unchanged zombie receipt blocked service restart", err)
+	}
+	if _, err := os.Lstat(path); !os.IsNotExist(err) {
+		t.Fatal("zombie receipt retained", err)
+	}
+	if err := os.WriteFile(path, []byte(strconv.Itoa(command.Process.Pid)), 0666); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Chmod(path, 0666); err != nil {
+		t.Fatal(err)
+	}
+	if err := retireExitedCompatPID(ctx, path, strings.Repeat("0", 64)); err == nil {
+		t.Fatal("unsafe exited receipt removed")
 	}
 }
 

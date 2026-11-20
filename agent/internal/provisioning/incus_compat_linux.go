@@ -226,6 +226,9 @@ func startCompatDaemon(ctx context.Context, expectedHash string) error {
 	if pid > 0 {
 		return waitCompatReady(ctx, expectedHash)
 	}
+	if err := retireExitedCompatPID(ctx, "/run/incus/incusd.pid", expectedHash); err != nil {
+		return err
+	}
 	// The old OpenRC runlevel marker survives a SIGTERM daemon reload.
 	// Clear only its stale marker after the exact original PID has exited.
 	if _, e := run(ctx, "rc-service", "incusd", "zap"); e != nil {
@@ -235,6 +238,39 @@ func startCompatDaemon(ctx context.Context, expectedHash string) error {
 		return fmt.Errorf("compatibility daemon service start: %w", e)
 	}
 	return waitCompatReady(ctx, expectedHash)
+}
+
+func retireExitedCompatPID(ctx context.Context, path, expectedHash string) error {
+	before, err := os.Lstat(path)
+	if os.IsNotExist(err) {
+		return nil
+	}
+	if err != nil {
+		return err
+	}
+	if !before.Mode().IsRegular() || before.Size() > 32 || before.Mode()&0022 != 0 || before.Sys().(*syscall.Stat_t).Uid != 0 {
+		return fmt.Errorf("compatibility service PID receipt unsafe")
+	}
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return err
+	}
+	// OpenRC tests only the pidfile's PID and may count an unreaped zombie as
+	// already running. Retire only a safe, unchanged receipt whose process is
+	// absent or a zombie; a live/reused PID remains a hard identity failure.
+	pid, err := compatStartingDaemon(ctx, path, "/usr/sbin/incusd", expectedHash)
+	if err != nil || pid != 0 {
+		return fmt.Errorf("compatibility service receipt still active or changed")
+	}
+	after, err := os.Lstat(path)
+	current, readErr := os.ReadFile(path)
+	if err != nil || readErr != nil || !os.SameFile(before, after) || before.ModTime() != after.ModTime() || before.Sys().(*syscall.Stat_t).Ctim != after.Sys().(*syscall.Stat_t).Ctim || string(current) != string(data) {
+		return fmt.Errorf("compatibility service receipt changed before retirement")
+	}
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	return os.Remove(path)
 }
 
 func compatStartingDaemon(ctx context.Context, pidPath, binaryPath, expectedHash string) (int, error) {
