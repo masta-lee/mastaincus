@@ -2,6 +2,7 @@ import { createHash, randomUUID } from 'node:crypto'
 import { createReadStream } from 'node:fs'
 import { lstat, mkdir, open, readFile, rename, rm, writeFile, statfs } from 'node:fs/promises'
 import { join, resolve } from 'node:path'
+import { setTimeout as delay } from 'node:timers/promises'
 import { retiredDefaultSystemImage } from '../lib/retired-system-images.js'
 
 export type CachedImagePart = { file: string; sha256: string; size: number; url?: string }
@@ -12,6 +13,34 @@ const downloading = new Map<string, Promise<string>>()
 const root = () => resolve(process.env.SYSTEM_IMAGE_CACHE_DIR || '/var/lib/incudal-images')
 const imageKey = (alias: string, architecture: string, type: string) => createHash('sha256').update(JSON.stringify([alias, architecture, type])).digest('hex')
 const validHash = (hash: unknown): hash is string => typeof hash === 'string' && /^[a-f0-9]{64}$/.test(hash)
+const transientStatuses = new Set([408, 429, 500, 502, 503, 504])
+class TransientImageSourceError extends Error {}
+function transientConnection(error: unknown, depth = 0): boolean {
+  if (!error || typeof error !== 'object' || depth > 4) return false
+  const value = error as { code?: string; cause?: unknown; errors?: unknown[] }
+  if (Array.isArray(value.errors)) return value.errors.length > 0 && value.errors.every(item => transientConnection(item, depth + 1))
+  if (/^(ECONNRESET|ECONNREFUSED|ETIMEDOUT|EAI_AGAIN|ENETUNREACH|EHOSTUNREACH|UND_ERR_(SOCKET|CONNECT_TIMEOUT|HEADERS_TIMEOUT|BODY_TIMEOUT))$/.test(value.code || '')) return true
+  return transientConnection(value.cause, depth + 1)
+}
+async function fetchImageSource<T>(url: string, timeoutMs: number, signal: AbortSignal | undefined,
+  redirect: 'follow' | 'error', consume: (response: Response, bounded: AbortSignal) => Promise<T>): Promise<T> {
+  const bounded = signal ? AbortSignal.any([signal, AbortSignal.timeout(timeoutMs)]) : AbortSignal.timeout(timeoutMs)
+  for (let attempt = 0; attempt < 3; attempt++) {
+    bounded.throwIfAborted()
+    let response: Response | undefined
+    try {
+      response = await fetch(url, { signal: bounded, redirect })
+      if (transientStatuses.has(response.status)) throw new TransientImageSourceError('SYSTEM_IMAGE_SOURCE_TEMPORARILY_UNAVAILABLE')
+      return await consume(response, bounded)
+    } catch (error) {
+      // Retry only transport/service failures under the original total deadline.
+      // TLS, cancellation, integrity and local disk failures retain their cause.
+      if (bounded.aborted || attempt === 2 || !(error instanceof TransientImageSourceError || transientConnection(error))) throw error
+    } finally { await response?.body?.cancel().catch(() => {}) }
+    await delay((attempt + 1) * 1000, undefined, { signal: bounded })
+  }
+  throw Error('SYSTEM_IMAGE_SOURCE_TEMPORARILY_UNAVAILABLE')
+}
 export async function hashImageFile(file: string) {
   const hash = createHash('sha256')
   for await (const chunk of createReadStream(file)) hash.update(chunk)
@@ -42,29 +71,31 @@ async function downloadPart(url: string, sha256: string, size: number, signal?: 
     if (!info.isFile() || info.isSymbolicLink() || info.nlink !== 1) throw Error('SYSTEM_IMAGE_CACHE_FILE_INVALID')
     if (info.isFile() && !info.isSymbolicLink() && info.size === size && await hashImageFile(target) === sha256) return target
   } catch (error) { if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error }
-  const temporary = target + '.' + randomUUID() + '.download'
   const space = await statfs(root())
   if (space.bavail * space.bsize < size + 512 * 1024 ** 2) throw Error('SYSTEM_IMAGE_CACHE_DISK_LOW')
-  const descriptor = await open(temporary, 'wx', 0o640)
-  try {
-    const response = await fetch(url, { signal: signal ? AbortSignal.any([signal, AbortSignal.timeout(300000)]) : AbortSignal.timeout(300000) })
+  return fetchImageSource(url, 300000, signal, 'follow', async (response, bounded) => {
     if (!response.ok || !response.body) throw Error('SYSTEM_IMAGE_DOWNLOAD_FAILED')
-    let received = 0
-    for await (const chunk of response.body) {
-      received += chunk.length
-      if (received > size) throw Error('SYSTEM_IMAGE_SIZE_MISMATCH')
-      let offset = 0
-      while (offset < chunk.length) {
-        const written = await descriptor.write(chunk, offset, chunk.length - offset)
-        if (!written.bytesWritten) throw Error('SYSTEM_IMAGE_CACHE_WRITE_FAILED')
-        offset += written.bytesWritten
+    const temporary = target + '.' + randomUUID() + '.download'
+    const descriptor = await open(temporary, 'wx', 0o640)
+    try {
+      let received = 0
+      for await (const chunk of response.body) {
+        received += chunk.length
+        if (received > size) throw Error('SYSTEM_IMAGE_SIZE_MISMATCH')
+        let offset = 0
+        while (offset < chunk.length) {
+          const written = await descriptor.write(chunk, offset, chunk.length - offset)
+          if (!written.bytesWritten) throw Error('SYSTEM_IMAGE_CACHE_WRITE_FAILED')
+          offset += written.bytesWritten
+        }
       }
-    }
-    await descriptor.sync(); await descriptor.close()
-    if (received !== size || await hashImageFile(temporary) !== sha256) throw Error('SYSTEM_IMAGE_HASH_MISMATCH')
-    await rename(temporary, target)
-    return target
-  } catch (error) { await descriptor.close().catch(() => {}); await rm(temporary, { force: true }); throw error }
+      await descriptor.sync(); await descriptor.close()
+      if (received !== size || await hashImageFile(temporary) !== sha256) throw Error('SYSTEM_IMAGE_HASH_MISMATCH')
+      bounded.throwIfAborted()
+      await rename(temporary, target)
+      return target
+    } catch (error) { await descriptor.close().catch(() => {}); await rm(temporary, { force: true }); throw error }
+  })
 }
 async function save(key: string, image: CachedSystemImage) {
   const temporary = join(root(), key + '.' + randomUUID() + '.json')
@@ -96,11 +127,12 @@ async function verifyParts(image: CachedSystemImage) {
 let catalog: { at: number; data: any } | undefined
 async function officialCatalog(signal?: AbortSignal) {
   if (catalog && Date.now() - catalog.at < 15 * 60000) return catalog.data
-  const response = await fetch('https://images.linuxcontainers.org/streams/v1/images.json', { signal: signal ? AbortSignal.any([signal, AbortSignal.timeout(20000)]) : AbortSignal.timeout(20000), redirect: 'error' })
-  if (!response.ok || !response.body) throw Error('SYSTEM_IMAGE_CATALOG_UNAVAILABLE')
-  const chunks: Buffer[] = []; let size = 0
-  for await (const chunk of response.body) { size += chunk.length; if (size > 16 * 1024 ** 2) throw Error('SYSTEM_IMAGE_CATALOG_TOO_LARGE'); chunks.push(Buffer.from(chunk)) }
-  const data = JSON.parse(Buffer.concat(chunks).toString('utf8'))
+  const data = await fetchImageSource('https://images.linuxcontainers.org/streams/v1/images.json', 20000, signal, 'error', async response => {
+    if (!response.ok || !response.body) throw Error('SYSTEM_IMAGE_CATALOG_UNAVAILABLE')
+    const chunks: Buffer[] = []; let size = 0
+    for await (const chunk of response.body) { size += chunk.length; if (size > 16 * 1024 ** 2) throw Error('SYSTEM_IMAGE_CATALOG_TOO_LARGE'); chunks.push(Buffer.from(chunk)) }
+    return JSON.parse(Buffer.concat(chunks).toString('utf8'))
+  })
   if (!data?.products || typeof data.products !== 'object' || Array.isArray(data.products)) throw Error('SYSTEM_IMAGE_CATALOG_INVALID')
   catalog = { at: Date.now(), data }; return data
 }
