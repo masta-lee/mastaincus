@@ -343,8 +343,10 @@ try {
       assert.equal((await transport.request<unknown[]>('GET','/1.0/instances/native-disk-resale/snapshots?recursion=1')).length,1,'image cache pruning retains customer snapshots')
       const actual=execFileSync('incus',['exec','native-disk-resale','--','stat','-f','-c','%S %b','/'],{encoding:'utf8',timeout:10000}).trim().split(/\s+/).map(BigInt)
       assert.equal(actual[0]*actual[1],10n*1024n**3n)
-      const full=await execWithOutput(transport,'native-disk-resale',['/bin/sh','-c',`set -e; if result=$(dd if=/dev/zero of=/root/quota-check bs=1048576 count=11000 2>&1); then rm /root/quota-check; exit 1; fi; printf '%s\\n' "$result" | grep -E "No space left|Disk quota exceeded"; rm -f /root/quota-check; sync`],{},120000)
+      execFileSync('incus',['file','push','--mode=0700','/tmp/incudal-disk-full-test','native-disk-resale/root/incudal-disk-full-test'],{timeout:10000})
+      const full=await execWithOutput(transport,'native-disk-resale',['/root/incudal-disk-full-test','disposable-10gib-volume'],{},30000)
       assert.equal((full.metadata as {return?:number}).return,0,'writing beyond the private device cannot consume the whole pool')
+      assert.equal(full.stdout.trim(),'PRIVATE_DEVICE_CAPACITY_ENFORCED')
       execFileSync('incus',['delete','native-disk-resale','--force'],{timeout:30000})
       console.log('PASS real isolated-volume disk-full enforcement and resale with a new 10GiB size')
     }
