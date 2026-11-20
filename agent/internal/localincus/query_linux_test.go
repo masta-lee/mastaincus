@@ -59,6 +59,12 @@ func TestQueryUsesOnlyBoundedLocalGET(t *testing.T) {
 	if data, err = querySocket(context.Background(), path, "/1.0/operations?recursion=1", true); err != nil || string(data) != response {
 		t.Fatal("raw proof lost")
 	}
+	if data, err = querySocket(context.Background(), path, "/internal/ready", true); err != nil || string(data) != response {
+		t.Fatal("internal readiness proof lost")
+	}
+	if _, err = querySocket(context.Background(), path, "/internal/other", true); err == nil {
+		t.Fatal("unrelated internal query accepted")
+	}
 	for _, bad := range []string{`{}`, `{"type":"error","status_code":200,"metadata":[]}`, `{"type":"sync","status_code":500,"metadata":[]}`, `{"type":"sync","status_code":200}`, `{"type":"sync","status_code":200,"metadata":null}`, strings.Repeat("x", MaxResponseBytes+1)} {
 		mu.Lock()
 		response = bad

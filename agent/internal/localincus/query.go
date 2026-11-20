@@ -28,7 +28,7 @@ func Query(ctx context.Context, path string, raw bool) ([]byte, error) {
 }
 
 func querySocket(ctx context.Context, socket, path string, raw bool) ([]byte, error) {
-	if path != "/1.0" && !strings.HasPrefix(path, "/1.0/") || strings.ContainsAny(path, "\r\n#\\") || strings.Contains(path, "..") {
+	if path != "/1.0" && path != "/internal/ready" && !strings.HasPrefix(path, "/1.0/") || strings.ContainsAny(path, "\r\n#\\") || strings.Contains(path, "..") {
 		return nil, fmt.Errorf("local Incus query path invalid")
 	}
 	ctx, cancel := context.WithTimeout(ctx, 5*time.Second)

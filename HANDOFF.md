@@ -1,5 +1,7 @@
 # 版本与验证记录
 
+- 2026-11-20非Go匿名大页v2来源13c4c3e5已双构建44600585511、压力44600585327、Agent44600585378、六兼容44600585239与完整CI44600585532全部success；daemon mm策略与客户PID1/exec THP继承恢复过。追加启动确认改为有界内部ready+实际server_pid与root PID/程序SHA核对，不启动第二个daemon、不把服务退出码当就绪；编译/vet/工具守卫过，新增原生PID/取消检查和同场景待。#56原版可售，下一轮实机仍须完整复原清理、稳定门槛前不发行。
+
 - 2026-11-20#56第二轮实机新Go预算/小页与本机API后仍近满额换页严重，非Go匿名大页约130MiB，API双查询>10秒，未通过；停止holder后原Agent/Incus/配置逐SHA复原、容器镜像卷及暂存全清，原公网19:36UTC再次synced/stockReady。初次OpenRC返回成功但waitready超时，同文件直接/后续服务debug启动正常，唯一根因仍待，自动启动/复原确认继续修。新方案仅小宿主daemon mm禁THP，子命令原C构造器先恢复、客户PID1/exec原THP和环境核验；源码/完整双pin/hash门禁新增v2，Linux编译/vet过，CGO双架构原生与实机待。未主控/全池升级或发行。
 
 - 2026-11-20新daemon构建门禁发现trimpath不保留ldflags，因此不能用go version -m验证小页默认；9524构建已失败保留日志，未发布。改为同链接设置原生32MiB触页探针核实际VmFlags nh，并核显式disablethp=0恢复；探针编译过、原生待。固定源码/完整签名与后续真实daemon映射验收保持，不放宽内存门禁。

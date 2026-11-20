@@ -6,11 +6,59 @@ import (
 	"context"
 	"encoding/json"
 	"os"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"testing"
 	"time"
 )
+
+func TestCompatibilityStartingDaemonRequiresCurrentExecutable(t *testing.T) {
+	if os.Geteuid() != 0 {
+		t.Skip("root-owned service receipt; native CI")
+	}
+	ctx := context.Background()
+	pidPath := filepath.Join(t.TempDir(), "incusd.pid")
+	binary, err := os.Readlink("/proc/self/exe")
+	if err != nil {
+		t.Fatal(err)
+	}
+	f, err := os.Open("/proc/self/exe")
+	if err != nil {
+		t.Fatal(err)
+	}
+	hash, err := hashCompatReader(ctx, f)
+	f.Close()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if pid, err := compatStartingDaemon(ctx, pidPath, binary, hash); err != nil || pid != 0 {
+		t.Fatal("absent PID", pid, err)
+	}
+	if err := os.WriteFile(pidPath, []byte(strconv.Itoa(os.Getpid())), 0600); err != nil {
+		t.Fatal(err)
+	}
+	if pid, err := compatStartingDaemon(ctx, pidPath, binary, hash); err != nil || pid != os.Getpid() {
+		t.Fatal("current process lost", pid, err)
+	}
+	if _, err := compatStartingDaemon(ctx, pidPath, binary, strings.Repeat("0", 64)); err == nil {
+		t.Fatal("wrong content accepted")
+	}
+	if _, err := compatStartingDaemon(ctx, pidPath, "/unexpected", hash); err == nil {
+		t.Fatal("reused PID accepted as daemon")
+	}
+	if err := os.Chmod(pidPath, 0666); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := compatStartingDaemon(ctx, pidPath, binary, hash); err == nil {
+		t.Fatal("unsafe service receipt accepted")
+	}
+	ctx, cancel := context.WithCancel(ctx)
+	cancel()
+	if err := waitCompatReady(ctx, hash); err == nil {
+		t.Fatal("cancelled readiness accepted")
+	}
+}
 
 func TestCompatPermitAndGuestIdentity(t *testing.T) {
 	good := &CompatPermit{RequestID: "11111111-1111-4111-8111-111111111111", HostIdentity: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", ExpiresAt: time.Now().Add(60 * time.Second).UTC().Format(time.RFC3339Nano)}

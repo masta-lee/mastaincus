@@ -12,6 +12,8 @@ import (
 	"strings"
 	"syscall"
 	"time"
+
+	"incudal-agent/internal/localincus"
 )
 
 type compatGuest struct {
@@ -212,11 +214,17 @@ func compatProcessStart(pid int) (string, error) {
 	}
 	return f[19], nil
 }
-func startCompatDaemon(ctx context.Context) error {
+func startCompatDaemon(ctx context.Context, expectedHash string) error {
 	// A prior attempt may have started the daemon before its receipt was saved.
 	// Reuse that process rather than launching a second backend for Incus.
-	if _, e := run(ctx, "incus", "query", "/1.0"); e == nil {
-		return nil
+	pid, err := compatStartingDaemon(ctx, "/run/incus/incusd.pid", "/usr/sbin/incusd", expectedHash)
+	if err != nil {
+		return err
+	}
+	// A service-start reply may arrive before its Unix socket. Never launch a
+	// second daemon when its root-owned PID already names the expected binary.
+	if pid > 0 {
+		return waitCompatReady(ctx, expectedHash)
 	}
 	// The old OpenRC runlevel marker survives a SIGTERM daemon reload.
 	// Clear only its stale marker after the exact original PID has exited.
@@ -226,11 +234,83 @@ func startCompatDaemon(ctx context.Context) error {
 	if _, e := run(ctx, "rc-service", "incusd", "start"); e != nil {
 		return fmt.Errorf("compatibility daemon service start: %w", e)
 	}
-	_, e := run(ctx, "incus", "admin", "waitready", "--timeout=60")
-	if e != nil {
-		return fmt.Errorf("compatibility daemon readiness: %w", e)
+	return waitCompatReady(ctx, expectedHash)
+}
+
+func compatStartingDaemon(ctx context.Context, pidPath, binaryPath, expectedHash string) (int, error) {
+	info, err := os.Lstat(pidPath)
+	if os.IsNotExist(err) {
+		return 0, nil
 	}
-	return nil
+	if err != nil || !info.Mode().IsRegular() || info.Size() > 32 || info.Mode()&0022 != 0 || info.Sys().(*syscall.Stat_t).Uid != 0 {
+		return 0, fmt.Errorf("compatibility service PID receipt unsafe")
+	}
+	data, err := os.ReadFile(pidPath)
+	if err != nil {
+		return 0, err
+	}
+	pid, err := strconv.Atoi(strings.TrimSpace(string(data)))
+	if err != nil || pid < 2 {
+		return 0, fmt.Errorf("compatibility service PID receipt invalid")
+	}
+	process := fmt.Sprintf("/proc/%d", pid)
+	start, err := compatProcessStart(pid)
+	if os.IsNotExist(err) {
+		return 0, nil
+	}
+	if err != nil {
+		return 0, err
+	}
+	stat, err := os.ReadFile(process + "/stat")
+	if err != nil {
+		return 0, err
+	}
+	end := strings.LastIndex(string(stat), ") ")
+	if end >= 0 && strings.HasPrefix(string(stat)[end+2:], "Z ") {
+		return 0, nil
+	}
+	exe, err := os.Readlink(process + "/exe")
+	if err != nil || exe != binaryPath || syscall.Kill(pid, 0) != nil {
+		return 0, fmt.Errorf("compatibility service process changed")
+	}
+	f, err := os.Open(process + "/exe")
+	if err != nil {
+		return 0, err
+	}
+	hash, err := hashCompatReader(ctx, f)
+	f.Close()
+	currentStart, startErr := compatProcessStart(pid)
+	if err != nil || startErr != nil || start != currentStart || hash != expectedHash {
+		return 0, fmt.Errorf("compatibility service executable changed")
+	}
+	return pid, nil
+}
+
+func waitCompatReady(ctx context.Context, expectedHash string) error {
+	ctx, cancel := context.WithTimeout(ctx, 60*time.Second)
+	defer cancel()
+	for {
+		if _, err := localincus.Query(ctx, "/internal/ready", true); err == nil {
+			pid, err := compatStartingDaemon(ctx, "/run/incus/incusd.pid", "/usr/sbin/incusd", expectedHash)
+			if err != nil {
+				return err
+			}
+			raw, err := localincus.Query(ctx, "/1.0", false)
+			var server struct {
+				Environment struct {
+					PID int `json:"server_pid"`
+				} `json:"environment"`
+			}
+			if err == nil && json.Unmarshal(raw, &server) == nil && pid > 0 && server.Environment.PID == pid {
+				return nil
+			}
+		}
+		select {
+		case <-ctx.Done():
+			return fmt.Errorf("compatibility daemon readiness not confirmed: %w", ctx.Err())
+		case <-time.After(500 * time.Millisecond):
+		}
+	}
 }
 func prepareIncusCompatibility(ctx context.Context, permit *CompatPermit) error {
 	if !validCompatPermit(permit) {
@@ -286,7 +366,7 @@ func prepareIncusCompatibility(ctx context.Context, permit *CompatPermit) error 
 		if e != nil || installedHash != journal.NewHash {
 			return fmt.Errorf("compatibility reloading binary changed")
 		}
-		if e = startCompatDaemon(ctx); e != nil {
+		if e = startCompatDaemon(ctx, journal.NewHash); e != nil {
 			return rollbackIncusCompatibility(ctx, journal)
 		}
 		rows, e := compatGuests(ctx)
@@ -479,7 +559,7 @@ func prepareIncusCompatibility(ctx context.Context, permit *CompatPermit) error 
 	if e = waitCompatDaemonExit(ctx, pid, start); e != nil {
 		return e
 	}
-	if e = startCompatDaemon(ctx); e != nil {
+	if e = startCompatDaemon(ctx, journal.NewHash); e != nil {
 		return rollbackIncusCompatibility(ctx, journal)
 	}
 	rows, e := compatGuests(ctx)
@@ -523,7 +603,7 @@ func rollbackIncusCompatibility(ctx context.Context, journal compatJournal) erro
 	if e = copyCompatFile(ctx, compatBackupPath, "/usr/sbin/incusd", journal.OldHash, true); e != nil {
 		return e
 	}
-	if e = startCompatDaemon(ctx); e != nil {
+	if e = startCompatDaemon(ctx, journal.OldHash); e != nil {
 		return e
 	}
 	rows, e := compatGuests(ctx)
