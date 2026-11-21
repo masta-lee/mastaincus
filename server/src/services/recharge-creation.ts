@@ -2,7 +2,7 @@ import { createHash } from 'node:crypto'
 import { Prisma } from '@prisma/client'
 import { prisma } from '../db/prisma.js'
 import { authorizeUserWrite, type WriteSession } from '../db/user-write-authorization.js'
-import { createRechargeOrder, type CreateRechargeOrderInput } from '../db/recharge-records.js'
+import { generateOrderNo, type CreateRechargeOrderInput } from '../db/recharge-records.js'
 
 export class RechargeCreationError extends Error {
   constructor(readonly status: number, message: string) { super(message) }
@@ -20,18 +20,18 @@ export async function findRechargeCreation(userId: number, intent: RechargeCreat
   return record
 }
 export async function createRechargeOnce(input: CreateRechargeOrderInput, intent: RechargeCreationIntent | undefined, session: WriteSession) {
-  if (!intent) return { order: await createRechargeOrder(input), created: true }
   return prisma.$transaction(async tx => {
-    const previous = await findRechargeCreation(input.userId, intent, session, tx)
+    const previous = intent ? await findRechargeCreation(input.userId, intent, session, tx) : null
+    if (!intent && !await authorizeUserWrite(tx, input.userId, session)) throw new RechargeCreationError(403, '登录状态已变化，请重新登录')
     if (previous) return { order: previous, created: false }
     // Authorization locks the account until this insert commits. No external
     // payment call runs in the transaction or repeats on a replayed intent.
     const order = await tx.rechargeRecord.create({ data: {
-      userId: input.userId, providerId: input.providerId, orderNo: input.orderNo!,
+      userId: input.userId, providerId: input.providerId, orderNo: input.orderNo || generateOrderNo(),
       amount: input.amount, actualAmount: input.actualAmount, fee: input.fee || 0,
       paymentMethod: input.paymentMethod, expiredAt: input.expiredAt,
       providerConfigSnapshot: input.providerConfigSnapshot, paymentDetails: input.paymentDetails as Prisma.InputJsonValue,
-      ip: input.ip, userAgent: input.userAgent, creationRequestId: intent.id, creationRequestHash: intent.hash
+      ip: input.ip, userAgent: input.userAgent, creationRequestId: intent?.id, creationRequestHash: intent?.hash
     } })
     return { order, created: true }
   })

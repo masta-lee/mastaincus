@@ -141,6 +141,7 @@
     "pnpm --filter server test:order-center-guards",
     "pnpm --filter server test:order-payment-operations-guards",
     "pnpm --filter server test:financial-reconciliation-guards",
+    "pnpm --filter server test:financial-integrity-guards",
     "pnpm --filter server test:frontend-i18n-keys",
     "pnpm --filter server test:i18n-message-compile-guards",
     "pnpm --filter server test:friend-route-guards",

@@ -50,6 +50,7 @@ environment:
  * 新增守卫若不属于这一类，请加进根 package.json 的 `testGuards`，不要加到这里。
  */
 const EXCLUDED_FROM_SUITE = new Map([
+  ['test:financial-integrity', 'requires isolated local *_pool_test PostgreSQL; actual wallet/ledger/business tampering, signed restore key/legacy baseline, rollback and authorized cascades'],
   ['test:customer-telegram-delivery', 'requires isolated PostgreSQL and intercepted external Telegram transport; validates actual customer/admin payloads and durable failure receipts'],
   ['test:registration-http', 'requires isolated PostgreSQL; exercises real registration HTTP, validation, verification and per-source quota'],
   ['test:admin-user-cleanup-incus', 'requires isolated PostgreSQL and mTLS; actual account cleanup using the existing instance stop/delete/recovery workers'],

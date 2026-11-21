@@ -2672,6 +2672,17 @@ model BalanceLog {
   @@map("balance_logs")
 }
 
+// Application HMAC keys remain outside PostgreSQL. Seals authenticate money
+// records; a selected, authenticated OSS snapshot keeps its original seals.
+model FinancialIntegritySeal {
+  kind      String
+  recordId  String @map("record_id")
+  signature String
+  updatedAt DateTime @updatedAt @map("updated_at")
+  @@id([kind, recordId])
+  @@map("financial_integrity_seals")
+}
+
 // Corrections applied while the restored platform is held. Credentials are never journaled.
 // Evidence belongs to a restore generation, never to a reusable host flag.
 model PlatformRecoveryBatch {

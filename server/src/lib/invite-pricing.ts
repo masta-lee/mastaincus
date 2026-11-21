@@ -60,14 +60,10 @@ const inviteCostResourceHandlers: Record<string, InviteCostResourceHandler> = Ob
 
       await advisoryTransactionLock(tx, USER_BALANCE_LOCK_NAMESPACE, userId)
 
-      const rows = await tx.$queryRaw<Array<{ balanceBefore: unknown; balanceAfter: unknown }>>(Prisma.sql`
-        UPDATE users
-        SET balance = balance - ${amount}
-        WHERE id = ${userId} AND balance >= ${amount}
-        RETURNING (balance + ${amount})::numeric AS "balanceBefore", balance::numeric AS "balanceAfter"
-      `)
+      const before = await tx.user.findUnique({ where: { id: userId }, select: { balance: true } })
+      const changed = await tx.user.updateMany({ where: { id: userId, balance: { gte: amount } }, data: { balance: { decrement: amount } } })
 
-      if (rows.length !== 1) {
+      if (changed.count !== 1) {
         const userExists = await tx.user.findUnique({
           where: { id: userId },
           select: { id: true }
@@ -78,8 +74,8 @@ const inviteCostResourceHandlers: Record<string, InviteCostResourceHandler> = Ob
         throw new Error('INSUFFICIENT_BALANCE')
       }
 
-      const balanceBefore = Number(rows[0].balanceBefore)
-      const balanceAfter = Number(rows[0].balanceAfter)
+      const balanceBefore = Number(before!.balance)
+      const balanceAfter = Number((await tx.user.findUniqueOrThrow({ where: { id: userId }, select: { balance: true } })).balance)
 
       await tx.balanceLog.create({
         data: {

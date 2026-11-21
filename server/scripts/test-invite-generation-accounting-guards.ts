@@ -62,13 +62,15 @@ assert.ok(
 assert.ok(
   balanceHandler.includes('await advisoryTransactionLock(tx, USER_BALANCE_LOCK_NAMESPACE, userId)') &&
     balanceHandler.indexOf('await advisoryTransactionLock(tx, USER_BALANCE_LOCK_NAMESPACE, userId)') <
-      balanceHandler.indexOf('UPDATE users'),
+      balanceHandler.indexOf('tx.user.updateMany'),
   'balance-paid invite generation must acquire the shared user balance lock before deducting balance'
 )
 
 assert.ok(
-  balanceHandler.includes('WHERE id = ${userId} AND balance >= ${amount}') &&
-    balanceHandler.includes('RETURNING (balance + ${amount})::numeric AS "balanceBefore", balance::numeric AS "balanceAfter"') &&
+  balanceHandler.includes('where: { id: userId, balance: { gte: amount } }') &&
+    balanceHandler.includes('data: { balance: { decrement: amount } }') &&
+    balanceHandler.includes('const balanceBefore = Number(before!.balance)') &&
+    balanceHandler.includes("const balanceAfter = Number((await tx.user.findUniqueOrThrow") &&
     balanceHandler.includes("type: 'invite_generate'"),
   'balance-paid invite generation must keep conditional deduction and persisted balance-log snapshots'
 )

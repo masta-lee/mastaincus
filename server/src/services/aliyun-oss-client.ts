@@ -21,6 +21,7 @@ export interface RemoteBackup extends BackupIndex { prefix: string }
 const noConfig = (error: unknown, code: string) => (error as { code?: string }).code === code || (error as { name?: string }).name === `${code}Error`
 export function sanitizedOssError(error: unknown): BackupError {
   if (error instanceof BackupError) return error
+  if ((error as Error | null)?.message === 'FINANCIAL_INTEGRITY_INVALID') return new BackupError('OSS_FINANCIAL_INTEGRITY_INVALID', 409)
   const code = String((error as { code?: string }).code || '').replace(/Error$/, '')
   if (code === 'ENOENT') return new BackupError('OSS_STATE_NOT_INITIALIZED', 503)
   if (['EACCES', 'EPERM', 'EROFS'].includes(code)) return new BackupError('OSS_STATE_PERMISSION_DENIED', 503)

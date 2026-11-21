@@ -9,7 +9,7 @@ export const RECOVERY_CATEGORIES = ['finance', 'access', 'tasks', 'gateway'] as 
 export type RecoveryCategory = typeof RECOVERY_CATEGORIES[number]
 export type RecoveryQuery = typeof pgQuery
 const tables: Record<RecoveryCategory, string[]> = {
-  finance: ['users', 'instances', 'instance_transfers', 'user_destroy_records', 'balance_logs', 'recharge_records', 'instance_billing_records', 'pool_orders', 'checkout_orders', 'checkout_payments', 'checkout_receipts', 'checkout_refunds'],
+  finance: ['users', 'instances', 'instance_transfers', 'user_destroy_records', 'balance_logs', 'recharge_records', 'recharge_late_payments', 'deleted_payment_receipts', 'renewal_requests', 'balance_adjustment_requests', 'instance_billing_records', 'pool_orders', 'checkout_orders', 'checkout_payments', 'checkout_receipts', 'checkout_refunds', 'financial_integrity_seals', 'aff_logs', 'hosting_balance_logs', 'payment_providers', 'host_pool_prices', 'package_plans'],
   access: ['users', 'public_api_tokens', 'oauth_access_tokens', 'oauth_refresh_tokens'],
   tasks: ['instance_tasks', 'instance_transfers', 'user_destroy_records', 'host_onboarding_nodes', 'management_gateway_tasks', 'checkout_orders', 'checkout_refunds', 'pool_orders', 'instances', 'instance_billing_records', 'balance_logs'],
   gateway: ['management_gateways', 'host_onboarding_nodes', 'system_configs']

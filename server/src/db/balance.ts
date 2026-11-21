@@ -602,6 +602,10 @@ export async function getUsersTotalConsumeMap(
     return new Map()
   }
 
+  // This aggregate feeds pricing/VIP benefits. Verify the underlying financial
+  // rows before executing raw SQL so a forged ledger cannot mint benefits.
+  await client.balanceLog.findMany({ where: { userId: { in: validUserIds } }, select: { id: true } })
+
   const rows = await client.$queryRaw<Array<{ userId: number; totalConsume: unknown }>>(Prisma.sql`
     SELECT
       user_id AS "userId",

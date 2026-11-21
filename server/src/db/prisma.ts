@@ -9,6 +9,7 @@ import '../config/env.js'
 import { PrismaClient } from '@prisma/client'
 import { Pool } from 'pg'
 import { PrismaPg } from '@prisma/adapter-pg'
+import { protectFinancialClient, initializeFinancialIntegrity } from '../lib/financial-integrity.js'
 
 const globalForPrisma = globalThis as unknown as {
   prisma: PrismaClient | undefined
@@ -173,7 +174,7 @@ export async function normalizeLegacyNetworkModes(): Promise<void> {
 // 创建 Prisma PostgreSQL 适配器
 const adapter = new PrismaPg(pool)
 
-export const prisma = globalForPrisma.prisma ?? new PrismaClient({
+const rawPrisma = globalForPrisma.prisma ?? new PrismaClient({
   adapter,
   // 开发环境也只记录错误，减少日志噪音
   // 如需调试查询，可设置环境变量 PRISMA_LOG=query,error,warn
@@ -181,9 +182,11 @@ export const prisma = globalForPrisma.prisma ?? new PrismaClient({
     ? (process.env.PRISMA_LOG.split(',') as ('query' | 'error' | 'warn' | 'info')[])
     : ['error'],
 })
+export const prisma = protectFinancialClient(rawPrisma)
+export const initializeFinancialDatabaseIntegrity = () => initializeFinancialIntegrity(rawPrisma)
 
 if (process.env.NODE_ENV !== 'production') {
-  globalForPrisma.prisma = prisma
+  globalForPrisma.prisma = rawPrisma
 }
 
 export function getDbPoolStats(): {

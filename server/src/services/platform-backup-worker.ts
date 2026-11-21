@@ -4,8 +4,10 @@ import { assertCurrentRecoveryGateway, recoveryGatewayIdentity } from './platfor
 import { pgRecoveryTransaction } from './platform-backup-database.js'
 import { resumeReviewedRecovery } from './platform-recovery-resume.js'
 import { captureRecoveryOperator, installRecoveryOperator } from './platform-recovery-operator.js'
+import { initializeFinancialDatabaseIntegrity } from '../db/prisma.js'
 import { execFile } from 'node:child_process'
 import { randomUUID } from 'node:crypto'
+import { financialIntegrityStatePath, verifyFinancialDatabaseSeals, legacyFinancialBaseline, sealRecoveryOperatorWallet, verifyFinancialBaseline, prepareRecoveryCheckoutStatuses, changeRecoveryOperatorRole } from '../lib/financial-integrity.js'
 import { promisify } from 'node:util'
 import { existsSync } from 'node:fs'
 import { chmod, chown, copyFile, lstat, mkdir, readdir, readFile, rm, stat, statfs, unlink, writeFile } from 'node:fs/promises'
@@ -94,6 +96,8 @@ export async function verifyBackupCompatibility(manifest: BackupManifest, stagin
 }
 async function listSources(): Promise<BackupSource[]> {
   const sources: BackupSource[] = [{ name: 'runtime.env', path: `${INSTALL}/.env` }]
+  ensure(existsSync(financialIntegrityStatePath()), 'OSS_FINANCIAL_BASELINE_MISSING', 503)
+  sources.push({ name: 'finance-baseline.json', path: financialIntegrityStatePath() })
   const addDirectory = async (path: string, prefix: string, required: boolean) => {
     if (!existsSync(path)) { ensure(!required, 'OSS_REQUIRED_ASSET_MISSING', 503); return }
     ensure((await lstat(path)).isDirectory() && !(await lstat(path)).isSymbolicLink(), 'OSS_ASSET_SYMLINK', 503)
@@ -213,6 +217,14 @@ async function prepareFiles(plan: RestorePlan, directory: string) {
   const localGateway=restoredGateway===undefined?undefined:await discoverLocalRecoveryGateway(currentEnv,archivedEnv,plan.gatewayEndpoint)
   await writeFile(preparedEnv, mergeBackupEnvironment(currentEnv,archivedEnv,restoredGateway,controllerPlatformId,localGateway), { flag: 'wx', mode: 0o600 })
   actions.push({ source: preparedEnv, target: `${INSTALL}/.env`, mode: 0o640 })
+  if (files.has('finance-baseline.json')) actions.push({ source: files.get('finance-baseline.json')!, target: financialIntegrityStatePath(), mode: 0o640 })
+  else {
+    // A pre-seal authenticated snapshot must bootstrap its own baseline; never
+    // reuse B's unrelated marker or re-sign a snapshot with existing seals.
+    const oldBaseline = join(directory, 'legacy-finance-baseline.json')
+    await writeFile(oldBaseline, legacyFinancialBaseline(parseEnv(archivedEnv).ENCRYPTION_KEY), { flag: 'wx', mode: 0o600 })
+    actions.push({ source: oldBaseline, target: financialIntegrityStatePath(), mode: 0o640 })
+  }
   const gatewayPresent = files.has('gateway.conf')
   if (gatewayPresent) {
     ensure(['management.key', 'management.pub', 'certs/onboarding-gateway.key'].every(name => files.has(name)), 'OSS_REQUIRED_ASSET_MISSING')
@@ -405,6 +417,9 @@ export async function runPlatformBackupTask(request: BackupTaskRequest): Promise
         }
         await update('checking_compatibility')
         compatibility = await verifyBackupCompatibility(archive.manifest, staging, directory)
+        const financeKey = parseEnv(await readFile(archive.files.get('runtime.env')!, 'utf8')).ENCRYPTION_KEY
+        if (archive.files.has('finance-baseline.json')) verifyFinancialBaseline(await readFile(archive.files.get('finance-baseline.json')!, 'utf8'), financeKey)
+        await verifyFinancialDatabaseSeals(staging, financeKey, !archive.files.has('finance-baseline.json'))
         await archivedGatewayForSnapshot(archive.files,staging)
         const [endpoint]=await pgQuery<{value:string}>("SELECT value FROM system_configs WHERE key='onboarding_gateway_dns_endpoint'",[],staging)
         if(endpoint)gatewayEndpoint=stableGatewayEndpointText(readGatewayEndpointPlan(endpoint.value))
@@ -504,6 +519,9 @@ export async function runPlatformBackupTask(request: BackupTaskRequest): Promise
       }
       await update('checking_compatibility')
       await verifyBackupCompatibility(plan.manifest, staging, directory, plan.compatibility)
+      const restoredKey = parseEnv(await readFile(files.get('runtime.env')!, 'utf8')).ENCRYPTION_KEY
+      if (files.has('finance-baseline.json')) verifyFinancialBaseline(await readFile(files.get('finance-baseline.json')!, 'utf8'), restoredKey)
+      await verifyFinancialDatabaseSeals(staging, restoredKey, !files.has('finance-baseline.json'))
       if(request.restorePolicy==='snapshot-v1' && preparedGateway){
         const gateway=await archivedGatewayForSnapshot(files,staging)
         ensure(gateway,'OSS_REQUIRED_ASSET_MISSING')
@@ -511,7 +529,8 @@ export async function runPlatformBackupTask(request: BackupTaskRequest): Promise
         await writeFile(path,gateway.config,{flag:'wx',mode:0o600});preparedGateway.source=path
         await writeJson(join(directory,'gateway-tombstones.json'),{version:1,removedNodeIds:gateway.removedNodeIds},0o600)
       }
-      await installRecoveryOperator(id, id, 'restore', staging)
+      const recoveryActor = await installRecoveryOperator(id, id, 'restore', staging)
+      if (files.has('finance-baseline.json')) await sealRecoveryOperatorWallet(staging, recoveryActor, restoredKey)
       await chown(join(backupRoot(), 'recovery-operator.json'), 0, operatorGid)
       // Expire every restored session and API credential. They may have been revoked since the snapshot.
       await pgQuery('DELETE FROM refresh_tokens', [], staging)
@@ -519,7 +538,7 @@ export async function runPlatformBackupTask(request: BackupTaskRequest): Promise
       await pgQuery('UPDATE oauth_access_tokens SET revoked_at=NOW() WHERE revoked_at IS NULL', [], staging)
       await pgQuery('UPDATE oauth_refresh_tokens SET revoked_at=NOW() WHERE revoked_at IS NULL', [], staging)
       await pgQuery(`INSERT INTO token_invalidations (user_id, session_id, invalidated_at, created_at) SELECT id, '__USER_LEVEL__', EXTRACT(EPOCH FROM NOW())::integer, NOW() FROM users ON CONFLICT (user_id, session_id) DO UPDATE SET invalidated_at=EXCLUDED.invalidated_at`, [], staging)
-      if(request.restorePolicy!=='snapshot-v1')await pgQuery("UPDATE checkout_orders SET status='recovery_review' WHERE status IN ('pending','paid','fulfilling','partial','refund_pending')", [], staging)
+      if(request.restorePolicy!=='snapshot-v1')await prepareRecoveryCheckoutStatuses(staging, restoredKey, !files.has('finance-baseline.json'))
       // Historical queue items must not execute again after a database rewind.
       // Existing workers use several enum/status shapes, so enumerate only task
       // tables and discover their legal terminal labels before changing them.
@@ -645,7 +664,7 @@ export async function runPlatformBackupTask(request: BackupTaskRequest): Promise
             FROM platform_recovery_hosts r WHERE r.batch_id=$1 AND r.host_id=h.id AND r.status='success'
             AND (h.pool_cleanup IS NULL OR h.pool_cleanup->>'version'='1')
             AND r.result->'pool'->>'canRecover'='true' AND r.result->'pool'->>'needsCleanup'='false'`, [request.recoveryBatchId])
-          if (operator?.synthetic) await query("UPDATE users SET role='user',status='banned' WHERE id=$1", [operator.actorId])
+          if (operator?.synthetic) await changeRecoveryOperatorRole(query,operator.actorId,'user','banned')
         }),
         restore: async () => { if (activation) { await restoreActivation(activation); resumeRestored = true } }
       })
@@ -711,6 +730,9 @@ export async function completeRestoredSnapshot(journal:RestoreJournal) {
   for(const key of Object.keys({...process.env,...restoredEnv}))if(/^(ONBOARDING_|GATEWAY_|ENCRYPTION_KEY$)/.test(key)) {
     if(restoredEnv[key]===undefined)delete process.env[key];else process.env[key]=restoredEnv[key]
   }
+  // This worker started before swapping A's key/database. Protect all delivery
+  // reconciliation writes using the restored baseline, including legacy input.
+  await initializeFinancialDatabaseIntegrity()
   await reconcileRestoredDeliveries(journal.taskId)
   await saveRestoredSnapshot(journal.taskId,journal.snapshotAt,journal.database)
 }

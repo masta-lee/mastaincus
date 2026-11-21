@@ -386,11 +386,6 @@ export async function completeRecharge(
     throw new Error(`订单状态异常：${record.status}`)
   }
 
-  const creditAmount = Number(data.actualAmount ?? record.actualAmount ?? record.amount)
-  if (!Number.isFinite(creditAmount) || creditAmount <= 0) {
-    throw new Error('充值入账金额无效')
-  }
-
   // 使用事务确保原子性
   const result = await prisma.$transaction(async (tx) => {
     if (data.tradeNo) {
@@ -405,11 +400,18 @@ export async function completeRecharge(
 
     await tx.$queryRaw`SELECT id FROM recharge_records WHERE id = ${record.id} FOR UPDATE`
     const current = await tx.rechargeRecord.findUniqueOrThrow({ where: { id: record.id } })
+    if (current.userId !== record.userId || current.providerId !== record.providerId || current.orderNo !== record.orderNo) throw new RechargePaymentSelectionChangedError()
     if (current.status === 'completed') {
       if (data.verifiedPayment && data.tradeNo && current.tradeNo !== data.tradeNo.trim()) {
         await recordLateRechargePayment(current, data.tradeNo, data.verifiedPayment, 'additional_payment', false, tx)
       }
       return { ...current, completedNow: false }
+    }
+    const creditAmount = Number(data.actualAmount ?? current.actualAmount ?? current.amount)
+    if (!Number.isFinite(creditAmount) || creditAmount <= 0 || creditAmount > 99999999.99 ||
+      !new Prisma.Decimal(creditAmount).equals(new Prisma.Decimal(creditAmount).toDecimalPlaces(2))) throw new Error('充值入账金额无效')
+    if (data.verifiedPayment && data.actualAmount !== undefined && !new Prisma.Decimal(creditAmount).equals(current.actualAmount ?? current.amount)) {
+      throw new RechargePaymentSelectionChangedError()
     }
     if (!await tx.rechargeRecord.findFirst({ where: { id: record.id, ...paymentSelectionCondition(data.expectedPaymentDetails) } })) {
       throw new RechargePaymentSelectionChangedError()
@@ -453,7 +455,7 @@ export async function completeRecharge(
         callbackAt: new Date(),
         completedAt: new Date(),
         actualAmount: creditAmount,
-        paymentDetails: (data.paymentDetails as any) ?? record.paymentDetails
+        paymentDetails: (data.paymentDetails as any) ?? current.paymentDetails
       }
     })
 
@@ -481,6 +483,8 @@ export async function completeRecharge(
     }
 
     // 2. 增加用户余额（使用 ?? 避免 0 值被误判为 falsy）
+    const payer = await tx.user.findUniqueOrThrow({ where: { id: current.userId }, select: { balance: true } })
+    if (payer.balance.plus(creditAmount).greaterThan('99999999.99') || payer.balance.lessThan(0)) throw new Error('余额超出系统允许范围')
     const updatedUser = await tx.user.update({
       where: { id: record.userId },
       data: { balance: { increment: creditAmount } },

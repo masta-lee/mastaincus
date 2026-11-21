@@ -6,6 +6,8 @@
   "main": "dist/app.js",
   "types": "dist/app.d.ts",
   "scripts": {
+    "test:financial-integrity-guards": "node --import tsx scripts/test-financial-integrity-guards.ts",
+    "test:financial-integrity": "node --import tsx scripts/test-financial-integrity.ts",
     "test:resource-size": "node --import tsx scripts/test-resource-size.ts",
     "test:expiry-enforcement-regressions": "node --import tsx scripts/test-expiry-enforcement-regressions.ts",
     "test:expiry-concurrency-regressions": "node --import tsx scripts/test-expiry-concurrency-regressions.ts",

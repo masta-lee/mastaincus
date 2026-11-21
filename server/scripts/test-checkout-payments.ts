@@ -327,7 +327,7 @@ try {
  await assert.rejects(prisma.$transaction(async tx=>{
    await tx.balanceLog.update({where:{id:creditedLogId},data:{amount:1}})
    await assertRecoveryExternalLedger(tx,{order:recoveredOrder,instances:[recoveredGuest],transfers:[]},new Date())
- }),/退款|账|OSS_RECOVERY/,'restored wallet refund must verify its actual exact ledger and never double count the external principal')
+ }),/退款|账|OSS_RECOVERY|FINANCIAL_INTEGRITY_INVALID/,'restored wallet refund must verify its actual exact ledger and never double count the external principal')
  await host();const lost=input();await createCheckout(buyer.id,lost,session)
  const lp=await prisma.checkoutPayment.create({data:{id:'P'+randomUUID().replaceAll('-',''),orderId:lost.requestId,providerId:cryptoProvider.id,providerType:'upaypro',providerName:'Fixture USDT',method:'USDT-TRC20',payableCents:1100,feeCents:0,configSnapshot:buildRechargeProviderConfigSnapshot('upaypro',upayConfig),details:{},status:'uncertain'}})
  await handleCheckoutCallback(cryptoProvider.id,signNotice({...notice,order_id:lp.id,trade_id:'fixture-lost-trade'}),{...meta,method:'POST'})

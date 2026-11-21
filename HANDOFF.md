@@ -1,5 +1,9 @@
 # 版本与验证记录
 
+- 2026-11-22 owner授权本轮资金审计源码提交并推送`codex/financial-integrity-audit`，暂不发版。本次仅保存已验证源码、守卫、迁移与脱敏报告，保留实际OSS/双架构完整恢复和生产验收缺口，不合并main/打tag/Release/OTA；下条“未推送”为本批审计完成时的历史状态。
+
+- 2026-11-22资金链源码/隔离排查：充值/余额/购买/手动批量PAT自动续费、退款礼品卡和OSS资金恢复完成本批修复；严格原快照GCM/MD5-RSA标量时间戳/锁内净到账和余额限额，统一PrismaHMAC覆盖关键账户鉴权/资金/定价渠道/流水凭据，双基线和固定v1字段、合法事务/删除/回滚，恢复trade去重/原key/新Boperator/精确journal与旧无签名迁移。第二轮全量226/226自然exit0（022415），后补权限签名最终server build exit0和八对应专项8/8、六真实资金主流程全部exit0；含鉴权签名真实pg_dump→项目加密归档→独立pg_restore→全验签/currentB真实口令恢复登记一次入账通过。未发版/推送/OTA/生产账务/真实OSS网络与双Linux全新安装/全主控灾备验收；本地归档往返不可当全OSS已经通过，快照之后新交易仍需独立对账。逐项问题、失败与边界见[资金审计](docs/financial-audit-2026-11-22.md)，原内存发行保持。
+
 - v1.8.14本轮最终闭环：main重复CI44672449465已30/30自然success，与最终PR30/30、正式面板/Agent、双首装/六v1.8.13原worker升级回滚、双架构压力/兼容矩阵、公开六面板/三Agent资产及实际tar核验一起全部完成。产品ced7c10c稳定tag保持；最后仅补脱敏文档。第七轮实际发行Agent已在唯一授权#56十分钟近满额/API峰1090ms/全实例操作后逐hash恢复原程序配置/45056水位并清理回池。未代主控OTA或主动全池部署；全池生效及长期满额/千台/完整OSS公网灾备分别保留未验，详见[完整发行证据](docs/release-v1.8.14-validation.md)。
 
 - v1.8.14于2026-11-20 12:24:42北京时间正式公开/latest正确，Agentv1.0.16于12:14:19公开；产品ced7c10c/PR18精确快进main、注释tag对象6b6548c2，面板正式44672454450双首装/六v1.8.13原worker/Release与Agent44672449503全部success。225本地/最终PR CI44668411193 30/30、同源双原生/压力/完整预览全部success。六面板/三Agent公开资产size/digest/checksum/OTA与双tar原pin双签名/source244迁移/所有修复/用户改价边界核过，自然exit0。唯一#56第七轮实际发行Agent十分钟120采样/客户768配额/swap0/OOM0/API峰1090ms/原UUID/PID/磁盘及全操作成功，原Agent/Incus/配置/45056水位逐hash复原、全部垃圾清理，04:04UTC原版online/stockReady。没有代主控OTA或全池升级；main重复CI44672449465仍25/30无failure，继续核终态。长期满额/千台/完整OSS公网灾备未验范围保持，详见[正式验证](docs/release-v1.8.14-validation.md)。

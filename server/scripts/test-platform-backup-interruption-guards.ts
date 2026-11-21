@@ -12,6 +12,15 @@ import { verifyRecoveryOneshotExit } from './fixtures/recovery-oneshot.js'
 
 await verifyRecoveryOneshotExit()
 
+// Finance identity participates in the same precise restore/rollback journal.
+{
+  const id=randomUUID(),directory=statePath('private',id)
+  const record={taskId:id,database:'fixture',staging:`incudal_restore_${id.replaceAll('-','')}`,rollback:`incudal_before_${id.replaceAll('-','')}`,
+    stage:'prepared',config:{} as any,files:[{target:'/var/lib/incudal-finance/baseline.json',saved:join(directory,'before-0'),mode:0o640}]}
+  validateRestoreJournal(record,directory)
+  for(const target of ['/var/lib/incudal-finance/other.json','/var/lib/incudal-finance/../baseline.json']) assert.throws(()=>validateRestoreJournal({...record,files:[{...record.files[0],target}]},directory),/OSS_RECOVERY_STATE_INVALID/)
+}
+
 const source = await readFile(new URL('../src/services/platform-backup-worker.ts', import.meta.url), 'utf8')
 const gatewaySource = await readFile(new URL('../src/services/platform-backup-gateway.ts', import.meta.url), 'utf8')
 function section(startText: string, endText: string) {

@@ -40,7 +40,7 @@ import { dirname, join } from 'path'
 
 // 导入数据库
 import { initPrismaDatabase } from './db/init-prisma.js'
-import { closePrismaDatabase, prisma } from './db/prisma.js'
+import { closePrismaDatabase, prisma, initializeFinancialDatabaseIntegrity } from './db/prisma.js'
 
 // 导入安全工具
 import { checkJwtConfig, isAccessTokenInvalidated } from './lib/security.js'
@@ -782,6 +782,7 @@ const start = async (): Promise<void> => {
       jwtCheck.warnings.forEach(w => console.warn(`   - ${w}`))
     }
 
+    await initializeFinancialDatabaseIntegrity()
     // Do not run startup mutations or workers against a database awaiting review.
     if (recoveryHeld()) {
       startRecoveryReviewWorker()

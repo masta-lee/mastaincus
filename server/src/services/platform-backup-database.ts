@@ -9,6 +9,7 @@ import { Pool, type PoolClient } from 'pg'
 import { BackupError, ensure } from './platform-backup-core.js'
 import type { BackupMigration } from './platform-backup-compatibility.js'
 import { ensureBackupLocales } from './platform-backup-locale.js'
+import { verifyFinancialDatabaseSeals } from '../lib/financial-integrity.js'
 
 const exec = promisify(execFile)
 export function postgresConnection() {
@@ -330,7 +331,11 @@ export async function verifyDatabaseBackup(source: string, expected: DatabaseInt
   ensure(/^[0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12}$/.test(taskId), 'OSS_TASK_INVALID')
   const staging = `incudal_verify_${taskId.replace(/-/g, '')}`
   await createBackupRestoreDatabase(staging, expected)
-  try { await restoreDatabase(source, staging); await verifyRestoredDatabase(staging, expected, directory, 'verified', source) }
+  try {
+    await restoreDatabase(source, staging)
+    await verifyRestoredDatabase(staging, expected, directory, 'verified', source)
+    await verifyFinancialDatabaseSeals(staging, process.env.ENCRYPTION_KEY || '')
+  }
   finally { await localDatabaseAdmin(`DROP DATABASE ${quoteIdentifier(staging)} WITH (FORCE);`) }
 }
 export async function createBackupRestoreDatabase(staging: string, expected?: DatabaseIntegrity) {

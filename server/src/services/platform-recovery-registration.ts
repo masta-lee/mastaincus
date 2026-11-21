@@ -9,7 +9,8 @@ import { readRecoveryHold } from './platform-recovery-review.js'
 import { reauthenticateRecoveryOperator } from './platform-recovery-operator.js'
 import { recoveryHash } from './platform-recovery-evidence.js'
 import { changeBalanceInTransaction } from '../db/balance.js'
-import { tryAdvisoryTransactionLock, USER_BALANCE_LOCK_NAMESPACE } from '../db/advisory-locks.js'
+import { tryAdvisoryTransactionLock, advisoryTransactionLockString, USER_BALANCE_LOCK_NAMESPACE, PAYMENT_SETTLEMENT_LOCK_NAMESPACE } from '../db/advisory-locks.js'
+import { assertPaymentNotDeleted } from '../lib/deleted-payment-receipt.js'
 import { buildRechargeProviderConfigSnapshot } from '../lib/recharge-provider-snapshot.js'
 
 interface Evidence { id: string; reference: string; evidenceHash: string; observedAt: string }
@@ -86,6 +87,8 @@ export async function registerRecoveryRecharge(input: RecoveryRechargeRegistrati
     /^[A-Z0-9]{3,12}$/.test(input.currency) && /^(0|[1-9][0-9]{0,15})(\.[0-9]{1,18})?$/.test(input.receivedAmount) && new Prisma.Decimal(input.receivedAmount).greaterThan(0) &&
     amount.greaterThan(0) && credit.greaterThan(0) && Date.parse(input.paidAt)>snapshotAt && Date.parse(input.paidAt)<=Date.parse(input.observedAt),'OSS_RECOVERY_EVIDENCE_INVALID')
   return prisma.$transaction(async tx=>{
+    await advisoryTransactionLockString(tx,PAYMENT_SETTLEMENT_LOCK_NAMESPACE,`${input.providerId}:${input.tradeNo}`)
+    await assertPaymentNotDeleted(tx,input.providerId,input.tradeNo)
     const prior=await tx.platformRecoveryEvidence.findUnique({where:{id:input.id}})
     if(prior){ensure(prior.batchId===batch.id&&prior.sourceHash===hash,'OSS_RECOVERY_EVIDENCE_CONFLICT',409);return {id:prior.id,...prior.payload as {userId:number;rechargeId:number},replayed:true}}
     ensure(await tryAdvisoryTransactionLock(tx,USER_BALANCE_LOCK_NAMESPACE,input.userId),'OSS_RECONCILIATION_BUSY',409)

@@ -35,7 +35,7 @@ export function validateRestoreJournal(record: RestoreJournal, directory: string
   const targets = new Set<string>()
   for (const file of record.files) {
     const allowed = ['/opt/incudal/.env', '/etc/wireguard/incudal-mgmt.conf', '/root/.ssh/incudal-host-management',
-      '/root/.ssh/incudal-host-management.pub', '/root/.ssh/authorized_keys'].includes(file.target) ||
+      '/root/.ssh/incudal-host-management.pub', '/root/.ssh/authorized_keys', '/var/lib/incudal-finance/baseline.json'].includes(file.target) ||
       /^\/opt\/incudal\/server\/certs\/[A-Za-z0-9_.-]+$/.test(file.target) ||
       /^\/var\/lib\/incudal-onboarding\/[A-Za-z0-9_.-]+$/.test(file.target) ||
       /^\/var\/lib\/incudal-onboarding\/retired\/[0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12}-[0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12}\.json$/.test(file.target) ||

@@ -780,92 +780,92 @@ export default async function adminBillingRoutes(app: FastifyInstance): Promise<
         thisMonthAff,
         affConverted,
         affPendingConvert
-      ] = await prisma.$transaction([
-        prisma.instanceBillingRecord.aggregate({
+      ] = await prisma.$transaction(async tx => Promise.all([
+        tx.instanceBillingRecord.aggregate({
           where: revenueBaseWhere,
           _sum: { amount: true }
         }),
-        prisma.instanceBillingRecord.aggregate({
+        tx.instanceBillingRecord.aggregate({
           where: {
             ...revenueBaseWhere,
             createdAt: { gte: thisMonthStart }
           },
           _sum: { amount: true }
         }),
-        prisma.instanceBillingRecord.aggregate({
+        tx.instanceBillingRecord.aggregate({
           where: {
             ...revenueBaseWhere,
             createdAt: { gte: lastMonthStart, lte: lastMonthEnd }
           },
           _sum: { amount: true }
         }),
-        prisma.instanceBillingRecord.aggregate({
+        tx.instanceBillingRecord.aggregate({
           where: {
             ...revenueBaseWhere,
             createdAt: { gte: today, lt: tomorrow }
           },
           _sum: { amount: true }
         }),
-        prisma.instanceBillingRecord.aggregate({
+        tx.instanceBillingRecord.aggregate({
           where: directRevenueWhere,
           _sum: { amount: true }
         }),
-        prisma.instanceBillingRecord.aggregate({
+        tx.instanceBillingRecord.aggregate({
           where: hostedRevenueWhere,
           _sum: { amount: true }
         }),
-        prisma.instanceBillingRecord.aggregate({
+        tx.instanceBillingRecord.aggregate({
           where: {
             ...directRevenueWhere,
             createdAt: { gte: thisMonthStart }
           },
           _sum: { amount: true }
         }),
-        prisma.instanceBillingRecord.aggregate({
+        tx.instanceBillingRecord.aggregate({
           where: {
             ...hostedRevenueWhere,
             createdAt: { gte: thisMonthStart }
           },
           _sum: { amount: true }
         }),
-        prisma.instanceBillingRecord.aggregate({
+        tx.instanceBillingRecord.aggregate({
           where: {
             ...directRevenueWhere,
             createdAt: { gte: today, lt: tomorrow }
           },
           _sum: { amount: true }
         }),
-        prisma.instanceBillingRecord.aggregate({
+        tx.instanceBillingRecord.aggregate({
           where: {
             ...hostedRevenueWhere,
             createdAt: { gte: today, lt: tomorrow }
           },
           _sum: { amount: true }
         }),
-        prisma.instanceBillingRecord.aggregate({
+        tx.instanceBillingRecord.aggregate({
           where: { type: 'refund' },
           _sum: { amount: true }
         }),
-        prisma.instance.count({
+        tx.instance.count({
           where: {
             packagePlanId: { not: null },
             status: { notIn: ['deleted'] }
           }
         }),
-        prisma.instance.count({
+        tx.instance.count({
           where: {
             packagePlanId: { not: null },
             status: { notIn: ['deleted', 'suspended'] },
             expiresAt: { gt: now }
           }
         }),
-        prisma.instance.count({
+        tx.instance.count({
           where: {
             packagePlanId: { not: null },
             status: 'suspended'
           }
         }),
-        prisma.instance.count({
+        tx.instance.count({
           where: {
             packagePlanId: { not: null },
             expiresAt: {
@@ -876,20 +876,20 @@ export default async function adminBillingRoutes(app: FastifyInstance): Promise<
             status: { notIn: ['deleted', 'suspended'] }
           }
         }),
-        prisma.$queryRaw<RechargeAggregateRow[]>(Prisma.sql`
+        tx.$queryRaw<RechargeAggregateRow[]>(Prisma.sql`
           SELECT COALESCE(SUM(COALESCE(actual_amount, amount)), 0)::numeric AS amount,
                  COUNT(*)::int AS count
           FROM recharge_records
           WHERE status = 'completed'
         `),
-        prisma.$queryRaw<RechargeAggregateRow[]>(Prisma.sql`
+        tx.$queryRaw<RechargeAggregateRow[]>(Prisma.sql`
           SELECT COALESCE(SUM(COALESCE(actual_amount, amount)), 0)::numeric AS amount,
                  COUNT(*)::int AS count
           FROM recharge_records
           WHERE status = 'completed'
             AND created_at >= ${thisMonthStart}
         `),
-        prisma.$queryRaw<RechargeAggregateRow[]>(Prisma.sql`
+        tx.$queryRaw<RechargeAggregateRow[]>(Prisma.sql`
           SELECT COALESCE(SUM(COALESCE(actual_amount, amount)), 0)::numeric AS amount,
                  COUNT(*)::int AS count
           FROM recharge_records
@@ -897,26 +897,26 @@ export default async function adminBillingRoutes(app: FastifyInstance): Promise<
             AND created_at >= ${today}
             AND created_at < ${tomorrow}
         `),
-        prisma.affLog.aggregate({
+        tx.affLog.aggregate({
           where: { type: { in: ['new_purchase', 'renew'] } },
           _sum: { amount: true },
           _count: { id: true }
         }),
-        prisma.affLog.aggregate({
+        tx.affLog.aggregate({
           where: {
             type: { in: ['new_purchase', 'renew'] },
             createdAt: { gte: thisMonthStart }
           },
           _sum: { amount: true }
         }),
-        prisma.affWithdrawal.aggregate({
+        tx.affWithdrawal.aggregate({
           where: { status: 'approved' },
           _sum: { amount: true }
         }),
-        prisma.affWithdrawal.count({
+        tx.affWithdrawal.count({
           where: { status: 'pending' }
         })
-      ])
+      ]), { isolationLevel: Prisma.TransactionIsolationLevel.RepeatableRead })
 
       // 辅助函数：安全转换 Prisma Decimal 为数字
       const toNumber = (val: unknown): number => {

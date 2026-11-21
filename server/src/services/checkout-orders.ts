@@ -5,7 +5,7 @@ import { prisma } from '../db/prisma.js'
 import * as db from '../db/index.js'
 import { advisoryTransactionLock, advisoryTransactionLockString, USER_BALANCE_LOCK_NAMESPACE, PAYMENT_SETTLEMENT_LOCK_NAMESPACE } from '../db/advisory-locks.js'
 import { authorizeUserWrite, type WriteSession } from '../db/user-write-authorization.js'
-import { encryptSensitiveData, decryptSensitiveData } from '../lib/security.js'
+import { encryptSensitiveData, decryptSensitiveDataStrict } from '../lib/security.js'
 import { sanitizeObject } from '../lib/log-sanitizer.js'
 import { ErrorCode } from '../lib/errors.js'
 import { lockHostGroups } from './host-groups.js'
@@ -257,9 +257,12 @@ export async function creditFailedCheckoutRefundToBalance(tx: Prisma.Transaction
 }
 
 function snapshotOf(order: CheckoutOrder): Snapshot {
-  const decrypted = decryptSensitiveData(order.snapshot)
+  const decrypted = decryptSensitiveDataStrict(order.snapshot)
   if (!decrypted) throw new CheckoutError('订单内容暂时无法读取', 503)
   const value = JSON.parse(decrypted) as Snapshot
+  if (!value?.input || value.input.requestId !== order.id || value.input.expectedTotal !== order.totalCents || value.input.source !== order.source ||
+      !Array.isArray(value.items) || value.items.length === 0 ||
+      createHash('sha256').update(`${value.input.source}:${poolOrderHash(value.input)}`).digest('hex') !== order.requestHash) throw new CheckoutError('订单内容或金额已变化，请核对原付款记录', 409)
   for (const item of value.items) item.billing.expiresAt = new Date(item.billing.expiresAt)
   return value
 }

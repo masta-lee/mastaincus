@@ -2,7 +2,7 @@ import '../src/config/env.js'
 
 // @ts-ignore - bcryptjs has its own types in this project setup
 import bcrypt from 'bcryptjs'
-import { closePrismaDatabase, prisma } from '../src/db/prisma.js'
+import { closePrismaDatabase, prisma, initializeFinancialDatabaseIntegrity } from '../src/db/prisma.js'
 import { invalidateUserAccessTokens, revokeAllUserRefreshTokens } from '../src/lib/security.js'
 
 const unsafeProductionConfirmation = 'I_UNDERSTAND'
@@ -62,6 +62,7 @@ function getUnsafeProductionPasswordReason(password: string): string | null {
 }
 
 async function resetAdminPassword(): Promise<void> {
+  await initializeFinancialDatabaseIntegrity()
   const username = (process.env.RESET_ADMIN_USERNAME || process.env.ADMIN_USERNAME || 'admin').trim()
   const email = (process.env.RESET_ADMIN_EMAIL || process.env.ADMIN_EMAIL || 'admin@isvoro.com').trim()
   const password = getPassword()

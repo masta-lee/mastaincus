@@ -4,6 +4,7 @@ import { backupRoot, ensure, readJson, writeJson, statePath, validateId } from '
 import { pgQuery, pgRecoveryTransaction } from './platform-backup-database.js'
 import type { RecoveryQuery } from './platform-recovery-state.js'
 import { waitForProtectedBackendHealth, waitForRestoredAgentHeartbeats } from './platform-backup-health.js'
+import { changeRecoveryOperatorRole } from '../lib/financial-integrity.js'
 
 export interface RecoveryActivation {
   version: 1; taskId: string; batchId: string; workerPid: number; phase: 'prepared' | 'committed'
@@ -54,7 +55,7 @@ export async function restoreActivation(record: RecoveryActivation) {
     await assertActivationContext(record, query)
     for (const row of record.before.hosts) await query(`UPDATE hosts SET pool_faulted=$2,cpu_used=$3,memory_used=$4,disk_used=$5,nat_ports_used_count=$6 WHERE id=$1`,
       [row.id,row.pool_faulted,row.cpu_used,row.memory_used,row.disk_used,row.nat_ports_used_count])
-    for (const row of record.before.operator) await query('UPDATE users SET role=$2,status=$3 WHERE id=$1',[row.id,row.role,row.status])
+    for (const row of record.before.operator) await changeRecoveryOperatorRole(query,row.id,row.role,row.status)
     await query('UPDATE platform_recovery_batches SET completed_at=NULL WHERE id=$1',[record.batchId])
   })
 }

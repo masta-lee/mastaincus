@@ -17,7 +17,8 @@ export async function verifyRecoveryOneshotExit() {
         Object.defineProperty(process,'platform',{value:'linux'});process.getuid=()=>0;process.env.NODE_ENV='production';process.argv[2]='status';
         const work=async()=>{await new Promise(r=>setTimeout(r,10));process.stdout.write('work\\n');if(${JSON.stringify(mode)}==='failure')throw new Error('fixture');};
         const ensure=value=>{if(!value)throw new Error('fixture precondition');},taskResults=async()=>{await work();return [];};
-        const readWorkerRequest=async()=>({});
+        const readWorkerRequest=async()=>({kind:'backup'});
+        const initializeFinancialDatabaseIntegrity=async()=>{};
         const runPlatformBackupTask=work,superviseRecovery=work,recoverInterruptedMapping=work;
         const recoverInterruptedActivation=async()=>{},assertRestoreStartupSafe=async()=>{};
         const closePrismaDatabase=async()=>{await new Promise(r=>setTimeout(r,10));process.stdout.write('closed\\n');if(${JSON.stringify(mode)}==='cleanup-failure')throw new Error('cleanup');};

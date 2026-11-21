@@ -27,6 +27,8 @@ install -d -o root -g incudal -m 0750 /var/lib/incudal-backup
 # Independent persistent image data; never lives inside an OTA release tree.
 [[ ! -L /var/lib/incudal-images ]] || { echo 'Untrusted persistent image directory.' >&2; exit 1; }
 install -d -o incudal -g incudal -m 0750 /var/lib/incudal-images
+[[ ! -L /var/lib/incudal-finance ]] || { echo 'Untrusted financial integrity directory.' >&2; exit 1; }
+install -d -o incudal -g incudal -m 0700 /var/lib/incudal-finance
 install -d -o incudal -g incudal -m 0700 /var/lib/incudal-backup/inbox
 install -d -o root -g incudal -m 0750 /var/lib/incudal-backup/results
 install -d -o root -g root -m 0700 /var/lib/incudal-backup/private
@@ -46,6 +48,7 @@ cat > /etc/systemd/system/incudal-backend.service.d/platform-backup.conf <<EOF
 [Service]
 ReadWritePaths=/var/lib/incudal-backup/inbox
 ReadWritePaths=/var/lib/incudal-images
+ReadWritePaths=/var/lib/incudal-finance
 ExecStartPre=
 ExecStartPre=+/usr/bin/bash $work_dir/scripts/install-platform-backup.sh
 ExecStartPre=+/usr/local/libexec/incudal/incudal-online-task recovery-startup

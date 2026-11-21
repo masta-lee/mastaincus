@@ -46,8 +46,9 @@ const completeSection = sectionBetween(
   '/**\n * 标记充值失败'
 )
 assert.ok(
-  completeSection.includes('const creditAmount = Number(data.actualAmount ?? record.actualAmount ?? record.amount)'),
-  'completeRecharge: must derive one explicit credit amount'
+  completeSection.includes('const creditAmount = Number(data.actualAmount ?? current.actualAmount ?? current.amount)') &&
+    completeSection.indexOf('const current = await tx.rechargeRecord.findUniqueOrThrow') < completeSection.indexOf('const creditAmount ='),
+  'completeRecharge: must derive the exact credit from the locked current order'
 )
 assert.ok(
   completeSection.includes('!Number.isFinite(creditAmount) || creditAmount <= 0'),

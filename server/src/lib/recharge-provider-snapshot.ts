@@ -1,4 +1,4 @@
-import { decryptSensitiveData, encryptSensitiveData } from './security.js'
+import { decryptSensitiveDataStrict, encryptSensitiveData } from './security.js'
 
 export interface RechargeProviderConfigSnapshot {
   type: string
@@ -25,7 +25,7 @@ export function parseRechargeProviderConfigSnapshot(
   }
 
   try {
-    const decrypted = decryptSensitiveData(value)
+    const decrypted = decryptSensitiveDataStrict(value)
     if (!decrypted) {
       return null
     }
@@ -53,10 +53,12 @@ export function resolveRechargeProviderConfigSnapshot(
   currentConfig: Record<string, unknown>,
   snapshotValue: unknown
 ): { config: Record<string, unknown>; source: 'snapshot' | 'provider' } {
+  // Missing snapshots belong to pre-snapshot orders. An existing but invalid
+  // snapshot is a trust failure, never authority to switch merchant/key.
+  if (snapshotValue === null || snapshotValue === undefined || snapshotValue === '') return { config: currentConfig, source: 'provider' }
   const snapshot = parseRechargeProviderConfigSnapshot(snapshotValue)
   if (snapshot && snapshot.type === providerType) {
     return { config: snapshot.config, source: 'snapshot' }
   }
-
-  return { config: currentConfig, source: 'provider' }
+  throw new Error('RECHARGE_PROVIDER_SNAPSHOT_INVALID')
 }

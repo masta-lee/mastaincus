@@ -2,7 +2,8 @@ import { reauthenticateRecoveryOperator, recoveryOperator } from './platform-rec
 import { Prisma } from '@prisma/client'
 import { prisma } from '../db/prisma.js'
 import { changeBalanceInTransaction } from '../db/balance.js'
-import { tryAdvisoryTransactionLock, USER_BALANCE_LOCK_NAMESPACE } from '../db/advisory-locks.js'
+import { tryAdvisoryTransactionLock, advisoryTransactionLockString, USER_BALANCE_LOCK_NAMESPACE, PAYMENT_SETTLEMENT_LOCK_NAMESPACE } from '../db/advisory-locks.js'
+import { assertPaymentNotDeleted } from '../lib/deleted-payment-receipt.js'
 import { withInstanceBillingMutation } from '../lib/instance-billing-mutation.js'
 import { gatewayTaskHash, GatewayTaskError } from '../lib/gateway-task-plan.js'
 import { authorizeGatewayAdministration } from './gateway-admin-authorization.js'
@@ -134,6 +135,14 @@ export async function reconcileRecovery(input: RecoveryCorrection, actorId: numb
   for (const item of correction.recharges) if (item.settlement) ensure(Date.parse(item.settlement.completedAt) > Date.parse(hold.snapshot.createdAt), 'OSS_RECONCILIATION_EVIDENCE_TIME')
   const hash = gatewayTaskHash(correction)
   return instanceLanes(correction.instances.map(item => item.id), () => prisma.$transaction(async tx => {
+    // Match callbacks' trade -> wallet order so two recovery accounts cannot
+    // publish the same gateway payment or deadlock a delayed callback.
+    const trades = await tx.rechargeRecord.findMany({ where: { id: { in: correction.recharges.map(item => item.id) } }, select: { id: true, providerId: true, tradeNo: true } })
+    const locks = correction.recharges.flatMap(item => {
+      const row = trades.find(row => row.id === item.id), tradeNo = item.settlement?.tradeNo || row?.tradeNo
+      return row && tradeNo ? [`${row.providerId}:${tradeNo}`] : []
+    }).sort()
+    for (const key of new Set(locks)) await advisoryTransactionLockString(tx, PAYMENT_SETTLEMENT_LOCK_NAMESPACE, key)
     await reauthenticate(tx, actorId, credentials)
     ensure(await tryAdvisoryTransactionLock(tx, USER_BALANCE_LOCK_NAMESPACE, correction.userId), 'OSS_RECONCILIATION_BUSY', 409)
     ensure((await readRecoveryHold()).taskId === hold.taskId, 'OSS_RECONCILIATION_CONTEXT_CHANGED', 409)
@@ -177,6 +186,7 @@ export async function reconcileRecovery(input: RecoveryCorrection, actorId: numb
         recharge.amount.toFixed(2) === item.expectedAmount && !await tx.balanceLog.count({ where: { orderId: item.orderNo, type: 'recharge' } }), 'OSS_RECONCILIATION_STALE', 409)
       ensure(!item.settlement?.tradeNo || !recharge.tradeNo || recharge.tradeNo === item.settlement.tradeNo, 'OSS_RECONCILIATION_STALE', 409)
       const tradeNo = item.settlement?.tradeNo || recharge.tradeNo
+      if (tradeNo) await assertPaymentNotDeleted(tx, recharge.providerId, tradeNo)
       if (tradeNo) ensure(!await tx.checkoutReceipt.count({ where: { providerId: recharge.providerId, tradeNo } }) &&
         !await tx.rechargeRecord.count({ where: { id: { not: recharge.id }, providerId: recharge.providerId, tradeNo } }), 'OSS_RECOVERY_RECEIPT_EXISTS', 409)
       rechargeRows.push({ ...recharge, credit: new Prisma.Decimal(item.settlement?.creditedAmount || recharge.amount),

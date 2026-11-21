@@ -41,6 +41,17 @@ function matchesMerchantId(value: unknown, expected: string): boolean {
   return (typeof value === 'string' && value.length > 0 && value === String(expected)) ||
     (typeof value === 'number' && Number.isSafeInteger(value) && value > 0 && String(value) === String(expected))
 }
+function validCallbackFields(data: CallbackData): boolean {
+  return !!data && typeof data === 'object' && !Array.isArray(data) && typeof data.sign === 'string' &&
+    Object.values(data).every(value => value === undefined || value === null || typeof value === 'string' ||
+      typeof value === 'number' && Number.isFinite(value))
+}
+function callbackTimestampValid(value: unknown): boolean {
+  if (value === undefined || value === null || value === '') return true
+  if (typeof value !== 'string' || !/^[0-9]{1,12}$/.test(value)) return false
+  const timestamp = Number(value)
+  return Number.isSafeInteger(timestamp) && Math.abs(Date.now() / 1000 - timestamp) <= 300
+}
 
 export interface PayParams {
   type: string          // 支付方式：alipay, wxpay, qqpay, bank, jdpay
@@ -124,6 +135,7 @@ export class EpayCoreV1 implements IEpayClient {
    * 验证回调签名 (MD5)
    */
   verify(data: CallbackData): boolean {
+    if (!validCallbackFields(data)) return false
     if (!data || !data.sign) return false
     if (!matchesMerchantId(data.pid, this.pid)) return false
     const sign = this.getSign(data as unknown as Record<string, string>)
@@ -135,6 +147,7 @@ export class EpayCoreV1 implements IEpayClient {
    * V1版本需要检查 trade_status === 'TRADE_SUCCESS'
    */
   verifyWithStatus(data: CallbackData): VerifyResult {
+    if (!validCallbackFields(data)) return { valid: false, tradeSuccess: false, error: '回调字段格式无效' }
     if (!data || !data.sign) {
       return { valid: false, tradeSuccess: false, error: '缺少签名参数' }
     }
@@ -317,16 +330,12 @@ export class EpayCoreV2 implements IEpayClient {
    * 验证回调签名 (RSA)
    */
   verify(data: CallbackData): boolean {
+    if (!validCallbackFields(data)) return false
     if (!data || !data.sign) return false
     if (!matchesMerchantId(data.pid, this.pid)) return false
     
     // 检查时间戳（允许 5 分钟误差）
-    if (data.timestamp) {
-      const timestamp = parseInt(data.timestamp, 10)
-      if (Math.abs(Date.now() / 1000 - timestamp) > 300) {
-        return false
-      }
-    }
+    if (!callbackTimestampValid(data.timestamp)) return false
 
     const sign = data.sign
     return this.rsaPublicVerify(this.getSignContent(data), sign)
@@ -337,6 +346,7 @@ export class EpayCoreV2 implements IEpayClient {
    * V2版本也检查 trade_status，但主要依赖RSA签名和时间戳
    */
   verifyWithStatus(data: CallbackData): VerifyResult {
+    if (!validCallbackFields(data)) return { valid: false, tradeSuccess: false, error: '回调字段格式无效' }
     if (!data || !data.sign) {
       return { valid: false, tradeSuccess: false, error: '缺少签名参数' }
     }
@@ -345,12 +355,7 @@ export class EpayCoreV2 implements IEpayClient {
     }
 
     // 检查时间戳（允许 5 分钟误差）
-    if (data.timestamp) {
-      const timestamp = parseInt(data.timestamp, 10)
-      if (Math.abs(Date.now() / 1000 - timestamp) > 300) {
-        return { valid: false, tradeSuccess: false, error: '时间戳已过期' }
-      }
-    }
+    if (!callbackTimestampValid(data.timestamp)) return { valid: false, tradeSuccess: false, error: '时间戳格式无效或已过期' }
 
     // 验证RSA签名
     const sign = data.sign
