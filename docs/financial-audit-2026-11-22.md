@@ -37,4 +37,4 @@
 
 最终后端构建`logs/finance-final-compile.log`自然exit0；最终新增账户权限/恢复部分八专项`logs/test-run-20261122-023942`8/8，自然exit0。`logs/finance-auth-final-live.log`六项全部exit0。最后仅测试/文档补充，不改产品。原失败日志保留，不能凭后来通过抹去原失败。新增账户权限签名后未再重跑未受影响的全部226。
 
-Owner于2026-11-22明确授权本批提交并推送源码分支，暂不发版。当前进入源码保存阶段，提交/远端事实以HANDOFF和Git核验为准；没有发行或生产部署。工作区无关`.taste-skill`及临时历史文件保持。安装/发行门槛仍按v1.8.7事故复盘和payincus-release-validation执行。
+Owner于2026-11-22明确授权本批提交并推送源码分支，暂不发版。源码`5f02d45fa8cab1aee5dd4f574d1e77531c86d30a`已非force推送`origin/codex/financial-integrity-audit`，远端完整SHA一致。未开PR/合并main/打tag/手动触发发行；分支暂无Actions运行，版本仍1.8.14，没有发行或生产部署。工作区无关`.taste-skill`及临时历史文件保持。安装/发行门槛仍按v1.8.7事故复盘和payincus-release-validation执行。

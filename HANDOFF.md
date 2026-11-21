@@ -1,5 +1,7 @@
 # 版本与验证记录
 
+- 2026-11-22源码保存完成：资金修复提交`5f02d45fa8cab1aee5dd4f574d1e77531c86d30a`已非force推送`origin/codex/financial-integrity-audit`，`ls-remote`完整SHA与本地一致，ahead/behind 0/0。共40文件含源码/迁移/守卫/脱敏报告；仅无关未跟踪文件留本地。未开PR/合并main/打tag/手动触发工作流，分支查询无Actions运行，版本仍1.8.14；owner“暂不发版”保持。
+
 - 2026-11-22 owner授权本轮资金审计源码提交并推送`codex/financial-integrity-audit`，暂不发版。本次仅保存已验证源码、守卫、迁移与脱敏报告，保留实际OSS/双架构完整恢复和生产验收缺口，不合并main/打tag/Release/OTA；下条“未推送”为本批审计完成时的历史状态。
 
 - 2026-11-22资金链源码/隔离排查：充值/余额/购买/手动批量PAT自动续费、退款礼品卡和OSS资金恢复完成本批修复；严格原快照GCM/MD5-RSA标量时间戳/锁内净到账和余额限额，统一PrismaHMAC覆盖关键账户鉴权/资金/定价渠道/流水凭据，双基线和固定v1字段、合法事务/删除/回滚，恢复trade去重/原key/新Boperator/精确journal与旧无签名迁移。第二轮全量226/226自然exit0（022415），后补权限签名最终server build exit0和八对应专项8/8、六真实资金主流程全部exit0；含鉴权签名真实pg_dump→项目加密归档→独立pg_restore→全验签/currentB真实口令恢复登记一次入账通过。未发版/推送/OTA/生产账务/真实OSS网络与双Linux全新安装/全主控灾备验收；本地归档往返不可当全OSS已经通过，快照之后新交易仍需独立对账。逐项问题、失败与边界见[资金审计](docs/financial-audit-2026-11-22.md)，原内存发行保持。

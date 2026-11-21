@@ -1,5 +1,7 @@
 # 2026-11-22 资金链审计当前阶段
 
+资金修复源码`5f02d45fa8cab1aee5dd4f574d1e77531c86d30a`已推送`origin/codex/financial-integrity-audit`并核远端一致。当前仅源码保存，版本仍1.8.14，无tag/Release/主控OTA；该分支暂无Actions运行，完整发行/生产验收仍未执行。
+
 Owner随后明确授权提交并推送本轮资金审计源码分支`codex/financial-integrity-audit`，暂不发版；不合并main、不打tag、不执行生产OTA或真实资金/OSS写入。下文为已完成审计的证据与上线前缺口，阶段保存不等于发行。
 
 本轮仅源码与隔离财务/备份验证，未改生产账目/执行OSS恢复/发布。充值、余额、购买、手动批量PAT自动续费、失败退余额、礼品卡与关键身份/定价/渠道的防篡改签名已接统一DB入口；原key、独立双基线、旧无签名迁移、staging验证、恢复Boperator和精确回滚路径已补。226全量第二轮全过，后追加权限签名最终build和八相关专项/六真实业务全过，真实pg_dump→加密归档→独立pg_restore与currentB口令恢复登记一次入账全过。上线前仍需双Linux正式包/旧v1.8.14升级回滚、真实OSS和A整机失联B全新恢复及快照后新付款独立对账；不要将本轮本地通过写为全OSS/生产已验。细目见[资金审计](docs/financial-audit-2026-11-22.md)，原正式发行状态如下。
