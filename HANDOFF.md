@@ -1,5 +1,7 @@
 # 2026-11-22 两轮安全修复续接，仍在验收
 
+最新阶段dc73df33已推；230全量final8已自然0、230/230通过，含最新精确schema/安全planner/宿主receipt相关守卫，各原生单测759/766及backend765过。第九45065735752当前双包/双Incus/Agent准备success，真正双首装与六旧worker仍待；第八全终态failure已双日志745/750查，types/functions在首table前导致归一定位漏掉固定comment，已88a7修/749实际schema过，完整root恢复仍待。当前CI dc73/45066663875队列，旧7ab/611重复普通CI正在取消（cancelled不绿、无tagpreview保留）；E03/E04全宿主服务/kernel自动patchactivation未完成，真实OSS保独立缺口。没有正式Release/tag/main合并/生产OTA。
+
 当前最新7ab62481已推，新增宿主叶子补丁后host PIDnamespace旧可执行映射核验（不读客户/路径/参数，5min/5sec/256host/1MiBmaps上限），区分activation-required/verification-pending，签名receipt接受两态但不改变stockReady。Linux原生mapping+重复plan759/766、双Linux编译/vet760/764、Windows固定binary762、backendtypes758/build765/hosttools765全0，准备保存；完整全宿主服务/kernel自动激活仍未实现，不据新receipt宣称全已生效。全量230final8当前228/230仍在途，须核自然completion。第九45065735752双包/Incus/签名Agent准备success，双首装和六旧worker仍排队/执行，继续跟。旧31bCI已27success/3failure全部日志已修700/713/716且新CI待，正式Release/生产/完整OSS未完成。
 
 最新已推61171227/第九预览45065735752来源88a7fec7已启动。第八45063248456终态failure六旧worker全过，双首装745/750仍schema-only差异；归一首table定位漏掉先声明的enum/function，已88a7改精确pg_dump session紧邻comment/空行，types-first与实际schema749/backup749/type749/build749全0，新增失败位置仅类别不SQL。当前全量230final8仍进行(50+)，保终态。E03/E04计划精修Go重复冲突版本拒绝/APT弱源和AllowUnauth明确false，实际LinuxGo+10rootplanner749全0/security755/update753过，当前准备保存，不代表完整全宿主自动patch/activation完成。原CI45061369559已终态27success/3失败全日志700/713/716本机修0，最终最新CI待。正式Release/生产/完整OSS保持未完。
