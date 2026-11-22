@@ -594,6 +594,11 @@ try {
   assert.ok(release.includes('cp scripts/platform-backup-recovery.py scripts/platform-backup-recovery-guide.md release/scripts/'), 'release must carry offline recovery instructions and tool')
   const freshInstall = await readFile(resolve(import.meta.dirname, '../../scripts/smoke-fresh-install.sh'), 'utf8')
   assert.ok(freshInstall.includes('RUN_BACKUP_COMPATIBILITY_DRILL=1') && freshInstall.includes('smoke-platform-backup-compatibility.mjs'), 'both release architectures must run isolated migration compatibility acceptance')
+  const recoveryDrill = await readFile(resolve(import.meta.dirname, '../../scripts/smoke-platform-backup.mjs'), 'utf8')
+  assert.ok(recoveryDrill.includes('CREATE DATABASE incudal OWNER incudal_migrate TEMPLATE template0') &&
+    recoveryDrill.includes("'/opt/incudal/scripts/harden-database.py'") && recoveryDrill.includes("'/opt/incudal/scripts/migrate-database.sh'") &&
+    recoveryDrill.includes("verifyFinancialDatabaseSeals('incudal', initialEnv.ENCRYPTION_KEY, false, true)"),
+    'different-key restore must initialize an independent destination through shipped role/migration tools and reject the source key')
   for (const [sourcePath, publicPath] of [['scripts/platform-backup-recovery.py', 'client/public/recovery/payincus-recovery.py'], ['scripts/platform-backup-recovery-guide.md', 'client/public/recovery/恢复说明.md']]) assert.equal(await readFile(resolve(import.meta.dirname, '../..', sourcePath), 'utf8'), await readFile(resolve(import.meta.dirname, '../..', publicPath), 'utf8'))
   console.log('Platform backup guards passed: authenticated archive, tampering, paths, schedule, retention and restore boundaries.')
 } finally {

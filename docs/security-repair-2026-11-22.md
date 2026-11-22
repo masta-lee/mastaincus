@@ -4,6 +4,8 @@
 
 ## 续接实施状态（2026-11-22，尚未完成）
 
+2026-11-23第九45065735752终态failure，六原公开v1.8.14worker与双构建/Incus/候选Agent全部success。双首装backup与schema/tables/sequence/largeobject全比对已通过，后续演练直接将A的ENCRYPTION_KEY换为B，原wallet签名正确拒绝；smoke现在先确认空客户、停唯一backend、关闭旧PG池、保存A库，再用实际harden-database/migrate/唯一backend建立独立B管理员和auth/financialseal，保旧key拒绝负对照，随后实际rootrestore/rollback/resume。只修CI演练，不放宽产品签名；backup778守卫及type781过，完整新source预览待。当前dc73CI45066663875的pool0/5失败全日志779/782已读，terminal-reconnect旧虚构sid/缺固定TLS证书和creditSMTP明文夹具已修；实际PG780完整撤权/真实锁/20秒总budget/commit失败清理自然0，783充值/自动续费/邮件编号/并发与保留期边界自然0。Agent/四内存/SSH/双Incus配套CI全success，主CI仍24success/2failure/4pending须查终态；E03/E04全配套自动patch/服务/kernel激活仍未完。正式发行/生产/真实OSS灾备不执行。
+
 E03/E04新回执：Agent叶子补丁checked后每5min最多5sec读取host PIDnamespace可执行旧映射，客户namespace/共享memfd不采、路径/argv不回传，256host/1MiB每maps预算；旧code报activation-required、不完整报verification-pending，service/客户不操作、销售ready不依赖它。Linux759/766真正proc fixture、双编译/vet760/764/Windows762与backendtype758/build765/receipt765全0准备保存。仍缺全配套宿主patch/服务及kernel自动激活完整策略，未称E03/E04闭环。最终230第8全量228/230进行，原完整包第九45065735752双构建/Agentready成功首装/升级待，继续终态；不正式发行/生产。
 
 较新第八45063248456全终态failure/六旧worker成功，types/functions先于table导致fixed comment归一旧定位失效，已88a7精确改session紧邻block，第九45065735752同source在途。新的patch计划重复target拒绝/APT拒weak/unauth override，原生LinuxGo+10rootplanner749、安全755/更新753均0；当前保存待，完整E03/E04全宿主自动patch/服务kernel激活仍未完成。全量final8执行中50+，最终包/root恢复/真实OSS继续，未正式发行/生产写入。

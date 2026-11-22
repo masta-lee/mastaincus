@@ -26,6 +26,7 @@ const { getAutoRenewInstances } = await import('../src/db/instance-suspend.js')
 const { USER_BALANCE_LOCK_NAMESPACE } = await import('../src/db/advisory-locks.js')
 const { invalidateAllConfigCache } = await import('../src/lib/config-cache.js')
 const { clearTransporterCache } = await import('../src/lib/mailer.js')
+const { encryptSensitiveData, generateRefreshToken, getRefreshTokenSessionId } = await import('../src/lib/security.js')
 globalThis.setInterval = interval
 const tag = 'renew-credit-' + randomUUID(), users: number[] = [], wakeups: Promise<void>[] = []
 const holder = new Client({ connectionString: database.href }), observer = new Client({ connectionString: database.href })
@@ -35,7 +36,7 @@ const mails: Array<{ text: string; html: string }> = []
 const mailStub = mock.method(nodemailer, 'createTransport', () => ({ sendMail: async (data: { text: string; html: string }) => {
   mails.push(data); return { accepted: ['isolated-fixture'] }
 } }))
-const smtp = { smtp_enabled: 'true', smtp_host: '127.0.0.1', smtp_username: 'fixture', smtp_password: 'fixture', smtp_from_email: 'fixture@example.invalid' }
+const smtp = { smtp_enabled: 'true', smtp_host: '127.0.0.1', smtp_username: 'fixture', smtp_password: encryptSensitiveData('fixture'), smtp_from_email: 'fixture@example.invalid' }
 const savedSmtp = await prisma.systemConfig.findMany({ where: { key: { in: Object.keys(smtp) } } })
 const wait = async (check: () => Promise<boolean> | boolean, label: string) => {
   const deadline = Date.now() + 10000
@@ -261,7 +262,8 @@ try {
   await prisma.instance.update({ where: { id: old.id }, data: { userId: changedOwner.id } })
   await processAutoRenew(old)
   assert.equal(await billCount(old.id), 0); assert.equal(await balance(oldOwner.id), 30); assert.equal(await balance(changedOwner.id), 30)
-  await updateAutoRenew(old.id, false, changedOwner.id, { sid: tag, iat: Math.floor(Date.now() / 1000) + 1 })
+  const changedSession = getRefreshTokenSessionId(await generateRefreshToken(changedOwner.id, changedOwner.username, 'user'))
+  await updateAutoRenew(old.id, false, changedOwner.id, { sid: changedSession, iat: Math.floor(Date.now() / 1000) + 1 })
   console.log('PASS a stale selection cannot charge a different owner after transfer')
 } finally {
   await holder.query('ROLLBACK').catch(() => {}); await Promise.allSettled(wakeups)

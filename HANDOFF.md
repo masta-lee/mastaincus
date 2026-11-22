@@ -1,3 +1,5 @@
+2026-11-23接续：第九无tag预览45065735752已终态failure；双构建/Incus/候选Agent与六原v1.8.14worker升级全部success。双首装首次backup完整性通过，后smoke直接换ENCRYPTION_KEY使A原钱包seal被正确拒绝，已改真实独立B数据库/原role和migrate工具/新签名初始化，原key负对照保留，完整同source新预览待。最新dc73 CI45066663875仍在途24success/2failure/4pending，两个失败job137344241307/161均全日志已读：terminal-reconnect虚构sid/缺pin、auto-renew-credit明文SMTP夹具；已精修并本机真实PG780/783自然0，原撤权/锁/20秒deadline及credit/邮件/去重/宽限期边界保持。Agent45066663958、内存45066663920、SSH45066664084、Incus compatibility45066663880/构建45066663888均success。backup778/type781全0；最新type784进行，阶段保存后继续。E03/E04全配套宿主自动patch/服务/kernel生效仍未闭环；正式发行/生产/真实OSS整机灾备暂停或待验，不因分项过宣称全完成。
+
 # 2026-11-22 两轮安全修复续接，仍在验收
 
 最新阶段dc73df33已推；230全量final8已自然0、230/230通过，含最新精确schema/安全planner/宿主receipt相关守卫，各原生单测759/766及backend765过。第九45065735752当前双包/双Incus/Agent准备success，真正双首装与六旧worker仍待；第八全终态failure已双日志745/750查，types/functions在首table前导致归一定位漏掉固定comment，已88a7修/749实际schema过，完整root恢复仍待。当前CI dc73/45066663875队列，旧7ab/611重复普通CI正在取消（cancelled不绿、无tagpreview保留）；E03/E04全宿主服务/kernel自动patchactivation未完成，真实OSS保独立缺口。没有正式Release/tag/main合并/生产OTA。

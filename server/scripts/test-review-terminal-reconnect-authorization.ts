@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict'
-import { randomUUID } from 'node:crypto'
+import { randomUUID, X509Certificate } from 'node:crypto'
 import { EventEmitter, once } from 'node:events'
 import { execFileSync } from 'node:child_process'
 import { mkdtemp, readFile, rm } from 'node:fs/promises'
@@ -43,12 +43,17 @@ const owner = await prisma.user.create({ data: { username: tag, passwordHash: 'u
 const hostOwner = await prisma.user.create({ data: { username: tag + '-host', passwordHash: 'unusable-fixture' } })
 const admin = await prisma.user.create({ data: { username: tag + '-admin', passwordHash: 'unusable-fixture', role: 'admin' } })
 const host = await prisma.host.create({ data: { userId: hostOwner.id, name: tag,
-  url: `https://127.0.0.1:${(backend.address() as { port: number }).port}`, certPath, keyPath } })
+  url: `https://127.0.0.1:${(backend.address() as { port: number }).port}`, certPath, keyPath,
+  serverCertificate: cert.toString(), serverFingerprint: new X509Certificate(cert).fingerprint256 } })
 const pkg = await prisma.package.create({ data: { userId: hostOwner.id, name: tag, cpuMax: 100, memoryMax: 512, diskMax: 1024 } })
 const instance = await prisma.instance.create({ data: { userId: owner.id, hostId: host.id, packageId: pkg.id,
   name: tag, incusId: tag, image: 'fixture/debian', cpu: 50, memory: 256, disk: 1024, status: 'running' } })
 const userIds = [owner.id, hostOwner.id, admin.id]
-const actor = { id: owner.id, role: 'user', sid: tag, iat: Math.floor(Date.now() / 1000) }
+const { generateRefreshToken, getRefreshTokenSessionId } = await import('../src/lib/security.js')
+const sessions = new Map<number, string>()
+for (const account of [owner, hostOwner, admin]) sessions.set(account.id,
+  getRefreshTokenSessionId(await generateRefreshToken(account.id, account.username, account.role as 'user' | 'admin')))
+const actor = { id: owner.id, role: 'user', sid: sessions.get(owner.id)!, iat: Math.floor(Date.now() / 1000) }
 const app = Fastify()
 app.decorate('authenticate', async (request: any) => { request.user = { ...actor, username: owner.username } })
 app.decorate('authenticateAdmin', app.authenticate)
@@ -90,7 +95,7 @@ try {
   await app.listen({ host: '127.0.0.1', port: 0 })
   for (const name of ['banned', 'session', 'transferred', 'replaced', 'host-url', 'demoted', 'stopped', 'host-owner', 'all-sessions']) {
     await reset()
-    const currentActor = name === 'demoted' ? { ...actor, id: admin.id, role: 'admin' } : actor
+    const currentActor = name === 'demoted' ? { ...actor, id: admin.id, sid: sessions.get(admin.id)!, role: 'admin' } : actor
     const ticket = generateTerminalAccessTicket(currentActor.id, instance.id, currentActor.iat, currentActor.sid)
     const client = new WebSocket(`ws://127.0.0.1:${(app.server.address() as { port: number }).port}/instances/${instance.id}/terminal?ticket=${ticket}`)
     const messages: any[] = []; client.on('message', data => messages.push(JSON.parse(String(data))))
@@ -110,7 +115,7 @@ try {
   }
   for(const name of ['session','banned','transferred','host-url','demoted']) {
     await reset()
-    const currentActor=name==='demoted'?{...actor,id:admin.id,role:'admin'}:actor
+    const currentActor=name==='demoted'?{...actor,id:admin.id,sid:sessions.get(admin.id)!,role:'admin'}:actor
     const ticket=generateTerminalAccessTicket(currentActor.id,instance.id,currentActor.iat,currentActor.sid)
     const client=new WebSocket(`ws://127.0.0.1:${(app.server.address() as {port:number}).port}/instances/${instance.id}/terminal?ticket=${ticket}`)
     const messages:any[]=[];client.on('message',data=>messages.push(JSON.parse(String(data))))
@@ -141,7 +146,7 @@ try {
       console.log('PASS actual reconnect waits on PG',name,'lock then rejects without dispatch')
     }finally{release();await blocker;client.terminate();closeAllSessions();await wait(()=>connections.size===0,'race cleanup')}
   }
-  for(const currentActor of [actor,{...actor,id:hostOwner.id},{...actor,id:admin.id,role:'admin'}]) {
+  for(const currentActor of [actor,{...actor,id:hostOwner.id,sid:sessions.get(hostOwner.id)!},{...actor,id:admin.id,sid:sessions.get(admin.id)!,role:'admin'}]) {
     await reset()
     const ticket=generateTerminalAccessTicket(currentActor.id,instance.id,currentActor.iat,currentActor.sid)
     const client=new WebSocket(`ws://127.0.0.1:${(app.server.address() as {port:number}).port}/instances/${instance.id}/terminal?ticket=${ticket}`)

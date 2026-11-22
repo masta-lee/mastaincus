@@ -1,3 +1,5 @@
+2026-11-23最新续接：第九45065735752双包/Incus/Agent和六原旧worker均success，双首装backup已通过，随后换key的恢复夹具错误导致FINANCIAL_INTEGRITY_INVALID；已改真实独立B数据库/签名初始化，完整新预览待。dc73源CI45066663875当前24success/2failure/4pending，两个失败均读日志后本机780终端重连、783充值自动续费全过；最新type784进行。配套Agent/四内存/SSH/双Incus都success。仍须查询CI终态并修后续失败，E03/E04全服务及kernel自动补丁生效未闭环；正式Release/生产暂停。
+
 # 2026-11-22 两轮安全修复实施中，暂不发版
 
 最新产品dc73df33已推（面板/Agent版本不变），本机全量第8轮230/230自然0，运行ID继续保第九45065735752源码88a7（双包/Incus/候选Agentsuccess，双首装及六旧worker待）。第八全终态failure/六旧升级全success，双首装schema-only比对，新归一漏types-before-tables已88a7修，actual schema749和对应守卫/type/build过；完整root restore/真实OSS仍待。Agentloadedcode新状态以5min/5sec/hostnamespace核，759/766Linux与双compile/vet及Windows762/backendbuild765全0，无客户操作、可售保持；全服务/kernel自动patchactivation仍缺。当前new CI45066663875/source dc73在队列，其它重复已旧source定向cancel，不算通过；正式发行/生产暂停。下一步先查第九实际首装/完整恢复和最新CI终态，阶段保存后继续，不能用230绿替代未完成根验收。

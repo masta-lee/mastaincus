@@ -3,7 +3,7 @@
 import assert from 'node:assert/strict'
 import childProcess, { execFile } from 'node:child_process'
 import { createHash, randomUUID } from 'node:crypto'
-import { chown, copyFile, mkdtemp, readFile, rm, stat, writeFile } from 'node:fs/promises'
+import { chown, copyFile, mkdtemp, readFile, rename, rm, stat, writeFile } from 'node:fs/promises'
 import { createRequire, syncBuiltinESMExports } from 'node:module'
 import { basename, join } from 'node:path'
 import { promisify } from 'node:util'
@@ -45,7 +45,8 @@ process.setgid(gid) // Match the installed root:incudal oneshot's file ownership
 const core = await import('/opt/incudal/server/dist/services/platform-backup-core.js')
 const { AliyunOssClient } = await import('/opt/incudal/server/dist/services/aliyun-oss-client.js')
 const { runPlatformBackupTask } = await import('/opt/incudal/server/dist/services/platform-backup-worker.js')
-const { pgQuery } = await import('/opt/incudal/server/dist/services/platform-backup-database.js')
+const { pgQuery, localDatabaseAdmin, quoteIdentifier } = await import('/opt/incudal/server/dist/services/platform-backup-database.js')
+const { controlRecoveryBackend, waitForProtectedBackendHealth } = await import('/opt/incudal/server/dist/services/platform-backup-health.js')
 const secured=await import('/opt/incudal/server/dist/db/prisma.js')
 await secured.initializeFinancialDatabaseIntegrity()
 const controllerRoot = '/var/lib/incudal-gateway-controller'
@@ -53,6 +54,8 @@ const controllerKeyBefore = createHash('sha256').update(await readFile(`${contro
 const controllerIdentityBefore = await readFile(`${controllerRoot}/identity.json`, 'utf8')
 const storage = await mkdtemp('/var/tmp/incudal-backup-drill-')
 const records = new Map()
+const preservedSource = `incudal_drill_${randomUUID().replaceAll('-', '')}`
+let sourcePreserved = false
 let config = core.normalizeConfig({ enabled: false, region: 'oss-cn-hangzhou', bucket: 'local-drill-only', prefix: 'drill/',
   accessKeyId: 'LocalDrillOnly', accessKeySecret: randomUUID(), backupPassword: randomUUID(), intervalHours: 24, retention: 3 })
 const password = core.openSecret(config.backupPassword)
@@ -79,7 +82,8 @@ async function task(kind, extras = {}) {
   const id = randomUUID()
   const held=core.recoveryHeld()
   const recovery=held?await (await import('/opt/incudal/server/dist/services/platform-recovery-operator.js')).recoveryOperator():null
-  const admin=held?null:await secured.prisma.user.findFirstOrThrow({where:{username:'admin',role:'admin'}})
+  const [admin]=held?[]:await pgQuery("SELECT id FROM users WHERE username='admin' AND role='admin' AND status='active'")
+  if (!held) await (await import('/opt/incudal/server/dist/lib/authentication-integrity.js')).verifyRecoveryAuthenticationActor(admin?.id)
   const request = { id, kind, createdBy: recovery?.actorId ?? admin.id, createdAt: new Date().toISOString(), config, ...extras }
   if (['restore', 'rollback', 'resume'].includes(kind)) {
     // Run the shipped oneshot with its actual PID/task argv and operation flock.
@@ -130,9 +134,16 @@ try {
   const key = `backup_drill_${randomUUID()}`
   await secured.prisma.systemConfig.create({data:{key,value:'snapshot',type:'string'}})
   const backup = await task('backup')
-  await secured.prisma.systemConfig.update({where:{key},data:{value:'before-restore'}})
-  // Restore across different environment keys and verify explicit rollback also
-  // recovers the destination key and its encrypted backup configuration.
+  // B must really have independently initialized authentication/money seals.
+  // Changing A's key in place creates invalid signatures, not a fresh B.
+  const [{ hosts, instances }] = await pgQuery('SELECT (SELECT count(*)::int FROM hosts) hosts,(SELECT count(*)::int FROM instances) instances')
+  assert.equal(hosts, 0); assert.equal(instances, 0, 'the disposable fresh-install drill has no customers')
+  assert.equal(new URL(initialEnv.DATABASE_URL).pathname, '/incudal')
+  await controlRecoveryBackend('stop')
+  await secured.closePrismaDatabase()
+  await localDatabaseAdmin(`SELECT pg_terminate_backend(pid) FROM pg_stat_activity WHERE datname='incudal'; ALTER DATABASE incudal RENAME TO ${quoteIdentifier(preservedSource)}; CREATE DATABASE incudal OWNER incudal_migrate TEMPLATE template0; REVOKE ALL ON DATABASE incudal FROM PUBLIC; GRANT CONNECT ON DATABASE incudal TO incudal;`)
+  sourcePreserved = true
+  await rename('/var/lib/incudal-finance/baseline.json', join(storage, 'source-baseline.json'))
   const targetKey = randomUUID() + randomUUID()
   const sourceSecret = core.openSecret(config.accessKeySecret)
   const originalEndpoint = initialEnv.ONBOARDING_WG_ENDPOINT
@@ -140,6 +151,16 @@ try {
   const targetEnv = { ...initialEnv, ENCRYPTION_KEY: targetKey, ONBOARDING_WG_ENDPOINT: originalEndpoint.replace(/:51820$/, ':51999') }
   await writeFile('/opt/incudal/.env', Object.entries(targetEnv).map(([name, value]) => `${name}='${value}'`).join('\n') + '\n')
   process.env.ENCRYPTION_KEY = targetKey
+  await exec('/usr/bin/python3', ['-I', '-B', '/opt/incudal/scripts/harden-database.py'], { timeout: 180000, env: { ...process.env, NODE_OPTIONS: '', NODE_PATH: '' } })
+  await exec('/usr/bin/bash', ['/opt/incudal/scripts/migrate-database.sh'], { timeout: 180000, env: { ...process.env, NODE_OPTIONS: '', NODE_PATH: '' } })
+  await controlRecoveryBackend('start')
+  await waitForProtectedBackendHealth(false)
+  // Use a new protected client with B's environment and actual signed writer.
+  await exec('/usr/bin/node', ['--input-type=module', '-e',
+    `const db=await import('/opt/incudal/server/dist/db/prisma.js');try{await db.initializeFinancialDatabaseIntegrity();await db.prisma.systemConfig.create({data:{key:${JSON.stringify(key)},value:'before-restore',type:'string'}})}finally{await db.closePrismaDatabase()}`],
+    { timeout: 180000, env: { ...process.env, NODE_OPTIONS: '', NODE_PATH: '' } })
+  await assert.rejects((await import('/opt/incudal/server/dist/lib/financial-integrity.js')).verifyFinancialDatabaseSeals('incudal', initialEnv.ENCRYPTION_KEY, false, true), /FINANCIAL_INTEGRITY_INVALID/)
+  console.log('PASS independent destination: new database, shipped migrations, administrator and money/authentication seals; source key rejected')
   config.accessKeySecret = core.sealSecret(sourceSecret); config.backupPassword = core.sealSecret(password)
   await saveConfig()
   const preview = await task('preview', { sourcePrefix: backup.objectPrefix, password: core.sealSecret(password) })
@@ -158,7 +179,7 @@ try {
   await health(true)
   assert.equal((await pgQuery('SELECT value FROM system_configs WHERE key=$1', [key]))[0].value, 'snapshot')
   assert.equal(core.openSecret((await core.readBackupConfig()).backupPassword), password)
-  assert.equal(process.env.ENCRYPTION_KEY, initialEnv.ENCRYPTION_KEY)
+  assert.ok(process.env.ENCRYPTION_KEY === initialEnv.ENCRYPTION_KEY, 'restoration retains the authenticated source encryption key')
   const restoredEnv = require('dotenv').parse(await readFile('/opt/incudal/.env'))
   assert.equal(restoredEnv.ONBOARDING_WG_ENDPOINT, originalEndpoint, 'restored UDP listen port must replace fresh-machine environment default')
   assert.equal(restoredEnv.ONBOARDING_GATEWAY_FINGERPRINT, initialEnv.ONBOARDING_GATEWAY_FINGERPRINT, 'destination SSH host identity must remain pinned')
@@ -180,7 +201,7 @@ try {
   assert.deepEqual(await gatewayState(), gatewayBefore, 'rollback must restore live addresses, MTU, identity, listen port and peers')
   await health(true)
   assert.equal((await pgQuery('SELECT value FROM system_configs WHERE key=$1', [key]))[0].value, 'before-restore')
-  assert.equal(process.env.ENCRYPTION_KEY, targetKey)
+  assert.ok(process.env.ENCRYPTION_KEY === targetKey, 'rollback retains the independent destination encryption key')
   assert.equal(require('dotenv').parse(await readFile('/opt/incudal/.env')).ONBOARDING_WG_ENDPOINT, targetEnv.ONBOARDING_WG_ENDPOINT, 'rollback preserves destination environment bytes')
   assert.equal(createHash('sha256').update(await readFile(`${controllerRoot}/signing.pem`)).digest('hex'), controllerKeyBefore)
   assert.equal(core.openSecret((await core.readBackupConfig()).backupPassword), password)
@@ -188,17 +209,24 @@ try {
   // receipts, just like the protected route. It is not the one-click contract.
   Object.assign(process.env, require('dotenv').parse(await readFile('/opt/incudal/.env')))
   const recoveryState = await import('/opt/incudal/server/dist/services/platform-recovery-state.js')
-  const { recordRecoveryEvidence } = await import('/opt/incudal/server/dist/services/platform-recovery-evidence.js')
-  const { verifyRecoveryGateway } = await import('/opt/incudal/server/dist/services/platform-recovery-gateway.js')
   const rollbackBatch = await recoveryState.activeRecoveryBatch()
   assert.equal(rollbackBatch.mode, 'rollback')
   assert.equal((await pgQuery('SELECT count(*)::int count FROM hosts'))[0].count, 0, 'fresh fixture must have no customer hosts')
-  for (const category of ['finance', 'access', 'tasks']) {
-    await recordRecoveryEvidence(category, { reference: `fresh-rollback-${category}`, observedAt: new Date().toISOString(),
-      sourceHash: await recoveryState.recoveryDatasetHash(category), evidenceHash: createHash('sha256').update(`empty-fixture-${category}`).digest('hex') },
-    rollbackBatch.operator_id, { password: initialEnv.ADMIN_PASSWORD })
-  }
-  await verifyRecoveryGateway(rollbackBatch, rollbackBatch.operator_id)
+  await exec('/usr/bin/node', ['--input-type=module', '-e', `
+    const {createHash}=await import('node:crypto');
+    const db=await import('/opt/incudal/server/dist/db/prisma.js');
+    try {
+      await db.initializeFinancialDatabaseIntegrity();
+      const state=await import('/opt/incudal/server/dist/services/platform-recovery-state.js');
+      const {recordRecoveryEvidence}=await import('/opt/incudal/server/dist/services/platform-recovery-evidence.js');
+      const {verifyRecoveryGateway}=await import('/opt/incudal/server/dist/services/platform-recovery-gateway.js');
+      const batch=await state.activeRecoveryBatch();
+      for(const category of ['finance','access','tasks'])await recordRecoveryEvidence(category,
+        {reference:'fresh-rollback-'+category,observedAt:new Date().toISOString(),sourceHash:await state.recoveryDatasetHash(category),
+          evidenceHash:createHash('sha256').update('empty-fixture-'+category).digest('hex')},batch.operator_id,{password:process.env.ADMIN_PASSWORD});
+      await verifyRecoveryGateway(batch,batch.operator_id);
+    } finally {await db.closePrismaDatabase()}`],
+    { timeout: 180000, env: { ...process.env, NODE_OPTIONS: '', NODE_PATH: '' } })
   await task('resume', { confirmation: 'RESUME AFTER RECONCILIATION', recoveryBatchId: rollbackBatch.id })
   await health(false)
   assert.equal((await exec('/usr/bin/systemctl', ['show', 'incudal-backend', '-p', 'NRestarts', '--value'])).stdout.trim(), '0')
@@ -244,7 +272,8 @@ try {
   const [{ count: manualReceipts }] = await pgQuery("SELECT count(*)::int count FROM platform_recovery_evidence WHERE batch_id=$1 AND category IN ('finance','access','tasks')", [automaticRestore.id])
   assert.equal(manualReceipts, 0, 'snapshot policy must not require manual review evidence')
   console.log('PASS installed snapshot policy: real database and gateway identity restored; automatic root resume; zero manual financial/access/task receipts; OSS transport simulated; no customer hosts.')
-} finally { await rm(storage, { recursive: true, force: true }) }
-const { closePrismaDatabase } = await import('/opt/incudal/server/dist/db/prisma.js')
-await closePrismaDatabase()
+} finally {
+  if (sourcePreserved) await localDatabaseAdmin(`DROP DATABASE ${quoteIdentifier(preservedSource)} WITH (FORCE);`)
+  await rm(storage, { recursive: true, force: true })
+}
 process.exit(0)
