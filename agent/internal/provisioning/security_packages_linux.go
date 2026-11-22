@@ -6,6 +6,7 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"reflect"
 	"regexp"
 	"strings"
 )
@@ -14,6 +15,32 @@ import (
 // restarts stay under their separately validated maintenance recipes.
 var securityLeaves = []string{"openssl", "libssl3", "libcrypto3", "curl", "libcurl", "ca-certificates"}
 var securityPackageVersionChange = regexp.MustCompile(`(?m)Upgrading ([a-zA-Z0-9+_.-]+) \(([0-9][a-zA-Z0-9+_.~-]*) -> ([0-9][a-zA-Z0-9+_.~-]*)\)`)
+var installedSecurityPackage = regexp.MustCompile(`^([a-zA-Z0-9+_.-]+)-([0-9][a-zA-Z0-9+_.~-]*)$`)
+
+func securityInstalledPackages(output string) (map[string]string, error) {
+	packages := map[string]string{}
+	for _, line := range strings.Split(strings.TrimSpace(output), "\n") {
+		if line == "" {
+			continue
+		}
+		match := installedSecurityPackage.FindStringSubmatch(line)
+		if match == nil || packages[match[1]] != "" || len(packages) >= 8192 {
+			return nil, fmt.Errorf("security package inventory invalid")
+		}
+		packages[match[1]] = match[2]
+	}
+	return packages, nil
+}
+func securityExpectedPackages(before map[string]string, plan string) map[string]string {
+	expected := map[string]string{}
+	for name, version := range before {
+		expected[name] = version
+	}
+	for _, change := range securityPackageVersionChange.FindAllStringSubmatch(plan, -1) {
+		expected[change[1]] = change[3]
+	}
+	return expected
+}
 
 func safeSecurityPackagePlan(output string, before map[string]string) error {
 	if strings.Contains(output, "Removing ") || strings.Contains(output, "Downgrading ") || strings.Contains(output, "UNTRUSTED") {
@@ -65,31 +92,28 @@ func repairSecurityPackages(ctx context.Context) error {
 			return fmt.Errorf("security package repository needs reviewed update")
 		}
 	}
-	installed, err := run(ctx, "apk", "info", "-v")
-	if err != nil {
-		return err
-	}
-	before := map[string]string{}
-	requested := []string{}
-	for _, name := range securityLeaves {
-		for _, line := range strings.Split(string(installed), "\n") {
-			if strings.HasPrefix(line, name+"-") {
-				version := strings.TrimPrefix(line, name+"-")
-				if len(version) > 0 && version[0] >= '0' && version[0] <= '9' {
-					before[name] = version
-					requested = append(requested, name)
-				}
-			}
-		}
-	}
-	if len(requested) == 0 {
-		return nil
-	}
 	unlock, err := lock()
 	if err != nil {
 		return err
 	}
 	defer unlock()
+	installed, err := run(ctx, "apk", "info", "-v")
+	if err != nil {
+		return err
+	}
+	before, err := securityInstalledPackages(string(installed))
+	if err != nil {
+		return err
+	}
+	requested := []string{}
+	for _, name := range securityLeaves {
+		if before[name] != "" {
+			requested = append(requested, name)
+		}
+	}
+	if len(requested) == 0 {
+		return nil
+	}
 	output, err := run(ctx, "apk", append([]string{"--simulate", "--no-cache", "--wait", "5", "upgrade"}, requested...)...)
 	if err != nil {
 		return err
@@ -108,6 +132,28 @@ func repairSecurityPackages(ctx context.Context) error {
 	if len(pinned) == 0 {
 		return nil
 	}
+	// Exact pins still let apk solve dependencies. Re-simulate the actual add
+	// transaction and require the original complete installed baseline before
+	// mutation; no extra dependency or unrelated package change is authorized.
+	current, err := run(ctx, "apk", "info", "-v")
+	if err != nil {
+		return err
+	}
+	currentPackages, err := securityInstalledPackages(string(current))
+	if err != nil || !reflect.DeepEqual(currentPackages, before) {
+		return fmt.Errorf("security package baseline changed")
+	}
+	actualPlan, err := run(ctx, "apk", append([]string{"--simulate", "--no-cache", "--wait", "5", "add"}, pinned...)...)
+	if err != nil {
+		return err
+	}
+	if err = safeSecurityPackagePlan(string(actualPlan), before); err != nil {
+		return err
+	}
+	expected := securityExpectedPackages(before, string(output))
+	if !reflect.DeepEqual(expected, securityExpectedPackages(before, string(actualPlan))) {
+		return fmt.Errorf("security package install plan changed")
+	}
 	if _, err = run(ctx, "apk", append([]string{"--no-cache", "--wait", "5", "add"}, pinned...)...); err != nil {
 		return err
 	}
@@ -115,10 +161,9 @@ func repairSecurityPackages(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
-	for _, change := range securityPackageVersionChange.FindAllStringSubmatch(string(output), -1) {
-		if !strings.Contains("\n"+string(after)+"\n", "\n"+change[1]+"-"+change[3]+"\n") {
-			return fmt.Errorf("security package installation not confirmed")
-		}
+	afterPackages, err := securityInstalledPackages(string(after))
+	if err != nil || !reflect.DeepEqual(expected, afterPackages) {
+		return fmt.Errorf("security package installation not confirmed")
 	}
 	return nil
 }

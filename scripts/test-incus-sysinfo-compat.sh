@@ -10,6 +10,7 @@ ls -ld /proc /proc/self
 cat /proc/self/status | head -n12
 mount | head -n12
 apk add --no-cache incus incus-client incus-openrc openrc apparmor-utils iproute2 python3
+/out/provisioning-test -test.run '^TestNativeSecurityPackageInventoryAndUpdate$' -test.v
 if test -n "${INCUDAL_NATIVE_OLD_DAEMON:-}"; then
   test -n "${INCUDAL_NATIVE_OLD_SHA256:-}"
   printf '%s  %s\n' "$INCUDAL_NATIVE_OLD_SHA256" "$INCUDAL_NATIVE_OLD_DAEMON" | sha256sum -c -
