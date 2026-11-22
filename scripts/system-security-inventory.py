@@ -2,7 +2,7 @@
 """Bounded package/runtime security receipt. Never changes a major or reboots."""
 import json,os,pathlib,subprocess,sys,time,tempfile,re,fcntl,signal,uuid,stat
 
-ALPINE=['openssl','libssl3','libcrypto3','curl','libcurl','openssh','openssh-server','openssh-client-default','dnsmasq','lxc','lxc-libs','lxcfs','lxcfs-openrc','lvm2','device-mapper','btrfs-progs','wireguard-tools','qemu-system-x86_64','qemu-system-aarch64']
+ALPINE=['openssl','libssl3','libcrypto3','curl','libcurl','openssh','openssh-server','openssh-client-default','dnsmasq','lxc','lxc-libs','lxcfs','lxcfs-openrc','lvm2','device-mapper','btrfs-progs','wireguard-tools','qemu-system-x86_64','qemu-system-aarch64','sqlite-libs','libseccomp','libcap2','acl-libs','libattr','libuv','lz4-libs','zstd-libs','xz-libs','libintl','libgcc','dbus-libs','eudev-libs','raft-cowsql','cowsql']
 DEBIAN=['openssl','libssl3','libssl3t64','curl','libcurl4','libcurl4t64','openssh-server','openssh-client','dnsmasq','lxc','liblxc1','liblxc-common','lxcfs','lvm2','libdevmapper1.02.1','libdevmapper-event1.02.1','btrfs-progs','wireguard-tools','nginx','nginx-common','nodejs','qemu-system-x86','qemu-system-arm','qemu-system-common','qemu-utils','systemd','systemd-dev','systemd-sysv','systemd-timesyncd','systemd-resolved','libsystemd0','libsystemd-shared','libpam-systemd','udev','libudev1','chrony','nftables','ca-certificates']
 
 def command(args,timeout=90):

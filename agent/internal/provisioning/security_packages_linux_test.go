@@ -86,6 +86,12 @@ func TestSecurityPackagePlanRejectsUnrelatedRemovalAndMajorChange(t *testing.T) 
 	if err := safeSecurityPackagePlan("(1/1) Upgrading openssl (3.5.7-r0 -> 3.5.9-r0)", before); err != nil {
 		t.Fatal(err)
 	}
+	if err := safeSecurityPackagePlan("Upgrading lxc-libs (7.0.0-r0 -> 7.0.1-r0)\nUpgrading sqlite-libs (3.53.3-r0 -> 3.53.4-r0)", map[string]string{"lxc-libs": "7.0.0-r0", "sqlite-libs": "3.53.3-r0"}); err != nil {
+		t.Fatal("actual daemon runtime dependencies excluded", err)
+	}
+	if err := safeSecurityPackagePlan("Upgrading musl (1.2.5-r0 -> 1.2.5-r1)", map[string]string{"musl": "1.2.5-r0"}); err == nil {
+		t.Fatal("unreviewed libc maintenance allowed")
+	}
 	for _, output := range []string{"Removing openssl", "Upgrading openssl (4.0.0-r0)", "Upgrading linux-virt (6.20.1-r0)", "Installing unknown (1.0-r0)", "Downgrading curl (8.0-r0)", "UNTRUSTED"} {
 		if safeSecurityPackagePlan(output, before) == nil {
 			t.Fatal(output)
