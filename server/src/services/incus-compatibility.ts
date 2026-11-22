@@ -57,13 +57,16 @@ export async function incusCompatibilityPermit(agent:HostAgentRecord) {
   const occupants=await tx.instance.findMany({where:{hostId:host.id,status:{not:'deleted'}},orderBy:{id:'asc'}})
   if(occupants.length!==rows.length||occupants.some((i,n)=>i.id!==rows[n].id||i.incusId!==rows[n].incusId||i.userId!==rows[n].userId||!['running','stopped'].includes(i.status)))return null
   if(fence.version===1&&report.incusCompat==='pending'&&report.compatRequest!==fence.requestId)return null
-  if(fence.version===1&&fence.phase==='prepared'&&report.incusCompat==='pending'&&report.compatRequest===fence.requestId&&fence.hostIdentity===transferHostIdentity(host)&&fence.binaryHash===report.compatHash){
+  const reactivate=fence.version===1&&fence.phase==='verified'&&report.incusCompat==='needed'&&report.compatRequest===fence.requestId&&
+   fence.hostIdentity===transferHostIdentity(host)&&fence.binaryHash===report.compatHash
+  if(fence.version===1&&(fence.phase==='prepared'&&report.incusCompat==='pending'||reactivate)&&report.compatRequest===fence.requestId&&fence.hostIdentity===transferHostIdentity(host)&&fence.binaryHash===report.compatHash){
    // The daemon may be down after an interrupted reload. Waiting for its API
    // before returning the original permit would deadlock Agent recovery. The
    // authenticated Agent validates the saved daemon/guest journal locally;
    // keep the durable host fence until its verified receipt and remote check.
    const current=[]
    for(const row of occupants){const previous=fence.instances.find(i=>i.id===row.id&&i.name===row.incusId),identity=await registeredGuestIdentity(tx,row,host),state=row.status==='running'?'Running':'Stopped';if(!previous||identity.uuid!==previous.uuid||!(state===previous.state||previous.state==='Running'&&state==='Stopped'))return null;current.push({...previous,state})}
+   if(reactivate)await tx.host.update({where:{id:host.id},data:{securityHardening:{...state,incusCompat:{...fence,phase:'prepared'}} as Prisma.InputJsonValue}})
    return {requestId:fence.requestId,hostIdentity:fence.hostIdentity,guests:current.map(i=>({name:i.name,uuid:i.uuid,state:i.state})),expiresAt:new Date(Date.now()+240000).toISOString()}
   }
   const client=await connect()

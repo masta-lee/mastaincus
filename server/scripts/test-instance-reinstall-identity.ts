@@ -195,6 +195,13 @@ try {
         assert.equal(await incusCompatibilityPermit({...rawAgent,lastReport:{hostProvisioningStatus:{incusCompat:'verified',compatHash:hash,compatRequest:permit.requestId}}}),null,
           'a repeated verified heartbeat cannot take the maintenance lane from a customer operation')
       }finally{releaseCustomerMutation()}
+      const previousReads=calls.length
+      const reactivation=await incusCompatibilityPermit({...rawAgent,lastReport:{hostProvisioningStatus:{incusCompat:'needed',compatHash:hash,compatRequest:permit.requestId}}})
+      assert.equal(reactivation?.requestId,permit.requestId,'a later missing daemon receives its original same-binary recovery permit')
+      assert.equal(calls.length,previousReads,'recovery authorization cannot wait for the unavailable daemon')
+      assert.equal(hostMaintenanceBlocked((await prisma.host.findUniqueOrThrow({where:{id:host.id}})).securityHardening),true)
+      await incusCompatibilityPermit({...rawAgent,lastReport:{hostProvisioningStatus:{incusCompat:'verified',compatHash:hash,compatRequest:permit.requestId}}})
+      assert.equal(hostMaintenanceBlocked((await prisma.host.findUniqueOrThrow({where:{id:host.id}})).securityHardening),false)
       const nextHash='b'.repeat(64)
       const nextPermit=await incusCompatibilityPermit({...rawAgent,lastReport:{hostProvisioningStatus:{incusCompat:'needed',compatHash:nextHash,compatRequest:permit.requestId}}})
       assert.equal(nextPermit?.requestId,permit.requestId,'verified original authority carries the next fixed binary generation')

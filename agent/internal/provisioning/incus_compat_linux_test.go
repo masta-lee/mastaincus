@@ -11,6 +11,7 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+	"syscall"
 	"testing"
 	"time"
 )
@@ -447,4 +448,38 @@ func TestNativeCompatibilityEmptyPoolReload(t *testing.T) {
 	if status != "verified" || request != p.RequestID {
 		t.Fatal("empty pool receipt missing")
 	}
+	manifest, err := compatibilityMetadata()
+	if err != nil {
+		t.Fatal(err)
+	}
+	pid, err := compatStartingDaemon(ctx, "/run/incus/incusd.pid", "/usr/sbin/incusd", manifest.SHA256)
+	if err != nil || pid < 2 {
+		t.Fatal("exact activated daemon unavailable", pid, err)
+	}
+	start, err := compatProcessStart(pid)
+	if err != nil {
+		t.Fatal(err)
+	}
+	process, err := os.FindProcess(pid)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err = process.Signal(syscall.SIGTERM); err != nil {
+		t.Fatal(err)
+	}
+	if err = waitCompatDaemonExit(ctx, pid, start); err != nil {
+		t.Fatal(err)
+	}
+	status, request, _ = incusCompatibilityStatus(ctx)
+	if status == "verified" || request != p.RequestID {
+		t.Fatal("dead daemon inherited verified status", status, request)
+	}
+	if err = prepareIncusCompatibility(ctx, p); err != nil {
+		t.Fatal("later daemon exit automatic recovery", err)
+	}
+	status, request, _ = incusCompatibilityStatus(ctx)
+	if status != "verified" || request != p.RequestID {
+		t.Fatal("same-permit daemon recovery not verified")
+	}
+	t.Log("PASS later exact daemon exit: stale status refused, original permit restarts same binary and verifies empty pool")
 }

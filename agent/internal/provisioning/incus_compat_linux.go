@@ -459,7 +459,17 @@ func prepareIncusCompatibility(ctx context.Context, permit *CompatPermit) error 
 			return e
 		}
 		if manifest.SHA256 == journal.NewHash {
-			return waitCompatReady(ctx, journal.NewHash)
+			// A later daemon exit needs the same authenticated recovery permit.
+			// Reuse or start only the exact installed executable; never kill an
+			// unknown process, replace the DB or restart a customer instance.
+			if e = startCompatDaemon(ctx, journal.NewHash); e != nil {
+				return e
+			}
+			rows, e := compatGuests(ctx)
+			if e != nil || !compatPermitGuests(permit, rows) || !validCompatPermit(permit) {
+				return fmt.Errorf("compatibility recovered guest authority not confirmed")
+			}
+			return nil
 		}
 		// Keep the previous rollback file immutable before a new repair generation.
 		if oldHash, readErr := hashCompatFile(ctx, compatBackupPath); readErr == nil {
