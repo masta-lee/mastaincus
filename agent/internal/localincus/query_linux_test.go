@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"net"
 	"net/http"
+	"os"
 	"path/filepath"
 	"strings"
 	"sync"
@@ -61,6 +62,23 @@ func TestQueryUsesOnlyBoundedLocalGET(t *testing.T) {
 	}
 	if data, err = querySocket(context.Background(), path, "/internal/ready", true); err != nil || string(data) != response {
 		t.Fatal("internal readiness proof lost")
+	}
+	if os.Geteuid() == 0 {
+		if _, err = queryProcess(context.Background(), path, "/internal/ready", true, os.Getpid()); err != nil {
+			t.Fatal("kernel peer PID not accepted", err)
+		}
+		if _, err = queryProcess(context.Background(), path, "/internal/ready", true, os.Getpid()+1); err == nil {
+			t.Fatal("wrong daemon PID accepted")
+		}
+		mu.Lock()
+		response = strings.Repeat("x", 4097)
+		mu.Unlock()
+		if _, err = queryProcess(context.Background(), path, "/internal/ready", true, os.Getpid()); err == nil {
+			t.Fatal("oversized process readiness accepted")
+		}
+		mu.Lock()
+		response = `{"type":"sync","status_code":200,"metadata":{}}`
+		mu.Unlock()
 	}
 	mu.Lock()
 	response = `{"type":"sync","status_code":200,"metadata":null}`

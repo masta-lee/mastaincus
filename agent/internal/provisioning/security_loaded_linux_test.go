@@ -25,10 +25,19 @@ func TestSecurityLoadedStateExcludesGuestsAndSharedMemory(t *testing.T) {
 	if err != nil || state != "checked" {
 		t.Fatal(state, err)
 	}
+	if old, err := securityProcessLoaded(context.Background(), root, 2); err != nil || old {
+		t.Fatal(old, err)
+	}
+	if _, err := securityProcessLoaded(context.Background(), root, 3); err == nil {
+		t.Fatal("guest namespace accepted for host activation")
+	}
 	os.WriteFile(filepath.Join(root, "2/maps"), []byte("a-b r-xp 0 0 0 /host-private.so (deleted)\n"), 0600)
 	state, err = securityLoadedState(context.Background(), root)
 	if err != nil || state != "activation-required" {
 		t.Fatal(state, err)
+	}
+	if old, err := securityProcessLoaded(context.Background(), root, 2); err != nil || !old {
+		t.Fatal(old, err)
 	}
 	canceled, cancel := context.WithCancel(context.Background())
 	cancel()

@@ -27,7 +27,21 @@ func Query(ctx context.Context, path string, raw bool) ([]byte, error) {
 	return querySocket(ctx, Socket, path, raw)
 }
 
+// ReadyForProcess binds a small readiness response to the kernel-authenticated
+// Unix peer PID. It cannot attest to another daemon using an old pidfile.
+func ReadyForProcess(ctx context.Context, pid int) (bool, error) {
+	info, err := os.Lstat(Socket)
+	if err != nil || !trustedSocket(info) || pid < 2 {
+		return false, fmt.Errorf("local Incus process unavailable")
+	}
+	_, err = queryProcess(ctx, Socket, "/internal/ready", true, pid)
+	return err == nil, err
+}
+
 func querySocket(ctx context.Context, socket, path string, raw bool) ([]byte, error) {
+	return queryProcess(ctx, socket, path, raw, 0)
+}
+func queryProcess(ctx context.Context, socket, path string, raw bool, expectedPID int) ([]byte, error) {
 	if path != "/1.0" && path != "/internal/ready" && !strings.HasPrefix(path, "/1.0/") || strings.ContainsAny(path, "\r\n#\\") || strings.Contains(path, "..") {
 		return nil, fmt.Errorf("local Incus query path invalid")
 	}
@@ -35,7 +49,15 @@ func querySocket(ctx context.Context, socket, path string, raw bool) ([]byte, er
 	defer cancel()
 	transport := &http.Transport{DisableCompression: true, DisableKeepAlives: true,
 		DialContext: func(ctx context.Context, _, _ string) (net.Conn, error) {
-			return (&net.Dialer{}).DialContext(ctx, "unix", socket)
+			connection, err := (&net.Dialer{}).DialContext(ctx, "unix", socket)
+			if err != nil {
+				return nil, err
+			}
+			if expectedPID > 0 && !trustedPeerProcess(connection, expectedPID) {
+				connection.Close()
+				return nil, fmt.Errorf("local Incus peer process changed")
+			}
+			return connection, nil
 		}}
 	defer transport.CloseIdleConnections()
 	client := &http.Client{Transport: transport, CheckRedirect: func(_ *http.Request, _ []*http.Request) error {
@@ -50,8 +72,12 @@ func querySocket(ctx context.Context, socket, path string, raw bool) ([]byte, er
 		return nil, err
 	}
 	defer response.Body.Close()
-	data, err := io.ReadAll(io.LimitReader(response.Body, MaxResponseBytes+1))
-	if err != nil || len(data) > MaxResponseBytes {
+	maximum := MaxResponseBytes
+	if expectedPID > 0 {
+		maximum = 4096
+	}
+	data, err := io.ReadAll(io.LimitReader(response.Body, int64(maximum+1)))
+	if err != nil || len(data) > maximum {
 		return nil, fmt.Errorf("local Incus response exceeds limit or failed")
 	}
 	var envelope struct {

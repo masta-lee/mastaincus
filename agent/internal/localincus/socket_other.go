@@ -2,6 +2,10 @@
 
 package localincus
 
-import "os"
+import (
+	"net"
+	"os"
+)
 
-func trustedSocket(os.FileInfo) bool { return false }
+func trustedSocket(os.FileInfo) bool        { return false }
+func trustedPeerProcess(net.Conn, int) bool { return false }

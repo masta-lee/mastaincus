@@ -330,16 +330,16 @@ func compatReadyOnce(ctx context.Context, expectedHash string) (bool, error) {
 	if err != nil {
 		return false, err
 	}
-	raw, err := localincus.Query(ctx, "/1.0", false)
-	var server struct {
-		Environment struct {
-			PID     int    `json:"server_pid"`
-			Version string `json:"server_version"`
-		} `json:"environment"`
+	// The small readiness response is tied to the same process through the
+	// kernel's Unix-socket peer credentials; no full /1.0 metadata allocation.
+	if pid < 2 {
+		return false, err
 	}
-	// Daily status needs one bounded authenticated local API response. Initial
-	// activation retains its separate /internal/ready wait below.
-	return err == nil && json.Unmarshal(raw, &server) == nil && pid > 0 && server.Environment.PID == pid && normalizedCompatVersion(server.Environment.Version) == "7.6.0", err
+	if ready, err := localincus.ReadyForProcess(ctx, pid); err != nil || !ready {
+		return false, err
+	}
+	old, err := securityProcessLoaded(ctx, "/proc", pid)
+	return !old && err == nil, err
 }
 func waitCompatReady(ctx context.Context, expectedHash string) error {
 	ctx, cancel := context.WithTimeout(ctx, 60*time.Second)
@@ -468,6 +468,28 @@ func prepareIncusCompatibility(ctx context.Context, permit *CompatPermit) error 
 			rows, e := compatGuests(ctx)
 			if e != nil || !compatPermitGuests(permit, rows) || !validCompatPermit(permit) {
 				return fmt.Errorf("compatibility recovered guest authority not confirmed")
+			}
+			pid, e := compatStartingDaemon(ctx, "/run/incus/incusd.pid", "/usr/sbin/incusd", journal.NewHash)
+			if e != nil || pid < 2 {
+				return fmt.Errorf("compatibility active daemon not confirmed")
+			}
+			old, e := securityProcessLoaded(ctx, "/proc", pid)
+			if e != nil {
+				return e
+			}
+			if old {
+				// Installed TLS/LXC library fixes must enter the running daemon.
+				// Reuse the exact authorized graceful reload and preserve guests;
+				// no binary, database or customer lifecycle replacement is needed.
+				start, e := compatProcessStart(pid)
+				if e != nil {
+					return e
+				}
+				journal.PID = pid
+				journal.ProcessStart = start
+				journal.Guests = rows
+				journal.Phase = "reloading"
+				return saveCompatJournal(journal)
 			}
 			return nil
 		}
