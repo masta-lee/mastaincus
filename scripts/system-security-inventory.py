@@ -131,6 +131,20 @@ def patch_plan(output,installed,allowed):
     if len(changes)>64 or len(changes)!=len({item.split('=',1)[0]for item in changes}):raise ValueError('SYSTEM_SECURITY_PLAN_REJECTED')
     return changes
 
+def debian_installed_packages():
+    output=command(['dpkg-query','-W','-f=${Package}\t${Architecture}\t${db:Status-Status}\t${Version}\n'],30)
+    packages={}
+    for line in output.splitlines():
+        fields=line.split('\t')
+        if len(fields)!=4:raise ValueError('SYSTEM_SECURITY_PACKAGE_QUERY_FAILED')
+        name,architecture,status,version=fields
+        if status!='installed':continue
+        if not re.fullmatch(r'[a-z0-9+.-]+',name)or not re.fullmatch(r'[a-z0-9-]+',architecture)or not re.fullmatch(r'[^\s\x00-\x1f]{1,200}',version):raise ValueError('SYSTEM_SECURITY_PACKAGE_QUERY_FAILED')
+        identity=name+':'+architecture
+        if identity in packages or len(packages)>=20000:raise ValueError('SYSTEM_SECURITY_PACKAGE_QUERY_FAILED')
+        packages[identity]=version
+    return packages
+
 POLICY=pathlib.Path('/usr/sbin/policy-rc.d')
 POLICY_RECEIPT=pathlib.Path('/var/lib/incudal-system-security/service-policy.json')
 
@@ -209,10 +223,19 @@ def apply_patches():
         changes=patch_plan(output,value['packages'],allowed)
         value['patchPlan']=changes;value['patchState']='prepared';persist(value)
         if changes:
+            before=debian_installed_packages()
+            planned=patch_plan(command(['apt-get','-o','DPkg::Lock::Timeout=5','-o','APT::Get::AllowUnauthenticated=false','--simulate','--only-upgrade','--no-remove','install',*changes]),value['packages'],allowed)
+            if sorted(planned)!=sorted(changes):raise ValueError('SYSTEM_SECURITY_PLAN_REJECTED')
+            expected=dict(before)
+            for item in changes:
+                name,version=item.split('=',1);matches=[identity for identity in before if identity.split(':',1)[0]==name]
+                if len(matches)!=1 or before[matches[0]]!=value['packages'][name]:raise ValueError('SYSTEM_SECURITY_PLAN_REJECTED')
+                expected[matches[0]]=version
             prepare_service_policy()
             try:command(['apt-get','-o','DPkg::Lock::Timeout=5','-o','APT::Get::AllowUnauthenticated=false','-o','Dpkg::Options::=--force-confold','--assume-yes','--only-upgrade','--no-remove','install',*changes],600)
             finally:
                 clean_service_policy()
+            if debian_installed_packages()!=expected:raise ValueError('SYSTEM_SECURITY_PATCH_NOT_CONFIRMED')
         after=inventory()
         for package in changes:
             name,version=package.split('=',1)

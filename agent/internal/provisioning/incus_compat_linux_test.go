@@ -491,7 +491,7 @@ func TestNativeCompatibilityEmptyPoolReload(t *testing.T) {
 	// Replace only the same bytes of a real mapped host library in this
 	// disposable root. The old daemon retains its deleted mapping until the
 	// authorized graceful reload; no guest or library content is changed.
-	library, err := filepath.EvalSymlinks("/lib/libssl.so.3")
+	library, err := filepath.EvalSymlinks("/usr/lib/libssl.so.3")
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -6,6 +6,12 @@ spec=importlib.util.spec_from_file_location('inventory',pathlib.Path(__file__).w
 module=importlib.util.module_from_spec(spec);spec.loader.exec_module(module)
 
 class Plans(unittest.TestCase):
+    def test_complete_debian_inventory_distinguishes_architecture(self):
+        output='libssl3\tamd64\tinstalled\t3.5.9-1\nlibssl3\ti386\tinstalled\t3.5.7-1\nremoved\tall\tconfig-files\t1.0\n'
+        with patch.object(module,'command',return_value=output):
+            self.assertEqual(module.debian_installed_packages(),{'libssl3:amd64':'3.5.9-1','libssl3:i386':'3.5.7-1'})
+        for output in ['wrong', 'libssl3\tamd64\tinstalled\t3.5.9-1\nlibssl3\tamd64\tinstalled\t3.5.7-1']:
+            with patch.object(module,'command',return_value=output),self.assertRaises(ValueError):module.debian_installed_packages()
     def test_running_alpine_kernel_exact_version_and_revision(self):
         self.assertFalse(module.alpine_kernel_replaced('6.12.1-0-virt',{'linux-virt':'6.12.1-r0'}))
         for version in ['6.12.10-r0','6.12.1-r1','unknown']:
