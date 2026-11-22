@@ -1,5 +1,7 @@
 # 2026-11-22 两轮安全修复续接，仍在验收
 
+阶段保存完成31b64bf51ba5d40532a622368f71f8df25d51624已推origin、版本不变、只留无关taste/log-temp。本机build688自然0、types684/backup684、真实SCRAM672/terminal675/port680/notification679/extend677/Agent签名并发687全0。第六45059247490终态failure、六旧worker再全过，双首装进入backup完整性比对拒绝；新增4类布尔诊断同source第七45061365903（31b64bf5）已启动、当前全部构建在途。最新source普通CI45061369559/原生Agent45061369668/内存45061369543等仍队列，继续核全部job；原629第三PR5失败全日志已读并本机修，末job仍在途。fulltable本机689仍运行，先核日志/自然终态，不重复开；只复制dump到独立临时DB，源客户生产未动。正式Release/生产及E03/E04完整自动激活/OSS灾备未完成。
+
 较新第六预览45059247490双首装已真正完成安装/启动/双方前端/admin/管理网关/签名Agent及原Prisma事务实证，随后**备份校验OSS_DATABASE_INTEGRITY_MISMATCH**失败；双日志681/684已读。六旧worker第六也全部success（状态687），正式Release skipped。新backup诊断仅4类布尔差异，原完整比较不放宽；本机隔离PG plain dump/restore schema685/686一致，全表689仍在运行。新增初装DB密码进入SQL/argv风险修复SCRAM verifier与重复认证，真实PG672创建两次/错误密码拒绝自然过、原服务健康，split/panel672/security671/types684/build688全过。
 
 第三PR629源现在61success/5failure/1skipped、1仍在途：5失败日志已全部取证，terminal-authorize旧session/pin已补实际PG/mTLS675全过，host-extend与notification-id旧plaintext输入677/679过，batch-port只统计String(error)漏结构化脱敏message，修统计后680全过；Agent-release-concurrency缺真实publisher签名，独立合成公钥复制生产route、实际Ed25519和全部并发/失败/恢复687过。新源码/测试保存后需同source CI和完整包/root恢复继续，不正式发行/生产。E03/E04全配套宿主自动patch/服务激活仍缺，不能仅写库存已全修。
