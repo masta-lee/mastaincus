@@ -16,6 +16,10 @@ func TestNativeSecurityPackageInventoryAndUpdate(t *testing.T) {
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
 	defer cancel()
+	world, err := os.ReadFile("/etc/apk/world")
+	if err != nil {
+		t.Fatal(err)
+	}
 	beforeOutput, err := run(ctx, "apk", "info", "-v")
 	if err != nil {
 		t.Fatal(err)
@@ -46,6 +50,10 @@ func TestNativeSecurityPackageInventoryAndUpdate(t *testing.T) {
 		if after[name] != version && !allowed[name] {
 			t.Fatal("unrelated installed package changed")
 		}
+	}
+	currentWorld, err := os.ReadFile("/etc/apk/world")
+	if err != nil || string(currentWorld) != string(world) {
+		t.Fatal("administrator world constraints changed", err)
 	}
 	t.Log("PASS actual Alpine apk: complete installed inventory, signed leaf update and unrelated package preservation")
 }

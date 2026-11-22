@@ -125,7 +125,7 @@ func repairSecurityPackages(ctx context.Context) error {
 	if filepath.Dir(cache) != "/var/lib/incudal-agent" {
 		return fmt.Errorf("security package cache invalid")
 	}
-	base := []string{"--cache-dir", cache, "--wait", "5"}
+	base := []string{"--cache-dir", cache, "--cache-max-age", "60", "--wait", "5", "--timeout", "15"}
 	// apk --simulate intentionally never writes missing indexes, even with
 	// --update-cache. Fetch and verify them explicitly once before simulation.
 	if _, err = run(ctx, "apk", append(append([]string{}, base...), "update")...); err != nil {
@@ -144,12 +144,15 @@ func repairSecurityPackages(ctx context.Context) error {
 		if err != nil || strings.TrimSpace(string(order)) != "<" {
 			return fmt.Errorf("security package version order refused")
 		}
-		pinned = append(pinned, change[1]+"="+change[3])
+		pinned = append(pinned, change[1])
 	}
 	if len(pinned) == 0 {
 		return nil
 	}
-	// Exact pins still let apk solve dependencies. Re-simulate the actual add
+	// Exact add atoms would persist in /etc/apk/world and block the next patch.
+	// upgrade accepts package names. The same verified cached index and complete
+	// second plan bind their exact versions without modifying world constraints.
+	// Package names still let apk solve dependencies. Re-simulate the upgrade
 	// transaction and require the original complete installed baseline before
 	// mutation; no extra dependency or unrelated package change is authorized.
 	current, err := run(ctx, "apk", "info", "-v")
@@ -160,7 +163,7 @@ func repairSecurityPackages(ctx context.Context) error {
 	if err != nil || !reflect.DeepEqual(currentPackages, before) {
 		return fmt.Errorf("security package baseline changed")
 	}
-	actualPlan, err := run(ctx, "apk", append(append([]string{}, base...), append([]string{"--simulate", "add"}, pinned...)...)...)
+	actualPlan, err := run(ctx, "apk", append(append([]string{}, base...), append([]string{"--simulate", "upgrade"}, pinned...)...)...)
 	if err != nil {
 		return err
 	}
@@ -171,7 +174,7 @@ func repairSecurityPackages(ctx context.Context) error {
 	if !reflect.DeepEqual(expected, securityExpectedPackages(before, string(actualPlan))) {
 		return fmt.Errorf("security package install plan changed")
 	}
-	if _, err = run(ctx, "apk", append(append([]string{}, base...), append([]string{"add"}, pinned...)...)...); err != nil {
+	if _, err = run(ctx, "apk", append(append([]string{}, base...), append([]string{"upgrade"}, pinned...)...)...); err != nil {
 		return err
 	}
 	after, err := run(ctx, "apk", "info", "-v")
