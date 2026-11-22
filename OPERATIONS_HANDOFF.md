@@ -4,6 +4,8 @@
 
 45045980526现已failure，双包/Incus/Agent准备、原生230全部过；双首装ENV_FILE readonly子进程传递与六原worker裸chown撞旧PATH wrapper问题已逐job定位修复，准备新源码预览。本机原包TCG失败不代真实CI，旧服务已人工按原helper复原、自然巡查执行，资金/身份/迁移留库。暂不Release。
 
+第二轮45047726936亦failure已逐8失败job核：Node版本probe继承兼容NODE_OPTIONS，正常版本误拒；已清子进程环境并真实PG故障preload验证通过。系统激活root核验和10包真实加载/回执持续全过，源码保存后第三轮预览继续；正式发行/生产不执行。
+
 最新接续：原公开v1.8.14系统服务健康；本机原worker任务1解压重复依赖fixture超时failed、代码/DB未换，精简后任务2已解压进入原代码备份仍running。系统安全巡查补持久待激活/失败回执和宿主旧库映射，不将安装版本等同已生效；8项Linuxroot/planner、三类型、backup4/install5及更新专项通过。完整旧升级/root恢复worker/系统配套自动激活与正式双架构包仍待，详安全修复台账；无本轮commit/push/Release/生产写入。
 
 源码与依赖已实施修复，旧“报告完成、待修”是历史。较新状态以[安全修复台账](docs/security-repair-2026-11-22.md)首节及HANDOFF顶部为准。未提交／推送／正式发行／生产部署。认证seal首次迁移会退休旧refresh／PAT／OAuth bearer／一次性码，需重新登录与签发，原密码／实例／账务保持；迁移OS身份root私密、业务DB仅DML，保留root回退runtime，不能移除该兼容桥或给予业务DDL权来修升级。须先验双架构公开旧包原worker／回滚再升、完整低权限restore和系统组件／客户端实证，真实OSS／整机失联首要目标单独保留。

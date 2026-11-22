@@ -40,7 +40,7 @@ for p in paths:
     text=p.read_text(errors='replace')
     for secret in sorted(secrets,key=len,reverse=True):text=text.replace(secret,'[redacted]')
     for line in text.splitlines()[-60:]:
-        if re.search(r'ERROR|FATAL|Error|error|失败|PROVISIONING_REJECTED|Auto rollback|System update completed|Production readiness verification passed|Backend health is ready',line):
+        if re.search(r'ERROR|FATAL|Error|error|失败|PROVISIONING_REJECTED|DATABASE_|AUTHENTICATION_|FINANCIAL_|Database security|Auto rollback|System update completed|Production readiness verification passed|Backend health is ready',line):
             print(p.name+': '+line[:500])
 PY
 }

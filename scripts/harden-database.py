@@ -35,7 +35,7 @@ numeric=int(run("SELECT current_setting('server_version_num')"));minimum={14:25,
 if numeric//10000 not in minimum or numeric%10000<minimum[numeric//10000]:raise SystemExit('Patched PostgreSQL required before database role separation')
 # Do not remove legacy DDL authority before the independently retained rollback
 # shim can run on this installation's patched Node runtime.
-node_check=subprocess.run(['/usr/bin/node','-e',"const [a,b,c]=process.versions.node.split('.').map(Number);const patched=a===22&&(b>23||b===23&&c>=5)||a===24&&(b>22||b===22&&c>=3);process.exit(patched&&typeof require('node:module').registerHooks==='function'?0:1)"],stdout=subprocess.DEVNULL,stderr=subprocess.PIPE)
+node_check=subprocess.run(['/usr/bin/node','-e',"const [a,b,c]=process.versions.node.split('.').map(Number);const patched=a===22&&(b>23||b===23&&c>=5)||a===24&&(b>22||b===22&&c>=3);process.exit(patched&&typeof require('node:module').registerHooks==='function'?0:1)"],env={'PATH':'/usr/bin:/bin'},stdout=subprocess.DEVNULL,stderr=subprocess.PIPE)
 if node_check.returncode:raise SystemExit('Database security preparation requires a patched Node 22 or 24 runtime')
 config_path=pathlib.Path(run("SELECT setting FROM pg_settings WHERE name='config_file'"))
 hba=pathlib.Path(run("SELECT setting FROM pg_settings WHERE name='hba_file'"))

@@ -6,6 +6,8 @@
 
 该预览终态failure已完整查因：双构建/Incus/Agent准备和原生230/230、双签名实包关键内容/source校验过；双首装readonly ENV_FILE赋值失败、六旧worker新安装钩子裸chown被旧PATH包装器exit64拒绝。已逐job读失败日志，修env子进程传递与保留runtime使用/usr/bin/chown，不放宽受限wrapper，Bash readonly回归及对应守卫复验。下一轮新源码预览继续，不发正式版；本机TCG任务2降权前封存/回退超时failed，原目录原helper复原、旧服务已自然五分钟巡查，迁移246保持，DB连接30秒仅fixture。
 
+第二轮82238c8d预览45047726936终态failure：全量230/双包/Incus/Agent准备过，双首装246迁移完成后Nodepreflight继承NODE_OPTIONS兼容shim，造成版本检查误拒，六原worker启动/回退亦失败。已清版本probe环境，真实PG父级必报错preload对照通过(dbpreflight525)，保持补丁门槛。系统激活新增精确核验/中断计划持久、正常共享内存不误报；空客户隔离VM实际重启10包激活回执/二次核验/后续刷新全过(activation527/536)、10项Linux测试538过，准备第三轮同来源预览。未正式发行/生产写入。
+
 2026-11-23较新：S05旧缺Incus pin通过原受信SSH/peer公有证书+TLS trusted后补齐、错误原pin/非root拒绝、排队stop不互等，真实PG管理回归425全过；类型421/后端build427、bootstrap415/gateway437/security436等过。系统库存8原生测试及待激活持久/旧映射/失败脱敏通过。原worker任务2已实际246迁移，但封存120秒/回退封存均在TCG超时，最终failed，未降权；本机仅用原helper重新封存后旧backend启动已派发，继续等健康，不能称旧升级验收通过。公开完整签名双架构六升级与root恢复worker必须在本批同来源预览核，不发正式版本。全gateway本机完整套件仍运行（probe389），必须继续跟终态。
 
 接续较新证据：原公开v1.8.14在systemd VM已唯一后端健康、244迁移/admin正常。原worker首次任务1只在解压344MiB本地重复依赖夹具超时，未切代码/DB；精简237MiB后任务2已解压并实际备份原代码，仍running，不能写升级成功。补系统库存待激活持久合并、失败状态/固定代码、实际宿主PID namespace旧库扫描，8项Linuxroot测试与本机planner通过；检出sshd/nginx/postgres旧映射。发行快捷start/migrate改唯一service/root迁移，更新专项通过；最新三类型、backup4专项、install5专项全过。全量第7轮230/230是较早冻结点，后续更新仅按对应证据记录。暂不发版、无生产写入。

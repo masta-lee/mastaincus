@@ -35,9 +35,9 @@ def command(args,timeout=90):
         if os.fstat(out.fileno()).st_size>2*1024*1024:raise ValueError('SYSTEM_SECURITY_PACKAGE_QUERY_FAILED')
         out.seek(0);return out.read(2*1024*1024).decode().strip()
 
-HOST_SERVICES={'incusd','lxcfs','dnsmasq','sshd','nginx','postgres','systemd','systemd-resolve','systemd-timesyn','chronyd'}
+HOST_SERVICES={'incusd','lxcfs','dnsmasq','sshd','nginx','postgres','systemd','systemd-resolve','systemd-timesyn','chronyd','node'}
 
-def replaced_host_mappings(proc=pathlib.Path('/proc')):
+def replaced_host_mappings(proc=pathlib.Path('/proc'),all_host=False):
     # Installed package versions cannot attest to old mapped libraries. Inspect
     # only recognized services in the host PID namespace; no guest process,
     # argument, mapped filename or credential is written to the receipt.
@@ -49,18 +49,37 @@ def replaced_host_mappings(proc=pathlib.Path('/proc')):
         try:
             if (path/'ns/pid').readlink()!=host_namespace:continue
             name=(path/'comm').read_text()[:32].strip()
-            if name not in HOST_SERVICES:continue
+            # Node may expose MainThread as comm. The executable basename is
+            # local proof only, never included in the public/private receipt.
+            if name not in HOST_SERVICES:
+                try:executable=str((path/'exe').readlink()).removesuffix(' (deleted)')
+                except (OSError,ValueError):
+                    if not all_host:continue
+                    executable=''
+                if pathlib.Path(executable).name=='node':name='node'
+            if name not in HOST_SERVICES:
+                if not all_host:continue
+                name='other'
             if checked>=256:complete=False;break
             checked+=1
             with (path/'maps').open()as source:data=source.read(1024*1024+1)
             if len(data)>1024*1024:complete=False;continue
-            count=sum(1 for line in data.splitlines()if line.endswith(' (deleted)') and re.search(r'\s/[^\x00]+$',line))
+            count=0
+            for line in data.splitlines():
+                if not line.endswith(' (deleted)'):continue
+                fields=line.split(maxsplit=5)
+                if len(fields)!=6 or 'x'not in fields[1]:continue
+                mapped_path=fields[5]
+                # Unlinked shared memory, memfd/JIT and System V mappings are
+                # intentional runtime data, not replaced package code.
+                if not mapped_path.startswith('/')or mapped_path.startswith(('/dev/','/memfd:','/SYSV')):continue
+                count+=1
             if count:rows.append({'pid':int(path.name),'service':name,'replacedMappings':count})
         except (FileNotFoundError,ProcessLookupError):continue
         except (OSError,ValueError):complete=False
-    return {'complete':complete,'checkedProcesses':checked,'processes':sorted(rows,key=lambda row:row['pid'])}
+    return {'complete':complete,'allHostProcesses':all_host,'checkedProcesses':checked,'processes':sorted(rows,key=lambda row:row['pid'])}
 
-def inventory():
+def inventory(all_loaded_code=False):
     release=dict(line.split('=',1) for line in pathlib.Path('/etc/os-release').read_text().splitlines() if '='in line)
     system=release.get('ID','').strip('"');packages={};pending=[]
     if system=='alpine':
@@ -80,7 +99,7 @@ def inventory():
     else:raise ValueError('SYSTEM_SECURITY_DISTRIBUTION_UNSUPPORTED')
     running_kernel=os.uname().release
     restart_required=pathlib.Path('/var/run/reboot-required').exists() or any(not version.startswith(running_kernel.split('-')[0]) for name,version in packages.items() if name in ['linux-virt','linux-lts','linux-edge'])
-    return {'version':1,'checkedAt':time.strftime('%Y-%m-%dT%H:%M:%SZ',time.gmtime()),'distribution':system,'release':release.get('VERSION_ID','').strip('"'),'runningKernel':running_kernel,'packages':packages,'pending':pending,'loadedCode':replaced_host_mappings(),'restartRequired':restart_required,'policy':'same-distribution-signed-packages; no-major-upgrade; no-automatic-customer-reboot','unreleasedAdvisories':['OpenSSL-20261117: official release planned 2026-12-01; feature conditions require review']}
+    return {'version':1,'checkedAt':time.strftime('%Y-%m-%dT%H:%M:%SZ',time.gmtime()),'distribution':system,'release':release.get('VERSION_ID','').strip('"'),'runningKernel':running_kernel,'packages':packages,'pending':pending,'loadedCode':replaced_host_mappings(all_host=all_loaded_code),'restartRequired':restart_required,'policy':'same-distribution-signed-packages; no-major-upgrade; no-automatic-customer-reboot','unreleasedAdvisories':['OpenSSL-20261117: official release planned 2026-12-01; feature conditions require review']}
 
 def patch_plan(output,installed,allowed):
     """Only explicit existing packages, same major; no solver expansion."""
@@ -200,7 +219,7 @@ def preserve_activation(value,previous):
     # and later no-op patch runs until a separate activation verifies it.
     pending=previous.get('activationRequired',[])
     if not isinstance(pending,list) or len(pending)>256 or any(not isinstance(item,str) or not re.fullmatch(r'[a-z0-9+.-]+=[^\s=\x00-\x1f]{1,200}',item)for item in pending):raise ValueError('SYSTEM_SECURITY_RECEIPT_INVALID')
-    if value.get('patchState')=='installed-activation-required':
+    if value.get('patchState') in ['prepared','installed-activation-required']:
         plan=value.get('patchPlan',[])
         if not isinstance(plan,list) or len(plan)>64 or any(not isinstance(item,str) or not re.fullmatch(r'[a-z0-9+.-]+=[^\s=\x00-\x1f]{1,200}',item)for item in plan):raise ValueError('SYSTEM_SECURITY_RECEIPT_INVALID')
         # A newer installed patch still needs activation, but replaces its
@@ -213,7 +232,13 @@ def preserve_activation(value,previous):
         if value.get('patchState') not in ['failed','prepared']:value['patchState']='installed-activation-required'
     return value
 
-def persist(value):
+def activation_verified(value,pending):
+    loaded=value.get('loadedCode',{})
+    if value.get('restartRequired') is not False or loaded.get('complete') is not True or loaded.get('allHostProcesses') is not True or loaded.get('processes')!=[]:return False
+    packages=value.get('packages',{})
+    return all(packages.get(name)==version for name,version in (item.split('=',1)for item in pending))
+
+def persist(value,verify_activation=False):
     root=pathlib.Path('/var/lib/incudal-system-security')
     if os.geteuid()!=0:raise ValueError('SYSTEM_SECURITY_ROOT_REQUIRED')
     if root.is_symlink():raise ValueError('SYSTEM_SECURITY_UNTRUSTED_PATH')
@@ -234,6 +259,19 @@ def persist(value):
             # Adopt the exact pending list from the earlier receipt format.
             if 'activationRequired'not in previous and previous.get('patchState')=='installed-activation-required':previous['activationRequired']=previous.get('patchPlan',[])
         preserve_activation(value,previous)
+        if 'activationReceipt' in previous and 'activationReceipt'not in value:
+            value['activationReceipt']=previous['activationReceipt']
+            value.setdefault('activationRequired',[])
+        if verify_activation:
+            pending=value.get('activationRequired',[])
+            if not pending and value.get('activationReceipt'):value['patchState']='activated'
+            if pending and activation_verified(value,pending):
+                value['activationRequired']=[]
+                value['activationReceipt']={'packages':pending,'checkedAt':value['checkedAt'],'bootId':pathlib.Path('/proc/sys/kernel/random/boot_id').read_text().strip()}
+                value['patchState']='activated'
+            elif pending:value['patchState']='installed-activation-required'
+        elif value.get('patchState') is None and previous.get('patchState')=='activated' and not value.get('activationRequired') and value.get('activationReceipt'):
+            value['patchState']='activated'
         fd,name=tempfile.mkstemp(dir=root,prefix='.receipt-')
         try:
             with os.fdopen(fd,'w')as out:out.write(json.dumps(value,separators=(',',':')));out.flush();os.fsync(out.fileno())
@@ -253,6 +291,20 @@ def failure_receipt(error):
 
 if __name__=='__main__':
     try:
+        if sys.argv[1:]==['--verify-activation']:
+            # No service restart or customer operation: attest only after the
+            # separately reviewed maintenance has loaded the installed code.
+            if os.geteuid()!=0:raise ValueError('SYSTEM_SECURITY_ROOT_REQUIRED')
+            if pathlib.Path('/var/lib/incudal-backup/recovery-hold.json').exists():raise ValueError('SYSTEM_SECURITY_RECOVERY_HELD')
+            fd=os.open('/var/lib/incudal-platform-operation.lock',os.O_RDWR|os.O_NOFOLLOW)
+            try:
+                info=os.fstat(fd)
+                if not stat.S_ISREG(info.st_mode)or info.st_uid!=0 or info.st_nlink!=1 or info.st_mode&0o077:raise ValueError('SYSTEM_SECURITY_UNTRUSTED_PATH')
+                fcntl.flock(fd,fcntl.LOCK_EX|fcntl.LOCK_NB)
+                value=inventory(all_loaded_code=True);persist(value,verify_activation=True)
+                print(json.dumps(value,separators=(',',':')))
+            finally:os.close(fd)
+            sys.exit(0)
         if sys.argv[1:]==['--record']:recover_service_policy()
         if sys.argv[1:]==['--apply']:value=apply_patches()
         else:value=inventory()
@@ -262,7 +314,7 @@ if __name__=='__main__':
         else:print(json.dumps(value,separators=(',',':')))
     except Exception as error:
         value=failure_receipt(error)
-        if sys.argv[1:]in [['--record'],['--apply']]:
+        if sys.argv[1:]in [['--record'],['--apply'],['--verify-activation']]:
             try:persist(value)
             except Exception:pass # Unsafe/unwritable state is never repaired implicitly.
         print(json.dumps(value,separators=(',',':')));sys.exit(1)

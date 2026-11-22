@@ -10,6 +10,12 @@
 
 预览45045980526已自然failure：双构建/双Incus/Agent准备过，原生230/230和双实际签名包/3461文件校验过；双首装在run_migrations失败（对readonly ENV_FILE临时赋值），六原worker在新backup installer失败exit64（旧PATH chown wrapper拒绝root retained runtime目录）。均已读每个固定job失败日志并定位源码：改env子进程传路径、不重赋readonly；保留runtime用/usr/bin/chown，不放宽原wrapper参数。新增真实Bash readonly回归、相关守卫480/system481过，split旧断言更新复验。没有重跑旧输入或正式Release；修复阶段后再新预览完整验。原本机任务2failed/迁移246保留，旧目录原helper封存复原后旧service已启动，17:05自然到期巡查执行；fixture只加DB连接30秒改善TCG预算，不能作为原版零故障证据。
 
+第二轮源码82238c8d预览45047726936已failure，双包/双Incus/Agent准备和230全量过，双首装已完成迁移后被Nodepreflight拒绝，六升级/回退启动同样失败。完整读取8个失败job：harden-database子进程继承service的NODE_OPTIONS回退预加载，`node -e`没有app入口却进入shim的pg定位而报错，被错误归类为版本未补丁。已把版本probe精确清环境PATH，无NODE_OPTIONS/注入，真实PG preflight在父级必报错preload下通过（dbpreflight525）；原补丁版本要求保持。诊断grep追加固定DB/auth/finance分类避免遗漏启动根因。不能把两轮双构建过写成首装/升级通过，修后第三轮继续。
+
+系统激活精修：新的--verify-activation只受root维护锁读取，全部hostPIDnamespace/可执行文件支持映射/256进程/5s预算确认补丁版本，无客户进程/路径/环境。准备阶段便持久待激活以覆盖中断，失败不丢计划；忽略正常/dev/zero、SYSV、memfd/JIT，旧library真正可执行映射仍拒。实际空客户VM重启后原10系统包已加载、无旧代码/重启待办，生成boot绑定回执（activation527）。新Linux测试拦变量覆盖并修，libraries529九项全过；已完成回执二次核验/定时刷新持久补修，activation536仍核终态，最新planner537过。此项不等于全部宿主自动patch/内核/真实OSS已闭环。
+
+activation536现自然退出0：最新完整映射扫描/同10包boot回执保留、再次核验/库存刷新全过；libraries538最新10项Linuxroot全过。已记录中途误判共享内存和变量覆盖、空字段/完成状态遗漏并精修，不抹失败日志。Nodepreflight与系统/升级专项521/531/532/537过，下一第三轮同源码完整包继续。
+
 2026-11-22接续补记：原公开v1.8.14 AMD64包在本机systemd VM已实际启动，唯一后端`/api/health`返回businessStartupReady=true、管理员存在、244迁移已完成（`security-systemd-lab140/current317.log`）。较早连接超时和组件目录检查失败保留原日志；当前目录root:root/0700及lock0600正确，不能据固定stage推断身份坏或修改权限。模拟器前置安装超过原systemd90秒默认，仅隔离观察增加10分钟fixture上限；不是产品修复证据，原worker升级仍待自然终态。
 
 本轮复审修复系统库存覆盖待激活状态：`system-security-inventory.py`按root私密receipt锁合并精确待激活包，定时刷新与后续无变更更新不能清除，失败/准备状态与待激活清单共同保留，兼容此前格式；不据安装版本宣称运行服务已装载补丁。六专项含真实root策略权限测试全过，原10项systemd补丁待激活receipt实际保留（`security-systemd-lab140/inventory328.log`），最新本机planner终态全过（`security-repair-planner329.log`）。激活完成的产品回执／全配套自动更新仍未闭环。
