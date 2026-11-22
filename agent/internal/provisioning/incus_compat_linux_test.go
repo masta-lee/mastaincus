@@ -488,4 +488,50 @@ func TestNativeCompatibilityEmptyPoolReload(t *testing.T) {
 		t.Fatal("same-permit daemon recovery not verified")
 	}
 	t.Log("PASS later exact daemon exit: stale status refused, original permit restarts same binary and verifies empty pool")
+	// Replace only the same bytes of a real mapped host library in this
+	// disposable root. The old daemon retains its deleted mapping until the
+	// authorized graceful reload; no guest or library content is changed.
+	library, err := filepath.EvalSymlinks("/lib/libssl.so.3")
+	if err != nil {
+		t.Fatal(err)
+	}
+	data, err := os.ReadFile(library)
+	if err != nil {
+		t.Fatal(err)
+	}
+	info, err := os.Stat(library)
+	if err != nil {
+		t.Fatal(err)
+	}
+	file, err := os.CreateTemp(filepath.Dir(library), ".incudal-library-fixture-*")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err = file.Chmod(info.Mode().Perm()); err == nil {
+		_, err = file.Write(data)
+	}
+	if err == nil {
+		err = file.Sync()
+	}
+	closeErr := file.Close()
+	if err != nil || closeErr != nil {
+		t.Fatal("library fixture publication", err, closeErr)
+	}
+	if err = os.Rename(file.Name(), library); err != nil {
+		t.Fatal(err)
+	}
+	status, request, _ = incusCompatibilityStatus(ctx)
+	if status != "needed" || request != p.RequestID {
+		t.Fatal("old mapped host library accepted as activated", status)
+	}
+	for n := 0; n < 2; n++ {
+		if err = prepareIncusCompatibility(ctx, p); err != nil {
+			t.Fatal("mapped host library automatic reload", err)
+		}
+	}
+	status, request, _ = incusCompatibilityStatus(ctx)
+	if status != "verified" || request != p.RequestID {
+		t.Fatal("mapped library reload not confirmed", status)
+	}
+	t.Log("PASS actual mapped OpenSSL library replacement: original permit graceful reloads same Incus binary; kernel peer and loaded code confirmed")
 }
