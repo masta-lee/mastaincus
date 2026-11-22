@@ -19,6 +19,18 @@ var securityLeaves = []string{"openssl", "libssl3", "libcrypto3", "curl", "libcu
 	"tar", "gzip", "xz", "squashfs-tools", "rsync", "libpsl", "libidn2", "libunistring", "c-ares", "brotli-libs", "nghttp2-libs"}
 var securityPackageVersionChange = regexp.MustCompile(`(?m)Upgrading ([a-zA-Z0-9+_.-]+) \(([0-9][a-zA-Z0-9+_.~-]*) -> ([0-9][a-zA-Z0-9+_.~-]*)\)`)
 var installedSecurityPackage = regexp.MustCompile(`^([a-zA-Z0-9+_.-]+)-([0-9][a-zA-Z0-9+_.~-]*)$`)
+var securityMajorVersion = regexp.MustCompile(`^([0-9]+)(?:\.|-r)`)
+var securityCertificateVersion = regexp.MustCompile(`^[0-9]{8}-r[0-9]+$`)
+
+func securitySameSeries(name, old, next string) bool {
+	// ca-certificates is a signed dated trust-store revision, not a program
+	// major. Ordering is still checked by apk before any mutation.
+	if name == "ca-certificates" {
+		return securityCertificateVersion.MatchString(old) && securityCertificateVersion.MatchString(next)
+	}
+	a, b := securityMajorVersion.FindStringSubmatch(old), securityMajorVersion.FindStringSubmatch(next)
+	return a != nil && b != nil && a[1] == b[1]
+}
 
 func securityInstalledPackages(output string) (map[string]string, error) {
 	packages := map[string]string{}
@@ -59,7 +71,7 @@ func safeSecurityPackagePlan(output string, before map[string]string) error {
 	}
 	for _, change := range securityPackageVersionChange.FindAllStringSubmatch(output, -1) {
 		old, ok := before[change[1]]
-		if !ok || !allowed[change[1]] || seen[change[1]] || old != change[2] || strings.Split(old, ".")[0] != strings.Split(change[3], ".")[0] {
+		if !ok || !allowed[change[1]] || seen[change[1]] || old != change[2] || !securitySameSeries(change[1], old, change[3]) {
 			return fmt.Errorf("unreviewed security package change refused")
 		}
 		seen[change[1]] = true

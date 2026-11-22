@@ -89,6 +89,16 @@ func TestSecurityPackageCompleteInventoryAndPinnedInstall(t *testing.T) {
 }
 
 func TestSecurityPackagePlanRejectsUnrelatedRemovalAndMajorChange(t *testing.T) {
+	for _, pair := range [][3]string{{"ca-certificates", "20261020-r0", "20261120-r0"}, {"libintl", "1-r0", "1-r1"}} {
+		if !securitySameSeries(pair[0], pair[1], pair[2]) {
+			t.Fatal("signed revision rejected", pair)
+		}
+	}
+	for _, pair := range [][3]string{{"openssl", "3.5.9-r0", "4.0.0-r0"}, {"ca-certificates", "20261020-r0", "unknown"}, {"libintl", "1-r0", "2-r0"}} {
+		if securitySameSeries(pair[0], pair[1], pair[2]) {
+			t.Fatal("unreviewed series accepted", pair)
+		}
+	}
 	before := map[string]string{"openssl": "3.5.7-r0", "curl": "8.16.0-r0"}
 	if err := safeSecurityPackagePlan("(1/1) Upgrading openssl (3.5.7-r0 -> 3.5.9-r0)", before); err != nil {
 		t.Fatal(err)

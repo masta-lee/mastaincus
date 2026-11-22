@@ -122,7 +122,8 @@ def patch_plan(output,installed,allowed):
         if not match:raise ValueError('SYSTEM_SECURITY_PLAN_REJECTED')
         name,old,new=match.groups()
         major=lambda v: re.match(r'(?:\d+:)?(\d+)',v).group(1) if re.match(r'(?:\d+:)?(\d+)',v)else None
-        if name not in allowed or installed.get(name)!=old or not major(old) or major(old)!=major(new):raise ValueError('SYSTEM_SECURITY_PLAN_REJECTED')
+        dated=name=='ca-certificates'and re.fullmatch(r'[0-9]{8}(?:[+~._-][a-zA-Z0-9.+~_-]+)?',old)and re.fullmatch(r'[0-9]{8}(?:[+~._-][a-zA-Z0-9.+~_-]+)?',new)
+        if name not in allowed or installed.get(name)!=old or not dated and (not major(old)or major(old)!=major(new)):raise ValueError('SYSTEM_SECURITY_PLAN_REJECTED')
         # Debian version ordering includes epochs, tildes and distro revisions;
         # a same-major comparison alone must never authorize a downgrade.
         check=subprocess.run(['dpkg','--compare-versions',new,'gt',old],capture_output=True,timeout=5)
