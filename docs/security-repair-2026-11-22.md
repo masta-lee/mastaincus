@@ -4,6 +4,8 @@
 
 ## 续接实施状态（2026-11-22，尚未完成）
 
+最新0b17fd1b已推，复审stage迁移child环境也设JITI_FS_CACHE=false防installed release内再生成代码cache，backup731/types731/build731自然0准备保存。第八45063248456（537source）双包/双Incus已过，候选Agent queued、首装/rootbackup完整待；旧31b CI45061369559余137327818869仍在途与3已读失败保持（700/713/716本机修），继续跟终态。E03/E04仍只有inventory/leaf安全patch/独立激活核验，完整全宿主服务及kernel策略未闭环，不谎称全修。正式发行/生产/完整OSS灾备保持未完成。
+
 最新复审补同owner-comment比较至preview/final restore的原始schema文件，两条路径保持同规则与SQLbody完整；初装密码传递去envargv，仅子shell导出给Python且peer psql仅固定PATH，真实PG721两次/错密码拒绝0。backup719/722/726、实际schema725、types724/build724/726自然0；本批保存待。第八45063248456当前537d3590原包在构建，尚未实际双首装/root恢复；新sourceCI45061369559原最后137327818869在途，adminemail/注册cleanup/deadline失败已700/713/716全修验证0但最终CI待。正式Release/生产、E03/E04全配套宿主自动patch/服务activation和实际OSS灾备仍未完成。
 
 最新第七45061365903终态failure、六旧worker全部success，双首装完整执行到backup比对仅schema失败（双708/711）。不同owner pg_dump→no-owner restore在真实PG709仅固定public-schema初始化注释差异，实际SQL一致；新schemaFingerprint只归一化表前精确生成注释、旧signed literal可匹配两原空行形态，保完整SQL/function，真实两份导出与column type篡改拒绝715过/backup715/types715/build715自然0。全表689自然完成只有实时logs新增差异，不与同snapshot产品备份证据混同。注册删除新JWT普通user session补713真实PG全过、admin-email700过；新Agent-upgrade-deadline16缺签名夹具已补实际Ed25519复制route716仍进行。新CI剩失败继续读；完整root restore/最终包/全配套宿主patch activation与实际OSS未完，正式发行不执行。

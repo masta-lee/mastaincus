@@ -146,7 +146,7 @@ export async function migrateBackupDatabase(app: string, database: string) {
   try {
     await exec('/usr/bin/node', [join(app, 'server/node_modules/prisma/build/index.js'), 'migrate', 'deploy'], {
       cwd: join(app, 'server'), uid:0, gid:0, timeout: 10 * 60 * 1000, maxBuffer: 1024 * 1024,
-      env: { PATH: '/usr/local/bin:/usr/bin:/bin', HOME: '/opt/incudal', NODE_ENV: 'production', DATABASE_URL: url.toString() }
+      env: { PATH: '/usr/local/bin:/usr/bin:/bin', HOME: '/opt/incudal', NODE_ENV: 'production', JITI_FS_CACHE:'false', DATABASE_URL: url.toString() }
     })
   } catch { throw new BackupError('OSS_BACKUP_MIGRATION_FAILED', 409) }
   await grantRestoredRuntime(database)

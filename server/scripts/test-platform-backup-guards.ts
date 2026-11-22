@@ -244,6 +244,8 @@ try {
   assert.equal(normalizedDumpHash(firstDump), normalizedDumpHash(nextDump))
   assert.notEqual(normalizedDumpHash(firstDump), normalizedDumpHash(nextDump.replace('CREATE ROLE example;', 'CREATE ROLE different;')))
   const dumpToolchain = { databaseVersion: '16.15 (Debian 16.15-1.pgdg13+2)', dumpVersion: '16.15 (Debian 16.15-1.pgdg13+2)' }
+  const databaseRuntime=await readFile(new URL('../src/services/platform-backup-database.ts',import.meta.url),'utf8')
+  assert.ok(databaseRuntime.includes("NODE_ENV: 'production', JITI_FS_CACHE:'false'"),'root staging migrations must not write executable TypeScript caches into the installed release')
   const publicBlock='\n--\n-- Name: public; Type: SCHEMA; Schema: -; Owner: -\n--\n\n-- *not* creating schema, since initdb creates it\n'
   const plain='SET row_security = off;\n\nSET default_table_access_method = heap;\nCREATE TABLE test(id integer);'
   const withPublic='SET row_security = off;\n'+publicBlock+'\nSET default_table_access_method = heap;\nCREATE TABLE test(id integer);'

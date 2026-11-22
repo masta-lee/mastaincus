@@ -1,5 +1,7 @@
 # 2026-11-22 两轮安全修复续接，仍在验收
 
+最新已推0b17fd1b（537结构等价+restore preview/final同规则/私密bootstrapargv），当前stage migration的JITI_FS_CACHE禁缓存补入口并backup731/types731/build731自然0，准备保存。第八45063248456双构建/双Incussuccess、候选Agent queued，首装/root恢复仍待；保该运行继续跟。原31bCI45061369559目前3失败（adminemail/注册cleanup/deadline）已本机700/713/716全修，余137327818869仍running，不能弃漏。第六/第七六原worker全部success；首装结构注释根因709/真实schema715/725已修，完整新包仍待。真实PG其他业务与1001state通过不替代root整体restore/实际OSS。E03/E04剩完整宿主依赖自动patch/加载与内核政策未完，正式Release/生产暂停。
+
 当前产品537d3590/Agent deadline夹具4f75d687均已推，第八45063248456（537d3590）双Incus/ARM包过、AMD仍在途。原sourceCI45061369559剩4非success：admin-email/注册清理/deadline3失败已全读且700/713/716真实回归0，分片4/137327818869仍running需继续核；第八首装/root恢复还没开始，不能宣称已过。复审补restore preview/final `verifyBackupCompatibility` rawSQLschema两路径也归一同固定comment；初装bootstrap去env命令argv密码、仅子shell导出并清query子进程env，真实PG721再次0。对应backup719/722/726、真实schema725、types724/build724/726自然全过，本批待保存。完整系统配套自动patch/activation/真实OSS仍缺。
 
 最新15c9aad6已推、第七45061365903已failure（六旧worker再次全success），双首装只schema=false、tables/sequence/largeobject=true，双708/711全日志读取。真实Linux不同DBowner709复现pg_dump只多public schema初始化注释，实际SQL一致；新精确前置注释归一化/旧原hash候选兼容、SQLtype篡改拒绝真实导出715过，backup715/type715/build715自然0，准备阶段保存。全表689结束，仅实时源日志新增差异1(logs)，不用于宣称共享snapshot已过；原客户无。新sourceCI45061369559后失败adminemail已700过；accountcleanup无真实用户session713过；upgrade-deadline缺publisher签名已补真实合成Ed25519复制route，716仍在途，必须跟。其它后续CI仍运行需继续查。E03/E04/root备份恢复全流程/实际OSS/最终新版双首装未完成，正式Release/生产暂停。
