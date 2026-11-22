@@ -6,6 +6,7 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"path/filepath"
 	"reflect"
 	"regexp"
 	"strings"
@@ -114,7 +115,23 @@ func repairSecurityPackages(ctx context.Context) error {
 	if len(requested) == 0 {
 		return nil
 	}
-	output, err := run(ctx, "apk", append([]string{"--simulate", "--no-cache", "--wait", "5", "upgrade"}, requested...)...)
+	// All stages reuse one root-private cache and the same signed index. Repeated
+	// --no-cache downloads waste the bounded repair window on slow small hosts.
+	cache, err := os.MkdirTemp("/var/lib/incudal-agent", ".security-packages-*")
+	if err != nil {
+		return err
+	}
+	defer os.RemoveAll(cache)
+	if filepath.Dir(cache) != "/var/lib/incudal-agent" {
+		return fmt.Errorf("security package cache invalid")
+	}
+	base := []string{"--cache-dir", cache, "--wait", "5"}
+	// apk --simulate intentionally never writes missing indexes, even with
+	// --update-cache. Fetch and verify them explicitly once before simulation.
+	if _, err = run(ctx, "apk", append(append([]string{}, base...), "update")...); err != nil {
+		return err
+	}
+	output, err := run(ctx, "apk", append(append([]string{}, base...), append([]string{"--simulate", "upgrade"}, requested...)...)...)
 	if err != nil {
 		return err
 	}
@@ -143,7 +160,7 @@ func repairSecurityPackages(ctx context.Context) error {
 	if err != nil || !reflect.DeepEqual(currentPackages, before) {
 		return fmt.Errorf("security package baseline changed")
 	}
-	actualPlan, err := run(ctx, "apk", append([]string{"--simulate", "--no-cache", "--wait", "5", "add"}, pinned...)...)
+	actualPlan, err := run(ctx, "apk", append(append([]string{}, base...), append([]string{"--simulate", "add"}, pinned...)...)...)
 	if err != nil {
 		return err
 	}
@@ -154,7 +171,7 @@ func repairSecurityPackages(ctx context.Context) error {
 	if !reflect.DeepEqual(expected, securityExpectedPackages(before, string(actualPlan))) {
 		return fmt.Errorf("security package install plan changed")
 	}
-	if _, err = run(ctx, "apk", append([]string{"--no-cache", "--wait", "5", "add"}, pinned...)...); err != nil {
+	if _, err = run(ctx, "apk", append(append([]string{}, base...), append([]string{"add"}, pinned...)...)...); err != nil {
 		return err
 	}
 	after, err := run(ctx, "apk", "info", "-v")
