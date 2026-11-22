@@ -238,6 +238,23 @@ def activation_verified(value,pending):
     packages=value.get('packages',{})
     return all(packages.get(name)==version for name,version in (item.split('=',1)for item in pending))
 
+def record_inventory():
+    # A timer cannot attest to a half-installed package set or overlap the
+    # restore/OTA/service maintenance lane. Busy means preserve the receipt,
+    # not overwrite a still-active patch plan with an incomplete observation.
+    if os.geteuid()!=0:raise ValueError('SYSTEM_SECURITY_ROOT_REQUIRED')
+    if pathlib.Path('/var/lib/incudal-backup/recovery-hold.json').exists():return
+    fd=os.open('/var/lib/incudal-platform-operation.lock',os.O_CREAT|os.O_RDWR|os.O_NOFOLLOW,0o600)
+    try:
+        info=os.fstat(fd)
+        if not stat.S_ISREG(info.st_mode)or info.st_uid!=0 or info.st_nlink!=1 or info.st_mode&0o077:raise ValueError('SYSTEM_SECURITY_UNTRUSTED_PATH')
+        try:fcntl.flock(fd,fcntl.LOCK_EX|fcntl.LOCK_NB)
+        except BlockingIOError:return
+        clean_service_policy()
+        value=inventory(all_loaded_code=True)
+        persist(value,verify_activation=True)
+    finally:os.close(fd)
+
 def persist(value,verify_activation=False):
     root=pathlib.Path('/var/lib/incudal-system-security')
     if os.geteuid()!=0:raise ValueError('SYSTEM_SECURITY_ROOT_REQUIRED')
@@ -264,12 +281,19 @@ def persist(value,verify_activation=False):
             value.setdefault('activationRequired',[])
         if verify_activation:
             pending=value.get('activationRequired',[])
-            if not pending and value.get('activationReceipt'):value['patchState']='activated'
+            # A past receipt is history, not proof after a later package change,
+            # service rollback, reboot or incomplete scan. Recheck its original
+            # targets as strictly as a newly installed patch on every refresh.
+            if not pending and value.get('activationReceipt'):
+                pending=value['activationReceipt'].get('packages',[])
+                if not isinstance(pending,list) or not pending or len(pending)>256 or any(not isinstance(item,str) or not re.fullmatch(r'[a-z0-9+.-]+=[^\s=\x00-\x1f]{1,200}',item)for item in pending):raise ValueError('SYSTEM_SECURITY_RECEIPT_INVALID')
             if pending and activation_verified(value,pending):
                 value['activationRequired']=[]
                 value['activationReceipt']={'packages':pending,'checkedAt':value['checkedAt'],'bootId':pathlib.Path('/proc/sys/kernel/random/boot_id').read_text().strip()}
                 value['patchState']='activated'
-            elif pending:value['patchState']='installed-activation-required'
+            elif pending:
+                value['activationRequired']=pending
+                value['patchState']='installed-activation-required'
         elif value.get('patchState') is None and previous.get('patchState')=='activated' and not value.get('activationRequired') and value.get('activationReceipt'):
             value['patchState']='activated'
         fd,name=tempfile.mkstemp(dir=root,prefix='.receipt-')
@@ -305,11 +329,11 @@ if __name__=='__main__':
                 print(json.dumps(value,separators=(',',':')))
             finally:os.close(fd)
             sys.exit(0)
-        if sys.argv[1:]==['--record']:recover_service_policy()
+        if sys.argv[1:]==['--record']:
+            record_inventory();sys.exit(0)
         if sys.argv[1:]==['--apply']:value=apply_patches()
         else:value=inventory()
-        if sys.argv[1:]==['--record']:persist(value)
-        elif sys.argv[1:]==['--apply']:print(json.dumps(value,separators=(',',':')))
+        if sys.argv[1:]==['--apply']:print(json.dumps(value,separators=(',',':')))
         elif sys.argv[1:]:raise ValueError('SYSTEM_SECURITY_ARGUMENT_INVALID')
         else:print(json.dumps(value,separators=(',',':')))
     except Exception as error:

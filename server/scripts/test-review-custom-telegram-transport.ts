@@ -10,6 +10,7 @@ assert.ok(['127.0.0.1', 'localhost', '[::1]'].includes(database.hostname) && dat
 process.env.NODE_ENV = 'test'
 const { prisma, closePrismaDatabase } = await import('../src/db/prisma.js')
 const { sendToChannel } = await import('../src/lib/notifier.js')
+const { sealNotificationConfig } = await import('../src/lib/notification-config.js')
 const originalFetch = globalThis.fetch, dispatcher = new Agent()
 const tag = 'custom-telegram-' + randomUUID()
 const sockets = new Set<Socket>(), perSocket = new Map<Socket, number>()
@@ -49,7 +50,7 @@ const channels: number[] = []
 async function fixture(mode: string) {
   const channel = await prisma.notificationChannel.create({ data: {
     userId: user.id, type: 'telegram', name: tag + '-' + mode, enabled: false,
-    config: { botToken: mode === 'missing' ? '' : 'fixture-' + mode, chatId: 'fixture-chat' }
+    config: sealNotificationConfig({ botToken: mode === 'missing' ? '' : 'fixture-' + mode, chatId: 'fixture-chat' })
   } })
   channels.push(channel.id); return channel
 }

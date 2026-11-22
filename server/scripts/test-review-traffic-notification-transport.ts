@@ -13,6 +13,7 @@ process.env.NODE_ENV = 'test'
 const { prisma, closePrismaDatabase } = await import('../src/db/prisma.js')
 const { sendTrafficWarningNotification: warning, sendTrafficThrottledNotification: throttle } = await import('../src/services/traffic-notifier.js')
 const { safeOutboundDispatcher } = await import('../src/lib/outbound-security.js')
+const { sealNotificationConfig } = await import('../src/lib/notification-config.js')
 const originalFetch = globalThis.fetch
 const tag = 'traffic-wire-' + randomUUID()
 const sockets = new Set<import('node:net').Socket>(), counts = new Map<string, number>(), durations = new Map<string, number[]>()
@@ -74,7 +75,7 @@ async function fixture(type: 'telegram' | 'discord', event: 'warning' | 'throttl
   const config = type === 'telegram' ? { botToken: `fixture-${event}_${mode}`, chatId: 'fixture-chat' } : { webhookUrl: mode === 'private'
     ? 'http://127.0.0.1/private' : mode.startsWith('rebind') ? `http://${rebindName}:${(server.address() as { port: number }).port}/private`
       : `https://8.8.8.8/discord/${event}/${mode}` }
-  const channel = await prisma.notificationChannel.create({ data: { userId: user.id, type, name: label, config } }); channels.push(channel.id)
+  const channel = await prisma.notificationChannel.create({ data: { userId: user.id, type, name: label, config: sealNotificationConfig(config) } }); channels.push(channel.id)
   return { channel, path: `/${type}/${event}/${mode}`, eventType: `traffic_${event}`, send: () => event === 'warning'
     ? warning(user.id, 80n, 100n, label) : throttle(user.id, label, label) }
 }

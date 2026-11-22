@@ -4,6 +4,8 @@
 
 ## 续接实施状态（2026-11-22，尚未完成）
 
+较新阶段e6a1123e16f55c8c0f3a89071199e2d77d19f57f已推，第十无tag45068751653同source双构建/Incus/候选Agent全success，双首装137354040606/610及六旧worker在途。对应源码CI45068741378的terminal-reconnect已实际Linux全部通过，随后traffic通知旧明文fixture失败137350689493日志789已读；同类customTelegram也改加密入库，实际PG/HTTP/custom790及traffic791自然0，三次总budget/私网/重绑定/八stall/无pending日志socket全过。E03/E04复审又发现历史activationReceipt在版本回退/旧库/不完整扫描后仍报activated，现每次计时器按实际版本、hostPIDnamespace映射/boot重验并受全局维护锁保护，不重启service/客户。Linuxroot11项793及原10包真实timer刷新794自然0，Windowsplanner792/安全guard792/type790全0。原dc73CI45066663875当前27success/2已修failure/1在途须查终态；阶段保存后继续，完整全服务/kernel自动patch仍未闭环，不正式发行/生产。
+
 2026-11-23第九45065735752终态failure，六原公开v1.8.14worker与双构建/Incus/候选Agent全部success。双首装backup与schema/tables/sequence/largeobject全比对已通过，后续演练直接将A的ENCRYPTION_KEY换为B，原wallet签名正确拒绝；smoke现在先确认空客户、停唯一backend、关闭旧PG池、保存A库，再用实际harden-database/migrate/唯一backend建立独立B管理员和auth/financialseal，保旧key拒绝负对照，随后实际rootrestore/rollback/resume。只修CI演练，不放宽产品签名；backup778守卫及type781过，完整新source预览待。当前dc73CI45066663875的pool0/5失败全日志779/782已读，terminal-reconnect旧虚构sid/缺固定TLS证书和creditSMTP明文夹具已修；实际PG780完整撤权/真实锁/20秒总budget/commit失败清理自然0，783充值/自动续费/邮件编号/并发与保留期边界自然0。Agent/四内存/SSH/双Incus配套CI全success，主CI仍24success/2failure/4pending须查终态；E03/E04全配套自动patch/服务/kernel激活仍未完。正式发行/生产/真实OSS灾备不执行。
 
 E03/E04新回执：Agent叶子补丁checked后每5min最多5sec读取host PIDnamespace可执行旧映射，客户namespace/共享memfd不采、路径/argv不回传，256host/1MiB每maps预算；旧code报activation-required、不完整报verification-pending，service/客户不操作、销售ready不依赖它。Linux759/766真正proc fixture、双编译/vet760/764/Windows762与backendtype758/build765/receipt765全0准备保存。仍缺全配套宿主patch/服务及kernel自动激活完整策略，未称E03/E04闭环。最终230第8全量228/230进行，原完整包第九45065735752双构建/Agentready成功首装/升级待，继续终态；不正式发行/生产。

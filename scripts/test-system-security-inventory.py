@@ -6,6 +6,18 @@ spec=importlib.util.spec_from_file_location('inventory',pathlib.Path(__file__).w
 module=importlib.util.module_from_spec(spec);spec.loader.exec_module(module)
 
 class Plans(unittest.TestCase):
+    @unittest.skipUnless(hasattr(os,'geteuid') and os.geteuid()==0,'requires Linux root and flock')
+    def test_timer_preserves_receipt_during_maintenance(self):
+        real_open=os.open
+        with tempfile.TemporaryDirectory(dir='/root')as folder:
+            lock=pathlib.Path(folder)/'operation.lock';lock.touch(mode=0o600)
+            held=os.open(lock,os.O_RDWR)
+            module.fcntl.flock(held,module.fcntl.LOCK_EX|module.fcntl.LOCK_NB)
+            def opened(path,*args,**kwargs):return real_open(lock if str(path)=='/var/lib/incudal-platform-operation.lock'else path,*args,**kwargs)
+            try:
+                with patch.object(module.os,'open',side_effect=opened),patch.object(module,'inventory')as inspect,patch.object(module,'persist')as persist:
+                    module.record_inventory();inspect.assert_not_called();persist.assert_not_called()
+            finally:os.close(held)
     def test_activation_requires_exact_packages_and_loaded_code(self):
         value={'packages':{'nginx':'1.26.3-3+deb13u11'},'restartRequired':False,'loadedCode':{'complete':True,'allHostProcesses':True,'processes':[]}}
         pending=['nginx=1.26.3-3+deb13u11']
@@ -18,13 +30,23 @@ class Plans(unittest.TestCase):
         real_path=module.pathlib.Path
         with tempfile.TemporaryDirectory(dir='/root')as folder:
             root=real_path(folder);status=root/'status.json'
-            receipt={'packages':['nginx=1.26.3'],'checkedAt':'2026-11-23T00:00:00Z','bootId':'synthetic'}
+            current={'version':1,'checkedAt':'2026-11-23T00:00:00Z','packages':{'nginx':'1.26.3'},'restartRequired':False,
+                'loadedCode':{'complete':True,'allHostProcesses':True,'processes':[]}}
+            receipt={'packages':['nginx=1.26.3'],'checkedAt':current['checkedAt'],'bootId':real_path('/proc/sys/kernel/random/boot_id').read_text().strip()}
             status.write_text(__import__('json').dumps({'activationReceipt':receipt,'activationRequired':[],'patchState':'activated'}));status.chmod(0o600)
             with patch.object(module.pathlib,'Path',side_effect=lambda value:root if str(value)=='/var/lib/incudal-system-security'else real_path(value)):
-                value={'version':1};module.persist(value,verify_activation=True)
+                value={**current};module.persist(value,verify_activation=True)
                 self.assertEqual(value['patchState'],'activated');self.assertEqual(value['activationRequired'],[])
                 value={'version':1};module.persist(value)
                 self.assertEqual(value['patchState'],'activated');self.assertEqual(value['activationReceipt'],receipt)
+                for delta in [{'restartRequired':True},{'packages':{'nginx':'1.26.2'}},{'loadedCode':{'complete':False,'allHostProcesses':True,'processes':[]}},
+                    {'loadedCode':{'complete':True,'allHostProcesses':True,'processes':[{'pid':12,'service':'nginx','replacedMappings':1}]}}]:
+                    value={**current,**delta};module.persist(value,verify_activation=True)
+                    self.assertEqual(value['patchState'],'installed-activation-required')
+                    self.assertEqual(value['activationRequired'],['nginx=1.26.3'])
+                    self.assertEqual(value['activationReceipt'],receipt,'failed verification retains the earlier historical receipt')
+                    value={**current};module.persist(value,verify_activation=True)
+                    self.assertEqual(value['patchState'],'activated');self.assertEqual(value['activationRequired'],[])
     def test_failed_query_receipt_redacts_exception(self):
         value=module.failure_receipt(ValueError('SYSTEM_SECURITY_CHECK_FAILED credential-internal-data'))
         self.assertEqual(value['error'],'SYSTEM_SECURITY_CHECK_FAILED')
