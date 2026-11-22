@@ -76,6 +76,9 @@ func TestCompatibilityRejectsPublishedBinaryWithOldRunningInode(t *testing.T) {
 		t.Fatal(err)
 	}
 	process := exec.Command(binary, "30")
+	// Alpine's /bin/sleep is a BusyBox applet selected by argv[0]. Retain
+	// that identity after copying it to the disposable Incus-named fixture.
+	process.Args[0] = "sleep"
 	if err = process.Start(); err != nil {
 		t.Fatal(err)
 	}
@@ -90,6 +93,9 @@ func TestCompatibilityRejectsPublishedBinaryWithOldRunningInode(t *testing.T) {
 	newBytes, err := os.ReadFile("/bin/true")
 	if err != nil {
 		t.Fatal(err)
+	}
+	if compatHash(newBytes) == compatHash(old) {
+		newBytes = append(newBytes, []byte("changed fixture bytes")...)
 	}
 	staged := filepath.Join(directory, "staged")
 	if err = os.WriteFile(staged, newBytes, 0755); err != nil {

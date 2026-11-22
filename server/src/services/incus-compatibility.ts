@@ -59,7 +59,7 @@ export async function incusCompatibilityPermit(agent:HostAgentRecord) {
   if(fence.version===1&&report.incusCompat==='pending'&&report.compatRequest!==fence.requestId)return null
   const reactivate=fence.version===1&&fence.phase==='verified'&&report.incusCompat==='needed'&&report.compatRequest===fence.requestId&&
    fence.hostIdentity===transferHostIdentity(host)&&fence.binaryHash===report.compatHash
-  if(fence.version===1&&(fence.phase==='prepared'&&report.incusCompat==='pending'||reactivate)&&report.compatRequest===fence.requestId&&fence.hostIdentity===transferHostIdentity(host)&&fence.binaryHash===report.compatHash){
+  if(fence.version===1&&(fence.phase==='prepared'&&['pending','needed'].includes(report.incusCompat)||reactivate)&&report.compatRequest===fence.requestId&&fence.hostIdentity===transferHostIdentity(host)&&fence.binaryHash===report.compatHash){
    // The daemon may be down after an interrupted reload. Waiting for its API
    // before returning the original permit would deadlock Agent recovery. The
    // authenticated Agent validates the saved daemon/guest journal locally;
