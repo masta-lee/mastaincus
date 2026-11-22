@@ -9,7 +9,27 @@ if [[ "$root" == /usr/local/libexec ]]; then
 fi
 root=$(readlink -f -- "$root")
 [[ "$root" == /opt/incudal || "$root" == /opt/incudal/releases/* ]] || { echo 'DATABASE_MIGRATION_RUNTIME_PATH_INVALID' >&2;exit 1; }
-[[ -d "$root" && $(stat -c %u "$root") == 0 && -z $(find "$root/server" -xdev \( -type f -o -type d \) \( ! -user root -o -perm /022 \) -print -quit) ]] || { echo 'DATABASE_MIGRATION_RUNTIME_UNTRUSTED' >&2;exit 1; }
+if [[ ! -d "$root" || $(stat -c %u "$root") != 0 || -n $(find "$root/server" -xdev \( -type f -o -type d \) \( ! -user root -o -perm /022 \) -print -quit) ]]; then
+  echo 'DATABASE_MIGRATION_RUNTIME_UNTRUSTED' >&2
+  # Classify the rejected tree without exposing certificate names or contents.
+  /usr/bin/python3 -I -B - "$root" <<'PY'
+import os,sys,stat
+from pathlib import Path
+root=Path(sys.argv[1]);print('DATABASE_MIGRATION_ROOT_METADATA',root.stat().st_uid,oct(stat.S_IMODE(root.stat().st_mode)),flush=True)
+count=0
+for parent,directories,files in os.walk(root/'server',followlinks=False):
+    for name in ['',*files]:
+        path=Path(parent)/name
+        info=path.lstat()
+        if stat.S_ISLNK(info.st_mode) or not (stat.S_ISREG(info.st_mode)or stat.S_ISDIR(info.st_mode)):continue
+        if info.st_uid==0 and not info.st_mode&0o022:continue
+        relative=path.relative_to(root/'server');category=relative.parts[0]if relative.parts and relative.parts[0]in ['certs','node_modules','dist','prisma','templates']else 'other'
+        print('DATABASE_MIGRATION_REJECTED_METADATA',category,info.st_uid,oct(stat.S_IMODE(info.st_mode)),flush=True)
+        count+=1
+        if count>=8:raise SystemExit(0)
+PY
+  exit 1
+fi
 env_file="${ENV_FILE:-/opt/incudal/.env}"
 stage=environment
 [[ $EUID -eq 0 && -f "$env_file" && ! -L "$env_file" && $(stat -c %u "$env_file") == 0 ]] || { echo 'DATABASE_MIGRATION_ENVIRONMENT_UNTRUSTED' >&2;exit 1; }
