@@ -213,9 +213,13 @@ def apply_patches():
     if lock.is_symlink() or lock.stat().st_uid!=0 or lock.stat().st_mode&0o077:raise ValueError('SYSTEM_SECURITY_UNTRUSTED_PATH')
     fd=os.open('/var/lib/incudal-platform-operation.lock',os.O_CREAT|os.O_NOFOLLOW|os.O_RDWR,0o600)
     info=os.fstat(fd)
-    if info.st_uid!=0 or info.st_nlink!=1 or info.st_mode&0o077:os.close(fd);raise ValueError('SYSTEM_SECURITY_UNTRUSTED_PATH')
+    if not stat.S_ISREG(info.st_mode)or info.st_uid!=0 or info.st_nlink!=1 or info.st_mode&0o077:os.close(fd);raise ValueError('SYSTEM_SECURITY_UNTRUSTED_PATH')
     try:
         fcntl.flock(fd,fcntl.LOCK_EX|fcntl.LOCK_NB)
+        if pathlib.Path('/var/lib/incudal-backup/recovery-hold.json').exists():raise ValueError('SYSTEM_SECURITY_RECOVERY_HELD')
+        # Recheck installed versions after owning the maintenance lane. A
+        # concurrent authorized updater may have completed since discovery.
+        value=inventory()
         clean_service_policy()
         command(['apt-get','-o','Acquire::AllowInsecureRepositories=false','-o','Acquire::AllowDowngradeToInsecureRepositories=false','-o','Acquire::AllowWeakRepositories=false','update'],180)
         names=sorted(set(value['packages'])&allowed)
