@@ -19,7 +19,7 @@ const { adminUserEmail, parseAdminEmail } = await import('../src/services/admin-
 const { default: routes } = await import('../src/routes/users.js')
 const { createUser, get2FAMutationState, updateUserProfileIfCurrent, resetPasswordWithEmailVerification } = await import('../src/db/users.js')
 const { createVerificationCode, hasPendingCode } = await import('../src/db/email-verification.js')
-const { isAccessTokenInvalidated } = await import('../src/lib/security.js')
+const { isAccessTokenInvalidated,generateRefreshToken,getRefreshTokenSessionId } = await import('../src/lib/security.js')
 const { containsDangerousChars } = await import('../src/lib/security.js')
 const { advisoryTransactionLockString, EMAIL_VERIFICATION_LOCK_NAMESPACE } = await import('../src/db/advisory-locks.js')
 const { recoveryHeld } = await import('../src/services/platform-backup-core.js')
@@ -31,7 +31,9 @@ const target = await prisma.user.create({ data: { username: tag, email: oldEmail
   twoFactorEnabled: true, twoFactorSecret: 'fixture-unchanged', twoFactorRecoveryCodes: 'fixture-unchanged' } })
 const other = await prisma.user.create({ data: { username: `${tag}-other`, passwordHash: 'fixture-only' } })
 const ids = [admin.id, target.id, other.id]
-const actor = { id: admin.id, sid: tag, iat: Math.floor(Date.now() / 1000) + 1 }
+const sessionIds=new Map<number,string>()
+for(const account of [admin,target,other])sessionIds.set(account.id,getRefreshTokenSessionId(await generateRefreshToken(account.id,account.username,account.role as 'user'|'admin')))
+const actor = { id: admin.id, sid: sessionIds.get(admin.id)!, iat: Math.floor(Date.now() / 1000) + 1 }
 const source = readFileSync(new URL('../src/app.ts', import.meta.url), 'utf8')
 const start = source.indexOf('async function ensureActiveAccessToken('), end = source.indexOf('// 注意: 安全响应头', start)
 assert.ok(start >= 0 && end > start)
@@ -41,7 +43,7 @@ new Function('fastify', 'prisma', 'isAccessTokenInvalidated', 'recoveryHeld', 'v
   ts.transpileModule(source.slice(start, end), { compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.None } }).outputText
 )(app, prisma, isAccessTokenInvalidated, recoveryHeld, validateRecoverySession)
 await app.register(routes, { prefix: '/api/users' })
-const token = (id = admin.id, extra: Record<string, unknown> = {}) => app.jwt.sign({ ...actor, id, role: 'admin', username: tag, ...extra })
+const token = (id = admin.id, extra: Record<string, unknown> = {}) => app.jwt.sign({ ...actor, id, sid:sessionIds.get(id), role: 'admin', username: tag, ...extra })
 const valid = token()
 const headers = { authorization: `Bearer ${valid}`, origin: process.env.ADMIN_FRONTEND_URL }
 const url = `/api/users/${target.id}/admin-email`
