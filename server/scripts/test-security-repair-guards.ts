@@ -50,6 +50,14 @@ const oauth=await readFile(new URL('../src/lib/oauth-provider.ts',import.meta.ur
 assert.ok(oauth.includes('WHERE code_hash=${codeHash} FOR UPDATE')&&oauth.includes('WHERE token_hash=${refreshTokenHash} FOR UPDATE'))
 const retained=await readFile(new URL('../../scripts/install-platform-backup.sh',import.meta.url),'utf8')
 const ownership=await readFile(new URL('../../deploy/incudal-online-task.sh.example',import.meta.url),'utf8')
+for(const file of ['ci','agent-release','alpine-ssh-security','host-memory-native','incus-sysinfo-native']){
+  const workflow=await readFile(new URL('../../.github/workflows/'+file+'.yml',import.meta.url),'utf8')
+  assert.ok(workflow.includes("cancel-in-progress: ${{ github.event_name == 'pull_request' }}")&&workflow.includes('github.event.pull_request.number || github.run_id'),
+    'only superseded PR validation may be automatically cancelled; independent previews and publication retain unique run ownership')
+  assert.ok(!workflow.includes('group: ${{ github.workflow }}'),'a reusable build inherits caller workflow; shared concurrency groups can cancel their own caller')
+}
+const reusableBuild=await readFile(new URL('../../.github/workflows/incus-sysinfo-compat.yml',import.meta.url),'utf8')
+assert.ok(!/^concurrency:/m.test(reusableBuild),'shared reusable builds must not cancel independent caller runs for the same PR')
 assert.ok(ownership.includes('if [[ "$app_dir" == "$INSTALL_DIR" ]]; then'),'an existing releases folder cannot skip active flat runtime hardening')
 const systemPackages=await readFile(new URL('../../scripts/system-security-inventory.py',import.meta.url),'utf8')
 assert.ok(systemPackages.includes('Acquire::AllowWeakRepositories=false')&&systemPackages.includes('APT::Get::AllowUnauthenticated=false'),'administrator APT settings cannot bypass package authentication in a security update')

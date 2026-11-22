@@ -1,4 +1,8 @@
 name: Alpine SSH security
+
+concurrency:
+  group: payincus-ssh-${{ github.event_name }}-${{ github.event.pull_request.number || github.run_id }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 on:
   push:
     branches: [main, dev, codex/alpine-ssh-security]
