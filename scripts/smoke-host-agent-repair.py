@@ -10,6 +10,7 @@ import json
 import os
 from pathlib import Path
 import secrets
+import ssl
 import subprocess
 import sys
 import tempfile
@@ -53,23 +54,28 @@ class Receiver(BaseHTTPRequestHandler):
             old_seen.set()
         self.send_response(200 if valid else 401)
         self.send_header('Content-Type', 'application/json')
+        nonce=self.headers.get('x-incudal-nonce','')
+        self.send_header('x-incudal-response-signature',hmac.new(secret.encode(),b'payincus/agent-response/v1\n'+nonce.encode()+b'\n{}',hashlib.sha256).hexdigest())
         self.end_headers()
         self.wfile.write(b'{}')
 
 
 receiver = ThreadingHTTPServer(('127.0.0.1', 0), Receiver)
-threading.Thread(target=receiver.serve_forever, daemon=True).start()
 with tempfile.TemporaryDirectory(prefix='agent-service-repair-', dir='/root') as directory:
+    tls_key=Path(directory)/'panel.key';tls_cert=Path(directory)/'panel.crt'
+    subprocess.run(['openssl','req','-x509','-newkey','rsa:2048','-nodes','-days','1','-subj','/CN=127.0.0.1','-addext','subjectAltName=IP:127.0.0.1','-keyout',str(tls_key),'-out',str(tls_cert)],check=True,stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL)
+    tls=ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER);tls.load_cert_chain(tls_cert,tls_key);receiver.socket=tls.wrap_socket(receiver.socket,server_side=True)
+    threading.Thread(target=receiver.serve_forever, daemon=True).start()
     customer = Path(directory) / 'customer.img'
     customer.write_bytes(b'customer fixture remains untouched')
     try:
         config.parent.mkdir(mode=0o700)
-        config.write_text(f'panel_url: "http://127.0.0.1:{receiver.server_port}"\nagent_id: "{old_id}"\n'
+        config.write_text(f'panel_url: "https://127.0.0.1:{receiver.server_port}"\nagent_id: "{old_id}"\n'
                           f'agent_secret: "ias_{secrets.token_urlsafe(32)}"\nheartbeat_interval_seconds: 30\n')
         config.chmod(0o600)
         node.write_text('11111111-1111-4111-8111-111111111111\n'); node.chmod(0o600)
         unit.write_text('[Unit]\nDescription=Disposable Agent repair test\n[Service]\nType=simple\n'
-                        f'ExecStart={binary}\nRestart=no\n')
+                        f'Environment=SSL_CERT_FILE={tls_cert}\nExecStart={binary}\nRestart=no\n')
         subprocess.run(['systemctl', 'daemon-reload'], check=True)
         subprocess.run(['systemctl', 'start', 'incudal-agent'], check=True)
         assert old_seen.wait(40), 'real Agent did not send old credentials'

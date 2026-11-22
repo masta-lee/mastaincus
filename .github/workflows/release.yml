@@ -392,7 +392,8 @@ jobs:
 
   legacy-upgrade:
     name: 旧版在线升级验证 (${{ matrix.arch }}, ${{ matrix.scenario }})
-    needs: build
+    needs: [build, preview-agent]
+    if: always() && needs.build.result == 'success' && (github.ref_type == 'tag' || needs.preview-agent.result == 'success')
     runs-on: ${{ matrix.runner }}
     timeout-minutes: 30
     strategy:
@@ -426,6 +427,11 @@ jobs:
           pattern: incudal-*-linux-${{ matrix.arch }}
           path: upgrade-artifact
           merge-multiple: true
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        if: github.ref_type != 'tag'
+        with:
+          name: incudal-preview-agent
+          path: preview-agent
       - name: 下载并校验原v1.8.14发行包
         env:
           GH_TOKEN: ${{ github.token }}
@@ -436,7 +442,9 @@ jobs:
         run: |
           package=$(find "$PWD/upgrade-artifact" -maxdepth 1 -name '*.tar.gz' -type f)
           test "$(printf '%s\n' "$package" | wc -l)" = 1
-          sudo env GITHUB_ACTIONS=true RUNNER_ENVIRONMENT=github-hosted INCUDAL_AGENT_RELEASE_TOKEN=${{ github.token }} \
+          preview_agent=''
+          if [[ '${{ github.ref_type }}' != tag ]]; then preview_agent="$PWD/preview-agent"; fi
+          sudo env GITHUB_ACTIONS=true RUNNER_ENVIRONMENT=github-hosted INCUDAL_AGENT_RELEASE_TOKEN=${{ github.token }} INCUDAL_PREVIEW_AGENT_DIR="$preview_agent" \
             bash scripts/smoke-legacy-online-upgrade.sh "$package" "$PWD/old-artifact/incudal-v1.8.14-linux-${{ matrix.arch }}.tar.gz" '${{ matrix.scenario }}'
 
   # ===== 首装与旧版升级验证成功后才发布 Release =====

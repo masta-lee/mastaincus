@@ -56,7 +56,7 @@ for name in ['/var/tmp/incudal-fresh-install.log', '/var/tmp/incudal-fresh-servi
             text = text.replace(secret, '[redacted]')
         print(text)
 import stat
-for name in ['/opt', '/opt/incudal', '/opt/incudal/vendor', '/opt/incudal/vendor/gateway', '/opt/incudal/vendor/gateway/catalog.json', '/opt/incudal/version.json', '/opt/incudal/server/package.json']:
+for name in ['/opt', '/opt/incudal', '/opt/incudal/current', '/opt/incudal/server', '/opt/incudal/server/node_modules/prisma/build/index.js', '/var/lib/incudal-database', '/var/lib/incudal-database/migration.url', '/opt/incudal/vendor', '/opt/incudal/vendor/gateway', '/opt/incudal/vendor/gateway/catalog.json', '/opt/incudal/version.json', '/opt/incudal/server/package.json']:
     path = pathlib.Path(name)
     try:
         info = path.lstat()

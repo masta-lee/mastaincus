@@ -51,6 +51,8 @@ const systemUpdateTasksDb = read('server/src/db/system-update-tasks.ts')
 const rootPackage = read('package.json')
 const serverPackage = read('server/package.json')
 const freshInstall = read('scripts/smoke-fresh-install.sh')
+const legacyUpgrade=read('scripts/smoke-legacy-online-upgrade.sh')
+assert.ok(releaseWorkflow.includes('needs: [build, preview-agent]')&&legacyUpgrade.includes('INCUDAL_AGENT_RELEASE_DIR=/opt/incudal/agent-release'),'old-worker preview must use the same signed Agent artifacts verified by the candidate backend')
 const managementScript = releaseWorkflow.slice(releaseWorkflow.indexOf("cat > release/incudal.sh"), releaseWorkflow.indexOf('chmod +x release/incudal.sh'))
 assert.ok(managementScript.includes('exec /usr/bin/systemctl start incudal-backend') &&
   managementScript.includes('exec /usr/bin/bash "$APP_DIR/scripts/migrate-database.sh"') &&

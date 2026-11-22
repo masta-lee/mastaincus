@@ -56,7 +56,7 @@ jobs:
           assert m['lifecycleSourceSha256']=='819e0462aa64e4147520a8686b55f52f2ca6761b69fdb6058e8caa946741f637'
           assert m['memorySourceSha256']=='56b95831a97677406958326f0a2d42a1aebc4589ebab8c616d9e735df2194f63'
           assert m['memoryNamespaceSourceSha256']=='917e33a02226b436dd6724c59fdc04735cc7958a1ffa33bd80f5084b39fa2ed1'
-          assert m['securityModulesScriptSha256']=='3ebef435a855ff03f23eb330ee8749036aae9d9d8cc467167c91b3ae5d9d465a'
+          assert m['securityModulesScriptSha256']=='025e7a6456f97e4b28fad8d2d2b437cc177452001e65248345158f914f07c4a3'
           assert m['memoryRaftSourceSha256']=='08af4c3ed863c1b7ce25d95aed06ab6ac9eb4d8e95f1c5884b7f699ab6151dce'
           assert m['memoryBuildDefault']=='disablethp=1' and m['memoryBudgetRevision']=='daemon-memory-v3'
           assert hashlib.sha256(b).hexdigest()==m['sha256'] and len(b)==m['size']

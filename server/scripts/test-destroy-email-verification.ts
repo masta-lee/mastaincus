@@ -1,6 +1,10 @@
 import assert from 'node:assert/strict'
 import crypto, { randomUUID } from 'node:crypto'
-import { createServer } from 'node:net'
+import { createServer } from 'node:tls'
+import { execFileSync } from 'node:child_process'
+import { mkdtemp,readFile,rm } from 'node:fs/promises'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
 import Fastify from 'fastify'
 
 const database = new URL(process.env.DATABASE_URL || '')
@@ -12,12 +16,19 @@ const { requestDestroyEmailVerification: requestCode, claimDestroyEmailVerificat
 const { default: routes } = await import('../src/routes/instance-destroy.js')
 const { clearTransporterCache } = await import('../src/lib/mailer.js')
 const { invalidateAllConfigCache } = await import('../src/lib/config-cache.js')
+const {encryptSensitiveData}=await import('../src/lib/security.js')
 const { isOperationVerified, claimOperationVerificationRequirement, verifyOperationCode, requestOperationVerification, consumeOperationVerification } = await import('../src/lib/operation-verification.js')
 const tag = 'destroy-email-' + randomUUID().slice(0, 8)
 const messages: string[] = []
+const tlsFolder=await mkdtemp(join(tmpdir(),'destroy-email-tls-')),tlsKey=join(tlsFolder,'key.pem'),tlsCertificate=join(tlsFolder,'cert.pem')
+execFileSync(process.env.REVIEW_OPENSSL||(process.platform==='win32'?'C:/Program Files/Git/usr/bin/openssl.exe':'openssl'),['req','-x509','-newkey','rsa:2048','-nodes','-days','1','-subj','/CN=127.0.0.1','-addext','subjectAltName=IP:127.0.0.1','-keyout',tlsKey,'-out',tlsCertificate],{stdio:'pipe',windowsHide:true})
+const {rootCertificates}=await import('node:tls');const nodemailer=(await import('nodemailer')).default
+const originalTransport=nodemailer.createTransport.bind(nodemailer)
+const fixtureCertificate=await readFile(tlsCertificate,'utf8')
+nodemailer.createTransport=((options:any)=>originalTransport({...options,tls:{...options.tls,ca:[...rootCertificates,fixtureCertificate]}})) as typeof nodemailer.createTransport
 const sockets = new Set<import('node:net').Socket>()
 let refuseMail = false
-const smtp = createServer(socket => {
+const smtp = createServer({key:await readFile(tlsKey),cert:fixtureCertificate},socket => {
   sockets.add(socket); socket.on('close', () => sockets.delete(socket)); socket.setEncoding('utf8')
   socket.write('220 isolated SMTP\r\n')
   let buffer = '', data = false, message = ''
@@ -42,7 +53,7 @@ const smtp = createServer(socket => {
 })
 await new Promise<void>(resolve => smtp.listen(0, '127.0.0.1', resolve))
 const port = (smtp.address() as { port: number }).port
-const config = { smtp_enabled: 'true', smtp_host: '127.0.0.1', smtp_port: String(port), smtp_secure: 'false',
+const config = { smtp_enabled: 'true', smtp_host: '127.0.0.1', smtp_port: String(port), smtp_secure: 'true',
   smtp_username: 'isolated', smtp_password: 'isolated-password', smtp_from_email: 'sender@example.test' }
 const saved = await prisma.systemConfig.findMany({ where: { key: { in: Object.keys(config) } } })
 const users = await Promise.all(['a', 'b'].map(letter => prisma.user.create({ data: {
@@ -70,7 +81,10 @@ app.decorate('authenticateUser', async (request: any) => { request.user = { ...a
 let failure: unknown
 const originalRandom = crypto.randomInt
 try {
-  for (const [key, value] of Object.entries(config)) await prisma.systemConfig.upsert({ where: { key }, create: { key, value }, update: { value } })
+  for (const [key, plaintext] of Object.entries(config)) {
+    const value=key==='smtp_password'?encryptSensitiveData(plaintext):plaintext
+    await prisma.systemConfig.upsert({ where: { key }, create: { key, value }, update: { value } })
+  }
   invalidateAllConfigCache(); clearTransporterCache()
   await app.register(routes, { prefix: '/instances' }); await app.ready()
   assert.equal((await app.inject({ method: 'POST', url: `/instances/${a}/destroy` })).statusCode, 400)
@@ -80,6 +94,7 @@ try {
   let allocation = 0
   crypto.randomInt = ((...args: any[]) => ++allocation <= 2 ? 123456 : (originalRandom as any)(...args)) as typeof crypto.randomInt
   const results = await Promise.all([requestCode(actors[0], [a]), requestCode(actors[1], [b])])
+  if(results.some(result=>!result.success))console.error('Destroy email failure codes',results.map(result=>result.success?'success':result.code))
   crypto.randomInt = originalRandom
   assert.ok(results.every(result => result.success), 'concurrent A/B mail request succeeds')
   const codeA = codeFor(users[0].email!), codeB = codeFor(users[1].email!)
@@ -151,6 +166,7 @@ try {
 finally {
   crypto.randomInt = originalRandom
   await app.close(); clearTransporterCache()
+  nodemailer.createTransport=originalTransport
   for (const socket of sockets) socket.destroy()
   await new Promise<void>(resolve => smtp.close(() => resolve()))
   await prisma.instance.deleteMany({ where: { id: { in: machines.map(machine => machine.id) } } })
@@ -162,6 +178,7 @@ finally {
     else await prisma.systemConfig.deleteMany({ where: { key } })
   }
   invalidateAllConfigCache(); await closePrismaDatabase()
+  await rm(tlsFolder,{recursive:true,force:true})
 }
 if (failure) throw failure
 process.exit(0)

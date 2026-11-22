@@ -7,6 +7,7 @@ import json
 import os
 import pathlib
 import secrets
+import ssl
 import subprocess
 import threading
 import time
@@ -73,6 +74,7 @@ class Panel(http.server.BaseHTTPRequestHandler):
             self.send_response(200)
             self.send_header('content-type', 'application/json')
             self.send_header('content-length', str(len(encoded)))
+            self.send_header('x-incudal-response-signature',hmac.new(secret.encode(),b'payincus/agent-response/v1\n'+nonce.encode()+b'\n'+encoded,hashlib.sha256).hexdigest())
             self.end_headers()
             self.wfile.write(encoded)
         except Exception:
@@ -152,12 +154,15 @@ incus('exec', 'memory-customer', '--', 'sh', '-c', 'printf preserved >/root/memo
 incus('file', 'push', '--mode=0700', '/out/memory-holder', 'memory-customer/root/memory-holder')
 P('/etc/incudal-onboarding-id').write_text('disposable-native-memory\n')
 server = http.server.ThreadingHTTPServer(('127.0.0.1', 0), Panel)
+tls_key=root/'panel.key';tls_cert=root/'panel.crt'
+subprocess.run(['openssl','req','-x509','-newkey','rsa:2048','-nodes','-days','1','-subj','/CN=127.0.0.1','-addext','subjectAltName=IP:127.0.0.1','-keyout',str(tls_key),'-out',str(tls_cert)],check=True,stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL)
+tls=ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER);tls.load_cert_chain(tls_cert,tls_key);server.socket=tls.wrap_socket(server.socket,server_side=True)
 threading.Thread(target=server.serve_forever, daemon=True).start()
 config = root / 'config.yaml'
-config.write_text(f'panel_url: http://127.0.0.1:{server.server_port}\nagent_id: disposable-memory\nagent_secret: {secret}\nheartbeat_interval_seconds: 30\n')
+config.write_text(f'panel_url: https://127.0.0.1:{server.server_port}\nagent_id: disposable-memory\nagent_secret: {secret}\nheartbeat_interval_seconds: 30\n')
 config.chmod(0o600)
 log = (root / 'agent.log').open('w')
-agent = subprocess.Popen(['/out/incudal-agent', '--config', str(config)], stdout=log, stderr=log)
+agent = subprocess.Popen(['/out/incudal-agent', '--config', str(config)], stdout=log, stderr=log,env={**os.environ,'SSL_CERT_FILE':str(tls_cert)})
 holder = None
 try:
     deadline = time.monotonic() + 120

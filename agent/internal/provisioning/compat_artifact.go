@@ -57,7 +57,7 @@ func validateCompatibilityArtifact(files fs.FS, arch string) (compatManifest, er
 		manifest.MemorySourceSha256 != "56b95831a97677406958326f0a2d42a1aebc4589ebab8c616d9e735df2194f63" ||
 		manifest.MemoryNamespaceSourceSha256 != "917e33a02226b436dd6724c59fdc04735cc7958a1ffa33bd80f5084b39fa2ed1" ||
 		manifest.MemoryRaftSourceSha256 != "08af4c3ed863c1b7ce25d95aed06ab6ac9eb4d8e95f1c5884b7f699ab6151dce" ||
-		manifest.SecurityModulesScriptSha256 != "3ebef435a855ff03f23eb330ee8749036aae9d9d8cc467167c91b3ae5d9d465a" ||
+		manifest.SecurityModulesScriptSha256 != "025e7a6456f97e4b28fad8d2d2b437cc177452001e65248345158f914f07c4a3" ||
 		manifest.MemoryBuildDefault != "disablethp=1" || manifest.MemoryBudgetRevision != "daemon-memory-v3" ||
 		manifest.Size < 20 || manifest.Size > compatMaxBinaryBytes || len(manifest.SHA256) != 64 {
 		return manifest, fmt.Errorf("compatibility manifest invalid")

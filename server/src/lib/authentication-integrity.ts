@@ -321,7 +321,9 @@ function includesAuthentication(model: string, args: any): boolean {
   })
 }
 export function protectAuthenticationClient(raw: PrismaClient): PrismaClient {
-  const transaction = (action: (db: Db) => Promise<any>, options?: any) => raw.$transaction(async db => {
+  const nativeTransaction=raw.$transaction.bind(raw)
+  const overrides=new Map<PropertyKey,any>()
+  const transaction = (action: (db: Db) => Promise<any>, options?: any) => nativeTransaction(async db => {
     const state: State = new Map(), result = await action(wrappedTransaction(db, state))
     for (const { model, id } of state.values()) {
       const row = await (db as any)[model].findUnique({ where: { id } })
@@ -331,11 +333,12 @@ export function protectAuthenticationClient(raw: PrismaClient): PrismaClient {
     return result
   }, {maxWait:5000,timeout:30000,...options})
   return new Proxy(raw, { get(target, property) {
+    if(overrides.has(property))return overrides.get(property)
     if (property === '$transaction') return (action: any, options?: any) => {
-      if (!enabled) return (raw.$transaction as any)(action, options)
+      if (!enabled) return (nativeTransaction as any)(action, options)
       if (Array.isArray(action)) {
         if (action.some(value => value?.authenticationOperation)) throw new AuthenticationIntegrityError()
-        return (raw.$transaction as any)(action, options)
+        return (nativeTransaction as any)(action, options)
       }
       return transaction(action, options)
     }
@@ -368,5 +371,5 @@ export function protectAuthenticationClient(raw: PrismaClient): PrismaClient {
         return { authenticationOperation: true, [Symbol.toStringTag]: 'PrismaPromise', then: (ok: any, fail: any) => run().then(ok, fail), catch: (fail: any) => run().catch(fail), finally: (action: any) => run().finally(action) }
       }
     } })
-  } }) as PrismaClient
+  },set(_target,property,value){overrides.set(property,value);return true} }) as PrismaClient
 }

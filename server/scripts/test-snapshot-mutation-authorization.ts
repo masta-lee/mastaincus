@@ -17,6 +17,7 @@ const { loadAuthorizedOperationVerificationResource } = await import('../src/db/
 const { notificationOperationVerificationBinding } = await import('../src/db/operation-verification-binding.js')
 const { invalidateAllConfigCache } = await import('../src/lib/config-cache.js')
 const { clearTransporterCache } = await import('../src/lib/mailer.js')
+const {sealNotificationConfig}=await import('../src/lib/notification-config.js')
 const tag = 'snapshot-auth-' + randomUUID(), sid = randomUUID(), iat = Math.floor(Date.now() / 1000) + 10
 const root = await mkdtemp(join(tmpdir(), tag)), keyPath = join(root, 'key.pem'), certPath = join(root, 'cert.pem')
 execFileSync(process.env.REVIEW_OPENSSL || 'openssl', ['req', '-x509', '-newkey', 'rsa:2048', '-nodes', '-days', '1', '-subj', '/CN=snapshot-fixture', '-addext', 'subjectAltName=IP:127.0.0.1', '-keyout', keyPath, '-out', certPath], { stdio: 'pipe', windowsHide: true })
@@ -174,7 +175,7 @@ try {
     assert.equal(result.statusCode, op === 'create' ? 201 : 200, result.body)
   }
   await reset()
-  const channel = await prisma.notificationChannel.create({ data: { userId: owner.id, name: tag, type: 'email', config: { email: 'snapshot-fixture@example.test' } } })
+  const channel = await prisma.notificationChannel.create({ data: { userId: owner.id, name: tag, type: 'email', config: sealNotificationConfig({ email: 'snapshot-fixture@example.test' }) } })
   const actor = { id: owner.id, sid, iat }
   const resource = await prisma.$transaction(tx => loadAuthorizedOperationVerificationResource(tx, actor, 'delete_snapshot', snapshotId))
   if (resource.kind !== 'allowed') throw Error('isolated snapshot grant target unavailable')

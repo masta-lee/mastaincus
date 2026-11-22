@@ -1,5 +1,9 @@
 # 2026-11-22 两轮安全修复续接，仍在验收
 
+2026-11-23最新接续：当前已推源码`2bcb2dc5`，草稿[PR19](https://github.com/mastalee928/payincus/pull/19)。第三预览[45049591755](https://github.com/mastalee928/payincus/actions/runs/45049591755)已自然failure，全部8失败job日志查清：双首装在DB角色准备后启动助手exit1，具体根因仍待新增分类/运行目录诊断；六旧升级实际到了生产Agent清单检查，未发布候选Agent输入404，原回退日志成功。新预览补同source signed Agent输入，不放宽验签。认证事务代理覆盖导致递归已修，真实PG Agent/snapshot/auth559、批量/托管600、管理员到期/资金592、正常认证/OAuth590、真实TLS销毁邮件576及进程提升冷mTLS/三90秒超时605全部自然通过；三类型/六相关专项609共9/9与后端build614、Go兼容binary616过。原生HTTP测试夹具改HTTPS/CA/nonce响应签名，Go模块网络获取补有界重试/预算并同步固定脚本hash，相关测试过。准备阶段保存；恢复state/instance及历史Docker恢复未全部过、双首装/六旧worker仍待，正式Release/生产不执行。
+
+本轮环境/测试错误也保留：临时PG库名超过63字节导致OSS_DATABASE_INVALID，改短名后真实资金592过；旧到期JWT未建立真实session被正确拒绝，改真实refresh会话并加未登记session拒绝后过。空current目录猜测没有复现，不能认定首装已修；Linux私有挂载中的helper仅验到缺迁移身份被正确拒绝604，原服务606健康。Go测试本身过但Windows临时exe删除拒绝两次，改固定本机test binary并运行616自然0，不把工具清理失败写为整体绿。恢复旧夹具直接改余额/批量流水/改历史退款被资金守卫拒绝，改真实记账和拒绝断言中；不能删除保护或把夹具适配当成完整OSS灾备通过。
+
 基准a5251f0／codex/financial-integrity-audit，版本1.8.14／Agent1.0.16保持。本轮已按owner指令修源码、锁图、Incus7.6及Go安全基线，不再是“仅报告未修”的阶段；准备按既有阶段保存授权提交推送并运行无tag双架构发行预览，暂不Release/生产OTA。较新实施和证据见[安全修复台账](docs/security-repair-2026-11-22.md)首节，下面审计历史保留。
 
 阶段已保存：`aec5f0f8d10d80454511ebd54a2ccae9d2bfb2e8`已推`origin/codex/financial-integrity-audit`并核远端相同，187文件只含源码/测试/脱敏文档；本地凭据扫描通过，无logs/私有档案。无tag发行预览[45045980526](https://github.com/mastalee928/payincus/actions/runs/45045980526)刚启动，须继续核全部job和失败日志，尚未CI/签名双包/六旧升级通过。版本仍1.8.14/Agent1.0.16；没有正式Release/生产OTA。

@@ -1,15 +1,22 @@
 #!/usr/bin/env bash
 set -Eeuo pipefail
+stage=runtime-directory
+trap 'printf "DATABASE_MIGRATION_PREPARATION_FAILED:%s\n" "$stage" >&2' ERR
 root=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd -P)
-if [[ "$root" == /usr/local/libexec ]]; then root=/opt/incudal/current; [[ -e "$root" ]] || root=/opt/incudal; fi
+if [[ "$root" == /usr/local/libexec ]]; then
+  root=/opt/incudal
+  [[ ! -L /opt/incudal/current ]] || root=$(readlink -f -- /opt/incudal/current)
+fi
 root=$(readlink -f -- "$root")
-[[ "$root" == /opt/incudal || "$root" == /opt/incudal/releases/* ]] || exit 1
-[[ -d "$root" && $(stat -c %u "$root") == 0 && -z $(find "$root/server" -xdev \( -type f -o -type d \) \( ! -user root -o -perm /022 \) -print -quit) ]] || exit 1
+[[ "$root" == /opt/incudal || "$root" == /opt/incudal/releases/* ]] || { echo 'DATABASE_MIGRATION_RUNTIME_PATH_INVALID' >&2;exit 1; }
+[[ -d "$root" && $(stat -c %u "$root") == 0 && -z $(find "$root/server" -xdev \( -type f -o -type d \) \( ! -user root -o -perm /022 \) -print -quit) ]] || { echo 'DATABASE_MIGRATION_RUNTIME_UNTRUSTED' >&2;exit 1; }
 env_file="${ENV_FILE:-/opt/incudal/.env}"
-[[ $EUID -eq 0 && -f "$env_file" && ! -L "$env_file" && $(stat -c %u "$env_file") == 0 ]] || exit 1
+stage=environment
+[[ $EUID -eq 0 && -f "$env_file" && ! -L "$env_file" && $(stat -c %u "$env_file") == 0 ]] || { echo 'DATABASE_MIGRATION_ENVIRONMENT_UNTRUSTED' >&2;exit 1; }
 export DATABASE_URL
 unset NODE_OPTIONS NODE_PATH LD_PRELOAD LD_LIBRARY_PATH BASH_ENV ENV PYTHONPATH PYTHONHOME
 export PATH=/usr/local/bin:/usr/bin:/bin
+stage=migration-identity
 DATABASE_URL=$(python3 -I -B - <<'PY'
 import sys,urllib.parse
 from pathlib import Path
@@ -23,14 +30,18 @@ print(value)
 PY
 )
 cd "$root/server"
+stage=migration-cli
 cli=$(readlink -f node_modules/prisma/build/index.js)
-[[ "$cli" == "$root/"* && -f "$cli" ]] || exit 1
+[[ "$cli" == "$root/"* && -f "$cli" ]] || { echo 'DATABASE_MIGRATION_CLI_UNTRUSTED' >&2;exit 1; }
+stage=prisma-migrate
 /usr/bin/node "$cli" migrate deploy
 # Credentials stay in a child environment, never a command-line URL.
+stage=runtime-grants
 /usr/bin/python3 - <<'PY'
 import os,subprocess,urllib.parse
 url=urllib.parse.urlsplit(os.environ['DATABASE_URL'])
 env={'PATH':'/usr/bin:/bin','PGHOST':url.hostname,'PGPORT':url.port and str(url.port) or '5432','PGDATABASE':urllib.parse.unquote(url.path[1:]),'PGUSER':urllib.parse.unquote(url.username),'PGPASSWORD':urllib.parse.unquote(url.password)}
 subprocess.run(['/usr/bin/psql','-X','-v','ON_ERROR_STOP=1','-c','REVOKE INSERT,UPDATE,DELETE ON public._prisma_migrations FROM incudal'],env=env,check=True,stdout=subprocess.DEVNULL)
 PY
+stage=network-mode
 /usr/bin/node --input-type=module -e 'const db=await import("./dist/db/prisma.js");try {await db.normalizeLegacyNetworkModes()}finally {await db.closePrismaDatabase()}process.exit(0)'

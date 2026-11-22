@@ -199,7 +199,7 @@ try {
   const start = authSource.indexOf('async function ensureActiveAccessToken(')
   const end = authSource.indexOf('// 注意: 安全响应头', start)
   assert.ok(start >= 0 && end > start)
-  const { isAccessTokenInvalidated } = await import('../src/lib/security.js')
+  const { isAccessTokenInvalidated, generateRefreshToken, getRefreshTokenSessionId } = await import('../src/lib/security.js')
   const { recoveryHeld } = await import('../src/services/platform-backup-core.js')
   const { validateRecoverySession } = await import('../src/services/platform-recovery-operator.js')
   const authApp = Fastify()
@@ -210,8 +210,12 @@ try {
   await authApp.register(routes)
   const { default: instanceRoutes } = await import('../src/routes/instances.js')
   await authApp.register(instanceRoutes, { prefix: '/api/instances' })
+  const sessionIds = new Map<number, string>()
+  for (const account of [owner, buyer, other]) {
+    sessionIds.set(account.id, getRefreshTokenSessionId(await generateRefreshToken(account.id, account.username, account.role as 'user' | 'admin')))
+  }
   const token = (id: number, role: 'user' | 'admin', extra: Record<string, unknown> = {}) => {
-    const claims = { id, username: 'isolated-expiry-test', role, sid: prefix, iat: session.iat, ...extra }
+    const claims = { id, username: 'isolated-expiry-test', role, sid: sessionIds.get(id), iat: session.iat, ...extra }
     return authApp.jwt.sign(claims)
   }
   const authRequest = (method: 'GET' | 'PUT', value?: string, payload?: object) => authApp.inject({ method, url,
@@ -220,7 +224,9 @@ try {
   try {
     await reset()
     const valid = token(owner.id, 'admin')
-    const latest = (await authRequest('GET', valid)).json()
+    const latestResponse = await authRequest('GET', valid)
+    assert.equal(latestResponse.statusCode, 200, latestResponse.body)
+    const latest = latestResponse.json()
     assert.equal(latest.ownerId, buyer.id); assert.equal(latest.hostId, host.id); assert.equal(latest.incusId, prefix)
     const detail = await authApp.inject({ method: 'GET', url: `/api/instances/${instance.id}`, headers: { authorization: 'Bearer ' + valid } })
     assert.equal(detail.statusCode, 200, detail.body)
@@ -237,7 +243,8 @@ try {
     }
     await prisma.log.deleteMany({ where: { instanceId: instance.id } })
     for (const value of [undefined, 'pat_fixture', 'poa_fixture', token(buyer.id, 'user'), token(other.id, 'user'),
-      token(buyer.id, 'admin'), token(owner.id, 'admin', { sid: null }), token(owner.id, 'admin', { exp: 1 }), valid + 'tampered']) {
+      token(buyer.id, 'admin'), token(owner.id, 'admin', { sid: null }), token(owner.id, 'admin', { sid: 'unregistered-session' }),
+      token(owner.id, 'admin', { sid: 'a'.repeat(32) }), token(owner.id, 'admin', { exp: 1 }), valid + 'tampered']) {
       for (const method of ['GET', 'PUT'] as const) {
         const denied = await authRequest(method, value)
         assert.ok([401, 403].includes(denied.statusCode), method + ' must reject non-admin/invalid credentials: ' + denied.statusCode)
@@ -251,7 +258,7 @@ try {
     for (const mode of ['role', 'ban', 'session']) {
       if (mode === 'role') await prisma.user.update({ where: { id: owner.id }, data: { role: 'user' } })
       if (mode === 'ban') await prisma.user.update({ where: { id: owner.id }, data: { status: 'banned' } })
-      if (mode === 'session') await prisma.tokenInvalidation.create({ data: { userId: owner.id, sessionId: prefix, invalidatedAt: session.iat } })
+      if (mode === 'session') await prisma.tokenInvalidation.create({ data: { userId: owner.id, sessionId: sessionIds.get(owner.id)!, invalidatedAt: session.iat } })
       for (const method of ['GET', 'PUT'] as const) assert.ok([401, 403].includes((await authRequest(method, valid)).statusCode), mode)
       await reset()
     }

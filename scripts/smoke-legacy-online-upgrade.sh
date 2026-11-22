@@ -53,6 +53,15 @@ tar -xOf "$old" ./scripts/install-panel.sh > "$work/old-install.sh"
 printf 'installer@example.invalid\n3\n' | ONBOARDING_PUBLIC_HOST=gateway.example.com \
   bash "$work/old-install.sh" > "$work/old-install.log" 2>&1
 systemctl is-active --quiet incudal-backend
+if [[ -n "${INCUDAL_PREVIEW_AGENT_DIR:-}" ]]; then
+  # Same-source signed binaries are a disposable preview input, exactly as in
+  # fresh-install. The installed backend still verifies both hashes/signatures.
+  install -d -m 0755 /opt/incudal/agent-release
+  cp "$INCUDAL_PREVIEW_AGENT_DIR"/* /opt/incudal/agent-release/
+  chown -R root:root /opt/incudal/agent-release
+  chmod 0644 /opt/incudal/agent-release/*
+  printf '\nINCUDAL_AGENT_RELEASE_DIR=/opt/incudal/agent-release\n' >> /opt/incudal/.env
+fi
 
 # Model both an original flat installation and the deployed atomic layout
 # after a failed attempt has already committed the additive DB migration.

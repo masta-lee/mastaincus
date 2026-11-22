@@ -67,7 +67,14 @@ async function utility(command: string, args: string[], database?: string, input
     if (output) await writeFile(output, Buffer.concat(stdout), { flag: 'wx', mode: 0o600 })
   } finally { clearTimeout(timer); if (child.exitCode === null) child.kill('SIGKILL') }
 }
-const backup = new Function('pgProcess', compiled)(utility) as {
+const backup = new Function('pgProcess','ensure','quoteIdentifier','quoteLiteral','postgresConnection','pgEnv','retainedMigrationIdentity','exec', compiled)(
+  utility,(condition:boolean,code:string)=>assert.ok(condition,code),quoteIdentifier,(value:string)=>"'"+value.replaceAll("'","''")+"'",
+  ()=>({user:decodeURIComponent(connection.username),url:connection}),(target:string)=>({PGDATABASE:target}),async(url:URL)=>url,
+  async(program:string,args:string[],options:{env:{PGDATABASE:string}})=>{
+    assert.equal(program,'/usr/bin/psql','only the production restore privilege utility is adapted')
+    await utility('psql',args,options.env.PGDATABASE)
+    return {stdout:'',stderr:''}
+  }) as {
   dumpDatabase: (path: string) => Promise<void>
   restoreDatabase: (path: string, target: string) => Promise<void>
 }

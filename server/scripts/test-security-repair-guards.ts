@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict'
 import { readFile } from 'node:fs/promises'
 import { Readable } from 'node:stream'
+import { spawnSync } from 'node:child_process'
 process.env.DATABASE_URL ||= 'postgresql://fixture:fixture@127.0.0.1:1/compile_only'
 import { readBoundedResponse, limitReadable } from '../src/lib/bounded-response.js'
 import { runStorageTest } from '../src/lib/request-budget.js'
@@ -38,6 +39,7 @@ release();await Promise.all(tests);await runStorageTest(()=>Promise.resolve())
 const auth=await readFile(new URL('../src/lib/authentication-integrity.ts',import.meta.url),'utf8')
 for(const model of ['refreshToken','userOAuthBinding','publicApiToken','oAuthGrant','twoFactorRecoveryCodes','notificationChannel','storageConfig'])assert.ok(auth.includes(model))
 assert.ok(auth.includes('marker.authenticationSignature')&&auth.includes('verifyAuthenticationDatabaseSeals'))
+assert.ok(auth.includes('const nativeTransaction=raw.$transaction.bind(raw)')&&auth.includes('overrides.set(property,value)'),'callback transaction overrides must not mutate the underlying financial wrapper and recurse')
 const transport=await readFile(new URL('../src/storage/transport.ts',import.meta.url),'utf8')
 assert.ok(transport.includes('revalidatingLookup')&&transport.includes('createConnection')&&transport.includes('isIpPrivateOrReserved'))
 const terminal=await readFile(new URL('../src/lib/terminal-proxy.ts',import.meta.url),'utf8')
@@ -51,6 +53,10 @@ assert.ok(retained.includes('"$root/server/templates"')&&retained.includes('serv
 assert.ok(retained.includes('/usr/bin/chown -R root:root "$stage"')&&!/^\s*chown -R root:root "\$stage"/m.test(retained),'new root runtime preparation must not hit the old worker PATH chown wrapper')
 const databasePreparation=await readFile(new URL('../../scripts/harden-database.py',import.meta.url),'utf8')
 assert.ok(databasePreparation.match(/node_check=subprocess\.run\([^\n]+env=\{'PATH':'\/usr\/bin:\/bin'\}/),'Node patch preflight must not inherit the backend compatibility import or injection environment')
+const migrationHelper=await readFile(new URL('../../scripts/migrate-database.sh',import.meta.url),'utf8')
+assert.ok(migrationHelper.includes('[[ ! -L /opt/incudal/current ]]')&&!migrationHelper.includes('[[ -e "$root" ]] || root=/opt/incudal'),'only an actual atomic symlink selects the current runtime')
+const python = spawnSync(process.env.PYTHON || 'python', ['../scripts/test-incus-security-modules.py'], { encoding: 'utf8', windowsHide: true })
+assert.equal(python.status,0,python.stdout+python.stderr)
 const shim=await readFile(new URL('../../scripts/legacy-database-startup.mjs',import.meta.url),'utf8')
 assert.ok(shim.includes("marker.authenticationSignature||existsSync('/var/lib/incudal-database/migration.url')")&&shim.includes(": {'lib/system-update-runtime.js':'lib/system-update-runtime.js'}"),'pre-baseline role separation needs the root-only migration bridge on an old-worker retry')
 const migrationRepair=await readFile(new URL('../src/services/host-management-repair.ts',import.meta.url),'utf8')
