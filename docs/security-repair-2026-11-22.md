@@ -4,6 +4,8 @@
 
 ## 续接实施状态（2026-11-22，尚未完成）
 
+最新root权限复审：`apply_secure_ownership`旧以releases目录存在代atomic布局，平铺active仍root时跳过当前code硬化。按resolve_app_dir结果独立处理flat，保mutable缓存/certs原规则；实际Linux完整函数+真实nobody文件属主回归652自然0、空客户原服务健康650，security/update651过。这是可复现产品缺陷，首装分类第五45057633656尚未终态，不认定唯一根因。f56新CI/压力/compat保留；226及fe05普通CI与重复压力四旧轮定向取消，它们未跑完项继续由最新source补、cancelled不报绿。state/instance完整与42鉴权/完整TLSverification最新自然全过，正式Release/生产/全池系统配套闭环待。
+
 较新源码226539f2已推；本机637完整恢复state已自然退出0（1001宿主/分页/陈旧source/Boperator/旧口令/注销/历史资金/事务回退），633整实例订单/原身份/转让换机、631replacement/624gateway、638当前鉴权42请求及完整真实TLS验证码、626改续费价/PUSH/upload全部自然0。state新增私密baseline/真实资金fixture待本轮保存；类型635过、split643过/update643仍在途。第五45057633656仍构建中（fe05c5a5诊断来源），新PR仍执行，不能阶段停工或把未终态写绿。第四双首装code明确runtime权限拒绝，root/current/migration.url正常，下一轮脱敏分类metadata进一步取证；六原worker成功已分别保留。
 
 最新第四45055789848终态failure：双签名实包/Incus构建与候选Agent全部过、六个公开v1.8.14原worker正常/保留迁移/后半程回滚再升**全部自然success**（含rollback137313703512/529日志）；双首装helper固定码DATABASE_MIGRATION_RUNTIME_UNTRUSTED，已证current不存在/root与migration.url权限正确，仍需定位哪个server运行文件被拒绝。fe05c5a5追加仅分类uid/mode、不含文件名/资料的metadata并推送，第五45057633656无tag预览在途，正式发行暂停。

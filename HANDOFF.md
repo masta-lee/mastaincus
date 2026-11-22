@@ -1,5 +1,7 @@
 # 2026-11-22 两轮安全修复续接，仍在验收
 
+2026-11-23当前已推f56c6222，完整state637/instance633/notification638自然成功。修复新增平铺权限分支：active app仍/opt/incudal但releases已存在时旧harden只修releases，可能留下当前非root证书/代码；按实际app_dir分别处理，Linux实际root回归650/652通过、缓存归属保持，security/update651过。当前第五45057633656继续双首装分类取证/六旧升级；不能把分支复现当作这轮首装唯一根因。新CI f56运行45057928320/内存45057928347/兼容45057928385保留；旧已改输入的226/fe05普通CI和重复压力四轮已定向取消节省runner，cancelled不算通过，原失败56/11记录不删。当前修复尚未保存。
+
 最新阶段已推`226539f2`（原生HTTPS压力依赖/真实session/通知加密/恢复fixture），当前仅state脚本剩未提交。自然终态：637完整恢复state1001宿主/历史资金/原身份全过；633完整instance-order/转让换机恢复、631replacement、624gateway、63842auth请求+完整TLS验证码、626price/PUSH/upload均退出0。新PR与第五45057633656（诊断源码fe05c5a5）仍执行，务必跟全部终态。第四45055789848六原worker全过、双首装runtime权限拒绝已逐日志定位到精确分类code，未查明具体文件分类，不提前移除权限检查。新本机split643过/update643仍在途。真实OSS/完整rootworker/全配套安全自动激活依旧未完成，正式发行/生产没有执行。
 
 较新自然终态：源码`7802ab1d`已推、第四预览45055789848现failure，其中双完整包/双Incus/候选Agent与**全部六个公开v1.8.14原worker升级、已迁移再升、故障回滚再升成功**；只剩双首装helper拒绝目录权限，日志明确DATABASE_MIGRATION_RUNTIME_UNTRUSTED，current不存在/原root/迁移私密文件正确。新固定metadata诊断已保存推送`fe05c5a5`，第五无tag预览45057633656已启动，必须跟终态。原source PR第二轮56success/11failure/1skipped全部11日志已读：四内存缺openssl、state缺baseline、renewal/auth/terminal旧会话及通知plaintext夹具（push/upload/verification）逐项精修，测试守卫不放宽。最新本机626价格/PUSH/upload、632terminal部分、638auth42请求/完整TLS验证码、633完整instance/order恢复、624gateway/631replacement都自然通过；完整state637仍在途，历史Dockerrestore待，新CI待。正式Release/生产仍未执行。

@@ -75,7 +75,10 @@ apply_secure_ownership() {
     /usr/bin/chown -R root:root "${INSTALL_DIR}/releases"
     find "${INSTALL_DIR}/releases" -xdev -type d -exec /usr/bin/chmod u=rwx,go=rx {} +
     find "${INSTALL_DIR}/releases" -xdev -type f -exec /usr/bin/chmod u+rw,go+r,go-w {} +
-  else
+  fi
+  # A flat installation may already contain an empty releases directory. Its
+  # presence does not mean the active app has moved to an atomic release.
+  if [[ "$app_dir" == "$INSTALL_DIR" ]]; then
     /usr/bin/chown -R root:root "$app_dir"
     find "$app_dir" -xdev -type d -exec /usr/bin/chmod u=rwx,go=rx {} +
     find "$app_dir" -xdev -type f -exec /usr/bin/chmod u+rw,go+r,go-w {} +
