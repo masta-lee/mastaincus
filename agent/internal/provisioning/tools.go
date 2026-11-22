@@ -61,6 +61,7 @@ func (e *Engine) Run(ctx context.Context) {
 	previousMemoryError := ""
 	securityChecked := time.Time{}
 	securityState := "pending"
+	loadedChecked := time.Time{}
 	for ctx.Err() == nil {
 		e.mu.Lock()
 		enabled := e.enabled != nil && *e.enabled
@@ -78,6 +79,17 @@ func (e *Engine) Run(ctx context.Context) {
 					securityChecked = time.Now()
 				}
 				done()
+			}
+			if (securityState == "checked" || securityState == "activation-required" || securityState == "verification-pending") && time.Since(loadedChecked) >= 5*time.Minute {
+				checkContext, done := context.WithTimeout(ctx, 5*time.Second)
+				state, err := securityLoadedState(checkContext, "/proc")
+				if err != nil {
+					securityState = "verification-pending"
+				} else {
+					securityState = state
+				}
+				done()
+				loadedChecked = time.Now()
 			}
 			c, cancel := context.WithTimeout(ctx, 180*time.Second)
 			compatStatus, compatRequest, compatHashValue := incusCompatibilityStatus(c)

@@ -12,6 +12,11 @@ assert.equal(acceptHostProvisioningStatus({...report,diskTools:'true'},now-14000
 assert.equal(acceptHostProvisioningStatus({...report,ready:false,diskTools:true},now-14000,now)?.diskTools,undefined)
 const agent = { enabled: true, lastSeenAt: new Date(now), capabilities: [HOST_PROVISIONING_CAPABILITY], lastReport: { hostProvisioningStatus: accepted } }
 assert.equal(hostProvisioningToolsReady(agent, now), true)
+for(const state of ['activation-required','verification-pending']){
+  const receipt=acceptHostProvisioningStatus({...report,securityPackages:state},now-14000,now)!
+  assert.equal(receipt.securityPackages,state)
+  assert.equal(hostProvisioningToolsReady({...agent,lastReport:{hostProvisioningStatus:receipt}},now),true,'optional patch activation cannot change stock readiness')
+}
 for (const input of [null, [], {}, { ...report, ready: 'true' }, { ...report, checkedAt: 'bad' }]) assert.equal(acceptHostProvisioningStatus(input, now, now), null)
 for (const [signed, checked] of [[now - 60001, now - 60001], [now, now - 180000], [now, now + 5001]]) {
   assert.equal(acceptHostProvisioningStatus({ ...report, checkedAt: new Date(checked).toISOString() }, signed, now)?.ready, false)

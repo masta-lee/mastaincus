@@ -17,3 +17,4 @@ func prepareIncusCompatibility(context.Context, *CompatPermit) error    { return
 func validCompatPermit(*CompatPermit) bool                              { return false }
 func reconcileMemoryWatermark(context.Context) error                    { return nil }
 func repairSecurityPackages(context.Context) error                      { return nil }
+func securityLoadedState(context.Context, string) (string, error)       { return "verification-pending", nil }
