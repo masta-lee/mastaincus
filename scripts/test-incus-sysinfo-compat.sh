@@ -40,7 +40,7 @@ else
 fi
 if test "${INCUDAL_COMPAT_RELOAD_SCENARIO:-}" = empty-pool; then
   printf '%s\n' "$old" > /run/incus/incusd.pid
-  /out/provisioning-test -test.run '^(TestCompatibilityStartingDaemonRequiresCurrentExecutable|TestCompatibilityRetiresOnlyExitedPIDReceipt|TestNativeCompatibilityEmptyPoolReload)$' -test.v
+  /out/provisioning-test -test.run '^(TestCompatibilityStartingDaemonRequiresCurrentExecutable|TestCompatibilityRejectsPublishedBinaryWithOldRunningInode|TestCompatibilityRetiresOnlyExitedPIDReceipt|TestNativeCompatibilityEmptyPoolReload)$' -test.v
   /out/provisioning-test -test.run '^TestNativeCompatibilityStatusAllocations$' -test.v
   /out/provisioning-test -test.run '^(TestCompatibilityStreamRejectsCorruption|TestCompatibilityFileHashAndRollbackCopy)$' -test.v
   INCUDAL_MEMORY_RUNTIME_TEST=1 /out/memory-budget-test -test.run '^TestNativeAgentBudgetRuntime$' -test.v

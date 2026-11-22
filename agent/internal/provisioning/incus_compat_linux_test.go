@@ -61,6 +61,46 @@ func TestCompatibilityStartingDaemonRequiresCurrentExecutable(t *testing.T) {
 		t.Fatal("cancelled readiness accepted")
 	}
 }
+func TestCompatibilityRejectsPublishedBinaryWithOldRunningInode(t *testing.T) {
+	if os.Geteuid() != 0 {
+		t.Skip("root-owned process evidence")
+	}
+	directory := t.TempDir()
+	binary, pidPath := filepath.Join(directory, "incusd"), filepath.Join(directory, "incusd.pid")
+	old, err := os.ReadFile("/bin/sleep")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err = os.WriteFile(binary, old, 0755); err != nil {
+		t.Fatal(err)
+	}
+	process := exec.Command(binary, "30")
+	if err = process.Start(); err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = process.Process.Kill(); _ = process.Wait() }()
+	if err = os.WriteFile(pidPath, []byte(strconv.Itoa(process.Process.Pid)), 0600); err != nil {
+		t.Fatal(err)
+	}
+	ctx := context.Background()
+	if pid, err := compatStartingDaemon(ctx, pidPath, binary, compatHash(old)); err != nil || pid != process.Process.Pid {
+		t.Fatal("original running inode not confirmed", pid, err)
+	}
+	newBytes, err := os.ReadFile("/bin/true")
+	if err != nil {
+		t.Fatal(err)
+	}
+	staged := filepath.Join(directory, "staged")
+	if err = os.WriteFile(staged, newBytes, 0755); err != nil {
+		t.Fatal(err)
+	}
+	if err = os.Rename(staged, binary); err != nil {
+		t.Fatal(err)
+	}
+	if _, err = compatStartingDaemon(ctx, pidPath, binary, compatHash(newBytes)); err == nil {
+		t.Fatal("installed new bytes must not attest to the old running executable")
+	}
+}
 
 func TestCompatibilityRetiresOnlyExitedPIDReceipt(t *testing.T) {
 	if os.Geteuid() != 0 {
@@ -370,6 +410,33 @@ func TestNativeCompatibilityEmptyPoolReload(t *testing.T) {
 		}
 	}
 	p := &CompatPermit{RequestID: "11111111-1111-4111-8111-111111111111", HostIdentity: strings.Repeat("a", 64), ExpiresAt: time.Now().Add(240 * time.Second).UTC().Format(time.RFC3339Nano)}
+	oldBinary, err := os.ReadFile("/usr/sbin/incusd")
+	if err != nil {
+		t.Fatal(err)
+	}
+	newBinary, err := compatibilityBinary()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if compatHash(oldBinary) != compatHash(newBinary) {
+		// Model an atomic publication that never reloaded the original daemon.
+		// No customer is created and no database migration has been performed.
+		if err = replaceCompatBinary(newBinary); err != nil {
+			t.Fatal(err)
+		}
+		refusal := prepareIncusCompatibility(ctx, p)
+		restore := replaceCompatBinary(oldBinary)
+		if restore != nil {
+			t.Fatal("restore unpublished fixture binary", restore)
+		}
+		if refusal == nil {
+			t.Fatal("old running daemon accepted as activated new binary")
+		}
+		if _, err = os.Lstat(compatJournalPath); !os.IsNotExist(err) {
+			t.Fatal("unloaded binary must not mint a verified compatibility journal", err)
+		}
+		t.Log("PASS real Incus: published candidate with original running inode is refused before activation receipt")
+	}
 	if err = prepareIncusCompatibility(ctx, p); err != nil {
 		t.Fatal("empty pool automatic reload", err)
 	}

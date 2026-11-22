@@ -86,7 +86,7 @@ func incusCompatibilityStatus(ctx context.Context) (string, string, string) {
 		return "", "", ""
 	}
 	if installedHash == manifest.SHA256 {
-		if j.Phase == "verified" {
+		if j.Phase == "verified" && j.NewHash == installedHash {
 			return "verified", j.RequestID, manifest.SHA256
 		}
 		return "needed", j.RequestID, manifest.SHA256
@@ -441,7 +441,7 @@ func prepareIncusCompatibility(ctx context.Context, permit *CompatPermit) error 
 			return e
 		}
 		if manifest.SHA256 == journal.NewHash {
-			return nil
+			return waitCompatReady(ctx, journal.NewHash)
 		}
 		// Keep the previous rollback file immutable before a new repair generation.
 		if oldHash, readErr := hashCompatFile(ctx, compatBackupPath); readErr == nil {
@@ -492,8 +492,16 @@ func prepareIncusCompatibility(ctx context.Context, permit *CompatPermit) error 
 		return e
 	}
 	if installedHash == manifest.SHA256 {
+		// A new binary on disk can coexist with the old running inode after an
+		// interrupted publication. It grants no verified activation receipt.
+		if e = waitCompatReady(ctx, manifest.SHA256); e != nil {
+			return e
+		}
 		rows, e := compatGuests(ctx)
-		if e != nil {
+		if e != nil || !compatPermitGuests(permit, rows) || !validCompatPermit(permit) {
+			if e == nil {
+				e = fmt.Errorf("compatibility current guest authority changed")
+			}
 			return e
 		}
 		pidData, e := os.ReadFile("/run/incus/incusd.pid")
