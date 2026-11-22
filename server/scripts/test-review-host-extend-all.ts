@@ -9,6 +9,7 @@ const database = new URL(process.env.DATABASE_URL || '')
 assert.ok(['127.0.0.1', 'localhost', '[::1]'].includes(database.hostname) && database.pathname.endsWith('_pool_test'))
 process.env.JWT_SECRET ||= 'extend-all-fixture-only'
 const { prisma, closePrismaDatabase } = await import('../src/db/prisma.js')
+const {sealNotificationConfig}=await import('../src/lib/notification-config.js')
 const { default: routes } = await import('../src/routes/hosts.js')
 const { performRenewal } = await import('../src/db/billing-operations.js')
 const { withInstanceBillingMutation } = await import('../src/lib/instance-billing-mutation.js')
@@ -250,7 +251,7 @@ try {
 
   await reset()
   // Email channels fail immediately without outbound network calls.
-  const channel = await prisma.notificationChannel.create({ data: { userId: buyer.id, type: 'email', name: prefix, config: {} } })
+  const channel = await prisma.notificationChannel.create({ data: { userId: buyer.id, type: 'email', name: prefix, config: sealNotificationConfig({}) as Prisma.InputJsonValue } })
   try {
     const result = await extend()
     assert.equal(result.statusCode, 200, result.body)

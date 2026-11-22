@@ -4,6 +4,8 @@
 
 ## 续接实施状态（2026-11-22，尚未完成）
 
+最新第六45059247490终态failure、六旧worker全部success。首装Jiti权限修复后真实安装、唯一backend/双前端/admin/网关/Agent/原Prisma事务全部过，后backup完整性比对失败OSS_DATABASE_INTEGRITY_MISMATCH（双681/684），不是启动仍失败；新增4固定布尔诊断、不泄表/数据且保拒绝，继续查。local PG schema dump→restore686一致、全部147表689仍在途。初装setup_database原明文SQL已改SCRAM/verifier/固定身份/重复真实认证，隔离真实PG672两次幂等/错误口令拒绝过，split/panel/security/types/build688均过。当前第三PR61success/5failure/1skipped＋1在途，5日志全部读后terminal675、hostextend677、notification679、port680、Agentpublisher concurrency687真实PG/TLS/签名回归全过；最终新CI/包恢复待。
+
 首装根因进一步实证：第五双首装657/660分类显示node_modules root0/mode0666，current/release不存在/certs和migration.url正常，排除旧空目录猜测。Prisma7 config经c12/Jiti生成磁盘代码缓存，root启动命令缺显式umask导致新缓存可写；helper补umask077和JITI_FS_CACHE=false，不复用或放宽未知cache，真实Linux原Jiti TypeScript import且fsCache=false/无磁盘cache661过、security659过。既有flat+releases安全分支另已3320f6b2推送并真实652验，不混称此首装根因。完整新同source包/原worker仍需重验；当前第五其它任务/新PR要继续跟终态，正式Release/生产暂停。
 
 最新root权限复审：`apply_secure_ownership`旧以releases目录存在代atomic布局，平铺active仍root时跳过当前code硬化。按resolve_app_dir结果独立处理flat，保mutable缓存/certs原规则；实际Linux完整函数+真实nobody文件属主回归652自然0、空客户原服务健康650，security/update651过。这是可复现产品缺陷，首装分类第五45057633656尚未终态，不认定唯一根因。f56新CI/压力/compat保留；226及fe05普通CI与重复压力四旧轮定向取消，它们未跑完项继续由最新source补、cancelled不报绿。state/instance完整与42鉴权/完整TLSverification最新自然全过，正式Release/生产/全池系统配套闭环待。

@@ -310,7 +310,10 @@ async function inventory(connection: Awaited<ReturnType<typeof snapshotConnectio
 }
 export function assertDatabaseIntegrity(expected: DatabaseIntegrity, actual: DatabaseIntegrity) {
   ensure(expected?.format === 1 && actual?.format === 1 && expected.dataEncoding === 'postgres-record-text-v1' && actual.dataEncoding === expected.dataEncoding && /^[a-f0-9]{64}$/.test(expected.schemaSha256) && Array.isArray(expected.tables) && expected.tables.length <= 10000 && expected.largeObjects && expected.database, 'OSS_DATABASE_INTEGRITY_INVALID')
-  ensure(actual.schemaSha256 === expected.schemaSha256 && JSON.stringify(actual.tables) === JSON.stringify(expected.tables) && JSON.stringify(actual.sequences) === JSON.stringify(expected.sequences) && JSON.stringify(actual.largeObjects) === JSON.stringify(expected.largeObjects), 'OSS_DATABASE_INTEGRITY_MISMATCH', 409)
+  const checks={schema:actual.schemaSha256===expected.schemaSha256,tables:JSON.stringify(actual.tables)===JSON.stringify(expected.tables),
+    sequences:JSON.stringify(actual.sequences)===JSON.stringify(expected.sequences),largeObjects:JSON.stringify(actual.largeObjects)===JSON.stringify(expected.largeObjects)}
+  if(Object.values(checks).some(value=>!value))console.error('Database backup integrity checks',checks)
+  ensure(Object.values(checks).every(Boolean), 'OSS_DATABASE_INTEGRITY_MISMATCH', 409)
   for (const key of ['encoding', 'datcollate', 'datctype', 'datlocprovider', 'daticulocale', 'datlocale']) ensure(actual.database[key] === expected.database[key], 'OSS_DATABASE_LOCALE_MISMATCH', 409)
 }
 async function archivedSequenceStates(source: string, sequences: DatabaseIntegrity['sequences'], directory: string) {

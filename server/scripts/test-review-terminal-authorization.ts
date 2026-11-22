@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict'
-import { randomUUID } from 'node:crypto'
+import { randomUUID, X509Certificate } from 'node:crypto'
 import { EventEmitter, once } from 'node:events'
 import { execFileSync } from 'node:child_process'
 import { mkdtemp, readFile, rm } from 'node:fs/promises'
@@ -43,12 +43,16 @@ const owner = await prisma.user.create({ data: { username: tag, passwordHash: 'u
 const hostOwner = await prisma.user.create({ data: { username: tag + '-host', passwordHash: 'unusable-fixture' } })
 const admin = await prisma.user.create({ data: { username: tag + '-admin', passwordHash: 'unusable-fixture', role: 'admin' } })
 const host = await prisma.host.create({ data: { userId: hostOwner.id, name: tag,
-  url: `https://127.0.0.1:${(backend.address() as { port: number }).port}`, certPath, keyPath } })
+  url: `https://127.0.0.1:${(backend.address() as { port: number }).port}`, certPath, keyPath,
+  serverCertificate:cert.toString(),serverFingerprint:new X509Certificate(cert).fingerprint256 } })
 const pkg = await prisma.package.create({ data: { userId: hostOwner.id, name: tag, cpuMax: 100, memoryMax: 512, diskMax: 1024 } })
 const instance = await prisma.instance.create({ data: { userId: owner.id, hostId: host.id, packageId: pkg.id,
   name: tag, incusId: tag, image: 'fixture/debian', cpu: 50, memory: 256, disk: 1024, status: 'running' } })
 const userIds = [owner.id, hostOwner.id, admin.id]
-const actor = { id: owner.id, role: 'user', sid: tag, iat: Math.floor(Date.now() / 1000) }
+const {generateRefreshToken,getRefreshTokenSessionId}=await import('../src/lib/security.js')
+const sessionIds=new Map<number,string>()
+for(const account of [owner,hostOwner,admin])sessionIds.set(account.id,getRefreshTokenSessionId(await generateRefreshToken(account.id,account.username,account.role as 'user'|'admin')))
+const actor = { id: owner.id, role: 'user', sid: sessionIds.get(owner.id)!, iat: Math.floor(Date.now() / 1000) }
 const app = Fastify()
 app.decorate('authenticate', async (request: any) => { request.user = { ...actor, username: owner.username } })
 app.decorate('authenticateAdmin', app.authenticate)
@@ -147,7 +151,7 @@ try {
   console.log('PASS current owner/host owner/admin remain allowed, missing credentials and changed package type reject')
   for (const currentActor of [actor, { ...actor, id: hostOwner.id }, { ...actor, id: admin.id, role: 'admin' }]) {
     await reset()
-    const ticket = generateTerminalAccessTicket(currentActor.id, instance.id, currentActor.iat, currentActor.sid)
+    const ticket = generateTerminalAccessTicket(currentActor.id, instance.id, currentActor.iat, sessionIds.get(currentActor.id)!)
     const client = new WebSocket(`ws://127.0.0.1:${(app.server.address() as { port: number }).port}/instances/${instance.id}/terminal?ticket=${ticket}`)
     const messages: any[] = []; client.on('message', data => messages.push(JSON.parse(String(data))))
     try {

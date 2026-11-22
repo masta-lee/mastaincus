@@ -7,12 +7,13 @@ const database = new URL(process.env.DATABASE_URL || '')
 assert.ok(['127.0.0.1', 'localhost', '[::1]'].includes(database.hostname) && database.pathname.endsWith('_pool_test'))
 process.env.NODE_ENV = 'test'
 const { prisma, closePrismaDatabase } = await import('../src/db/prisma.js')
+const {sealNotificationConfig}=await import('../src/lib/notification-config.js')
 const { default: routes } = await import('../src/routes/notifications.js')
 const { default: adminRoutes } = await import('../src/routes/admin-notification-channels.js')
 const tag = 'notification-id-' + randomUUID()
 const user = await prisma.user.create({ data: { username: tag, role: 'admin', passwordHash: 'unusable-fixture' } })
 const channels = await Promise.all([false, true].map(isGlobal => prisma.notificationChannel.create({ data: {
-  userId: user.id, name: tag, type: 'telegram', isGlobal, config: { botToken: '123456:' + 'a'.repeat(24), chatId: '123456' }
+  userId: user.id, name: tag, type: 'telegram', isGlobal, config: sealNotificationConfig({ botToken: '123456:' + 'a'.repeat(24), chatId: '123456' })
 } })))
 const ids = channels.map(row => row.id)
 const app = Fastify()

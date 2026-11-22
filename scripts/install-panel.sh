@@ -984,22 +984,32 @@ setup_database() {
     local db_password="$1"
 
     step "配置 PostgreSQL 数据库..."
-
-    # 检查数据库和用户是否已存在
-    local db_exists
-    db_exists=$(sudo -u postgres psql -tAc "SELECT 1 FROM pg_database WHERE datname='incudal'" 2>/dev/null || echo "")
-
-    if [[ "$db_exists" == "1" ]]; then
-        info "数据库 'incudal' 已存在，跳过创建"
-        # 更新密码
-        sudo -u postgres psql -c "ALTER USER incudal WITH PASSWORD '${db_password}';" >/dev/null 2>&1 || true
-    else
-        # 创建用户和数据库
-        sudo -u postgres psql -c "CREATE USER incudal WITH PASSWORD '${db_password}';" >/dev/null 2>&1 || true
-        sudo -u postgres psql -c "CREATE DATABASE incudal OWNER incudal;" >/dev/null 2>&1
-        sudo -u postgres psql -c "GRANT ALL PRIVILEGES ON DATABASE incudal TO incudal;" >/dev/null 2>&1
-        log "数据库 'incudal' 创建完成"
-    fi
+    # Passwords never enter SQL text, process argv or PostgreSQL statement logs.
+    # A resumed installation authenticates the retained role without resetting it.
+    env "INCUDAL_INSTALL_DB_PASSWORD=$db_password" /usr/bin/python3 -I -B - <<'DATABASE_BOOTSTRAP'
+import os,subprocess,secrets,hashlib,hmac,base64
+password=os.environ['INCUDAL_INSTALL_DB_PASSWORD']
+if not password or not password.isascii() or any(ord(c)<32 or ord(c)==127 for c in password):raise SystemExit('DATABASE_BOOTSTRAP_PASSWORD_INVALID')
+def query(sql):
+    result=subprocess.run(['/usr/sbin/runuser','-u','postgres','--','/usr/bin/psql','-X','-v','ON_ERROR_STOP=1','-At','-d','postgres'],input=sql.encode(),capture_output=True,timeout=15)
+    if result.returncode:raise SystemExit('DATABASE_BOOTSTRAP_QUERY_FAILED')
+    return result.stdout.decode().strip()
+try:
+    if query("SELECT 1 FROM pg_roles WHERE rolname='incudal'")!='1':
+        salt=secrets.token_bytes(16);salted=hashlib.pbkdf2_hmac('sha256',password.encode(),salt,4096)
+        stored=hashlib.sha256(hmac.new(salted,b'Client Key','sha256').digest()).digest()
+        server=hmac.new(salted,b'Server Key',hashlib.sha256).digest()
+        encode=lambda value:base64.b64encode(value).decode()
+        verifier=f'SCRAM-SHA-256$4096:{encode(salt)}${encode(stored)}:{encode(server)}'
+        query("CREATE ROLE incudal LOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE NOREPLICATION NOBYPASSRLS PASSWORD '"+verifier+"'")
+    if query("SELECT 1 FROM pg_database WHERE datname='incudal'")!='1':query('CREATE DATABASE incudal OWNER incudal')
+    environment={'PATH':'/usr/bin:/bin','PGHOST':'127.0.0.1','PGPORT':'5432','PGDATABASE':'incudal','PGUSER':'incudal','PGPASSWORD':password,'PGCONNECT_TIMEOUT':'5'}
+    result=subprocess.run(['/usr/bin/psql','-X','-At','-c','SELECT 1'],env=environment,capture_output=True,timeout=15)
+    if result.returncode or result.stdout.strip()!=b'1':raise SystemExit('DATABASE_BOOTSTRAP_AUTHENTICATION_FAILED')
+except (OSError,subprocess.TimeoutExpired):raise SystemExit('DATABASE_BOOTSTRAP_QUERY_FAILED')
+print('DATABASE_BOOTSTRAP_READY')
+DATABASE_BOOTSTRAP
+    log "PostgreSQL 数据库与原登录身份已核验"
 }
 
 # ========================== 生成环境变量 ==========================

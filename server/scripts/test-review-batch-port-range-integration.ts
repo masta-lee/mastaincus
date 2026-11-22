@@ -208,7 +208,8 @@ try {
   const originalError = console.error
   let auditFailures = 0
   console.error = (...args: unknown[]) => {
-    if (args.some(arg => String(arg).includes('fixture-port-audit-failure'))) auditFailures++
+    if (args.some(arg => typeof arg==='string'?arg.includes('fixture-port-audit-failure'):
+      !!arg&&typeof arg==='object'&&(arg as {message?:unknown}).message==='fixture-port-audit-failure')) auditFailures++
     originalError(...args)
   }
   try {

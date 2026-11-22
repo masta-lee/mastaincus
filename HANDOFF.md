@@ -1,5 +1,9 @@
 # 2026-11-22 两轮安全修复续接，仍在验收
 
+较新第六预览45059247490双首装已真正完成安装/启动/双方前端/admin/管理网关/签名Agent及原Prisma事务实证，随后**备份校验OSS_DATABASE_INTEGRITY_MISMATCH**失败；双日志681/684已读。六旧worker第六也全部success（状态687），正式Release skipped。新backup诊断仅4类布尔差异，原完整比较不放宽；本机隔离PG plain dump/restore schema685/686一致，全表689仍在运行。新增初装DB密码进入SQL/argv风险修复SCRAM verifier与重复认证，真实PG672创建两次/错误密码拒绝自然过、原服务健康，split/panel672/security671/types684/build688全过。
+
+第三PR629源现在61success/5failure/1skipped、1仍在途：5失败日志已全部取证，terminal-authorize旧session/pin已补实际PG/mTLS675全过，host-extend与notification-id旧plaintext输入677/679过，batch-port只统计String(error)漏结构化脱敏message，修统计后680全过；Agent-release-concurrency缺真实publisher签名，独立合成公钥复制生产route、实际Ed25519和全部并发/失败/恢复687过。新源码/测试保存后需同source CI和完整包/root恢复继续，不正式发行/生产。E03/E04全配套宿主自动patch/服务激活仍缺，不能仅写库存已全修。
+
 最新源码3320f6b2已推。第五首装双失败日志657/660已明确：current/release目录均不存在，certs/root/migration.url受信，node_modules出现root-owned0666新文件；Prisma7 TS config的Jiti磁盘缓存无私密umask是执行路径。新helper设umask077/JITI_FS_CACHE=false，真实LinuxJiti加载TypeScript且无disk cache661自然通过，security659过；修复保存后需完整双包首装/全部旧worker复验，不能只硬chmod未知文件或排除依赖权限。第五其它旧worker仍在途；当前PR仍执行。第四六升级已全过，完整恢复/notification638/state637本机全过，正式Release/生产不执行。
 
 2026-11-23当前已推f56c6222，完整state637/instance633/notification638自然成功。修复新增平铺权限分支：active app仍/opt/incudal但releases已存在时旧harden只修releases，可能留下当前非root证书/代码；按实际app_dir分别处理，Linux实际root回归650/652通过、缓存归属保持，security/update651过。当前第五45057633656继续双首装分类取证/六旧升级；不能把分支复现当作这轮首装唯一根因。新CI f56运行45057928320/内存45057928347/兼容45057928385保留；旧已改输入的226/fe05普通CI和重复压力四轮已定向取消节省runner，cancelled不算通过，原失败56/11记录不删。当前修复尚未保存。
