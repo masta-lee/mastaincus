@@ -14,4 +14,12 @@ func TestSecurityPackagePlanRejectsUnrelatedRemovalAndMajorChange(t *testing.T) 
 			t.Fatal(output)
 		}
 	}
+	for _, duplicate := range []string{
+		"Upgrading openssl (3.5.7-r0 -> 3.5.9-r0)\nUpgrading openssl (3.5.7-r0 -> 3.5.9-r0)",
+		"Upgrading openssl (3.5.7-r0 -> 3.5.9-r0)\nUpgrading openssl (3.5.7-r0 -> 3.5.10-r0)",
+	} {
+		if safeSecurityPackagePlan(duplicate, before) == nil {
+			t.Fatal("repeated or conflicting package targets must be refused")
+		}
+	}
 }

@@ -53,6 +53,7 @@ const serverPackage = read('server/package.json')
 const freshInstall = read('scripts/smoke-fresh-install.sh')
 const legacyUpgrade=read('scripts/smoke-legacy-online-upgrade.sh')
 assert.ok(releaseWorkflow.includes('needs: [build, preview-agent]')&&legacyUpgrade.includes('INCUDAL_AGENT_RELEASE_DIR=/opt/incudal/agent-release'),'old-worker preview must use the same signed Agent artifacts verified by the candidate backend')
+assert.ok(releaseWorkflow.includes('sudo python3 scripts/test-flat-runtime-ownership.py'),'both native fresh installations must verify active flat code ownership with an existing release folder')
 const managementScript = releaseWorkflow.slice(releaseWorkflow.indexOf("cat > release/incudal.sh"), releaseWorkflow.indexOf('chmod +x release/incudal.sh'))
 assert.ok(managementScript.includes('exec /usr/bin/systemctl start incudal-backend') &&
   managementScript.includes('exec /usr/bin/bash "$APP_DIR/scripts/migrate-database.sh"') &&

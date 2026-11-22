@@ -23,14 +23,16 @@ func safeSecurityPackagePlan(output string, before map[string]string) error {
 		return fmt.Errorf("unexpected security package installation refused")
 	}
 	allowed := map[string]bool{}
+	seen := map[string]bool{}
 	for _, name := range securityLeaves {
 		allowed[name] = true
 	}
 	for _, change := range securityPackageVersionChange.FindAllStringSubmatch(output, -1) {
 		old, ok := before[change[1]]
-		if !ok || !allowed[change[1]] || old != change[2] || strings.Split(old, ".")[0] != strings.Split(change[3], ".")[0] {
+		if !ok || !allowed[change[1]] || seen[change[1]] || old != change[2] || strings.Split(old, ".")[0] != strings.Split(change[3], ".")[0] {
 			return fmt.Errorf("unreviewed security package change refused")
 		}
+		seen[change[1]] = true
 	}
 	if strings.Count(output, "Upgrading ") != len(securityPackageVersionChange.FindAllStringSubmatch(output, -1)) {
 		return fmt.Errorf("unknown security package plan format")

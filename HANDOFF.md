@@ -1,5 +1,7 @@
 # 2026-11-22 两轮安全修复续接，仍在验收
 
+最新已推61171227/第九预览45065735752来源88a7fec7已启动。第八45063248456终态failure六旧worker全过，双首装745/750仍schema-only差异；归一首table定位漏掉先声明的enum/function，已88a7改精确pg_dump session紧邻comment/空行，types-first与实际schema749/backup749/type749/build749全0，新增失败位置仅类别不SQL。当前全量230final8仍进行(50+)，保终态。E03/E04计划精修Go重复冲突版本拒绝/APT弱源和AllowUnauth明确false，实际LinuxGo+10rootplanner749全0/security755/update753过，当前准备保存，不代表完整全宿主自动patch/activation完成。原CI45061369559已终态27success/3失败全日志700/713/716本机修0，最终最新CI待。正式Release/生产/完整OSS保持未完。
+
 最新第八45063248456已自然failure/六旧worker全部success，双首装745/750仍仅schema false/tables sequence LO true，已逐日志读取；新发现完整schema enums/functions排在table之前，原先注释归一定位首table导致未剔除该注释。改为只在固定pg_dump session前导后的精确public comment，保SQL、旧literal与空行兼容，types-first新guard/真实schema749/backup749/types749/build749自然0；同源新完整包待。新增sys security计划重复目标拒绝，APT明确拒弱源/未认证包，Go Linux测试及10项root planner749自然0，update753在途；E03/E04全服务自动activation仍未完成。当前230全量final8仍running（已越33），不先写绿；旧CI45061369559终态27success/3failure且3日志已700/713/716本机全修，新的完整CI待。本批准备提交，生产/Release仍暂停。
 
 最新已推0b17fd1b（537结构等价+restore preview/final同规则/私密bootstrapargv），当前stage migration的JITI_FS_CACHE禁缓存补入口并backup731/types731/build731自然0，准备保存。第八45063248456双构建/双Incussuccess、候选Agent queued，首装/root恢复仍待；保该运行继续跟。原31bCI45061369559目前3失败（adminemail/注册cleanup/deadline）已本机700/713/716全修，余137327818869仍running，不能弃漏。第六/第七六原worker全部success；首装结构注释根因709/真实schema715/725已修，完整新包仍待。真实PG其他业务与1001state通过不替代root整体restore/实际OSS。E03/E04剩完整宿主依赖自动patch/加载与内核政策未完，正式Release/生产暂停。
