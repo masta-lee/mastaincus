@@ -1,4 +1,4 @@
-2026-11-23最新续接：第九45065735752双包/Incus/Agent和六原旧worker均success，双首装backup已通过，随后换key的恢复夹具错误导致FINANCIAL_INTEGRITY_INVALID；已改真实独立B数据库/签名初始化，完整新预览待。dc73源CI45066663875当前24success/2failure/4pending，两个失败均读日志后本机780终端重连、783充值自动续费全过；最新type784进行。配套Agent/四内存/SSH/双Incus都success。仍须查询CI终态并修后续失败，E03/E04全服务及kernel自动补丁生效未闭环；正式Release/生产暂停。
+2026-11-23最新fe2feec6已推，CI45075595071及Incus45075595058/Agent45075595135/memory45075595166/SSH45075595080/build45075595094在途须继续查终态。第十/十一45068751653/45072078521均双首装完整rootbackup/独立Brestore/rollback/resume/自动snapshot与六原worker全success（OSS本地transport、无客户）；独立pkg验签796仅e6source，最终fe2包待。普通ada/2eCI45069903164/45071989830均30/30success；d418Incus45073338009两个empty allocation failure已821/829读日志改singleAPI，其真实daemon恢复已PASS。cfbf/3220失败分别831/832同已修rootfixture/allocation；重复source定向cancel不绿。actualAlpineleaf旧r0→r1在42.41秒/完整包清单/临时cache清理828/830过；kernel12Linux812过。E03/E04全配套自动service/kernel补丁生效与真实OSS/A整机灾备仍未完；正式Release/生产暂停，阶段保存后继续。
 
 # 2026-11-22 两轮安全修复实施中，暂不发版
 
