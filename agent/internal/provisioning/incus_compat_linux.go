@@ -326,9 +326,6 @@ func compatStartingDaemon(ctx context.Context, pidPath, binaryPath, expectedHash
 }
 
 func compatReadyOnce(ctx context.Context, expectedHash string) (bool, error) {
-	if _, err := localincus.Query(ctx, "/internal/ready", true); err != nil {
-		return false, err
-	}
 	pid, err := compatStartingDaemon(ctx, "/run/incus/incusd.pid", "/usr/sbin/incusd", expectedHash)
 	if err != nil {
 		return false, err
@@ -336,10 +333,13 @@ func compatReadyOnce(ctx context.Context, expectedHash string) (bool, error) {
 	raw, err := localincus.Query(ctx, "/1.0", false)
 	var server struct {
 		Environment struct {
-			PID int `json:"server_pid"`
+			PID     int    `json:"server_pid"`
+			Version string `json:"server_version"`
 		} `json:"environment"`
 	}
-	return err == nil && json.Unmarshal(raw, &server) == nil && pid > 0 && server.Environment.PID == pid, err
+	// Daily status needs one bounded authenticated local API response. Initial
+	// activation retains its separate /internal/ready wait below.
+	return err == nil && json.Unmarshal(raw, &server) == nil && pid > 0 && server.Environment.PID == pid && normalizedCompatVersion(server.Environment.Version) == "7.6.0", err
 }
 func waitCompatReady(ctx context.Context, expectedHash string) error {
 	ctx, cancel := context.WithTimeout(ctx, 60*time.Second)
