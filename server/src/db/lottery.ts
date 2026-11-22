@@ -3,6 +3,7 @@
  */
 import { prisma } from './prisma.js'
 import { Prisma } from '@prisma/client'
+import { sealNotificationConfig, openNotificationConfig } from '../lib/notification-config.js'
 import type { LotteryPrizeType, LotteryRecordStatus } from '@prisma/client'
 import { createBadgeOwnership, selectRandomBadgeOrThrow } from './badges.js'
 import type { BadgeOwnershipView } from './badges.js'
@@ -104,7 +105,7 @@ export async function deleteLottery(id: number) {
  * 获取抽奖活动详情
  */
 export async function getLotteryById(id: number) {
-  return prisma.lottery.findUnique({
+  const lottery = await prisma.lottery.findUnique({
     where: { id },
     include: {
       prizes: {
@@ -116,6 +117,7 @@ export async function getLotteryById(id: number) {
       }
     }
   })
+  return lottery ? { ...lottery, notificationConfig: lottery.notificationConfig ? { ...lottery.notificationConfig, config: openNotificationConfig(lottery.notificationConfig.config) } : null } : null
 }
 
 /**
@@ -308,12 +310,13 @@ export async function upsertLotteryNotificationConfig(
     notifyInstance: boolean
   }
 ) {
+  const sealedConfig = sealNotificationConfig(data.config) as Prisma.JsonObject
   return prisma.lotteryNotificationConfig.upsert({
     where: { lotteryId },
     update: {
       enabled: data.enabled,
       type: data.type,
-      config: data.config as Prisma.JsonObject,
+      config: sealedConfig,
       notifyBalance: data.notifyBalance,
       notifyInstance: data.notifyInstance
     },
@@ -321,7 +324,7 @@ export async function upsertLotteryNotificationConfig(
       lotteryId,
       enabled: data.enabled,
       type: data.type,
-      config: data.config as Prisma.JsonObject,
+      config: sealedConfig,
       notifyBalance: data.notifyBalance,
       notifyInstance: data.notifyInstance
     }
@@ -332,9 +335,10 @@ export async function upsertLotteryNotificationConfig(
  * 获取抽奖通知配置
  */
 export async function getLotteryNotificationConfig(lotteryId: number) {
-  return prisma.lotteryNotificationConfig.findUnique({
+  const row = await prisma.lotteryNotificationConfig.findUnique({
     where: { lotteryId }
   })
+  return row ? { ...row, config: openNotificationConfig(row.config) } : null
 }
 
 // ==================== 中奖记录 ====================

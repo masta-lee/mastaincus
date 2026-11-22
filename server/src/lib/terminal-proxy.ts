@@ -8,6 +8,9 @@ import type { WebSocket as WsWebSocket } from 'ws'
 import { Agent, request } from 'undici'
 import { readFileSync } from 'fs'
 import { setTimeout as waitForReconnect } from 'node:timers/promises'
+import { X509Certificate } from 'node:crypto'
+import type { ConnectionOptions } from 'node:tls'
+import { readBoundedResponse } from './bounded-response.js'
 import type { Host } from '../types/database.js'
 import { resolveCertificatePair } from './incus/certificate-paths.js'
 
@@ -162,7 +165,7 @@ async function requestTerminalOperation(
         signal
     })
 
-    const data = await response.body.json() as {
+    const data = JSON.parse(await readBoundedResponse(response.body, 1024 * 1024)) as {
         type: string
         operation: string
         error_code: number
@@ -470,12 +473,19 @@ export async function createIncusConsoleConnection(
 
     // 使用缓存的证书（避免每次连接都读取文件）
     const { cert, key } = getCachedCertificates(host.cert_path, host.key_path)
+    if (!host.server_certificate || !host.server_fingerprint || !baseUrl.startsWith('https://') ||
+        new X509Certificate(host.server_certificate).fingerprint256 !== host.server_fingerprint) {
+        throw new Error('TERMINAL_SERVER_IDENTITY_REQUIRED')
+    }
+    const tlsIdentity = { ca: host.server_certificate, rejectUnauthorized: true,
+        checkServerIdentity: (_hostname: string, peer: { fingerprint256: string }) => peer.fingerprint256 === host.server_fingerprint
+            ? undefined : new Error('TERMINAL_SERVER_IDENTITY_CHANGED') }
 
     const agent = new Agent({
         connect: {
             cert,
             key,
-            rejectUnauthorized: false
+            ...tlsIdentity
         }
     })
 
@@ -556,16 +566,16 @@ export async function createIncusConsoleConnection(
     const dataWs = new WebSocket(dataWsUrl, {
         cert,
         key,
-        rejectUnauthorized: false
-    })
+        ...tlsIdentity
+    } as ConnectionOptions)
 
     let controlWs: WsWebSocket | null = null
     if (controlWsUrl) {
         controlWs = new WebSocket(controlWsUrl, {
             cert,
             key,
-            rejectUnauthorized: false
-        }) as WsWebSocket
+            ...tlsIdentity
+        } as ConnectionOptions) as WsWebSocket
     }
 
     // 等待连接建立（带资源清理）
@@ -942,6 +952,7 @@ export function startSessionCleanup(): void {
     cleanupInterval = setInterval(() => {
         cleanupStaleSessions()
     }, 60 * 1000)
+    cleanupInterval.unref()
     console.log(`[Terminal] Session cleanup task started (threshold: ${(TERMINAL_CONFIG.idleTimeout + TERMINAL_CONFIG.heartbeatInterval * 2) / 1000}s)`)
 }
 

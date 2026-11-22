@@ -85,8 +85,9 @@ export async function processMailAutoRenew(candidate: {
       return { status: 'ineligible' as const }
     }
 
-    const users = await tx.$queryRaw<Array<{ status: string }>>`SELECT status FROM users WHERE id = ${subscription.userId} FOR UPDATE`
-    if (users[0]?.status !== 'active') return { status: 'ineligible' as const }
+    await tx.$queryRaw`SELECT id FROM users WHERE id = ${subscription.userId} FOR UPDATE`
+    const user=await tx.user.findUnique({where:{id:subscription.userId},select:{status:true,deletionIntent:true}})
+    if (user?.status !== 'active' || user.deletionIntent!==null) return { status: 'ineligible' as const }
 
     const periodKey = buildPeriodKey(subscription.id, subscription.expiresAt)
     const periodMarker = `[${periodKey}]`

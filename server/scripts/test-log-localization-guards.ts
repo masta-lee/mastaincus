@@ -42,7 +42,7 @@ assertIncludes(
 )
 assertIncludes(
   'server/src/db/logs.ts',
-  'const normalizedContent = normalizeLogContentForStorage(content)',
+  'const normalizedContent = normalizeLogContentForStorage(sanitizeTokensInString(content))',
   '新日志入库前必须中文化常见英文模板'
 )
 

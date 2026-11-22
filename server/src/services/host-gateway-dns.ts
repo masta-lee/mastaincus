@@ -101,7 +101,12 @@ export async function queueHostGatewayDns(actor: number, nodeId?: string, onlyFa
     throw new OnboardingError('GATEWAY_DNS_MANAGEMENT_REQUIRED')
   }
   for (let offset = 0; offset < selected.length; offset += 40) {
-    await prisma.$transaction(selected.slice(offset, offset + 40).map(node => recordStatus(node.id, { installed: false, state: 'queued', step: 'connect', code: null, actor, attempt: 0, desiredRevision: desired.revision })))
+    await prisma.$transaction(async tx => {
+      for (const node of selected.slice(offset, offset + 40)) {
+        const value=JSON.stringify({installed:false,state:'queued',step:'connect',code:null,actor,attempt:0,desiredRevision:desired.revision})
+        await tx.systemConfig.upsert({where:{key:statusKey(node.id)},create:{key:statusKey(node.id),value,type:'json'},update:{value}})
+      }
+    })
   }
   return { queued: selected.length }
 }

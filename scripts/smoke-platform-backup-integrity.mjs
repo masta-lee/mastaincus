@@ -10,21 +10,20 @@ import { join } from 'node:path'
 assert.equal(process.platform, 'linux')
 assert.equal(process.getuid(), 0)
 assert.equal(process.env.RUN_BACKUP_INTEGRITY_DRILL, '1', 'Explicit isolated drill authorization required')
-await import('/opt/incudal/server/dist/config/env.js')
+await import(process.env.INTEGRITY_ENV_MODULE || '/opt/incudal/server/dist/config/env.js')
 const db = await import(process.env.INTEGRITY_DATABASE_MODULE || '/opt/incudal/server/dist/services/platform-backup-database.js')
 const exec = promisify(execFile)
 const originalUrl = process.env.DATABASE_URL
 const connection = db.postgresConnection()
 const suffix = randomUUID().replace(/-/g, '')
-const source = `incudal_integrity_${suffix}`, restored = `incudal_integrity_copy_${suffix}`
+const source = `incudal_check_${suffix}`, restored = `incudal_restore_${suffix}`
 const role = `incudal_integrity_role_${suffix.slice(0, 16)}`
 const directory = await mkdtemp('/var/tmp/incudal-integrity-')
 const q = db.quoteIdentifier
 let sourceCreated = false, restoredCreated = false, roleCreated = false
 try {
   await db.localDatabaseAdmin(`CREATE ROLE ${q(role)} NOLOGIN;`); roleCreated = true
-  await db.localDatabaseAdmin(`CREATE DATABASE ${q(source)} OWNER ${q(connection.user)} TEMPLATE template0;`); sourceCreated = true
-  const fixtureUrl = new URL(originalUrl); fixtureUrl.pathname = `/${source}`; process.env.DATABASE_URL = fixtureUrl.toString()
+  await db.createBackupRestoreDatabase(source); sourceCreated = true
   await db.pgQuery(`
     CREATE TABLE _prisma_migrations (migration_name text, checksum text, finished_at timestamptz, rolled_back_at timestamptz);
     INSERT INTO _prisma_migrations VALUES ('fixture',repeat('a',64),now(),NULL);
@@ -42,18 +41,23 @@ try {
     CREATE TABLE partition_leaf PARTITION OF partitioned FOR VALUES FROM (0) TO (10);
     INSERT INTO partitioned VALUES (1,1.01),(2,2.02);
     CREATE TABLE concurrent_ledger (id bigserial PRIMARY KEY, amount numeric NOT NULL DEFAULT 0.01);
-  `)
+    CREATE TABLE financial_integrity_seals (kind text,record_id text,signature text);
+  `,[],source)
+  const user=q(connection.user)
+  const grantSql=`GRANT USAGE ON SCHEMA public,"edge schema" TO ${user};GRANT SELECT,INSERT,UPDATE,DELETE ON ALL TABLES IN SCHEMA public,"edge schema" TO ${user};GRANT USAGE,SELECT ON ALL SEQUENCES IN SCHEMA public,"edge schema" TO ${user};REVOKE INSERT,UPDATE,DELETE ON _prisma_migrations FROM ${user};`
+  await db.pgQuery(grantSql,[],source)
   await exec('/usr/sbin/runuser', ['-u', 'postgres', '--', 'psql', '-X', '-v', 'ON_ERROR_STOP=1', '-p', connection.url.port || '5432', '-d', source, '-c', `GRANT SELECT ON public.ledger TO ${q(role)};`])
-  const [{ oid }] = await db.pgQuery("SELECT lo_from_bytea(0,decode(repeat('ab',5000),'hex')) AS oid")
+  const query=(sql,args=[])=>db.pgRecoveryTransaction(tx=>tx(sql,args),source)
+  const [{ oid }] = await query("SELECT lo_from_bytea(0,decode(repeat('ab',5000),'hex')) AS oid")
   let writing = true
   const writer = (async () => {
-    while (writing) { await db.pgQuery('INSERT INTO concurrent_ledger DEFAULT VALUES'); await new Promise(resolve => setTimeout(resolve, 40)) }
+    while (writing) { await query('INSERT INTO concurrent_ledger DEFAULT VALUES'); await new Promise(resolve => setTimeout(resolve, 40)) }
   })()
   const dump = join(directory, 'database.dump')
   let captured
-  try { captured = await db.captureDatabaseBackup(dump, directory) } finally { writing = false; await writer }
+  try { captured = await db.captureDatabaseBackup(dump, directory, source) } finally { writing = false; await writer }
   const concurrent = captured.report.tables.find(table => table.name === 'concurrent_ledger')
-  const [{ count }] = await db.pgQuery('SELECT count(*)::text AS count FROM concurrent_ledger')
+  const [{ count }] = await query('SELECT count(*)::text AS count FROM concurrent_ledger')
   assert.ok(BigInt(count) > BigInt(concurrent.rows), 'fixture must commit writes after the exported snapshot')
   assert.equal(captured.report.tables.find(table => table.name === 'ledger').rows, '3')
   assert.equal(captured.report.largeObjects.objects, '1')
@@ -62,15 +66,18 @@ try {
   const schemaSql = join(directory, 'archive-schema.sql')
   await exec('pg_restore', ['--schema-only', '--file', schemaSql, dump])
   assert.ok((await readFile(schemaSql, 'utf8')).includes(`TO ${role}`), 'table grants must be preserved in the full archive')
-  await db.verifyDatabaseBackup(dump, captured.report, directory, randomUUID())
+  await db.verifyDatabaseBackup(dump, captured.report, directory, randomUUID(), true)
   const readableSql = await db.exportReadableDatabase(dump, captured.report, directory)
   assert.equal(readableSql.filter(file => file.name.startsWith('tables/')).length, captured.report.tables.length)
   assert.ok(readableSql.some(file => file.name === 'tables/edge%20schema/quoted%2Etable.sql'))
   const fullSql = readableSql.find(file => file.name === 'database.sql')
   assert.ok((await readFile(fullSql.path, 'utf8')).includes('CREATE TABLE public.ledger'))
   // Restore the human-readable full SQL to another disposable database, without the live CREATE DATABASE/role mapping.
-  const sqlDatabase = `incudal_sql_${suffix}`
-  await db.localDatabaseAdmin(`CREATE DATABASE ${q(sqlDatabase)} OWNER ${q(connection.user)} TEMPLATE template0;`)
+  const sqlDatabase = `incudal_restore_${randomUUID().replaceAll('-','')}`
+  // Restore requires the root-retained identity of the installed live database,
+  // while the actual archive remains from the isolated fixture source.
+  process.env.DATABASE_URL=originalUrl
+  await db.createBackupRestoreDatabase(sqlDatabase)
   try {
     await db.restoreDatabaseSql(fullSql.path, sqlDatabase)
     const compareDir = await mkdtemp(join(directory, 'sql-verify-'))
@@ -90,11 +97,11 @@ try {
     assert.ok(decoded.zipPath)
     assert.equal((await readFile(decoded.zipPath)).readUInt32LE(0), 0x04034b50)
     const verification = await mkdtemp(join(directory, 'zip-verify-'))
-    await db.verifyDatabaseBackup(decoded.files.get('database.dump'), JSON.parse(await readFile(decoded.files.get('database-integrity.json'), 'utf8')), verification, randomUUID())
+    await db.verifyDatabaseBackup(decoded.files.get('database.dump'), JSON.parse(await readFile(decoded.files.get('database-integrity.json'), 'utf8')), verification, randomUUID(), true)
     console.log('PASS: encrypted ZIP/ZIP64 decrypts to a standard ZIP and its complete database restores with all integrity checks matched.')
   }
 
-  await db.localDatabaseAdmin(`CREATE DATABASE ${q(restored)} OWNER ${q(connection.user)} TEMPLATE template0;`); restoredCreated = true
+  await db.createBackupRestoreDatabase(restored); restoredCreated = true
   await db.restoreDatabase(dump, restored)
   await db.pgQuery('UPDATE ledger SET amount=amount+1 WHERE id IS NULL', [], restored)
   await assert.rejects(db.verifyRestoredDatabase(restored, captured.report, directory, 'tampered-rows'), /OSS_DATABASE_INTEGRITY_MISMATCH/)
@@ -117,7 +124,7 @@ try {
   console.log('PASS: missing table is rejected.')
   await exec('/usr/sbin/runuser', ['-u', 'postgres', '--', 'psql', '-X', '-v', 'ON_ERROR_STOP=1', '-p', connection.url.port || '5432', '-d', source, '-c', 'CREATE FOREIGN DATA WRAPPER fixture_fdw; CREATE SERVER fixture_server FOREIGN DATA WRAPPER fixture_fdw; CREATE FOREIGN TABLE foreign_fixture (id integer) SERVER fixture_server;'])
   const foreign = await mkdtemp(join(directory, 'foreign-'))
-  await assert.rejects(db.captureDatabaseBackup(join(foreign, 'database.dump'), foreign), /OSS_DATABASE_FOREIGN_TABLE_UNSUPPORTED/)
+  await assert.rejects(db.captureDatabaseBackup(join(foreign, 'database.dump'), foreign, source), /OSS_DATABASE_FOREIGN_TABLE_UNSUPPORTED/)
   console.log('PASS: unsupported foreign-table data is refused before publishing a backup.')
 } finally {
   process.env.DATABASE_URL = originalUrl

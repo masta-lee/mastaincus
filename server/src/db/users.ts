@@ -983,8 +983,8 @@ export async function updateUserProfileIfCurrent(
       if (self && !await verifyCodeInTransaction(tx, data.email!, emailCode || '', 'change_email')) return false
     }
     const ids = [...new Set([actor.id, expected.id])].sort((a, b) => a - b)
-    const locked = await tx.$queryRaw<Array<{ id: number; role: string; status: string }>>(Prisma.sql`SELECT id, role, status FROM users WHERE id IN (${Prisma.join(ids)}) ORDER BY id FOR UPDATE`)
-    const currentActor = locked.find(row => row.id === actor.id)
+    await tx.$queryRaw(Prisma.sql`SELECT id FROM users WHERE id IN (${Prisma.join(ids)}) ORDER BY id FOR UPDATE`)
+    const currentActor = await tx.user.findUnique({ where: { id: actor.id }, select: { status: true, role: true } })
     if (currentActor?.status !== 'active' || (!self && currentActor.role !== 'admin')) throw new Error('PROFILE_ACTOR_FORBIDDEN')
     if (!actor.iat || !actor.sid) throw new Error('AUTHENTICATION_STATE_CHANGED')
     const invalidations = await tx.tokenInvalidation.findMany({ where: {

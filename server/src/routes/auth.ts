@@ -27,8 +27,10 @@ import {
   generate2FAQRCode,
   verify2FAToken,
   generateRecoveryCodes,
+  encodeRecoveryCodes,
+  readRecoveryCodeHashes,
+  decryptSensitiveDataStrict,
   encryptSensitiveData,
-  decryptSensitiveData,
   validateIdentifier,
   containsDangerousChars,
   detectNewLoginLocation
@@ -276,7 +278,7 @@ export default async function authRoutes(fastify: FastifyInstance) {
       if (totpCode) {
         const secret = await db.get2FASecret(user.id)
         if (secret) {
-          const decryptedSecret = decryptSensitiveData(secret)
+          const decryptedSecret = decryptSensitiveDataStrict(secret)
           if (decryptedSecret && verify2FAToken(totpCode, decryptedSecret)) {
             verified = true
           }
@@ -288,15 +290,15 @@ export default async function authRoutes(fastify: FastifyInstance) {
         const recoveryState = await db.get2FAMutationState(user.id)
         const encryptedCodes = recoveryState?.twoFactorRecoveryCodes
         if (encryptedCodes) {
-          const decryptedCodesJson = decryptSensitiveData(encryptedCodes)
-          if (decryptedCodesJson) {
+          const codes = readRecoveryCodeHashes(encryptedCodes)
+          if (codes) {
             try {
-              const codes: string[] = JSON.parse(decryptedCodesJson)
-              const codeIndex = codes.indexOf(recoveryCode.toUpperCase())
+              const { createHash } = await import('node:crypto')
+              const codeIndex = codes.indexOf(createHash('sha256').update(recoveryCode.toUpperCase()).digest('hex'))
               if (codeIndex !== -1) {
                 // 恢复码有效，移除已使用的恢复码
                 codes.splice(codeIndex, 1)
-                const newEncryptedCodes = encryptSensitiveData(JSON.stringify(codes))
+                const newEncryptedCodes = encryptSensitiveData(JSON.stringify({ version: 1, hashes: codes }))
                 verified = Boolean(recoveryState && recoveryState.twoFactorEnabled &&
                   recoveryState.passwordHash === user.password_hash &&
                   await db.replace2FAStateIfCurrent(recoveryState, { twoFactorRecoveryCodes: newEncryptedCodes }))
@@ -354,7 +356,7 @@ export default async function authRoutes(fastify: FastifyInstance) {
       username: user.username,
       role: user.role,
       sid: sessionId  // 会话标识，用于会话级别的 token 失效
-    }, { expiresIn: '7d' })
+    }, { expiresIn: user.role === 'admin' ? '15m' : '1h' })
 
     // 设置 Refresh Token Cookie (HttpOnly)
     // SEC005: 使用统一的 Cookie 配置
@@ -698,7 +700,7 @@ export default async function authRoutes(fastify: FastifyInstance) {
       username: newUser.username,
       role: newUser.role,
       sid: sessionId  // 会话标识，用于会话级别的 token 失效
-    }, { expiresIn: '7d' })
+    }, { expiresIn: newUser.role === 'admin' ? '15m' : '1h' })
 
     // 设置 Refresh Token Cookie (HttpOnly)
     // SEC005: 使用统一的 Cookie 配置
@@ -882,7 +884,7 @@ export default async function authRoutes(fastify: FastifyInstance) {
         username: user.username,
         role: user.role,
         sid: sessionId
-      }, { expiresIn: '7d' })
+      }, { expiresIn: user.role === 'admin' ? '15m' : '1h' })
 
       // 如果会话成功延期，同步更新 Cookie 有效期
       // SEC005: 使用统一的 Cookie 配置
@@ -1056,7 +1058,7 @@ export default async function authRoutes(fastify: FastifyInstance) {
 
     // 生成备用恢复码并加密保存（临时保存，启用时才生效）
     const recoveryCodes = generateRecoveryCodes()
-    const encryptedCodes = encryptSensitiveData(JSON.stringify(recoveryCodes))
+    const encryptedCodes = encodeRecoveryCodes(recoveryCodes)
     if (!await db.replace2FAStateIfCurrent(setupState, {
       twoFactorSecret: encryptedSecret, twoFactorRecoveryCodes: encryptedCodes
     }, request.user)) return reply.code(409).send({ error: 'Authentication state changed; retry setup' })
@@ -1093,7 +1095,7 @@ export default async function authRoutes(fastify: FastifyInstance) {
     }
 
     // 解密并验证
-    const secret = decryptSensitiveData(encryptedSecret)
+    const secret = decryptSensitiveDataStrict(encryptedSecret)
     if (!secret || !verify2FAToken(code, secret)) {
       return reply.code(400).send(apiError(ErrorCode.INVALID_2FA_CODE))
     }
@@ -1149,7 +1151,7 @@ export default async function authRoutes(fastify: FastifyInstance) {
       return reply.code(409).send({ error: 'Authentication state changed; retry verification' })
     }
     const encryptedSecret = disableState.twoFactorSecret
-    const secret = encryptedSecret ? decryptSensitiveData(encryptedSecret) : null
+    const secret = encryptedSecret ? decryptSensitiveDataStrict(encryptedSecret) : null
     if (!secret || !verify2FAToken(code, secret)) {
       return reply.code(400).send(apiError(ErrorCode.INVALID_2FA_CODE))
     }
@@ -1195,13 +1197,12 @@ export default async function authRoutes(fastify: FastifyInstance) {
       return { total: 8, remaining: 0, used: 8 }
     }
 
-    const decryptedCodesJson = decryptSensitiveData(encryptedCodes)
-    if (!decryptedCodesJson) {
+    const codes = readRecoveryCodeHashes(encryptedCodes)
+    if (!codes) {
       return { total: 8, remaining: 0, used: 8 }
     }
 
     try {
-      const codes: string[] = JSON.parse(decryptedCodesJson)
       return { total: 8, remaining: codes.length, used: 8 - codes.length }
     } catch {
       return { total: 8, remaining: 0, used: 8 }
@@ -1248,14 +1249,14 @@ export default async function authRoutes(fastify: FastifyInstance) {
       return reply.code(409).send({ error: 'Authentication state changed; retry verification' })
     }
     const encryptedSecret = regenerateState.twoFactorSecret
-    const secret = encryptedSecret ? decryptSensitiveData(encryptedSecret) : null
+    const secret = encryptedSecret ? decryptSensitiveDataStrict(encryptedSecret) : null
     if (!secret || !verify2FAToken(code, secret)) {
       return reply.code(400).send(apiError(ErrorCode.INVALID_2FA_CODE))
     }
 
     // 生成新的恢复码
     const recoveryCodes = generateRecoveryCodes()
-    const encryptedCodes = encryptSensitiveData(JSON.stringify(recoveryCodes))
+    const encryptedCodes = encodeRecoveryCodes(recoveryCodes)
     if (!await db.replace2FAStateIfCurrent(regenerateState, { twoFactorRecoveryCodes: encryptedCodes }, request.user)) {
       return reply.code(409).send({ error: 'Authentication state changed; retry verification' })
     }

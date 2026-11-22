@@ -26,6 +26,7 @@ import { recoveryHeld, recoveryRequestAllowed } from './services/platform-backup
 import { startPlatformBackupScheduler, stopPlatformBackupScheduler } from './services/platform-backup-scheduler.js'
 
 import Fastify, { type FastifyReply, type FastifyRequest } from 'fastify'
+import { assertRuntimeDatabaseRole } from './lib/database-role-security.js'
 import cors from '@fastify/cors'
 import helmet from '@fastify/helmet'
 import fastifyStatic from '@fastify/static'
@@ -231,7 +232,6 @@ await fastify.register(helmet, {
       defaultSrc: ["'self'"],
       scriptSrc: [
         "'self'",
-        "'unsafe-inline'",  // Vue 需要
         'https://challenges.cloudflare.com',  // Turnstile
         'https://static.cloudflareinsights.com',  // Cloudflare Analytics
       ],
@@ -260,8 +260,8 @@ await fastify.register(helmet, {
       ],
       connectSrc: [
         "'self'",
-        'ws:',   // HTTP-only intranet WebSocket validation
-        'wss:',  // WebSocket 连接
+        ...(process.env.SITE_URL?.startsWith('https://') ? [] : ['ws:']), // HTTP-only intranet WebSocket validation
+        // 'self' includes same-origin wss on HTTPS; no cross-origin WS access.
         'https://challenges.cloudflare.com',  // Turnstile API
         'https://cloudflareinsights.com',  // Cloudflare Analytics
         'https://api.dicebear.com',  // 头像 API
@@ -715,17 +715,17 @@ if (shouldServeStaticClient) {
       try {
         // 确保JavaScript和CSS文件有正确的Content-Type
         if (pathName.endsWith('.js')) {
-          res.setHeader('Content-Type', 'application/javascript; charset=utf-8')
+          res.header('Content-Type', 'application/javascript; charset=utf-8')
         } else if (pathName.endsWith('.css')) {
-          res.setHeader('Content-Type', 'text/css; charset=utf-8')
+          res.header('Content-Type', 'text/css; charset=utf-8')
         } else if (pathName.endsWith('.html')) {
-          res.setHeader('Content-Type', 'text/html; charset=utf-8')
+          res.header('Content-Type', 'text/html; charset=utf-8')
           // HTML 文件不缓存，确保总是获取最新版本
-          res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate')
+          res.header('Cache-Control', 'no-cache, no-store, must-revalidate')
         }
         // 静态资源缓存（JS/CSS/图片等）
         if (!pathName.endsWith('.html')) {
-          res.setHeader('Cache-Control', 'public, max-age=31536000, immutable')
+          res.header('Cache-Control', 'public, max-age=31536000, immutable')
         }
       } catch (error) {
         // 忽略设置响应头时的错误（例如响应头已发送）
@@ -782,6 +782,7 @@ const start = async (): Promise<void> => {
       jwtCheck.warnings.forEach(w => console.warn(`   - ${w}`))
     }
 
+    if(process.env.NODE_ENV==='production')await assertRuntimeDatabaseRole(prisma)
     await initializeFinancialDatabaseIntegrity()
     // Do not run startup mutations or workers against a database awaiting review.
     if (recoveryHeld()) {

@@ -66,7 +66,8 @@ if (mode === 'migrate') {
   const name = `incudal-${state.target}-linux-${arch}.tar.gz`
   const url = `https://github.com/mastalee928/payincus/releases/download/${state.target}/${name}`
   const manifestUrl = `https://github.com/mastalee928/payincus/releases/download/${state.target}/ota-manifest.json`
-  const manifest = { artifacts: [{ name, platform: 'linux', arch, url, sha256, size: bytes.length }] }
+  const signature=(await readFile(archive+'.sig','utf8')).trim()
+  const manifest = { artifacts: [{ name, platform: 'linux', arch, url, sha256, size: bytes.length,version:state.target,signature }] }
   const metadata = { tag_name: state.target, draft: false, assets: [
     { id: 1, name: 'ota-manifest.json', browser_download_url: manifestUrl },
     { id: 2, name, browser_download_url: url, size: bytes.length, digest: 'sha256:' + sha256 }

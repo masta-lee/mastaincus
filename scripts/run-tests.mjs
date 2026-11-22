@@ -50,6 +50,16 @@ environment:
  * 新增守卫若不属于这一类，请加进根 package.json 的 `testGuards`，不要加到这里。
  */
 const EXCLUDED_FROM_SUITE = new Map([
+  ['test:security-csp-browser', 'requires both built frontend entries and Chrome; actual CSP headers, three locales, working login/theme and inline script rejection'],
+  ['test:smtp-security-transport', 'requires disposable local TCP/TLS SMTP listeners and OpenSSL; actual delivery, bad certificate and downgrade rejection, no file/URL access'],
+  ['test:request-budget-transport', 'requires disposable local HTTP socket; cancelled upload retains global memory reservation until actual handler completion'],
+  ['test:storage-security-transport', 'requires isolated HTTP transport with exact socket fixture; real S3 signing, streaming, SDK Agent and parser limit'],
+  ['test:webdav-security-transport', 'requires isolated Undici transport; real SDK stream and bounded XML behavior'],
+  ['test:storage-security-dns', 'requires disposable HTTP listener; actual DNS rebinding rejection and zero private-target credentials'],
+  ['test:authentication-integrity', 'requires empty disposable local PostgreSQL; real authenticated source, tampering, concurrency, ciphertext migration and cascade regression'],
+  ['test:oauth-integrity', 'requires empty disposable local PostgreSQL; real authenticated source, tampering, concurrency, ciphertext migration and cascade regression'],
+  ['test:authentication-functional', 'requires empty disposable local PostgreSQL; real authenticated source, tampering, concurrency, ciphertext migration and cascade regression'],
+
   ['test:financial-integrity', 'requires isolated local *_pool_test PostgreSQL; actual wallet/ledger/business tampering, signed restore key/legacy baseline, rollback and authorized cascades'],
   ['test:customer-telegram-delivery', 'requires isolated PostgreSQL and intercepted external Telegram transport; validates actual customer/admin payloads and durable failure receipts'],
   ['test:registration-http', 'requires isolated PostgreSQL; exercises real registration HTTP, validation, verification and per-source quota'],

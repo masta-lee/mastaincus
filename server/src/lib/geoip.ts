@@ -131,7 +131,7 @@ async function processQueue(): Promise<void> {
 async function fetchGeoIpInfo(ip: string): Promise<GeoIpInfo> {
   try {
     const response = await fetch(
-      `http://ip-api.com/json/${encodeURIComponent(ip)}?fields=status,message,country,regionName,city,isp,timezone,query`,
+      `https://ipwho.is/${encodeURIComponent(ip)}`,
       {
         method: 'GET',
         headers: {
@@ -146,7 +146,8 @@ async function fetchGeoIpInfo(ip: string): Promise<GeoIpInfo> {
       return createEmptyResult(ip)
     }
 
-    const data = await response.json() as IpApiResponse
+    const payload = await response.json() as {success?:boolean;country?:string;region?:string;city?:string;connection?:{isp?:string};timezone?:{id?:string};message?:string}
+    const data: IpApiResponse = {status:payload.success?'success':'fail',country:payload.country,regionName:payload.region,city:payload.city,isp:payload.connection?.isp,timezone:payload.timezone?.id,message:payload.message}
 
     if (data.status === 'fail') {
       console.warn(`[GeoIP] Query failed for ${ip}: ${data.message}`)

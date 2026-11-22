@@ -4,9 +4,12 @@
 
 import { createClient, WebDAVClient } from 'webdav'
 import { Readable } from 'stream'
+import '../webdav-transport.js'
+import { limitReadable, readBoundedResponse } from '../../lib/bounded-response.js'
 import type { IStorageProvider, StorageConfigData } from '../types.js'
 import { assertSafeStorageTarget } from '../../lib/outbound-security.js'
 import { joinStorageRemoteDirectory, joinStorageRemotePath, normalizeStorageBasePath } from '../path.js'
+import { storageHttpAgent, storageHttpsAgent, rejectStorageControlCharacters } from '../transport.js'
 
 export class WebDavProvider implements IStorageProvider {
     private client: WebDAVClient
@@ -14,6 +17,7 @@ export class WebDavProvider implements IStorageProvider {
     private rawHost: string
 
     constructor(config: StorageConfigData) {
+        rejectStorageControlCharacters(config.host)
         // 构建 WebDAV URL
         const port = config.port ? `:${config.port}` : ''
         const baseUrl = config.host.includes('://')
@@ -25,11 +29,10 @@ export class WebDavProvider implements IStorageProvider {
         this.basePath = normalizeStorageBasePath(config.basePath)
 
         this.client = createClient(baseUrl, {
+            httpAgent: storageHttpAgent,
+            httpsAgent: storageHttpsAgent,
             username: config.username || undefined,
-            password: config.password || undefined,
-            // 大文件上传需要更长的超时时间
-            maxBodyLength: Infinity,
-            maxContentLength: Infinity
+            password: config.password || undefined
         })
     }
 
@@ -47,28 +50,23 @@ export class WebDavProvider implements IStorageProvider {
             // 忽略目录创建错误，可能已存在
         }
 
-        // 使用 putFileContents 的流模式
-        const writeStream = this.client.createWriteStream(remotePath)
-
-        return new Promise((resolve, reject) => {
-            fileStream.pipe(writeStream)
-            writeStream.on('finish', resolve)
-            writeStream.on('error', reject)
-            fileStream.on('error', reject)
-        })
+        // Await the remote HTTP success, not just a local writable finish.
+        const response = await this.client.customRequest(remotePath, { method: 'PUT', data: limitReadable(fileStream) })
+        await readBoundedResponse((response as unknown as { body: Readable }).body, 2 * 1024 ** 2)
     }
 
     async downloadStream(filename: string): Promise<Readable> {
         await assertSafeStorageTarget('WEBDAV', this.rawHost)
         const remotePath = joinStorageRemotePath(this.basePath, filename)
-        return this.client.createReadStream(remotePath)
+        const response = await this.client.customRequest(remotePath, { method: 'GET' })
+        return (response as unknown as { body: Readable }).body
     }
 
     async testConnection(): Promise<void> {
         try {
             await assertSafeStorageTarget('WEBDAV', this.rawHost)
             // 尝试获取根目录内容来测试连接
-            await this.client.getDirectoryContents('/')
+            await this.client.getDirectoryContents('/', { signal: AbortSignal.timeout(15000) })
         } catch (err) {
             const message = err instanceof Error ? err.message : String(err)
             throw new Error(`WebDAV 连接测试失败: ${message}`)

@@ -412,5 +412,32 @@ class RetirementTests(unittest.TestCase):
         self.assertEqual(self.writes,[])
 
 
+class CertificateProbeTests(unittest.TestCase):
+    def test_original_ssh_peer_identity_before_public_certificate(self):
+        import os,types
+        if not hasattr(os,'geteuid') or os.geteuid()!=0:self.skipTest('requires disposable Linux root metadata')
+        job='11111111-1111-4111-8111-111111111111';peer=base64.b64encode(bytes([7])*32).decode()
+        control=ipaddress.ip_interface('10.253.240.1/20');certificate='-----BEGIN CERTIFICATE-----\nYQ==\n-----END CERTIFICATE-----'
+        with tempfile.TemporaryDirectory(dir='/root')as folder:
+            state=pathlib.Path(folder);reservation=state/(job+'.json')
+            reservation.write_text(json.dumps({'nodePublicKey':peer,'managementIp':'10.253.240.2'}));reservation.chmod(0o600)
+            request={'sshPort':22,'sshFingerprint':'SHA256:'+'a'*43,'nodePublicKey':peer,'serverCertificate':True}
+            calls=[]
+            def execute(args):
+                calls.append(args)
+                if args[0]=='ssh-keyscan':return types.SimpleNamespace(stdout=b'fixture',stderr=b'',returncode=0)
+                self.assertIn('StrictHostKeyChecking=yes',args);self.assertIn('/var/lib/incus/server.crt',args[-1]);self.assertNotIn('server.key',args[-1])
+                return types.SimpleNamespace(stdout=(job+'\n'+certificate+'\n').encode(),stderr=b'',returncode=0)
+            with mock.patch.object(gateway,'STATE',state),mock.patch.object(gateway,'run',return_value=peer+'\t10.253.240.2/32'),mock.patch.object(gateway,'recovery_probe_process',side_effect=execute),mock.patch.object(gateway,'verified_host_scan',return_value=['fixture known host']):
+                with mock.patch.object(gateway.sys,'stdin',types.SimpleNamespace(buffer=io.BytesIO(json.dumps(request).encode()))):
+                    value=gateway.probe_host(job,control)
+                self.assertEqual(value['serverCertificate'],certificate);self.assertTrue(value['sshIdentityVerified'])
+                self.assertEqual(len(calls),2)
+                with mock.patch.object(gateway.sys,'stdin',types.SimpleNamespace(buffer=io.BytesIO(json.dumps({**request,'nodePublicKey':base64.b64encode(bytes([8])*32).decode()}).encode()))):
+                    with self.assertRaises(gateway.GatewayOperationError):gateway.probe_host(job,control)
+                self.assertEqual(len(calls),2,'wrong peer rejected before SSH/certificate read')
+                with mock.patch.object(gateway.sys,'stdin',types.SimpleNamespace(buffer=io.BytesIO(json.dumps({**request,'serverCertificate':False}).encode()))):
+                    with self.assertRaises(ValueError):gateway.probe_host(job,control)
+
 if __name__ == "__main__":
     unittest.main()

@@ -1,5 +1,5 @@
 import { createHash, randomBytes, timingSafeEqual } from 'crypto'
-import type { OAuthAccessToken, OAuthClientApp, OAuthGrant, Prisma, User } from '@prisma/client'
+import { Prisma, type OAuthAccessToken, type OAuthClientApp, type OAuthGrant, type User } from '@prisma/client'
 import { prisma } from '../db/prisma.js'
 import { PUBLIC_API_SCOPES, type PublicApiScope } from './public-api-auth.js'
 
@@ -441,11 +441,20 @@ export async function exchangeOAuthAuthorizationCode(input: {
   const refreshTokenExpiresAt = new Date(Date.now() + OAUTH_REFRESH_TOKEN_TTL_SECONDS * 1000)
 
   const result = await prisma.$transaction(async tx => {
+    await tx.$queryRaw`SELECT id FROM oauth_client_apps WHERE id=${app.id} FOR UPDATE`
+    const currentApp = await tx.oAuthClientApp.findUnique({ where: { id: app.id } })
+    if (!currentApp?.enabled || currentApp.clientSecretHash !== app.clientSecretHash) throw new Error('OAuth client authorization changed')
+    await tx.$queryRaw`SELECT id FROM oauth_authorization_codes WHERE code_hash=${codeHash} FOR UPDATE`
     const authorizationCode = await tx.oAuthAuthorizationCode.findUnique({ where: { codeHash } })
     if (!authorizationCode || authorizationCode.appId !== app.id) throw new Error('Invalid authorization code')
     if (authorizationCode.usedAt) throw new Error('Authorization code has already been used')
     if (authorizationCode.expiresAt.getTime() <= Date.now()) throw new Error('Authorization code has expired')
     if (authorizationCode.redirectUri !== input.redirectUri) throw new Error('redirect_uri does not match authorization request')
+
+    await tx.$queryRaw`SELECT id FROM users WHERE id=${authorizationCode.userId} FOR SHARE`
+    const account = await tx.user.findUnique({ where: { id: authorizationCode.userId }, select: { status: true, deletionIntent: true } })
+    if (account?.status !== 'active' || account.deletionIntent !== null) throw new Error('Account is not active')
+    await tx.$queryRaw`SELECT id FROM oauth_grants WHERE app_id=${app.id} AND user_id=${authorizationCode.userId} FOR UPDATE`
 
     await tx.oAuthAuthorizationCode.update({
       where: { id: authorizationCode.id },
@@ -513,6 +522,10 @@ export async function exchangeOAuthRefreshToken(input: {
   const refreshTokenExpiresAt = new Date(Date.now() + OAUTH_REFRESH_TOKEN_TTL_SECONDS * 1000)
 
   const result = await prisma.$transaction(async tx => {
+    await tx.$queryRaw`SELECT id FROM oauth_client_apps WHERE id=${app.id} FOR UPDATE`
+    const currentApp = await tx.oAuthClientApp.findUnique({ where: { id: app.id } })
+    if (!currentApp?.enabled || currentApp.clientSecretHash !== app.clientSecretHash) throw new Error('OAuth client authorization changed')
+    await tx.$queryRaw`SELECT id FROM oauth_refresh_tokens WHERE token_hash=${refreshTokenHash} FOR UPDATE`
     const refreshToken = await tx.oAuthRefreshToken.findUnique({
       where: { tokenHash: refreshTokenHash },
       include: {
@@ -521,6 +534,11 @@ export async function exchangeOAuthRefreshToken(input: {
       }
     })
     if (!refreshToken || refreshToken.appId !== app.id) throw new Error('Invalid refresh token')
+    await tx.$queryRaw`SELECT id FROM users WHERE id=${refreshToken.userId} FOR SHARE`
+    if (refreshToken.grantId) await tx.$queryRaw`SELECT id FROM oauth_grants WHERE id=${refreshToken.grantId} FOR UPDATE`
+    const currentUser = await tx.user.findUnique({ where: { id: refreshToken.userId }, select: { status: true, deletionIntent: true } })
+    const currentGrant = refreshToken.grantId ? await tx.oAuthGrant.findUnique({ where: { id: refreshToken.grantId } }) : null
+    if (currentUser?.status !== 'active' || currentUser.deletionIntent !== null || !currentGrant || currentGrant.revokedAt) throw new Error('OAuth authorization changed')
     if (refreshToken.revokedAt) throw new Error('Refresh token has been revoked')
     if (refreshToken.expiresAt.getTime() <= Date.now()) throw new Error('Refresh token has expired')
     if (refreshToken.user.status !== 'active') throw new Error('Account is not active')

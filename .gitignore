@@ -97,6 +97,9 @@ coverage/
 # ==================== 文档 (内部) ====================
 docs/*
 !docs/financial-audit-2026-11-22.md
+!docs/security-audit-2026-11-22.md
+!docs/security-advisories-2026-11-22.md
+!docs/security-repair-2026-11-22.md
 !docs/release-v1.8.5-validation.md
 !docs/release-v1.8.5-owner-click-test.md
 !docs/release-v1.8.4-validation.md

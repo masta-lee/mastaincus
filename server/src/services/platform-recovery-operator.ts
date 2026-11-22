@@ -42,6 +42,11 @@ export async function captureRecoveryOperator(actorId: number, batchId: string) 
     "SELECT id, username, password_hash, two_factor_enabled, two_factor_secret FROM users WHERE id=$1 AND role='admin' AND status='active'", [actorId])
   const allowed = process.env.PLATFORM_BACKUP_ALLOWED_ADMIN_IDS?.trim() ? process.env.PLATFORM_BACKUP_ALLOWED_ADMIN_IDS.split(',').map(Number) : undefined
   ensure(user && (allowed ? allowed.includes(user.id) : user.username === 'admin'), 'OSS_RECOVERY_OPERATOR_REQUIRED', 403)
+  // Verify B's actor independently: corrupted money must not prevent recovery
+  // while a database-forged operator must never authorize replacing the DB.
+  const { verifyRecoveryAuthenticationActor }=await import('../lib/authentication-integrity.js')
+  const account=await verifyRecoveryAuthenticationActor(user.id)
+  ensure(account?.role==='admin'&&account.status==='active'&&account.username===user.username&&account.passwordHash===user.password_hash&&account.twoFactorEnabled===user.two_factor_enabled&&account.twoFactorSecret===user.two_factor_secret,'OSS_RECOVERY_OPERATOR_REQUIRED',403)
   ensure(!user.two_factor_enabled || user.two_factor_secret, 'OSS_RECOVERY_OPERATOR_REQUIRED', 403)
   await writeJson(path(), { batchId, originalId: actorId, actorId, username: user.username, passwordHash: user.password_hash,
     mfa: user.two_factor_enabled ? protect(decryptGatewayTaskSecret(user.two_factor_secret!)) : null, synthetic: false } satisfies RecoveryOperator, 0o640)

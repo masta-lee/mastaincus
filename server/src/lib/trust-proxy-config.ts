@@ -1,6 +1,7 @@
 import { isIP } from 'node:net'
 
-export type TrustProxyConfig = boolean | number | string[]
+export type TrustProxyConfig = boolean | string[] | ((address: string, hop: number) => boolean)
+const trustHops = (count: number) => (_address: string, hop: number) => hop < count
 
 const ENABLED_VALUES = ['true', '1', 'yes', 'on']
 const DISABLED_VALUES = ['false', '0', 'no', 'off']
@@ -52,13 +53,14 @@ export function getTrustProxyConfig(): TrustProxyConfig {
     // Nginx and cloudflared may both connect over loopback. A hop count of one
     // records cloudflared's address; a larger count also trusts direct clients.
     // Stop at the first non-local address unless the operator configured hops.
-    return getConfiguredHops() ?? [...LOCAL_PROXY_ADDRESSES]
+    const hops = getConfiguredHops()
+    return hops ? trustHops(hops) : [...LOCAL_PROXY_ADDRESSES]
   }
 
   if (/^\d+$/.test(configured)) {
     const hops = Number(configured)
     if (Number.isSafeInteger(hops) && hops > 0) {
-      return hops
+      return trustHops(hops)
     }
   }
 

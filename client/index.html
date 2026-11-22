@@ -20,17 +20,7 @@
   <link rel="icon" type="image/webp" href="/incudal_logo.webp">
   <link rel="apple-touch-icon" href="/incudal_logo.webp">
   <title>基于 Incus 的低价 NAT VPS 平台</title>
-  <script>
-    (function () {
-      const theme = localStorage.getItem('theme') || 'system';
-      let resolved = theme;
-      if (theme === 'system') {
-        resolved = window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
-      }
-      document.documentElement.classList.add(resolved);
-      document.querySelector('meta[name="theme-color"]').setAttribute('content', resolved === 'dark' ? '#000000' : '#f5f5f7');
-    })();
-  </script>
+  <script src="/theme-init.js"></script>
   <style>
     html.dark body {
       background: #000000;
@@ -44,15 +34,6 @@
 
 <body>
   <div id="app"></div>
-  <script>
-    (function () {
-      const params = new URLSearchParams(window.location.search)
-      const figmaToken = params.get('figma_token')
-      if (figmaToken) {
-        localStorage.setItem('token', figmaToken)
-      }
-    })()
-  </script>
   <script type="module" src="/src/main.ts"></script>
 </body>
 

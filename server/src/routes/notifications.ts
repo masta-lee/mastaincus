@@ -11,6 +11,7 @@ import { testNotificationChannel } from '../lib/notifier.js'
 import type { NotificationChannel } from '../types/database.js'
 import { assertSafeWebhookUrl, OutboundTargetValidationError } from '../lib/outbound-security.js'
 import { NotificationChannelMutationError } from '../db/notifications.js'
+import { openNotificationConfig } from '../lib/notification-config.js'
 
 const telegramBotTokenPattern = /^[1-9]\d{5,19}:[A-Za-z0-9_-]{20,}$/
 const telegramChatIdPattern = /^-?\d{1,20}$|^@[A-Za-z0-9_]{5,32}$/
@@ -474,7 +475,7 @@ export default async function notificationRoutes(fastify: FastifyInstance) {
         // 不向普通用户暴露 chatId 等渠道配置明细，仅返回是否已配置，绑定套餐用名称/类型即可区分。
         let config: Record<string, unknown> | null = null
         try {
-          config = (typeof c.config === 'string' ? JSON.parse(c.config) : c.config) as Record<string, unknown> | null
+          config = openNotificationConfig(c.config)
         } catch {
           config = null
         }

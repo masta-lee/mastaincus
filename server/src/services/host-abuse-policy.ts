@@ -75,9 +75,10 @@ async function writeQueueErrors(tx: Prisma.TransactionClient, rows: AbuseRetryRe
   const failed = rows.filter(row => !row.success && queueErrors.has(row.code || ''))
   if (!failed.length) return
   const at = new Date().toISOString()
-  const values = failed.map(row => Prisma.sql`(${queueErrorPrefix + row.id}, ${JSON.stringify({ revision, code: row.code, at })}, 'json', NOW())`)
-  await tx.$executeRaw(Prisma.sql`INSERT INTO system_configs (key, value, type, updated_at) VALUES ${Prisma.join(values)}
-    ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value, updated_at = EXCLUDED.updated_at`)
+  for (const row of failed) {
+    const key = queueErrorPrefix + row.id, value = JSON.stringify({ revision, code: row.code, at })
+    await tx.systemConfig.upsert({ where: { key }, create: { key, value, type: 'json' }, update: { value } })
+  }
 }
 
 async function auditQueueAttemptFailure(rows: AbuseRetryResult[], revision: number, actor: WriteActor, forbidden: boolean, diagnosticsFailed = false) {

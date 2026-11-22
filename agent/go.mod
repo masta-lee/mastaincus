@@ -1,3 +1,3 @@
 module incudal-agent
 
-go 1.19
+go 1.26.11

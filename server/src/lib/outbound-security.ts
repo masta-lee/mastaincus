@@ -209,7 +209,7 @@ export const revalidatingLookup: LookupFunction = (hostname, options, callback) 
  * 用于所有“已通过 assertSafe*Url 校验的外发请求”的 undici dispatcher。
  * 在 fetch(..., { dispatcher: safeOutboundDispatcher }) 中传入即可获得连接期防 rebinding 保护。
  */
-export const safeOutboundDispatcher = new Agent({ connect: { lookup: revalidatingLookup } })
+export const safeOutboundDispatcher = new Agent({ connections: 8, connect: { lookup: revalidatingLookup } })
 
 export async function safeFetch(
   url: string,

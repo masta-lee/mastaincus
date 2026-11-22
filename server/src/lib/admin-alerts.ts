@@ -10,6 +10,8 @@ import * as db from '../db/index.js'
 import { prisma } from '../db/prisma.js'
 import { sanitizeTokensInString } from './log-sanitizer.js'
 import { telegramHtmlText } from './telegram-format.js'
+import { openNotificationConfig } from './notification-config.js'
+import { readTelegramResponse } from './notification-response.js'
 
 export const ADMIN_ALERT_CATEGORIES = ['ticket', 'host', 'payment', 'instance'] as const
 export type AdminAlertCategory = (typeof ADMIN_ALERT_CATEGORIES)[number]
@@ -114,7 +116,7 @@ export async function sendAdminAlert(
         if (channel.type !== 'telegram') {
           error = `Unsupported alert channel type: ${channel.type}`
         } else {
-          const config = (typeof channel.config === 'string' ? JSON.parse(channel.config) : channel.config) as Record<string, unknown>
+          const config = openNotificationConfig(channel.config)
           const botToken = typeof config.botToken === 'string' ? config.botToken : ''
           const chatId = typeof config.chatId === 'string' ? config.chatId : ''
           if (!botToken || !chatId) {
@@ -127,7 +129,7 @@ export async function sendAdminAlert(
               headers: { 'Content-Type': 'application/json' },
               body: JSON.stringify({ chat_id: chatId, text, parse_mode: 'HTML', link_preview_options: {is_disabled:true} })
             })
-            const json = await response.json() as { ok?: boolean; description?: string }
+            const json = await readTelegramResponse(response)
             error = response.ok && json.ok ? null : (json.description || `HTTP ${response.status}`)
           }
         }
@@ -143,7 +145,7 @@ export async function sendAdminAlert(
 
     return { sent, failed }
   } catch (err) {
-    console.warn('[AdminAlerts] sendAdminAlert failed:', err)
+    console.warn('[AdminAlerts] sendAdminAlert failed:', sanitizeTokensInString(err instanceof Error ? err.message : String(err)))
     return { sent: 0, failed: 0 }
   }
 }
@@ -152,7 +154,7 @@ async function dispatch(category: AdminAlertCategory, title: string, lines: Arra
   try {
     await sendAdminAlert(category, title, lines.filter((line): line is string => Boolean(line)).join('\n'))
   } catch (err) {
-    console.warn('[AdminAlerts] dispatch failed:', err)
+    console.warn('[AdminAlerts] dispatch failed:', sanitizeTokensInString(err instanceof Error ? err.message : String(err)))
   }
 }
 

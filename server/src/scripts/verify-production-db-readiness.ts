@@ -1,5 +1,6 @@
 import '../config/env.js'
 import { closePrismaDatabase, prisma } from '../db/prisma.js'
+import { assertRuntimeDatabaseRole } from '../lib/database-role-security.js'
 import { getAllPaymentProviders } from '../db/payment-providers.js'
 import { getSystemConfig } from '../db/system-config.js'
 import { assertSafeHttpUrl } from '../lib/outbound-security.js'
@@ -65,6 +66,7 @@ function isInstanceTypeCompatible(imageType: string | null | undefined, targetTy
 
 async function checkDatabaseConnectivity(): Promise<void> {
   await prisma.$queryRaw`SELECT 1`
+  await assertRuntimeDatabaseRole(prisma)
 }
 
 async function checkPaymentProviders(): Promise<void> {

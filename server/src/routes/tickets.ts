@@ -9,6 +9,7 @@
 
 import type { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify'
 import * as ticketDb from '../db/tickets.js'
+import { ticketUploadBudget, beginTicketUploadProcessing, completeTicketUploadProcessing } from '../lib/request-budget.js'
 import * as db from '../db/index.js'
 import { prisma } from '../db/prisma.js'
 import { getAllAdminUserIds } from '../db/users.js'
@@ -146,6 +147,9 @@ async function readRemoteImageBody(response: Response): Promise<Buffer> {
       }
       chunks.push(chunk)
     }
+  } catch(error) {
+    await reader.cancel().catch(()=>{})
+    throw error
   } finally {
     reader.releaseLock()
   }
@@ -163,10 +167,11 @@ export default async function ticketsRoutes(fastify: FastifyInstance) {
    * instanceId 可选：如果不选实例，工单直接发给管理员
    */
   fastify.post('/', {
-    onRequest: [fastify.authenticate],
+    onRequest: [fastify.authenticate, ticketUploadBudget],
     bodyLimit: TICKET_UPLOAD_BODY_LIMIT
   }, async (request: FastifyRequest, reply: FastifyReply) => {
     const { user } = request
+    beginTicketUploadProcessing(request)
     let uploadedAttachments: ticketDb.CreateTicketMessageAttachmentData[] = []
 
     try {
@@ -294,6 +299,8 @@ export default async function ticketsRoutes(fastify: FastifyInstance) {
         throw error
       }
       return reply.code(400).send(apiError(ErrorCode.INVALID_PARAMS, error?.message || 'Invalid ticket payload'))
+    } finally {
+      completeTicketUploadProcessing(request)
     }
   })
 
@@ -628,7 +635,7 @@ export default async function ticketsRoutes(fastify: FastifyInstance) {
   fastify.post<{
     Params: { id: string }
   }>('/:id/messages', {
-    onRequest: [fastify.authenticate],
+    onRequest: [fastify.authenticate, ticketUploadBudget],
     bodyLimit: TICKET_UPLOAD_BODY_LIMIT
   }, async (request: FastifyRequest<{
     Params: { id: string }
@@ -641,6 +648,7 @@ export default async function ticketsRoutes(fastify: FastifyInstance) {
     }
 
     let uploadedAttachments: ticketDb.CreateTicketMessageAttachmentData[] = []
+    beginTicketUploadProcessing(request)
 
     try {
       const payload = await readTicketPayload(request)
@@ -746,6 +754,8 @@ export default async function ticketsRoutes(fastify: FastifyInstance) {
         throw error
       }
       return reply.code(400).send(apiError(ErrorCode.INVALID_PARAMS, error?.message || 'Invalid ticket reply payload'))
+    } finally {
+      completeTicketUploadProcessing(request)
     }
   })
 

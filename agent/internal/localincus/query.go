@@ -61,7 +61,7 @@ func querySocket(ctx context.Context, socket, path string, raw bool) ([]byte, er
 		Metadata   json.RawMessage `json:"metadata"`
 	}
 	if response.StatusCode != http.StatusOK || json.Unmarshal(data, &envelope) != nil ||
-		envelope.Type != "sync" || envelope.StatusCode != http.StatusOK || envelope.Error != "" || len(envelope.Metadata) == 0 || string(envelope.Metadata) == "null" {
+		envelope.Type != "sync" || envelope.StatusCode != http.StatusOK || envelope.Error != "" || len(envelope.Metadata) == 0 || string(envelope.Metadata) == "null" && path != "/internal/ready" {
 		return nil, fmt.Errorf("local Incus response not confirmed")
 	}
 	if raw {

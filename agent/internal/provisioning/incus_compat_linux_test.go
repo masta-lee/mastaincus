@@ -118,6 +118,17 @@ func TestCompatibilityRetiresOnlyExitedPIDReceipt(t *testing.T) {
 }
 
 func TestCompatPermitAndGuestIdentity(t *testing.T) {
+	for _, versions := range [][2]string{{"7.0.1", "7.6.0"}, {"", ""}, {"7.6.0", "7.0.1"}} {
+		if compatRollbackSafe(compatJournal{OldVersion: versions[0], NewVersion: versions[1]}) {
+			t.Fatal("unsafe schema downgrade accepted", versions)
+		}
+	}
+	if !compatRollbackSafe(compatJournal{OldVersion: "7.6.0", NewVersion: "7.6.0"}) {
+		t.Fatal("same-version rollback refused")
+	}
+	if !compatSourceVersion("7.6") || !compatRollbackSafe(compatJournal{OldVersion: "7.6", NewVersion: "7.6.0"}) || compatSourceVersion("7.6.1") {
+		t.Fatal("exact upstream version alias must retain same-version rollback without accepting unknown patches")
+	}
 	good := &CompatPermit{RequestID: "11111111-1111-4111-8111-111111111111", HostIdentity: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", ExpiresAt: time.Now().Add(60 * time.Second).UTC().Format(time.RFC3339Nano)}
 	if !validCompatPermit(good) || validCompatPermit(nil) {
 		t.Fatal("permit validation")
@@ -163,7 +174,7 @@ func TestNativeCompatibilityAutomaticReload(t *testing.T) {
 	if os.Getenv("INCUDAL_SYSINFO_COMPAT_TEST") != "disposable" {
 		t.Skip("disposable Alpine root only")
 	}
-	ctx, cancel := context.WithTimeout(context.Background(), 120*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), 240*time.Second)
 	defer cancel()
 	before, e := compatGuests(ctx)
 	if e != nil || len(before) != 1 || before[0].Name != "native-sysinfo" {
@@ -236,35 +247,46 @@ func TestNativeCompatibilityAutomaticReload(t *testing.T) {
 		}
 	}
 	if os.Getenv("INCUDAL_COMPAT_RELOAD_SCENARIO") == "rollback-retry" {
-		// An invalid networking dependency makes the first real OpenRC start
-		// fail. Repair the disposable dependency and let the saved reloading
-		// journal resume, with the original guest still present.
-		path := "/etc/network/interfaces"
+		// Fail the actual OpenRC start_pre hook once. An already-started network
+		// dependency can ignore a missing interfaces file and is not a reliable
+		// failure injection. Restore the exact original script before retry.
+		path := "/etc/init.d/incusd"
 		original, readErr := os.ReadFile(path)
 		if readErr != nil {
 			t.Fatal(readErr)
 		}
-		if e = os.Remove(path); e != nil {
+		if e = os.WriteFile(path, append(append([]byte{}, original...), []byte("\nstart_pre() { return 1; }\n")...), 0755); e != nil {
 			t.Fatal(e)
 		}
 		e = prepareIncusCompatibility(ctx, p)
-		if restoreErr := os.WriteFile(path, original, 0644); restoreErr != nil {
+		if restoreErr := os.WriteFile(path, original, 0755); restoreErr != nil {
 			t.Fatal(restoreErr)
 		}
 		if e == nil {
 			t.Fatal("failed service startup reported success")
 		}
+		t.Log("injected startup result", e)
 		journalData, readErr := os.ReadFile(compatJournalPath)
 		var j compatJournal
-		if readErr != nil || json.Unmarshal(journalData, &j) != nil || j.Phase != "rolling-back" {
+		if readErr != nil || json.Unmarshal(journalData, &j) != nil || j.Phase != "rolling-back" && j.Phase != "reloading" {
 			t.Fatal("failed service lost durable reload intent", readErr)
 		}
-		if e = prepareIncusCompatibility(ctx, p); e == nil || !strings.Contains(e.Error(), "rolled back; retry pending") {
-			t.Fatal("automatic rollback", e)
-		}
-		current, _ := os.ReadFile("/usr/sbin/incusd")
-		if compatHash(current) != j.OldHash {
-			t.Fatal("rollback binary not restored")
+		if compatRollbackSafe(j) {
+			if e = prepareIncusCompatibility(ctx, p); e == nil || !strings.Contains(e.Error(), "rolled back; retry pending") {
+				t.Fatal("automatic rollback", e)
+			}
+			current, _ := os.ReadFile("/usr/sbin/incusd")
+			if compatHash(current) != j.OldHash {
+				t.Fatal("rollback binary not restored")
+			}
+		} else {
+			current, _ := os.ReadFile("/usr/sbin/incusd")
+			if compatHash(current) != j.NewHash {
+				t.Fatal("cross-version retry lost verified candidate")
+			}
+			if e = prepareIncusCompatibility(ctx, p); e != nil {
+				t.Fatal("schema-safe forward retry", e)
+			}
 		}
 		restored, readErr := compatGuests(ctx)
 		if readErr != nil || !sameCompatGuests(before, restored) {

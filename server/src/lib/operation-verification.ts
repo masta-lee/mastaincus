@@ -17,6 +17,7 @@ import {
     advisoryTransactionLockString
 } from '../db/advisory-locks.js'
 import crypto from 'crypto'
+import { openNotificationConfig } from './notification-config.js'
 
 // Destroy-email records have their own session/set binding, lifetime and send
 // budget. Generic verification must neither authorize nor remove those records.
@@ -126,9 +127,7 @@ async function getUserNotificationChannel(userId: number): Promise<NotificationC
 }
 
 function maskNotificationTarget(notificationChannel: NotificationChannel): string {
-    const config = typeof notificationChannel.config === 'string'
-        ? JSON.parse(notificationChannel.config)
-        : notificationChannel.config
+    const config = openNotificationConfig(notificationChannel.config)
     if (!config || typeof config !== 'object' || Array.isArray(config)) throw new Error('Invalid notification configuration')
 
     switch (notificationChannel.type) {

@@ -712,13 +712,13 @@ export default async function oauthRoutes(fastify: FastifyInstance) {
     // 提取会话标识
     const sessionId = getRefreshTokenSessionId(refreshToken)
 
-    // 生成 Access Token（简化版：7天有效期）
+    // Bind lifetime to the same current role used in the signed token.
     const accessToken = fastify.jwt.sign({
       id: session.user.id,
       username: session.user.username,
       role: session.user.role,
       sid: sessionId
-    }, { expiresIn: '7d' })
+    }, { expiresIn: session.user.role === 'admin' ? '15m' : '1h' })
 
     return {
       token: accessToken,

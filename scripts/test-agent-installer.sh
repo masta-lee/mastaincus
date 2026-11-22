@@ -28,6 +28,15 @@ iptables-restore() { return 0; }
 ip6tables-restore() { return 0; }
 apt-get() { echo 'Unexpected package installation' >&2; return 90; }
 apk() { echo 'Unexpected package installation' >&2; return 90; }
+# The install/staging tests model the fixed signing service at this boundary;
+# independent Go/Node Ed25519 tests cover actual crypto verification.
+openssl() {
+  if [[ "${1:-}" == pkeyutl ]]; then
+    [[ "${TEST_FAILURE:-}" != signature ]] || return 1
+    return 0
+  fi
+  command openssl "$@"
+}
 # The fixture must not chown host files. Preserve all real install operations and
 # permissions, but strip the root ownership request in this unprivileged test.
 install() {
@@ -91,7 +100,9 @@ INCUDAL_AGENT_SECRET='ias_fixture_only_not_a_real_credential'
 CONFIG
   local digest
   digest="$(sha256sum "$TEST_CASE/candidate" | awk '{print $1}')"
-  printf '{"files":{"linux-amd64":{"name":"incudal-agent-linux-amd64","sha256":"%s"},"linux-arm64":{"name":"incudal-agent-linux-arm64","sha256":"%s"}}}\n' "$digest" "$digest" > "$TEST_CASE/manifest.json"
+  local signature
+  signature=$(printf '%086d' 0)
+  printf '{"version":"v1.0.16","files":{"linux-amd64":{"name":"incudal-agent-linux-amd64","sha256":"%s","signature":"%s=="},"linux-arm64":{"name":"incudal-agent-linux-arm64","sha256":"%s","signature":"%s=="}}}\n' "$digest" "$signature" "$digest" "$signature" > "$TEST_CASE/manifest.json"
 }
 
 run_installer() {
@@ -99,6 +110,7 @@ run_installer() {
 }
 
 assert_no_staging() {
+  [[ -d "$TEST_CASE/custom" ]] || return 0
   if find "$TEST_CASE/custom" -type f \( -name '*.download*' -o -name '*.tmp' -o -name '*.new*' -o -name '*.manifest.*' \) | read -r _; then
     echo 'Installer left staging files' >&2; exit 1
   fi
@@ -117,7 +129,21 @@ for arch in x86_64 aarch64; do
   printf 'PASS R088 new custom parent, manifest, real hash/staging and installed files (%s fixture)\n' "$arch"
 done
 
-for failure in parent download checksum smoke; do
+for failure in injected-config duplicate-config plaintext-panel; do
+  new_case "security-$failure"
+  if [[ "$failure" == injected-config ]]; then
+    printf 'touch "$TEST_CASE/injection-executed"\n' >> "$TEST_CASE/install-config"
+  elif [[ "$failure" == duplicate-config ]]; then
+    printf "INCUDAL_AGENT_ID='duplicate'\n" >> "$TEST_CASE/install-config"
+  else export INCUDAL_PANEL_URL='http://agent-installer.invalid'; fi
+  if run_installer; then echo 'Installer accepted insecure credential input' >&2; exit 1; fi
+  [[ ! -e "$TEST_CASE/injection-executed" && ! -e "$INCUDAL_AGENT_BIN" ]]
+  if grep -q '^service ' "$TEST_CASE/events"; then echo 'Rejected credentials changed the service' >&2; exit 1; fi
+  assert_no_staging
+  printf 'PASS Agent installer rejects %s without execution or service changes\n' "$failure"
+done
+
+for failure in parent download checksum signature smoke; do
   new_case "old-install-$failure"
   mkdir -p "$(dirname "$INCUDAL_AGENT_BIN")" "$(dirname "$INCUDAL_CONFIG_FILE")" "$(dirname "$INCUDAL_SERVICE_FILE")"
   printf 'old-binary\n' > "$INCUDAL_AGENT_BIN"
@@ -144,6 +170,7 @@ for failure in parent download checksum smoke; do
     parent) [[ ! -s "$TEST_CASE/events" ]] ;;
     download) grep -q '^binary$' "$TEST_CASE/events" ;;
     checksum) grep -Fq 'sha256 mismatch' "$TEST_CASE/output" ;;
+    signature) grep -Fq 'Agent publisher signature verification failed' "$TEST_CASE/output" ;;
     smoke) grep -Fq 'staged Agent smoke test failed' "$TEST_CASE/output" ;;
   esac
   assert_no_staging
@@ -169,4 +196,4 @@ for manager in systemd openrc; do
     printf 'PASS R090 dry-run %s/%s redaction, zero downloads/service calls/installed files\n' "$manager" "$identity"
   done
 done
-printf 'PASS unchanged installer: 10 isolated cases; service manager, root and network are fixtures\n'
+printf 'PASS product installer: 14 isolated cases; service manager, root, publisher and network are fixtures\n'

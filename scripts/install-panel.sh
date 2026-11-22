@@ -354,20 +354,33 @@ install_nodejs() {
     # from nvm or a CI tool cache does not satisfy that runtime requirement.
     if [[ -x /usr/bin/node ]]; then
         local current_ver
-        current_ver=$(/usr/bin/node -v 2>/dev/null | sed 's/v//' | cut -d. -f1)
-        if [[ "$current_ver" -ge "$NODE_MAJOR" ]] 2>/dev/null; then
-            log "系统 Node.js $(/usr/bin/node -v) 已安装，跳过"
+        current_ver=$(/usr/bin/node -v 2>/dev/null | sed 's/v//')
+        if /usr/bin/node -e 'const [a,b,c]=process.versions.node.split(".").map(Number);process.exit(a===24&&(b>22||b===22&&c>=3)?0:1)'; then
+            log "系统 Node.js $(/usr/bin/node -v) 已满足安全补丁基线，跳过"
             return 0
         fi
         info "系统 Node.js 版本较低 ($(/usr/bin/node -v))，将升级到 v${NODE_MAJOR}"
     fi
 
-    # 通过 NodeSource 安装
+    # Configure the signed repository directly; no mutable remote root script.
     info "添加 NodeSource APT 源..."
-    curl -fsSL "https://deb.nodesource.com/setup_${NODE_MAJOR}.x" | bash - >/dev/null 2>&1
+    apt-get install -y -qq ca-certificates curl gnupg >/dev/null 2>&1
+    local node_key
+    node_key=$(mktemp)
+    if ! curl --proto '=https' --proto-redir '=https' -fsSL --connect-timeout 15 --max-time 60 https://deb.nodesource.com/gpgkey/nodesource-repo.gpg.key -o "$node_key" ||
+       [[ $(sha256sum "$node_key" | awk '{print $1}') != b42e0321dabdc24e892115da705cf061167eac12a317f23d329862d0aa0a271d ]]; then
+        rm -f "$node_key"; error 'NodeSource 签名身份校验失败'; return 1
+    fi
+    install -d -o root -g root -m 0755 /etc/apt/keyrings
+    gpg --batch --yes --dearmor -o /etc/apt/keyrings/nodesource.gpg "$node_key"
+    rm -f "$node_key"
+    chmod 0644 /etc/apt/keyrings/nodesource.gpg
+    printf 'deb [signed-by=/etc/apt/keyrings/nodesource.gpg] https://deb.nodesource.com/node_%s.x nodistro main\n' "$NODE_MAJOR" > /etc/apt/sources.list.d/nodesource.list
+    apt-get update -qq >/dev/null 2>&1
     apt-get install -y -qq nodejs >/dev/null 2>&1
 
     [[ -x /usr/bin/node ]] || { error "系统 Node.js 安装失败，缺少 /usr/bin/node"; return 1; }
+    /usr/bin/node -e 'const [a,b,c]=process.versions.node.split(".").map(Number);process.exit(a===24&&(b>22||b===22&&c>=3)?0:1)' || { error '系统 Node.js 未达到 24.22.3 安全补丁基线'; return 1; }
     log "系统 Node.js $(/usr/bin/node -v) 安装完成"
 }
 
@@ -513,11 +526,12 @@ download_release() {
 
     info "下载地址: ${download_url}"
 
-    if curl -fSL --progress-bar --connect-timeout 15 --max-time 600 \
+    if curl --proto '=https' --proto-redir '=https' -fSL --progress-bar --connect-timeout 15 --max-time 600 \
         "$download_url" -o "$tmp_file" 2>/dev/null && \
-        curl -fsSL --connect-timeout 15 --max-time 60 \
+        curl --proto '=https' --proto-redir '=https' -fsSL --connect-timeout 15 --max-time 60 \
         "$checksum_url" -o "$checksum_file" 2>/dev/null && \
-        verify_release_checksum "$tmp_file"; then
+        { curl --proto '=https' --proto-redir '=https' -fsSL --connect-timeout 15 --max-time 60 "$download_url.sig" -o "$tmp_file.sig" 2>/dev/null || rm -f "$tmp_file.sig"; } && \
+        verify_release_checksum "$tmp_file" && verify_release_publisher "$tmp_file"; then
         local file_size
         file_size=$(du -h "$tmp_file" | cut -f1 || true)
         log "下载和 SHA256 校验完成 (${file_size})"
@@ -525,7 +539,7 @@ download_release() {
         return 0
     fi
 
-    rm -f "$tmp_file" "$checksum_file" 2>/dev/null || true
+    rm -f "$tmp_file" "$checksum_file" "$tmp_file.sig" 2>/dev/null || true
     return 1
 }
 
@@ -576,6 +590,31 @@ validate_release_archive() {
     return 0
 }
 
+verify_release_publisher() {
+    local file="$1" name version architecture signature work actual
+    name=$(basename "$file")
+    [[ "$name" =~ ^incudal-(.+)-linux-(amd64|arm64)\.tar\.gz$ ]] || return 1
+    version="${BASH_REMATCH[1]}"; architecture="${BASH_REMATCH[2]}"
+    [[ "$version" =~ ^v[0-9]+\.[0-9]+\.[0-9]+([-+][0-9A-Za-z.-]+)?$ || "$version" =~ ^preview-[a-f0-9]{7}$ ]] || return 1
+    actual=$(sha256sum "$file" | awk '{print $1}')
+    # Only these exact public legacy bytes remain eligible without a signature.
+    case "$name:$actual" in
+        incudal-v1.8.13-linux-amd64.tar.gz:f4b1e4274d7d9d3beeff775346bac900a540d47eb57d6a9c4d24cefed7bd6d84|incudal-v1.8.13-linux-arm64.tar.gz:d9114de77354731f8385a302ddb3c549a7617c738eaa85f2705326e0c37e072b|incudal-v1.8.14-linux-amd64.tar.gz:9cfd05408aa6ddd0ec0d7872099c2a0b550d96bce2beb2a063f220f55dd85ee4|incudal-v1.8.14-linux-arm64.tar.gz:03bfb27d636d628048761a44e3bdca8f5d55b1f33183e2466465dfdd98657eaf) [[ ! -f "$file.sig" ]] && return 0 ;;
+    esac
+    [[ -f "$file.sig" ]] || { error '缺少独立发布签名'; return 1; }
+    signature=$(tr -d '\n\r' < "$file.sig")
+    [[ "$signature" =~ ^[A-Za-z0-9+/]{86}==$ ]] || return 1
+    work=$(mktemp -d)
+    printf '\x30\x2a\x30\x05\x06\x03\x2b\x65\x70\x03\x21\x00' > "$work/public.der"
+    printf '%s' 'y6C9aLon6OtgHPp5KPVDpxoNha95YptW03o4Dp2djQA=' | openssl base64 -d -A >> "$work/public.der"
+    printf '%s' "$signature" | openssl base64 -d -A > "$work/signature"
+    printf 'payincus/panel-package/v1\n%s\nlinux-%s\n%s' "${version#v}" "$architecture" "$actual" > "$work/message"
+    local status=0
+    openssl pkeyutl -verify -pubin -keyform DER -rawin -inkey "$work/public.der" -sigfile "$work/signature" -in "$work/message" >/dev/null 2>&1 || status=$?
+    rm -rf -- "$work"
+    [[ $status -eq 0 ]]
+}
+
 # ========================== 扫描手动放置的产物包 ==========================
 scan_manual_package() {
     local found=""
@@ -618,6 +657,7 @@ wait_for_manual_package() {
     echo -e "  ${BOLD}所需文件名格式：${NC}" >&2
     echo -e "  ${GREEN}incudal-vX.Y.Z-linux-${ARCH}.tar.gz${NC}" >&2
     echo -e "  ${GREEN}incudal-vX.Y.Z-linux-${ARCH}.tar.gz.sha256${NC}" >&2
+    echo -e "  ${GREEN}incudal-vX.Y.Z-linux-${ARCH}.tar.gz.sig${NC}" >&2
     echo "" >&2
     echo -e "  ${DIM}提示: 可使用 scp、wget、rz 等方式将文件传到服务器${NC}" >&2
     echo -e "  ${DIM}例如: scp incudal-v1.0.0-linux-${ARCH}.tar.gz root@服务器IP:${MANUAL_PKG_DIR}/${NC}" >&2
@@ -664,6 +704,12 @@ wait_for_manual_package() {
                 if [[ $stable_count -ge 3 ]]; then
                     if [[ ! -f "${pkg_file}.sha256" ]]; then
                         info "已收到产物包，继续等待对应的 $(basename "${pkg_file}.sha256")..."
+                        stable_count=0
+                        sleep 3
+                        continue
+                    fi
+                    if [[ ! -f "${pkg_file}.sig" ]]; then
+                        info "等待独立发布签名 $(basename "${pkg_file}.sig")..."
                         stable_count=0
                         sleep 3
                         continue
@@ -764,6 +810,7 @@ install_release() {
     step "安装产物包..."
 
     verify_release_checksum "$tar_file" || return 1
+    verify_release_publisher "$tar_file" || return 1
     validate_release_archive "$tar_file" || return 1
     install_verified_root_helpers_from_archive "$tar_file" || return 1
     RELEASE_VERIFIED_THIS_RUN=true
@@ -816,7 +863,7 @@ install_release() {
     fi
 
     # 清理下载的临时文件
-    rm -f "$tar_file" "${tar_file}.sha256"
+    rm -f "$tar_file" "${tar_file}.sha256" "${tar_file}.sig"
 
     # 创建证书目录
     mkdir -p "${INSTALL_DIR}/server/certs"
@@ -1085,15 +1132,8 @@ run_migrations() {
 
     cd "${INSTALL_DIR}/server"
 
-    # 以 incudal 用户身份加载 .env 并运行迁移
-    # HOME 需要指向有写权限的目录，否则 npm 缓存报 EACCES
-    sudo -u "$RUN_USER" HOME="${INSTALL_DIR}" bash -c "
-        set -a
-        source '${ENV_FILE}'
-        set +a
-        cd '${INSTALL_DIR}/server'
-        pnpm exec prisma migrate deploy
-    "
+    ENV_FILE="$ENV_FILE" python3 "$INSTALL_DIR/scripts/harden-database.py"
+    ENV_FILE="$ENV_FILE" bash "$INSTALL_DIR/scripts/migrate-database.sh"
 
     log "数据库迁移完成"
 }
@@ -1130,7 +1170,7 @@ Environment=PATH=/usr/local/libexec/incudal:/usr/local/sbin:/usr/local/bin:/usr/
 
 # 启动前自动执行数据库迁移
 ExecStartPre=+/usr/bin/bash -c 'if [ -f ${app_dir}/scripts/install-platform-backup.sh ]; then bash ${app_dir}/scripts/install-platform-backup.sh; fi'
-ExecStartPre=/usr/bin/bash -c 'cd ${app_dir}/server && pnpm exec prisma migrate deploy'
+ExecStartPre=+/usr/bin/bash ${app_dir}/scripts/migrate-database.sh
 
 # 启动主程序
 ExecStart=/usr/bin/node ${app_dir}/server/dist/app.js
@@ -1300,8 +1340,12 @@ server {
     root ${root_dir};
     index index.html;
     client_max_body_size 100m;
+    # API query strings can contain terminal/download credentials. Keep
+    # application audits, but never copy bearer URLs into proxy diagnostics.
+    access_log off;
+    error_log /dev/null;
 
-    add_header Content-Security-Policy "default-src 'self'; script-src 'self' 'unsafe-inline' https://challenges.cloudflare.com https://static.cloudflareinsights.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com data:; img-src 'self' data: blob: http: https: https://kkksr.com https://api.dicebear.com https://dicebear.incudal.com https://*.githubusercontent.com https://avatars.githubusercontent.com https://lh3.googleusercontent.com; connect-src 'self' ws: wss: https://challenges.cloudflare.com https://cloudflareinsights.com https://api.dicebear.com https://dicebear.incudal.com; frame-src 'self' https://challenges.cloudflare.com; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'" always;
+    add_header Content-Security-Policy "default-src 'self'; script-src 'self' https://challenges.cloudflare.com https://static.cloudflareinsights.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com data:; img-src 'self' data: blob: http: https: https://kkksr.com https://api.dicebear.com https://dicebear.incudal.com https://*.githubusercontent.com https://avatars.githubusercontent.com https://lh3.googleusercontent.com; connect-src 'self' https://challenges.cloudflare.com https://cloudflareinsights.com https://api.dicebear.com https://dicebear.incudal.com; frame-src 'self' https://challenges.cloudflare.com; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'" always;
     add_header X-Content-Type-Options nosniff always;
     add_header X-Frame-Options DENY always;
     add_header Referrer-Policy strict-origin-when-cross-origin always;
@@ -1656,11 +1700,17 @@ setup_cf_tunnel() {
     check_cf_prerequisites || return 1
     if [[ "$reuse" == false ]]; then
         if ! command -v cloudflared &>/dev/null; then
-            local binary
+            local binary cloudflared_hash
             info "下载 cloudflared..."
             binary="$(mktemp)"
-            if ! curl -fsSL --connect-timeout 10 --max-time 180 \
-                "https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-${ARCH}" -o "$binary" ||
+            case "$ARCH" in
+                amd64) cloudflared_hash=97bb3b02d23a5980fc9c15a1a270e692da1923f103f920d5b16d4931d5ab55e7 ;;
+                arm64) cloudflared_hash=b155cec3e48e489cfb8e5c602769fb8c771083018d8881d68b4d18a791567c5a ;;
+                *) rm -f "$binary"; return 1 ;;
+            esac
+            if ! curl --proto '=https' --proto-redir '=https' -fsSL --connect-timeout 10 --max-time 180 \
+                "https://github.com/cloudflare/cloudflared/releases/download/2026.11.1/cloudflared-linux-${ARCH}" -o "$binary" ||
+                [[ $(sha256sum "$binary" | awk '{print $1}') != "$cloudflared_hash" ]] ||
                 ! install -m 0755 "$binary" /usr/local/bin/cloudflared; then
                 rm -f "$binary"
                 error "cloudflared 下载或安装失败，请检查 GitHub 访问和系统架构。"

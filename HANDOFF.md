@@ -1,4 +1,20 @@
+# 2026-11-22 两轮安全修复续接，仍在验收
+
+基准a5251f0／codex/financial-integrity-audit，版本1.8.14／Agent1.0.16保持。本轮已按owner指令修源码、锁图、Incus7.6及Go安全基线，不再是“仅报告未修”的阶段；准备按既有阶段保存授权提交推送并运行无tag双架构发行预览，暂不Release/生产OTA。较新实施和证据见[安全修复台账](docs/security-repair-2026-11-22.md)首节，下面审计历史保留。
+
+2026-11-23较新：S05旧缺Incus pin通过原受信SSH/peer公有证书+TLS trusted后补齐、错误原pin/非root拒绝、排队stop不互等，真实PG管理回归425全过；类型421/后端build427、bootstrap415/gateway437/security436等过。系统库存8原生测试及待激活持久/旧映射/失败脱敏通过。原worker任务2已实际246迁移，但封存120秒/回退封存均在TCG超时，最终failed，未降权；本机仅用原helper重新封存后旧backend启动已派发，继续等健康，不能称旧升级验收通过。公开完整签名双架构六升级与root恢复worker必须在本批同来源预览核，不发正式版本。全gateway本机完整套件仍运行（probe389），必须继续跟终态。
+
+接续较新证据：原公开v1.8.14在systemd VM已唯一后端健康、244迁移/admin正常。原worker首次任务1只在解压344MiB本地重复依赖夹具超时，未切代码/DB；精简237MiB后任务2已解压并实际备份原代码，仍running，不能写升级成功。补系统库存待激活持久合并、失败状态/固定代码、实际宿主PID namespace旧库扫描，8项Linuxroot测试与本机planner通过；检出sshd/nginx/postgres旧映射。发行快捷start/migrate改唯一service/root迁移，更新专项通过；最新三类型、backup4专项、install5专项全过。全量第7轮230/230是较早冻结点，后续更新仅按对应证据记录。暂不发版、无生产写入。
+
+续接补记：正确cgroup旧7.0.1→新版7.6实际升级保UUID/PID/boot/磁盘／sysinfo128MiB，故障前进重试和同版本回退→再升通过，stop/start/restart实测过；完整147表加密restore及多schema/旧迁移/并发/缺表/外部表/largeobject完整性最终退出0。Chrome双端三语生产dist/CSP login主题和inline拒绝过，真实SMTP/TG/抽奖与4真实PG最新回归全部过。原生AlpineVM临时guest／stagingDB空并已结束，测试日志本机保留。新systemdVM固定key在线，原公开v1.8.14原installer仍安装Node/PG等依赖，候选fixture已解压但未跑原worker，不冒充正式签名包／双架构旧升级成功。230全量第7轮仍运行，生产无写入。
+
+真实PG认证／OAuth／资金与正常业务通过；补抽奖通知专表加密验签、旧迁移／级联签名清理；真实业务Telegram隔离响应回归和真实TLS SMTP／假证书／明文AUTH0／文件URL拒绝通过。真实OpenSSL安装器双架构签名边界、LinuxDB角色两次幂等及系统策略中断清理通过。230全量自然退出0且230/230通过，其后5相关专项全过；完整低权限147表加密restore／schema与每行序列／money和auth seals／原密码余额及篡改拒绝已过，原DB复原。后续修改还须影响复验。原公开旧包worker升级回退、Incus实际热换保客户、系统patch激活、最终静态CSP浏览器仍待，不能当作生产已修或完整OSS灾备完成。当前仅本机隔离VM／数据库，凭据不写台账。
+
 # 版本与验证记录
+
+- 2026-11-22 owner要求联网公告补查，已整合主报告第5.1～5.6节及[逐条公告附表](docs/security-advisories-2026-11-22.md)。全npm310记录／264URL／49包、prod263／236／38；36直接来源35成功、1个404排除；官方Incus74／LXC3／Caddy23／cloudflared2与发行版PG／Node／OpenSSL／SSH／nginx／内核及工具链分别核前提。固定7.0.1源tar SHA再核，确认后续Incus认证／backup metadata／never-started idmap未被现有patch覆盖；cgroup锚定安全回补已有，不重复误报。正式Agentv1.0.16原资产SHA一致／双Go1.22.12、内嵌daemon双Go1.26.11＋传递module，govulncheck4项自然完成且各Agent65／daemon19不同ID版本symbol匹配（非攻击复现、JSON exit0非无漏洞）。新外部E01～E05分组不混算原11项复现；OpenSSL11月17日部分目标12月1日计划发行、PG16.16及发行版回补范围明确。没有生产安装核验／源码依赖修改／推送发行，原S问题待修及OSS／双架构升级门槛保持。公开来源和hash本机ignored目录留证。
+
+- 2026-11-22整程序安全审计仅报告完成，基准`a5251f0cab9c7fdaf861f36d2c7563f838984d33`／源码1.8.14，含已推未发行资金加固。确认11项问题（7高／4中）及4项条件风险：刷新摘要直接换JWT、DB伪会话无密码admin／恢复码替换、存储DNS与redirect SSRF、终端TLS不核pin、OAuth重复兑换、通知明文、SFTP新key接受、FTP明文与CRLF、日志漏遮盖及DB owner权限；分别以本机PG／HTTP／TLS／SSH／TCP证据和利用前提区分。两批安全守卫18/18＋13/13自然exit0仍未覆盖上述攻击，依赖公告不能按数量等同业务可利用。报告[整程序安全审计](docs/security-audit-2026-11-22.md)列修复顺序、数据库防脱库分层与OSS／升级兼容门槛。所有发现待修，未改产品／依赖／生产／commit／push／发版；临时审计PG库／角色无剩余，原财务库保持。生产部署SHA／PG监听HBA防火墙权限／日志与OSS ACL未核，不认定线上已被入侵或已防住脱库；原完整灾备缺口保持。
 
 - 2026-11-22源码保存完成：资金修复提交`5f02d45fa8cab1aee5dd4f574d1e77531c86d30a`已非force推送`origin/codex/financial-integrity-audit`，`ls-remote`完整SHA与本地一致，ahead/behind 0/0。共40文件含源码/迁移/守卫/脱敏报告；仅无关未跟踪文件留本地。未开PR/合并main/打tag/手动触发工作流，分支查询无Actions运行，版本仍1.8.14；owner“暂不发版”保持。
 

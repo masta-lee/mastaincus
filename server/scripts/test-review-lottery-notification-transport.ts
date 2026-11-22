@@ -13,6 +13,8 @@ assert.ok(['127.0.0.1', 'localhost', '[::1]'].includes(database.hostname) && dat
 process.env.NODE_ENV = 'test'
 const { prisma, closePrismaDatabase } = await import('../src/db/prisma.js')
 const { sendLotteryWinNotification: send } = await import('../src/lib/lottery-notifier.js')
+const {sealNotificationConfig}=await import('../src/lib/notification-config.js')
+process.env.ENCRYPTION_KEY||='isolated-lottery-transport-key'
 const { safeOutboundDispatcher } = await import('../src/lib/outbound-security.js')
 const originalFetch = globalThis.fetch, dispatcher = new Agent(), tag = 'lottery-wire-' + randomUUID()
 const active = new Set<import('node:http').ServerResponse>()
@@ -71,8 +73,8 @@ async function fixture(type: 'telegram' | 'discord' | 'webhook', mode: string) {
     prizeType: 'balance', prizeValue: 1, prizeName: prize.name, pointsSpent: 1 } })
   const url = mode === 'private' ? 'http://127.0.0.1/private' : mode.startsWith('rebind')
     ? `http://${rebind}:${(server.address() as { port: number }).port}/private` : `https://8.8.8.8/${type}/${mode}`
-  await prisma.lotteryNotificationConfig.create({ data: { lotteryId: lottery.id, type, config: type === 'telegram'
-    ? { botToken: 'fixture-' + mode, chatId: 'fixture-chat' } : type === 'discord' ? { webhookUrl: url } : { url } } })
+  await prisma.lotteryNotificationConfig.create({ data: { lotteryId: lottery.id, type, config: sealNotificationConfig(type === 'telegram'
+    ? { botToken: 'fixture-' + mode, chatId: 'fixture-chat' } : type === 'discord' ? { webhookUrl: url } : { url }) } })
   return { type, mode, record, run: () => send({ lotteryId: lottery.id, recordId: record.id, prizeType: 'balance',
     username: tag, lotteryName: lottery.name, prizeName: prize.name, amount: 1 }) }
 }

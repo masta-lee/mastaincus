@@ -11,6 +11,18 @@
 // 需要过滤的敏感字段名列表（不区分大小写）
 const SENSITIVE_FIELDS = [
     'password',
+    'rootPassword',
+    'root_password',
+    'sshPassword',
+    'ssh_password',
+    'DATABASE_URL',
+    'ENCRYPTION_KEY',
+    'COOKIE_SECRET',
+    'JWT_SECRET',
+    'accessKeySecret',
+    'access_key_secret',
+    'backupPassword',
+    'backup_password',
     'adminPassword',
     'smtpPassword',
     'mailPassword',
@@ -66,6 +78,12 @@ const SENSITIVE_FIELDS = [
     'leaseToken',
     'recoveryCode',
     'twoFactorSecret',
+    'twoFactorRecoveryCodes',
+    'passwordHash',
+    'secretEncrypted',
+    'two_factor_recovery_codes',
+    'secret_encrypted',
+    'password_hash',
     'encryptedSecret',
     'backupCode',
     'totp_code',
@@ -106,9 +124,13 @@ const TOKEN_PATTERNS = [
         replacement: `$1${REDACTED}`
     },  // Script download paths are bearer credentials, including invalid tokens.
     {
-        pattern: /([?&](?:token|secret|key|sign|signature|access_token|refresh_token|api_key|apikey|apiKey|password|pwd|assetToken|agentSecret|code)=)[^&#\s]+/gi,
+        pattern: /([?&](?:token|dt|ticket|secret|key|sign|signature|access_token|refresh_token|api_key|apikey|apiKey|password|pwd|assetToken|agentSecret|code)=)[^&#\s]+/gi,
         replacement: `$1${REDACTED}`
     },  // URL query secrets
+    { pattern: /(https?:\/\/[^\s/@]+):[^\s@]+@/gi, replacement: `$1:${REDACTED}@` },
+    { pattern: /((?:postgresql?|mysql|redis):\/\/)[^\s]+/gi, replacement: `$1${REDACTED}` },
+    { pattern: /(\/bot)\d+:[^/\s?]+/gi, replacement: `$1${REDACTED}` },
+    { pattern: /\brt_[A-Za-z0-9_-]{43}\b/g, replacement: REDACTED },
 ]
 
 /**
@@ -140,6 +162,11 @@ export function sanitizeObject<T>(obj: T, depth = 0): T {
     if (obj === null || obj === undefined) {
         return obj
     }
+    if (obj instanceof Error) return {
+        type: obj.name,
+        message: sanitizeTokensInString(obj.message),
+        stack: obj.stack ? sanitizeTokensInString(obj.stack) : undefined
+    } as T
 
     // 处理字符串
     if (typeof obj === 'string') {
@@ -225,16 +252,16 @@ export function createSafeLogger(logger: {
 }) {
     return {
         info: (obj: unknown, msg?: string) => {
-            logger.info(sanitizeObject(obj), msg)
+            logger.info(sanitizeObject(obj), msg ? sanitizeTokensInString(msg) : msg)
         },
         warn: (obj: unknown, msg?: string) => {
-            logger.warn(sanitizeObject(obj), msg)
+            logger.warn(sanitizeObject(obj), msg ? sanitizeTokensInString(msg) : msg)
         },
         error: (obj: unknown, msg?: string) => {
-            logger.error(sanitizeObject(obj), msg)
+            logger.error(sanitizeObject(obj), msg ? sanitizeTokensInString(msg) : msg)
         },
         debug: (obj: unknown, msg?: string) => {
-            logger.debug(sanitizeObject(obj), msg)
+            logger.debug(sanitizeObject(obj), msg ? sanitizeTokensInString(msg) : msg)
         }
     }
 }

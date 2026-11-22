@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
-"""Build the fixed Alpine Incus 7.0.1 daemon from pinned official sources."""
+"""Build the security baseline Alpine Incus 7.6.0 daemon from pinned official sources."""
 import hashlib, json, os, pathlib, subprocess, tarfile, urllib.request
 
-SOURCE_SHA = '5e415fa1684f0945d45ca780af6662f143b857681e18d29038725cde70c26ee6'
-SOURCE_URL = 'https://github.com/lxc/incus/releases/download/v7.0.1/incus-7.0.1.tar.gz'
+SOURCE_SHA = 'f57dcf2b781f6664b04b264e680d6b05a86303bbee717161110282e2a8891486'
+SOURCE_URL = 'https://github.com/lxc/incus/releases/download/v7.6.0/incus-7.6.0.tar.gz'
 root = pathlib.Path('/build/incus-sysinfo')
 root.mkdir(parents=True, exist_ok=True)
 archive = root / 'source.tar.gz'
@@ -13,7 +13,11 @@ if not archive.exists():
 assert hashlib.sha256(archive.read_bytes()).hexdigest() == SOURCE_SHA
 with tarfile.open(archive) as tar:
     tar.extractall(root, filter='data')
-source = root / 'incus-7.0.1'
+source = root / 'incus-7.6'
+import sys
+sys.path.insert(0,'/')
+from incus_security_modules import update as update_security_modules, MODULES as security_modules
+update_security_modules(source)
 target = source / 'cmd/incusd/dev_incus.go'
 text = target.read_text()
 marker = 'func findContainerForPid(pid int32, s *state.State) (instance.Container, error) {'
@@ -200,7 +204,10 @@ namespace_target.write_text(namespace_text)
 raft_memory_target=source/'internal/server/cluster/incudal_raft_memory.go'
 raft_memory_target.write_bytes(pathlib.Path('/incus-raft-memory.go').read_bytes())
 (source/'internal/server/cluster/incudal_raft_memory_test.go').write_bytes(pathlib.Path('/incus-raft-memory_test.go').read_bytes())
-gateway_target=source/'internal/server/cluster/gateway.go'
+gateway_target=source/'vendor/github.com/cowsql/go-cowsql/cluster/gateway/gateway.go'
+# Upstream 7.6 moves the gateway into the cowsql module. Keep its actual
+# standalone creation path tuned; cluster behavior and formats stay upstream.
+(gateway_target.parent/'incudal_raft_memory.go').write_text(raft_memory_target.read_text().replace('package cluster','package gateway',1))
 gateway_text=gateway_target.read_text()
 raft_marker='\t\t\tg.memoryDial = cowsqlMemoryDial(g.bindAddress)'
 assert gateway_text.count(raft_marker)==1
@@ -227,7 +234,7 @@ subprocess.run([str(probe)],env={**env,'INCUDAL_EXPECT_SMALL_PAGES':'1'},check=T
 subprocess.run([str(probe)],env={**env,'GODEBUG':'disablethp=0','INCUDAL_EXPECT_SMALL_PAGES':'0'},check=True)
 probe.unlink()
 subprocess.run(['ldd',str(binary)],check=True)
-manifest={'schemaVersion':1,'purpose':'alpine-incus-sysinfo-compat','incusVersion':'7.0.1','sourceUrl':SOURCE_URL,'sourceSha256':SOURCE_SHA,
+manifest={'schemaVersion':1,'purpose':'alpine-incus-sysinfo-compat','incusVersion':'7.6.0','sourceUrl':SOURCE_URL,'sourceSha256':SOURCE_SHA,
  'upstreamFixes':['5daa427d330004609859ab6f19b6101d3479d59c','83eaa5e19345a4719df46bcdb2850547d069b88e'],
  'architecture':os.uname().machine,'sha256':hashlib.sha256(binary.read_bytes()).hexdigest(),'size':binary.stat().st_size,
  'patchedSourceSha256':hashlib.sha256(target.read_bytes()).hexdigest(),
@@ -235,6 +242,8 @@ manifest={'schemaVersion':1,'purpose':'alpine-incus-sysinfo-compat','incusVersio
  'memorySourceSha256':hashlib.sha256(memory_target.read_bytes()+native_memory_target.read_bytes()).hexdigest(),
  'memoryNamespaceSourceSha256':hashlib.sha256(namespace_target.read_bytes()).hexdigest(),
  'memoryRaftSourceSha256':hashlib.sha256(raft_memory_target.read_bytes()+gateway_target.read_bytes()).hexdigest(),
- 'memoryBuildDefault':'disablethp=1', 'memoryBudgetRevision':'daemon-memory-v3'}
+ 'memoryBuildDefault':'disablethp=1', 'memoryBudgetRevision':'daemon-memory-v3',
+ 'securityModules':{name:{'version':value[0],'zipSha256':value[1]} for name,value in security_modules.items()},
+ 'securityModulesScriptSha256':hashlib.sha256(pathlib.Path('/incus_security_modules.py').read_bytes()).hexdigest()}
 (output/'incusd-manifest.json').write_text(json.dumps(manifest,indent=2))
 print(json.dumps(manifest))

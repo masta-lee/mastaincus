@@ -36,25 +36,25 @@ jobs:
           - arch: arm64
             runner: ubuntu-24.04-arm
     permissions:
-      contents: write
+      contents: read
 
     steps:
       - name: 检出代码
-        uses: actions/checkout@v4
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
 
       - name: 安装 pnpm
-        uses: pnpm/action-setup@v4
+        uses: pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1 # v4
 
       - name: 安装 Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
           node-version: ${{ env.NODE_VERSION }}
           cache: 'pnpm'
 
       - name: 安装 Go
-        uses: actions/setup-go@v5
+        uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5
         with:
-          go-version: '1.22.x'
+          go-version: '1.27.3'
           cache-dependency-path: agent/go.mod
 
       - name: 校验一键安装脚本
@@ -190,6 +190,10 @@ jobs:
           cp scripts/install-panel.sh release/scripts/
           cp scripts/install-platform-backup.sh release/scripts/
           cp scripts/ensure-time-sync.py release/scripts/
+          cp scripts/harden-database.py scripts/migrate-database.sh release/scripts/
+          cp scripts/system-security-inventory.py release/scripts/
+          cp scripts/harden-nginx-logging.py release/scripts/
+          cp scripts/legacy-database-startup.mjs release/scripts/
           cp scripts/install-local-gateway-worker.sh release/scripts/
           cp scripts/platform-backup-recovery.py scripts/platform-backup-recovery-guide.md release/scripts/
 
@@ -215,16 +219,11 @@ jobs:
           case "${1:-}" in
             start)
               echo "🚀 启动 PayIncus..."
-              cd "$APP_DIR/server"
-              pnpm exec prisma migrate deploy
-              cd "$APP_DIR"
-              exec node server/dist/app.js
+              exec /usr/bin/systemctl start incudal-backend
               ;;
             migrate)
               echo "🔄 执行数据库迁移..."
-              cd "$APP_DIR/server"
-              pnpm exec prisma migrate deploy
-              echo "✅ 迁移完成"
+              exec /usr/bin/bash "$APP_DIR/scripts/migrate-database.sh"
               ;;
             version)
               echo "PayIncus $(node -e "console.log(require('./package.json').version)")"
@@ -296,12 +295,25 @@ jobs:
       - name: 核对完整包与本次构建及运行脚本
         run: python3 scripts/check-release-runtime-files.py 'incudal-${{ steps.version.outputs.version }}-linux-${{ matrix.arch }}.tar.gz'
 
+      - name: Sign exact panel package
+        env:
+          PANEL_SIGNING_KEY: ${{ secrets.GATEWAY_COMPONENT_SIGNING_KEY }}
+        run: |
+          set -euo pipefail
+          key_dir=$(mktemp -d)
+          trap 'rm -rf "$key_dir"' EXIT
+          umask 077
+          printf '%s\n' "$PANEL_SIGNING_KEY" > "$key_dir/publisher.pem"
+          PANEL_PACKAGE_SIGNING_KEY_PATH="$key_dir/publisher.pem" node scripts/panel-package-signature.mjs 'incudal-${{ steps.version.outputs.version }}-linux-${{ matrix.arch }}.tar.gz' '${{ steps.version.outputs.version }}' '${{ matrix.arch }}'
+
       # ===== 上传构建产物 =====
       - name: 上传构建产物
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: incudal-${{ steps.version.outputs.version }}-linux-${{ matrix.arch }}
-          path: incudal-${{ steps.version.outputs.version }}-linux-${{ matrix.arch }}.tar.gz
+          path: |
+            incudal-${{ steps.version.outputs.version }}-linux-${{ matrix.arch }}.tar.gz
+            incudal-${{ steps.version.outputs.version }}-linux-${{ matrix.arch }}.tar.gz.sig
           retention-days: 30
 
   preview-agent:
@@ -313,12 +325,12 @@ jobs:
       contents: read
       actions: read
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-go@v5
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5
         with:
-          go-version: '1.22.x'
+          go-version: '1.27.3'
           cache-dependency-path: agent/go.mod
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
           node-version: '24'
       - run: node scripts/prepare-incus-compat.mjs
@@ -326,8 +338,17 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           INCUS_COMPAT_BUILD_RUN: ${{ github.run_id }}
       - run: bash agent/scripts/build-release.sh
+      - name: Sign preview Agent packages
+        env:
+          AGENT_SIGNING_KEY: ${{ secrets.GATEWAY_COMPONENT_SIGNING_KEY }}
+        run: |
+          key_dir=$(mktemp -d)
+          trap 'rm -rf "$key_dir"' EXIT
+          umask 077
+          printf '%s\n' "$AGENT_SIGNING_KEY" > "$key_dir/publisher.pem"
+          AGENT_PACKAGE_SIGNING_KEY_PATH="$key_dir/publisher.pem" node scripts/agent-package-signature.mjs agent/dist
       - run: node scripts/prepare-preview-agent.mjs agent/dist preview-agent
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: incudal-preview-agent
           path: preview-agent/
@@ -350,13 +371,13 @@ jobs:
     permissions:
       contents: read
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/download-artifact@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
         with:
           pattern: incudal-*-linux-${{ matrix.arch }}
           path: install-artifact
           merge-multiple: true
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
         if: github.ref_type != 'tag'
         with:
           name: incudal-preview-agent
@@ -399,24 +420,24 @@ jobs:
     permissions:
       contents: read
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/download-artifact@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
         with:
           pattern: incudal-*-linux-${{ matrix.arch }}
           path: upgrade-artifact
           merge-multiple: true
-      - name: 下载并校验原v1.8.13发行包
+      - name: 下载并校验原v1.8.14发行包
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          gh release download v1.8.13 --repo "$GITHUB_REPOSITORY" --pattern 'incudal-v1.8.13-linux-${{ matrix.arch }}.tar.gz*' --dir old-artifact
-          (cd old-artifact && sha256sum --check 'incudal-v1.8.13-linux-${{ matrix.arch }}.tar.gz.sha256')
+          gh release download v1.8.14 --repo "$GITHUB_REPOSITORY" --pattern 'incudal-v1.8.14-linux-${{ matrix.arch }}.tar.gz*' --dir old-artifact
+          (cd old-artifact && sha256sum --check 'incudal-v1.8.14-linux-${{ matrix.arch }}.tar.gz.sha256')
       - name: 原worker升级至新包并核身份和校时
         run: |
           package=$(find "$PWD/upgrade-artifact" -maxdepth 1 -name '*.tar.gz' -type f)
           test "$(printf '%s\n' "$package" | wc -l)" = 1
           sudo env GITHUB_ACTIONS=true RUNNER_ENVIRONMENT=github-hosted INCUDAL_AGENT_RELEASE_TOKEN=${{ github.token }} \
-            bash scripts/smoke-legacy-online-upgrade.sh "$package" "$PWD/old-artifact/incudal-v1.8.13-linux-${{ matrix.arch }}.tar.gz" '${{ matrix.scenario }}'
+            bash scripts/smoke-legacy-online-upgrade.sh "$package" "$PWD/old-artifact/incudal-v1.8.14-linux-${{ matrix.arch }}.tar.gz" '${{ matrix.scenario }}'
 
   # ===== 首装与旧版升级验证成功后才发布 Release =====
   release:
@@ -434,7 +455,7 @@ jobs:
 
     steps:
       - name: 检出代码
-        uses: actions/checkout@v4
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
           fetch-depth: 0
 
@@ -444,12 +465,12 @@ jobs:
 
       # 下载所有架构的构建产物
       - name: 下载 amd64 产物
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
         with:
           name: incudal-${{ steps.version.outputs.version }}-linux-amd64
 
       - name: 下载 arm64 产物
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
         with:
           name: incudal-${{ steps.version.outputs.version }}-linux-arm64
 
@@ -494,7 +515,9 @@ jobs:
                 arch: match ? match[1] : 'unknown',
                 url: `https://github.com/${repo}/releases/download/${version}/${name}`,
                 sha256: crypto.createHash('sha256').update(data).digest('hex'),
-                size: data.length
+                size: data.length,
+                version,
+                signature: fs.readFileSync(name+'.sig','utf8').trim()
               }
             })
 
@@ -597,11 +620,12 @@ jobs:
 
       # 创建 Release 并上传所有架构的产物
       - name: 创建 GitHub Release
-        uses: softprops/action-gh-release@v2
+        uses: softprops/action-gh-release@3bb12739c298aeb8a4eeaf626c5b8d85266b0e65 # v2
         with:
           files: |
             incudal-*.tar.gz
             incudal-*.tar.gz.sha256
+            incudal-*.tar.gz.sig
             incudal-*-ota-manifest.json
             ota-manifest.json
           generate_release_notes: true

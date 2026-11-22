@@ -45,6 +45,7 @@ export function legacyFinancialBaseline(secret: string) { return JSON.stringify(
 export function verifyFinancialBaseline(value: string, secret: string) {
   const marker = JSON.parse(value)
   if (marker.version !== 1 || !matches(marker.signature, signature('baseline', 'v1', { version: 1 }, secret))) throw new FinancialIntegrityError()
+  if (marker.authenticationSignature !== undefined && !matches(marker.authenticationSignature, createHmac('sha256',secret).update('payincus/authentication-integrity/baseline/v1').digest('hex'))) throw new FinancialIntegrityError()
 }
 let enabled = false
 
@@ -148,7 +149,7 @@ export async function initializeFinancialIntegrity(raw: PrismaClient) {
           for (const row of rows) await verify(tx, kind, row)
         }
         await assertNoOrphanSeals(tx)
-      }, { timeout: 120000, isolationLevel: Prisma.TransactionIsolationLevel.RepeatableRead })
+      }, { maxWait:30000, timeout: 120000, isolationLevel: Prisma.TransactionIsolationLevel.RepeatableRead })
       enabled = true
       return
     }
@@ -170,7 +171,7 @@ export async function initializeFinancialIntegrity(raw: PrismaClient) {
     const signed = signature('baseline', 'v1', { version: 1 })
     await tx.financialIntegritySeal.upsert({ where: { kind_recordId: { kind: 'baseline', recordId: 'v1' } },
       create: { kind: 'baseline', recordId: 'v1', signature: signed }, update: { signature: signed } })
-  }, { timeout: 120000, isolationLevel: Prisma.TransactionIsolationLevel.Serializable })
+  }, { maxWait:30000, timeout: 120000, isolationLevel: Prisma.TransactionIsolationLevel.Serializable })
   await mkdir(root(), { recursive: true, mode: 0o700 })
   const directory = await lstat(root())
   if (!directory.isDirectory() || directory.isSymbolicLink()) throw new FinancialIntegrityError()
@@ -188,15 +189,23 @@ export async function initializeFinancialIntegrity(raw: PrismaClient) {
 
 export function financialIntegrityEnabled() { return enabled }
 export function disableFinancialIntegrityForShutdown() { enabled = false }
-export async function verifyFinancialDatabaseSeals(database: string, secret: string, allowLegacy = false) {
+export async function verifyFinancialDatabaseSeals(database: string, secret: string, allowLegacy = false, authenticationRequired = false) {
   const url = new URL(process.env.DATABASE_URL || '')
   url.pathname = '/' + database
   const pool = new Pool({ connectionString: url.href, max: 1 })
   const client = await pool.connect()
   try {
     await client.query('BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY')
+    if(allowLegacy&&!(await client.query("SELECT to_regclass('public.financial_integrity_seals') IS NOT NULL present")).rows[0].present){
+      const {verifyAuthenticationDatabaseSeals}=await import('./authentication-integrity.js')
+      await verifyAuthenticationDatabaseSeals(client,secret,authenticationRequired);return
+    }
     const seals = (await client.query('SELECT kind,record_id,signature FROM financial_integrity_seals')).rows
-    if (allowLegacy && !seals.length) return
+    if (allowLegacy && !seals.length) {
+      const { verifyAuthenticationDatabaseSeals }=await import('./authentication-integrity.js')
+      await verifyAuthenticationDatabaseSeals(client,secret,authenticationRequired)
+      return
+    }
     const index = new Map(seals.map(row => [`${row.kind}:${row.record_id}`, row.signature]))
     if (!matches(index.get('baseline:v1'), signature('baseline', 'v1', { version: 1 }, secret))) throw new FinancialIntegrityError()
     index.delete('baseline:v1')
@@ -222,6 +231,8 @@ export async function verifyFinancialDatabaseSeals(database: string, secret: str
       }
     }
     if (index.size) throw new FinancialIntegrityError()
+    const { verifyAuthenticationDatabaseSeals } = await import('./authentication-integrity.js')
+    await verifyAuthenticationDatabaseSeals(client, secret, authenticationRequired)
   } finally { await client.query('ROLLBACK'); client.release(); await pool.end() }
 }
 export async function sealRecoveryOperatorWallet(database: string, id: number, secret: string) {
@@ -234,6 +245,8 @@ export async function sealRecoveryOperatorWallet(database: string, id: number, s
     if (!user || logs.count || new Prisma.Decimal(user.balance).toNumber() !== 0) throw new FinancialIntegrityError()
     const value = { ...facts('wallet', {...user,balance:new Prisma.Decimal(user.balance),affBalance:new Prisma.Decimal(user.affBalance),hostingBalance:new Prisma.Decimal(user.hostingBalance)}), ledger: { count: '0', hash: createHash('sha256').update('').digest('hex') } }
     await pool.query('INSERT INTO financial_integrity_seals(kind,record_id,signature,updated_at) VALUES(\'wallet\',$1,$2,NOW()) ON CONFLICT(kind,record_id) DO UPDATE SET signature=EXCLUDED.signature,updated_at=NOW()', [String(id), signature('wallet', String(id), value, secret)])
+    const { updateRecoveryAuthentication } = await import('./authentication-integrity.js')
+    await updateRecoveryAuthentication(async (sql,args)=> (await pool.query(sql,args)).rows,id,secret)
   } finally { await pool.end() }
 }
 export async function changeRecoveryOperatorRole(query: (sql:string,params?:any[])=>Promise<any[]>, id:number, role:string, status:string, secret=process.env.ENCRYPTION_KEY||'') {
@@ -248,6 +261,8 @@ export async function changeRecoveryOperatorRole(query: (sql:string,params?:any[
   if(!matches(seal?.signature,signature('wallet',String(id),value,secret)))throw new FinancialIntegrityError()
   await query('UPDATE users SET role=$2,status=$3 WHERE id=$1',[id,role,status])
   await query("UPDATE financial_integrity_seals SET signature=$2,updated_at=NOW() WHERE kind='wallet' AND record_id=$1",[String(id),signature('wallet',String(id),{...value,role,status},secret)])
+  const { updateRecoveryAuthentication } = await import('./authentication-integrity.js')
+  await updateRecoveryAuthentication(query, id, secret)
 }
 export async function prepareRecoveryCheckoutStatuses(database: string, secret: string, legacy: boolean) {
   const url = new URL(process.env.DATABASE_URL || ''); url.pathname = '/' + database
@@ -503,7 +518,7 @@ export function protectFinancialClient(raw: PrismaClient): PrismaClient {
     const value = await action(transactionProxy(db, state))
     await finalize(db, state)
     return value
-  }, options)
+  }, {maxWait:5000,timeout:30000,...options})
   return new Proxy(raw, { get(target, property) {
     if (overrides.has(property)) return overrides.get(property)
     if (property === '$transaction') return (action: any, options: any) => {

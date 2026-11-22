@@ -13,14 +13,15 @@ import (
 )
 
 type Status struct {
-	Version       int    `json:"version"`
-	Ready         bool   `json:"ready"`
-	CheckedAt     string `json:"checkedAt"`
-	Error         string `json:"error,omitempty"`
-	IncusCompat   string `json:"incusCompat,omitempty"`
-	CompatRequest string `json:"compatRequest,omitempty"`
-	CompatHash    string `json:"compatHash,omitempty"`
-	DiskTools     bool   `json:"diskTools,omitempty"`
+	SecurityPackages string `json:"securityPackages,omitempty"`
+	Version          int    `json:"version"`
+	Ready            bool   `json:"ready"`
+	CheckedAt        string `json:"checkedAt"`
+	Error            string `json:"error,omitempty"`
+	IncusCompat      string `json:"incusCompat,omitempty"`
+	CompatRequest    string `json:"compatRequest,omitempty"`
+	CompatHash       string `json:"compatHash,omitempty"`
+	DiskTools        bool   `json:"diskTools,omitempty"`
 }
 type Engine struct {
 	mu           sync.Mutex
@@ -58,6 +59,8 @@ func (e *Engine) SetGuests(v []Guest) {
 func (e *Engine) Status() Status { e.mu.Lock(); defer e.mu.Unlock(); return e.status }
 func (e *Engine) Run(ctx context.Context) {
 	previousMemoryError := ""
+	securityChecked := time.Time{}
+	securityState := "pending"
 	for ctx.Err() == nil {
 		e.mu.Lock()
 		enabled := e.enabled != nil && *e.enabled
@@ -65,6 +68,17 @@ func (e *Engine) Run(ctx context.Context) {
 		permit := e.compatPermit
 		e.mu.Unlock()
 		if enabled {
+			if time.Since(securityChecked) > 6*time.Hour {
+				securityContext, done := context.WithTimeout(ctx, 60*time.Second)
+				if err := repairSecurityPackages(securityContext); err != nil {
+					securityState = "retry"
+					securityChecked = time.Now().Add(-6*time.Hour + 5*time.Minute)
+				} else {
+					securityState = "checked"
+					securityChecked = time.Now()
+				}
+				done()
+			}
 			c, cancel := context.WithTimeout(ctx, 180*time.Second)
 			compatStatus, compatRequest, compatHashValue := incusCompatibilityStatus(c)
 			if compatStatus == "needed" || compatStatus == "pending" {
@@ -96,6 +110,7 @@ func (e *Engine) Run(ctx context.Context) {
 			if err != nil {
 				s.Error = "HOST_PROVISIONING_TOOLS_PENDING"
 			}
+			s.SecurityPackages = securityState
 			e.mu.Lock()
 			e.status = s
 			e.mu.Unlock()

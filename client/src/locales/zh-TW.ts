@@ -3710,6 +3710,8 @@ pool: {
             password: '密碼',
             passwordUnchanged: '留空則不修改',
             basePath: '基礎路徑',
+            hostFingerprint: 'SFTP 伺服器指紋',
+            hostFingerprintHelp: '填入從伺服器可信管道確認的 SHA256 指紋。伺服器身分變更時將拒絕連線。',
             setAsDefault: '設為預設',
             default: '預設',
             setDefault: '設為預設',

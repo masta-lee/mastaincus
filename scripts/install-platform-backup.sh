@@ -7,7 +7,39 @@ root=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd -P)
 for file in "$root/deploy/incudal-online-task.sh.example" "$root/deploy/incudal-systemctl-wrapper.sh.example" "$root/deploy/incudal-platform-backup@.service.example"; do
   [[ -f "$file" && ! -L "$file" && $(stat -c %u "$file") == 0 ]] || { echo 'Untrusted helper source.' >&2; exit 1; }
 done
+# An unsupported DB/Node patch must fail before any persistent service/helper
+# replacement, so an installed old worker can still roll back normally.
+if [[ -f "$root/scripts/harden-database.py" && ! -e /var/lib/incudal-backup/recovery-hold.json && -f /opt/incudal/.env ]] && /usr/bin/pg_isready -q -d incudal; then
+  INCUDAL_DATABASE_PREFLIGHT=1 /usr/bin/python3 -I -B "$root/scripts/harden-database.py"
+fi
 install -d -o root -g root -m 0755 /usr/local/libexec/incudal
+if [[ -f "$root/scripts/harden-nginx-logging.py" ]] && command -v nginx >/dev/null 2>&1; then
+  /usr/bin/python3 -I -B "$root/scripts/harden-nginx-logging.py"
+fi
+if [[ -f "$root/scripts/system-security-inventory.py" ]]; then
+  [[ ! -L "$root/scripts/system-security-inventory.py" && $(stat -c %u "$root/scripts/system-security-inventory.py") == 0 && -z $(find "$root/scripts/system-security-inventory.py" -perm /022 -print -quit) ]] || exit 1
+  install -o root -g root -m 0755 "$root/scripts/system-security-inventory.py" /usr/local/libexec/incudal/system-security-inventory.py
+  cat > /etc/systemd/system/incudal-system-security.service <<'EOF'
+[Unit]
+Description=PayIncus installed and running security component inventory
+[Service]
+Type=oneshot
+ExecStart=/usr/bin/python3 -I -B /usr/local/libexec/incudal/system-security-inventory.py --record
+TimeoutStartSec=5min
+EOF
+  cat > /etc/systemd/system/incudal-system-security.timer <<'EOF'
+[Unit]
+Description=Refresh PayIncus security component inventory
+[Timer]
+OnBootSec=3min
+OnUnitInactiveSec=6h
+RandomizedDelaySec=30min
+[Install]
+WantedBy=timers.target
+EOF
+  /usr/bin/systemctl daemon-reload
+  /usr/bin/systemctl enable --now incudal-system-security.timer
+fi
 # Keep the verifier outside releases so an old worker can reconcile component
 # enrollment after switching back to an older release. Install before replacing
 # the root launcher; only the current trusted package supplies these tools.
@@ -53,9 +85,82 @@ ExecStartPre=
 ExecStartPre=+/usr/bin/bash $work_dir/scripts/install-platform-backup.sh
 ExecStartPre=+/usr/local/libexec/incudal/incudal-online-task recovery-startup
 ExecStartPost=+/usr/local/libexec/incudal/incudal-online-task recovery-ready
-ExecStartPre=/usr/bin/bash -lc 'if [ ! -e /var/lib/incudal-backup/recovery-hold.json ]; then cd $work_dir/server && pnpm exec prisma migrate deploy; fi'
+ExecStartPre=+/usr/bin/bash -lc 'if [ ! -e /var/lib/incudal-backup/recovery-hold.json ]; then /usr/bin/bash $work_dir/scripts/migrate-database.sh; fi'
 EOF
 chmod 0644 /etc/systemd/system/incudal-backend.service.d/platform-backup.conf
+if [[ -f "$root/scripts/migrate-database.sh" && -f "$root/scripts/harden-database.py" ]]; then
+  # Preserve this verified security runtime across physical/atomic rollback.
+  # Copy code and dependencies only; never copy .env, certs or user uploads.
+  compatibility=/usr/local/libexec/incudal/database-compat-runtime
+  # Ordinary startup reuses the preserved runtime. Replace it only when the
+  # verified source security modules changed, avoiding a large copy each boot.
+  source_hash=$(cd "$root"; { find server/dist server/templates -type f -print0 | sort -z | xargs -0 sha256sum; sha256sum package.json pnpm-lock.yaml; } | sha256sum | awk '{print $1}')
+  if [[ ! -f "$compatibility/source.hash" || $(cat "$compatibility/source.hash") != "$source_hash" ]]; then
+    stage=$(mktemp -d /usr/local/libexec/incudal/.database-compat-XXXXXX)
+    trap 'if [[ -n "${stage:-}" && "$stage" == /usr/local/libexec/incudal/.database-compat-* && -d "$stage" && ! -L "$stage" ]]; then rm -rf -- "$stage"; fi' EXIT
+    install -d -m 0755 "$stage/server"
+    cp -a "$root/server/dist" "$root/server/templates" "$root/server/node_modules" "$root/server/package.json" "$stage/server/"
+    cp -a "$root/node_modules" "$root/package.json" "$stage/"
+    chown -R root:root "$stage"
+    chmod -R go-w "$stage"
+    chmod 0755 "$stage"
+    python3 -I -B - "$stage" <<'PY'
+import pathlib,hashlib,json,sys
+root=pathlib.Path(sys.argv[1])
+files={};links={}
+for path in sorted(root.rglob('*')):
+    if path.is_symlink():
+        if not path.resolve().is_relative_to(root):raise ValueError('Database compatibility link escapes retained runtime')
+        links[str(path.relative_to(root))]=str(path.readlink())
+    elif path.is_file():files[str(path.relative_to(root))]=hashlib.sha256(path.read_bytes()).hexdigest()
+(root/'manifest.json').write_text(json.dumps({'version':1,'files':files,'links':links},separators=(',',':')))
+PY
+    chmod 0644 "$stage/manifest.json"
+    printf '%s\n' "$source_hash" > "$stage/source.hash"
+    if [[ -e "$compatibility" ]]; then
+      [[ -d "$compatibility" && ! -L "$compatibility" ]] || exit 1
+      previous="$compatibility.before"
+      [[ ! -e "$previous" ]] || { [[ -d "$previous" && ! -L "$previous" ]] || exit 1; rm -rf -- "$previous"; }
+      mv "$compatibility" "$previous"
+    fi
+    mv "$stage" "$compatibility"
+    stage=""
+    trap - EXIT
+  fi
+  install -o root -g root -m 0755 "$root/scripts/migrate-database.sh" /usr/local/libexec/incudal/migrate-database
+  install -o root -g root -m 0755 "$root/scripts/harden-database.py" /usr/local/libexec/incudal/harden-database.py
+  [[ -f "$root/scripts/legacy-database-startup.mjs" && ! -L "$root/scripts/legacy-database-startup.mjs" && $(stat -c %u "$root/scripts/legacy-database-startup.mjs") == 0 && -z $(find "$root/scripts/legacy-database-startup.mjs" -perm /022 -print -quit) ]] || exit 1
+  install -o root -g root -m 0644 "$root/scripts/legacy-database-startup.mjs" /usr/local/libexec/incudal/legacy-database-startup.mjs
+  # Old installers replace the ordinary launcher when rolling back. These
+  # fixed unit overrides keep the verified security launcher for subsequent
+  # updates, while it still verifies and executes the original current worker.
+  install -o root -g root -m 0755 "$root/deploy/incudal-online-task.sh.example" /usr/local/libexec/incudal/database-secure-task
+  for operation in update rollback; do
+    if [[ "$operation" == update ]]; then unit=incudal-online-update@.service; else unit=incudal-online-rollback@.service; fi
+    install -d -m 0755 "/etc/systemd/system/$unit.d"
+    cat > "/etc/systemd/system/$unit.d/zz-database-security.conf" <<EOF
+[Service]
+ExecStart=
+ExecStart=/usr/local/libexec/incudal/database-secure-task $operation %i
+EOF
+    chmod 0644 "/etc/systemd/system/$unit.d/zz-database-security.conf"
+  done
+  # Preserve the rollback runtime and shim before revoking legacy DDL authority.
+  if [[ ! -e /var/lib/incudal-backup/recovery-hold.json && -f /opt/incudal/.env ]] && /usr/bin/pg_isready -q -d incudal; then
+    /usr/bin/python3 -I -B "$root/scripts/harden-database.py"
+  fi
+  # A rollback's older installer must not restore application-owned migrations.
+  # The fixed root helper resolves current on each invocation and remains trusted.
+  cat > /etc/systemd/system/incudal-backend.service.d/zz-database-security.conf <<'EOF'
+[Service]
+ExecStartPre=
+ExecStartPre=+/usr/bin/python3 -I -B /usr/local/libexec/incudal/harden-database.py
+ExecStartPre=+/usr/local/libexec/incudal/incudal-online-task recovery-startup
+ExecStartPre=+/usr/bin/bash -lc 'if [ ! -e /var/lib/incudal-backup/recovery-hold.json ]; then /usr/local/libexec/incudal/migrate-database; fi'
+Environment=NODE_OPTIONS=--import=/usr/local/libexec/incudal/legacy-database-startup.mjs
+EOF
+  chmod 0644 /etc/systemd/system/incudal-backend.service.d/zz-database-security.conf
+fi
 cat > /etc/systemd/system/incudal-recovery-supervisor.service <<'EOF'
 [Unit]
 Description=PayIncus interrupted recovery continuation

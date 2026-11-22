@@ -6,16 +6,18 @@
 import { prisma } from './prisma.js'
 import { authorizeUserWrite, lockAdministrativeUserMutation, revokeUserSessionsInTransaction, type WriteActor, type WriteSession } from './user-write-authorization.js'
 import type { OAuthConfig, UserOAuthBinding } from '../types/database.js'
-import { decryptSensitiveData, encryptSensitiveData, generateRefreshToken, isEncrypted, type OAuthLoginCodeData } from '../lib/security.js'
+import { decryptSensitiveDataStrict, encryptSensitiveData, generateRefreshToken, type OAuthLoginCodeData } from '../lib/security.js'
 import { Prisma } from '@prisma/client'
 
 function decryptOAuthSecret(value: string): string {
   if (!value) return value
-  return isEncrypted(value) ? (decryptSensitiveData(value) || value) : value
+  const decoded = decryptSensitiveDataStrict(value)
+  if (decoded === null) throw new Error('OAUTH_SECRET_AUTHENTICATION_INVALID')
+  return decoded
 }
 
 function encryptOAuthSecret(value: string): string {
-  return isEncrypted(value) ? value : encryptSensitiveData(value)
+  return value ? encryptSensitiveData(value) : value
 }
 
 /**

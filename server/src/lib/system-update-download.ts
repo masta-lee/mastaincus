@@ -5,6 +5,7 @@ import { Readable, Transform } from 'node:stream'
 import { pipeline } from 'node:stream/promises'
 import { setTimeout as delay } from 'node:timers/promises'
 import type { OtaArtifactInfo } from './system-version.js'
+import { verifyPanelPackageIdentity } from './panel-package-integrity.js'
 
 const releaseHosts = new Set(['github.com', 'api.github.com', 'objects.githubusercontent.com', 'release-assets.githubusercontent.com'])
 const transientStatuses = new Set([408, 429, 500, 502, 503, 504])
@@ -125,6 +126,7 @@ export async function downloadSystemUpdateArtifact(artifact: OtaArtifactInfo, de
       if (artifact.size !== null && size !== artifact.size) throw new Error(`OTA artifact size mismatch: expected ${artifact.size}, got ${size}`)
       const actual = hash.digest('hex')
       if (actual !== artifact.sha256) throw new Error(`OTA artifact sha256 mismatch: expected ${artifact.sha256}, got ${actual}`)
+      if ((process.env.NODE_ENV==='production'||artifact.signature) && !verifyPanelPackageIdentity({...artifact,sha256:actual}))throw new Error('OTA panel publisher signature invalid')
       signal.throwIfAborted()
       await rename(temporary, destination)
       await options.log?.(`OTA artifact verified: sha256=${actual}`)

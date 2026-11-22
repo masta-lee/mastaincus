@@ -243,7 +243,8 @@ assert.ok(
   onlineTaskHelper.includes('/usr/bin/chown -R root:root "${INSTALL_DIR}/releases"') &&
     onlineTaskHelper.includes('verify_manifest') &&
     onlineTaskHelper.includes('verify_git_control') &&
-    onlineTaskHelper.indexOf('verify_manifest') < onlineTaskHelper.indexOf('/usr/bin/node "${app_dir}/${script}"'),
+    onlineTaskHelper.indexOf('verify_manifest') < onlineTaskHelper.indexOf('/usr/bin/node "${security_import[@]}" "${app_dir}/${script}"') &&
+    onlineTaskHelper.includes('legacy-database-startup.mjs'),
   'fixed root helper must enforce root ownership and verify release integrity before Node execution'
 )
 assert.ok(
@@ -362,7 +363,7 @@ assert.ok(
     backendServiceExample.includes('Environment=XDG_CACHE_HOME=/opt/incudal/.cache') &&
     backendServiceExample.includes('WorkingDirectory=/opt/incudal/current') &&
     backendServiceExample.includes('NoNewPrivileges=false') &&
-    backendServiceExample.includes('pnpm exec prisma migrate deploy') &&
+    backendServiceExample.includes('ExecStartPre=+/usr/bin/bash /opt/incudal/current/scripts/migrate-database.sh') &&
     !backendServiceExample.includes('npx prisma'),
   'systemd backend example must keep runtime cache paths writable, allow restricted online-update sudo, and run locked local Prisma migrations under ProtectSystem=strict'
 )
@@ -386,7 +387,7 @@ assert.ok(
     installPanel.includes('Environment=XDG_CACHE_HOME=${INSTALL_DIR}/.cache') &&
     installPanel.includes('app_dir="${INSTALL_DIR}/current"') &&
     installPanel.includes('NoNewPrivileges=false') &&
-    installPanel.includes('pnpm exec prisma migrate deploy') &&
+    installPanel.includes('ENV_FILE="$ENV_FILE" bash "$INSTALL_DIR/scripts/migrate-database.sh"') &&
     !installPanel.includes('npx prisma'),
   'install script systemd service must keep runtime cache paths writable, allow restricted online-update sudo, and run locked local Prisma migrations under ProtectSystem=strict'
 )
@@ -450,7 +451,7 @@ assert.ok(
   rootPackage.includes('"pnpm"') &&
     rootPackage.includes('"overrides"') &&
     rootPackage.includes('"caniuse-lite": "^1.0.30001799"') &&
-    rootPackage.includes('"baseline-browser-mapping": "^2.10.38"'),
+    rootPackage.includes('"baseline-browser-mapping": "2.11.5"'),
   'root package must pin current Browserslist data through pnpm overrides so production builds do not emit stale browser-data warnings'
 )
 assert.ok(rootPackage.includes('"verify:production": "bash scripts/verify-production-readiness.sh"'), 'root package must expose production readiness verification')
@@ -733,7 +734,7 @@ assert.ok(readme.includes('BACKEND_URL=http://10.0.0.12:3001'), 'README split ve
 assert.ok(nginxExample.includes('10.0.0.12:3001'), 'Nginx split example must document backend port 3001')
 assert.ok(nginxExample.includes('server_name panel.example.com') && nginxExample.includes('server_name admin.example.com'), 'Nginx split example must define customer and admin frontend server names')
 assert.ok(nginxExample.includes('root /opt/incudal/current/client/dist/user') && nginxExample.includes('root /opt/incudal/current/client/dist/admin'), 'Nginx split example must serve separate user and admin build outputs from the active release')
-assert.ok(nginxExample.includes("connect-src 'self' ws: wss:"), 'Nginx split example CSP must allow HTTP and HTTPS WebSocket terminals')
+assert.ok(nginxExample.includes("connect-src 'self'"), 'Nginx split example CSP must allow HTTP and HTTPS WebSocket terminals')
 assertBalancedNginxBraces('Nginx split example', nginxExample)
 assert.equal(countOccurrences(nginxExample, 'server {'), 2, 'Nginx split example must define customer and admin server blocks')
 assert.equal(countOccurrences(nginxExample, 'location = /healthz {'), 2, 'Nginx split example must define /healthz for both frontends')
@@ -746,7 +747,7 @@ assert.equal(countOccurrences(nginxExample, 'location /api/ {'), 2, 'Nginx split
 assert.equal(countOccurrences(nginxExample, 'location / {'), 2, 'Nginx split example must define SPA fallback for both frontends')
 assertWebSocketProxyConfig('Nginx split example', nginxExample, 'http://10.0.0.12:3001/api/ws/;')
 assertWebSocketProxyConfig('install script Nginx template', installPanel, 'http://127.0.0.1:${DEFAULT_PORT};')
-assert.ok(installPanel.includes("connect-src 'self' ws: wss:"), 'install script Nginx CSP must allow HTTP and HTTPS WebSocket terminals')
+assert.ok(installPanel.includes("connect-src 'self'"), 'install script Nginx CSP must allow HTTP and HTTPS WebSocket terminals')
 assert.ok(
   installPanel.includes('location = /index.html {') &&
     installPanel.includes('location /assets/ {') &&

@@ -11,6 +11,7 @@ import { StorageFactory } from '../storage/factory.js'
 import { normalizeStorageBasePath } from '../storage/path.js'
 import type { StorageType } from '@prisma/client'
 import { assertSafeStorageTarget, OutboundTargetValidationError } from '../lib/outbound-security.js'
+import { runStorageTest } from '../lib/request-budget.js'
 
 interface CreateStorageConfigBody {
     name: string
@@ -84,6 +85,11 @@ export default async function storageConfigRoutes(fastify: FastifyInstance) {
         username: string | null | undefined,
         hasSecret: boolean
     ): Record<string, unknown> | null | undefined {
+        if (type === 'SFTP') {
+            const fingerprint = extra?.hostFingerprint
+            if (typeof fingerprint !== 'string' || !/^SHA256:[A-Za-z0-9+/]{43}$/.test(fingerprint)) throw new Error('请填写已确认的 SFTP 服务器 SHA256 指纹')
+            return { hostFingerprint: fingerprint }
+        }
         if (type !== 'S3') return extra
         if (!username?.trim()) {
             throw new Error('S3 access key 不能为空')
@@ -373,11 +379,12 @@ export default async function storageConfigRoutes(fastify: FastifyInstance) {
 
         try {
             const provider = StorageFactory.create(config)
-            await provider.testConnection()
+            await runStorageTest(()=>provider.testConnection())
 
             return { success: true, message: '连接测试成功' }
         } catch (err) {
             const errorMessage = err instanceof Error ? err.message : String(err)
+            if ((err as {statusCode?:number}).statusCode===429) return reply.code(429).send({success:false,error:'STORAGE_TEST_BUSY',message:errorMessage})
             return reply.code(400).send({
                 success: false,
                 error: 'CONNECTION_TEST_FAILED',

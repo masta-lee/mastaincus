@@ -3018,6 +3018,8 @@ pool: {
             password: 'Password',
             passwordUnchanged: 'Leave empty to keep unchanged',
             basePath: 'Base Path',
+            hostFingerprint: 'SFTP server fingerprint',
+            hostFingerprintHelp: 'Enter the SHA256 fingerprint confirmed through a trusted server channel. Connections are refused if the server identity changes.',
             setAsDefault: 'Set as default',
             default: 'Default',
             setDefault: 'Set Default',

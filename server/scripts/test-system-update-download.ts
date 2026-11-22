@@ -134,11 +134,12 @@ export async function verifySystemUpdateDownloads(): Promise<void> {
     const ota = await getOtaReleaseInfo('v1.8.4')
     assert.equal(ota.error, null)
     assert.deepEqual(ota.artifacts, [artifact], 'fallback identity is derived from matching Release metadata, ignoring injected manifest URL')
-    for (const invalid of [{ sha256: 'a'.repeat(64) }, { size: payload.length + 1 }, { url: 'https://github.com/other/repo/file' }, { name: '../package' }]) {
+    for (const invalid of [{ sha256: 'a'.repeat(64) }, { size: payload.length + 1 }, { url: 'https://github.com/other/repo/file' }, { name: '../package' }, { version: 'v1.8.3' }, { version: 'preview-abc1234', signature: 'A'.repeat(86)+'==' }]) {
       manifestArtifact = { ...artifact, ...invalid }
       const failed = await getOtaReleaseInfo('v1.8.4')
       assert.equal(failed.manifestAvailable, false)
       assert.deepEqual(failed.artifacts, [])
+      if ('version' in invalid) assert.match(failed.error || '', /does not match the requested version/)
     }
     release.tag_name = 'v1.8.3'
     assert.equal((await getOtaReleaseInfo('v1.8.4')).manifestAvailable, false)

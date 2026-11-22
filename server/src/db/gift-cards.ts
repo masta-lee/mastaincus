@@ -65,8 +65,9 @@ async function authorizeGiftCardManager(tx: Prisma.TransactionClient, actor: Wri
   await lockAdministrativeUserMutation(tx, targetId, actor)
   // Read the current allowlist directly inside the write transaction; the route cache
   // may still contain the value from before an asynchronous operation.
-  const configs = await tx.$queryRaw<Array<{ value: string }>>`SELECT value FROM system_configs WHERE key = 'payincus_gift_card_admin_ids' FOR SHARE`
-  const values = [configs[0]?.value, process.env.PAYINCUS_GIFT_CARD_ADMIN_IDS?.trim()]
+  await tx.$queryRaw`SELECT id FROM system_configs WHERE key = 'payincus_gift_card_admin_ids' FOR SHARE`
+  const config = await tx.systemConfig.findUnique({ where: { key: 'payincus_gift_card_admin_ids' }, select: { value: true } })
+  const values = [config?.value, process.env.PAYINCUS_GIFT_CARD_ADMIN_IDS?.trim()]
     .filter((value): value is string => Boolean(value?.trim()))
   const allowed = values.some(value => value.split(',').some(part => Number(part.trim()) === actor.id))
   if ((values.length > 0 || process.env.NODE_ENV === 'production') && !allowed) throw new Error('GIFT_CARD_ACTOR_FORBIDDEN')

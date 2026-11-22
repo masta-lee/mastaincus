@@ -51,7 +51,10 @@ export async function readTicketPayload(request: FastifyRequest): Promise<Parsed
   for await (const part of multipartRequest.parts()) {
     if (part.type === 'file') {
       if (part.fieldname !== 'images') {
-        await part.toBuffer()
+        // Unknown uploads do not need a second 50MiB allocation. Consume with
+        // multipart's existing byte limit and stream backpressure.
+        if(part.file)for await(const _chunk of part.file) { /* drain */ }
+        else await part.toBuffer()
         continue
       }
 

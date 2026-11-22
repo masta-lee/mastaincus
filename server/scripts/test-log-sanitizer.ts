@@ -9,6 +9,8 @@ const __dirname = dirname(__filename)
 
 const redacted = '[REDACTED]'
 const redactedJwt = '[REDACTED_JWT]'
+for (const key of ['rootPassword','root_password','DATABASE_URL','accessKeySecret','backupPassword','ENCRYPTION_KEY']) assert.equal(sanitizeObject({[key]:'synthetic-only'})[key], redacted)
+for (const url of ['/api/download?dt=synthetic-only','/api/ws?ticket=synthetic-only','https://api.telegram.org/bot123:synthetic-only/sendMessage','postgresql://test:synthetic-only@127.0.0.1/test']) assert.ok(!sanitizeTokensInString(url).includes('synthetic-only'))
 
 const sanitized = sanitizeObject({
   username: 'alice',

@@ -51,6 +51,11 @@ const systemUpdateTasksDb = read('server/src/db/system-update-tasks.ts')
 const rootPackage = read('package.json')
 const serverPackage = read('server/package.json')
 const freshInstall = read('scripts/smoke-fresh-install.sh')
+const managementScript = releaseWorkflow.slice(releaseWorkflow.indexOf("cat > release/incudal.sh"), releaseWorkflow.indexOf('chmod +x release/incudal.sh'))
+assert.ok(managementScript.includes('exec /usr/bin/systemctl start incudal-backend') &&
+  managementScript.includes('exec /usr/bin/bash "$APP_DIR/scripts/migrate-database.sh"') &&
+  !managementScript.includes('prisma migrate deploy') && !managementScript.includes('exec node server/dist/app.js'),
+  'release shortcuts must retain the single service and root-only migration identity after role separation')
 assert.ok(onlineTaskHelper.includes('--sync-runtime "$app_dir"') && onlineTaskHelper.includes('gateway-controller-tools'),
   'old OTA workers must reconcile signed enrollment after switching the current runtime, including rollback')
 const backupInstaller = read('scripts/install-platform-backup.sh')
@@ -515,6 +520,13 @@ try {
   await assert.rejects(readFile(join(snapshot, '.incudal-update-downloads/archive')), { code: 'ENOENT' })
   assert.ok(await readFile(join(snapshot, 'server/package.json'), 'utf8'))
   assert.equal((await runSystemUpdateCommand(process.execPath, ['-e', 'process.stdout.write("checked")'], { cwd: runtimeFixture, env: process.env, capture: true, timeoutMs: 5000 })), 'checked')
+  let sanitizedLog = ''
+  const fragmented = `const chunks=['开始 Bear','er synthetic-secret\\npostgres','ql://user:split-secret@localhost/db\\n','x'.repeat(65537),' hidden-secret\\n正常结束'];let i=0;const next=()=>{if(i<chunks.length){process.stdout.write(chunks[i++]);setTimeout(next,20)}};next()`
+  await runSystemUpdateCommand(process.execPath, ['-e', fragmented], { cwd: runtimeFixture, env: process.env, timeoutMs: 5000, stdout: data => { sanitizedLog += data } })
+  assert.ok(sanitizedLog.includes('开始 [REDACTED_JWT]') && sanitizedLog.includes('正常结束'))
+  for (const secret of ['synthetic-secret','split-secret','hidden-secret']) assert.ok(!sanitizedLog.includes(secret))
+  assert.ok(sanitizedLog.includes('[UPDATE_LOG_LINE_TOO_LARGE]'))
+  await assert.rejects(runSystemUpdateCommand(process.execPath, ['-e', 'process.stdout.write(Buffer.alloc(4*1024*1024+1))'], { cwd: runtimeFixture, env: process.env, capture: true, timeoutMs: 5000 }), /exceeds capture limit/)
   if (process.platform === 'linux') {
     const counter = join(runtimeFixture, 'child-write-count')
     const grandchild = `const fs=require('node:fs');process.on('SIGTERM',()=>{});fs.writeFileSync(${JSON.stringify(counter)},'start');setInterval(()=>fs.appendFileSync(${JSON.stringify(counter)},'x'),20)`

@@ -11,12 +11,12 @@
 
 import nodemailer from 'nodemailer'
 import type { Transporter } from 'nodemailer'
+import { sanitizeTokensInString } from './log-sanitizer.js'
 import {
     getSystemConfig,
     getSystemConfigBoolean,
     getSystemConfigNumber
 } from '../db/system-config.js'
-import { decryptSensitiveData } from './security.js'
 
 // SMTP 配置接口
 export interface SmtpConfig {
@@ -106,15 +106,8 @@ export async function getSmtpConfig(): Promise<SmtpConfig> {
         ? brandName
         : normalizedFromName
 
-    // 如果密码已加密，则解密
-    let decryptedPassword = password || ''
-    if (decryptedPassword && decryptedPassword.includes(':')) {
-        // 格式: iv:tag:encrypted - 尝试解密
-        const decrypted = decryptSensitiveData(decryptedPassword)
-        if (decrypted) {
-            decryptedPassword = decrypted
-        }
-    }
+    // getSystemConfig already authenticates and decrypts this persisted value.
+    const decryptedPassword = password || ''
 
     return {
         enabled,
@@ -138,6 +131,21 @@ export async function isSmtpEnabled(): Promise<boolean> {
     return config.enabled && !!config.host && !!config.username && !!config.password
 }
 
+export function createSmtpTransport(config: Pick<SmtpConfig,'host'|'port'|'secure'|'username'|'password'>): Transporter {
+    return nodemailer.createTransport({
+        disableFileAccess: true,
+        disableUrlAccess: true,
+        host: config.host,
+        port: config.port,
+        secure: config.secure,
+        requireTLS: true,
+        auth: { user: config.username, pass: config.password },
+        connectionTimeout: 10000,
+        greetingTimeout: 10000,
+        socketTimeout: 30000
+    })
+}
+
 /**
  * 获取或创建 nodemailer transporter
  */
@@ -155,19 +163,7 @@ async function getTransporter(): Promise<Transporter | null> {
         return null
     }
 
-    transporterCache = nodemailer.createTransport({
-        host: config.host,
-        port: config.port,
-        secure: config.secure,
-        auth: {
-            user: config.username,
-            pass: config.password
-        },
-        // 超时设置，防止请求卡住
-        connectionTimeout: 10000, // 连接超时 10 秒
-        greetingTimeout: 10000,   // 问候超时 10 秒
-        socketTimeout: 30000      // Socket 超时 30 秒
-    })
+    transporterCache = createSmtpTransport(config)
 
     configCacheTime = now
     return transporterCache
@@ -758,24 +754,13 @@ export async function testSmtpConnection(): Promise<{ success: boolean; error?: 
         }
 
         // 创建临时 transporter 用于测试（忽略启用状态）
-        const testTransporter = nodemailer.createTransport({
-            host: config.host,
-            port: config.port,
-            secure: config.secure,
-            auth: {
-                user: config.username,
-                pass: config.password
-            },
-            connectionTimeout: 10000,
-            greetingTimeout: 10000,
-            socketTimeout: 30000
-        })
+        const testTransporter = createSmtpTransport(config)
 
         await testTransporter.verify()
         return { success: true }
     } catch (error: any) {
-        console.error('SMTP connection test failed:', error)
-        return { success: false, error: error.message || 'Connection failed' }
+        console.error('SMTP connection test failed:', sanitizeTokensInString(error.message || 'Connection failed'))
+        return { success: false, error: sanitizeTokensInString(error.message || 'Connection failed') }
     }
 }
 
@@ -799,18 +784,7 @@ export async function sendTestEmail(to: string): Promise<SmtpTestDeliveryResult>
         }
 
         // 创建临时 transporter 用于测试（忽略启用状态）
-        const testTransporter = nodemailer.createTransport({
-            host: config.host,
-            port: config.port,
-            secure: config.secure,
-            auth: {
-                user: config.username,
-                pass: config.password
-            },
-            connectionTimeout: 10000,
-            greetingTimeout: 10000,
-            socketTimeout: 30000
-        })
+        const testTransporter = createSmtpTransport(config)
 
         const testTime = formatDateTime(new Date())
 
@@ -862,7 +836,7 @@ export async function sendTestEmail(to: string): Promise<SmtpTestDeliveryResult>
 
         return { success: true, ...buildSmtpTestDeliveryInfo(info) }
     } catch (error: unknown) {
-        const errorMessage = error instanceof Error ? error.message : String(error)
+        const errorMessage = sanitizeTokensInString(error instanceof Error ? error.message : String(error))
         console.error('Failed to send test email:', errorMessage)
         return buildFailedSmtpTestDeliveryResult(errorMessage)
     }

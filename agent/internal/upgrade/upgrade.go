@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"compress/gzip"
 	"context"
+	"crypto/ed25519"
 	"crypto/rand"
 	"crypto/sha256"
 	"encoding/hex"
@@ -37,6 +38,7 @@ var systemdServiceNamePattern = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9_.@-]*
 type RestartFunc func(ctx context.Context, serviceName string) error
 
 type Runner struct {
+	TrustedPublicKey ed25519.PublicKey
 	BinaryPath       string
 	BackupPath       string
 	LockPath         string
@@ -119,6 +121,9 @@ func (runner *Runner) Apply(ctx context.Context, instruction panel.UpgradeInstru
 		}
 	}
 
+	if err := runner.verifyPackageSignature(binaryBytes, instruction); err != nil {
+		return err
+	}
 	tempPath, err := runner.writeTempBinary(binaryBytes)
 	if err != nil {
 		return err
@@ -136,10 +141,10 @@ func (runner *Runner) Apply(ctx context.Context, instruction panel.UpgradeInstru
 
 func (runner *Runner) validateUpgradeURL(rawURL string) error {
 	upgradeURL, err := url.Parse(rawURL)
-	if err != nil || upgradeURL.Scheme == "" || upgradeURL.Host == "" {
+	if err != nil || upgradeURL.Scheme == "" || upgradeURL.Host == "" || upgradeURL.User != nil || upgradeURL.Fragment != "" {
 		return fmt.Errorf("upgrade URL is invalid: %s", rawURL)
 	}
-	if upgradeURL.Scheme != "http" && upgradeURL.Scheme != "https" {
+	if upgradeURL.Scheme != "https" && (upgradeURL.Scheme != "http" || upgradeURL.Hostname() != "127.0.0.1" && upgradeURL.Hostname() != "localhost") {
 		return fmt.Errorf("upgrade URL scheme is not allowed: %s", upgradeURL.Scheme)
 	}
 
@@ -158,6 +163,9 @@ func (runner *Runner) download(ctx context.Context, rawURL string) ([]byte, erro
 	if client == nil {
 		client = &http.Client{Timeout: 30 * time.Second}
 	}
+	clientCopy := *client
+	clientCopy.CheckRedirect = func(_ *http.Request, _ []*http.Request) error { return http.ErrUseLastResponse }
+	client = &clientCopy
 
 	request, err := http.NewRequestWithContext(ctx, http.MethodGet, rawURL, nil)
 	if err != nil {
@@ -170,8 +178,7 @@ func (runner *Runner) download(ctx context.Context, rawURL string) ([]byte, erro
 	defer response.Body.Close()
 
 	if response.StatusCode < 200 || response.StatusCode >= 300 {
-		body, _ := io.ReadAll(io.LimitReader(response.Body, 4096))
-		return nil, fmt.Errorf("download upgrade failed: status=%d body=%s", response.StatusCode, string(body))
+		return nil, fmt.Errorf("download upgrade failed: status=%d", response.StatusCode)
 	}
 
 	limit := runner.sizeLimit()
@@ -192,6 +199,10 @@ func (runner *Runner) writeTempBinary(binaryBytes []byte) (string, error) {
 		return "", err
 	}
 	if err := tempFile.Chmod(0755); err != nil {
+		_ = os.Remove(tempPath)
+		return "", err
+	}
+	if err := tempFile.Sync(); err != nil {
 		_ = os.Remove(tempPath)
 		return "", err
 	}

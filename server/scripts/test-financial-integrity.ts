@@ -59,7 +59,7 @@ try {
   assert.equal((await read()).balance.toFixed(2), '92.00')
   await assert.rejects(async () => prisma.$transaction([
     prisma.user.update({ where: { id: userId }, data: { balance: 999 } })
-  ]), /FINANCIAL_INTEGRITY_INVALID/)
+  ]), /(?:FINANCIAL|AUTHENTICATION)_INTEGRITY_INVALID/)
   assert.equal((await read()).balance.toFixed(2), '92.00', 'array transactions do not start standalone financial writes')
   hostId = (await prisma.host.create({ data: { userId, name: tag, url: 'https://127.0.0.1:1' } })).id
   providerId = (await prisma.paymentProvider.create({ data: { name: tag, type: 'manual', config: {} } })).id

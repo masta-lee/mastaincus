@@ -21,6 +21,12 @@ REQUEST_TIMEOUT="${INCUDAL_REQUEST_TIMEOUT_SECONDS:-10}"
 DRY_RUN="${INCUDAL_AGENT_DRY_RUN:-0}"
 INSTALL_CONFIG_PATH=""
 
+# Public production management and credentials must never cross plain HTTP.
+# file:// is reserved for the explicitly supplied local binary below.
+require_https_url() {
+  [[ "$1" =~ ^https://[^/@[:space:]]+(/[^[:space:]]*)?$ ]] || fail 'Agent management/download URL must use HTTPS without credentials'
+}
+
 fail() {
   echo "error: $*" >&2
   exit 1
@@ -109,8 +115,9 @@ download_binary_once() {
   if [[ "${binary_url}" == file://* ]]; then
     install -m 0644 "${binary_url#file://}" "${target}.download" || return 1
   else
+    require_https_url "$binary_url"
     command -v curl >/dev/null 2>&1 || fail "curl is required"
-    curl -fsSL "${binary_url}" -o "${target}.download" || {
+    curl --proto '=https' --proto-redir '=https' -fsSL --connect-timeout 15 --max-time 300 "${binary_url}" -o "${target}.download" || {
       rm -f "${target}.download"
       return 1
     }
@@ -199,6 +206,23 @@ verify_sha256() {
   fi
 }
 
+verify_publisher_signature() {
+  [[ "$DRY_RUN" == 1 ]] && return 0
+  [[ "$BINARY_VERSION" =~ ^v?[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?$ && "$BINARY_SIGNATURE" =~ ^[A-Za-z0-9+/]{86}==$ ]] || fail 'Agent publisher signature metadata is missing or invalid'
+  command -v openssl >/dev/null 2>&1 || fail 'openssl is required to verify the Agent publisher'
+  local work
+  work=$(mktemp -d)
+  # Fixed independent Ed25519 publisher. Never read the key from metadata.
+  printf '\x30\x2a\x30\x05\x06\x03\x2b\x65\x70\x03\x21\x00' > "$work/public.der"
+  printf '%s' 'y6C9aLon6OtgHPp5KPVDpxoNha95YptW03o4Dp2djQA=' | openssl base64 -d -A >> "$work/public.der"
+  printf '%s' "$BINARY_SIGNATURE" | openssl base64 -d -A > "$work/signature"
+  printf 'payincus/agent-package/v1\n%s\nlinux-%s\n%s' "${BINARY_VERSION#v}" "$ARCH" "$(sha256_file "$STAGED_BIN")" > "$work/message"
+  if ! openssl pkeyutl -verify -pubin -keyform DER -rawin -inkey "$work/public.der" -sigfile "$work/signature" -in "$work/message" >/dev/null 2>&1; then
+    rm -rf -- "$work"; fail 'Agent publisher signature verification failed'
+  fi
+  rm -rf -- "$work"
+}
+
 download_manifest() {
   local manifest_url="$1"
   local target="$2"
@@ -209,7 +233,8 @@ download_manifest() {
   fi
 
   command -v curl >/dev/null 2>&1 || fail "curl is required"
-  curl -fsSL "${manifest_url}" -o "${target}"
+  require_https_url "$manifest_url"
+  curl --proto '=https' --proto-redir '=https' -fsSL --connect-timeout 15 --max-time 60 --max-filesize 65536 "${manifest_url}" -o "${target}"
 }
 
 manifest_value() {
@@ -385,14 +410,27 @@ fetch_agent_install_config() {
 
   command -v curl >/dev/null 2>&1 || fail "curl is required"
   INSTALL_CONFIG_PATH="$(mktemp)"
-  curl -fsSL "${config_url}" -o "${INSTALL_CONFIG_PATH}"
-  # shellcheck disable=SC1090
-  . "${INSTALL_CONFIG_PATH}"
+  require_https_url "$config_url"
+  curl --proto '=https' --proto-redir '=https' -fsS --connect-timeout 15 --max-time 30 --max-filesize 4096 "${config_url}" -o "${INSTALL_CONFIG_PATH}"
+  # The response is data, never shell code. Accept only these two exact
+  # generated credential assignments; reject duplicates and other statements.
+  local config_line config_id='' config_secret=''
+  while IFS= read -r config_line; do
+    if [[ "$config_line" =~ ^INCUDAL_AGENT_ID=\'([A-Za-z0-9_-]+)\'$ && -z "$config_id" ]]; then
+      config_id="${BASH_REMATCH[1]}"
+    elif [[ "$config_line" =~ ^INCUDAL_AGENT_SECRET=\'([A-Za-z0-9_-]+)\'$ && -z "$config_secret" ]]; then
+      config_secret="${BASH_REMATCH[1]}"
+    else fail 'Agent installation credential response is invalid'; fi
+  done < "$INSTALL_CONFIG_PATH"
+  [[ -n "$config_id" && -n "$config_secret" ]] || fail 'Agent installation credential response is incomplete'
+  INCUDAL_AGENT_ID="$config_id"
+  INCUDAL_AGENT_SECRET="$config_secret"
   rm -f "${INSTALL_CONFIG_PATH}"
   INSTALL_CONFIG_PATH=""
 }
 
 need_env INCUDAL_PANEL_URL
+require_https_url "$INCUDAL_PANEL_URL"
 HEARTBEAT_INTERVAL="$(normalize_heartbeat_interval "${HEARTBEAT_INTERVAL}")"
 
 PANEL_BASE_URL="${INCUDAL_PANEL_URL%/}"
@@ -403,6 +441,8 @@ BINARY_BASE_URL="${INCUDAL_AGENT_BINARY_BASE_URL:-${DEFAULT_BINARY_BASE_URL}}"
 BINARY_NAME="incudal-agent-${OS}-${ARCH}"
 BINARY_URL="${INCUDAL_AGENT_BINARY_URL:-}"
 BINARY_EXPECTED_SHA256="${INCUDAL_AGENT_BINARY_SHA256:-}"
+BINARY_SIGNATURE=""
+BINARY_VERSION=""
 BINARY_FALLBACK_URL=""
 MANIFEST_PATH=""
 MANIFEST_URL="${INCUDAL_AGENT_MANIFEST_URL:-${PANEL_BASE_URL}/api/agent/manifest.json}"
@@ -439,12 +479,19 @@ if [ -z "${INCUDAL_AGENT_INSTALL_TOKEN:-}" ]; then
   need_env INCUDAL_AGENT_SECRET
 fi
 
+# A custom binary still has to match independently signed release metadata.
+# Downloading arbitrary bytes from an administrator-supplied URL is not trust.
+BINARY_CACHE_BUSTER="${INCUDAL_AGENT_BINARY_CACHE_BUSTER:-$(date +%s)}"
+MANIFEST_URL="$(append_query_param "${MANIFEST_URL}" "v" "${BINARY_CACHE_BUSTER}")"
+MANIFEST_PATH="${BIN_PATH}.manifest.$$"
+download_manifest "${MANIFEST_URL}" "${MANIFEST_PATH}"
+if [ "$DRY_RUN" != 1 ]; then
+  BINARY_SIGNATURE="$(manifest_value "$MANIFEST_PATH" "$OS-$ARCH" signature)"
+  BINARY_VERSION="$(tr -d '\n\r' < "$MANIFEST_PATH" | sed -nE 's/^.*"version"[[:space:]]*:[[:space:]]*"([^"]+)".*$/\1/p')"
+fi
+
 if [ -z "${INCUDAL_AGENT_BINARY_URL:-}" ]; then
   # Cloudflare 等边缘缓存可能缓存旧二进制；默认面板下载强制按安装批次换 URL。
-  BINARY_CACHE_BUSTER="${INCUDAL_AGENT_BINARY_CACHE_BUSTER:-$(date +%s)}"
-  MANIFEST_URL="$(append_query_param "${MANIFEST_URL}" "v" "${BINARY_CACHE_BUSTER}")"
-  MANIFEST_PATH="${BIN_PATH}.manifest.$$"
-  download_manifest "${MANIFEST_URL}" "${MANIFEST_PATH}"
 
   if [ "${DRY_RUN}" != "1" ]; then
     BINARY_NAME="$(manifest_value "${MANIFEST_PATH}" "${OS}-${ARCH}" "name")"
@@ -468,6 +515,7 @@ fi
 
 # 实际下载和校验在消费一次性 token 之前完成，下载失败时同一条命令仍可重试。
 download_binary "${BINARY_URL}" "${STAGED_BIN}" "${BINARY_FALLBACK_URL}" "${BINARY_EXPECTED_SHA256}"
+verify_publisher_signature
 
 fetch_agent_install_config
 need_env INCUDAL_AGENT_ID

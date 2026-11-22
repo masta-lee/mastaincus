@@ -1,4 +1,5 @@
 import { Prisma } from '@prisma/client'
+import { X509Certificate } from 'node:crypto'
 import { OnboardingError } from '../lib/host-onboarding.js'
 import { prisma } from '../db/prisma.js'
 import { IncusClient } from '../lib/incus/incus-client.js'
@@ -6,7 +7,7 @@ import { panelCertificatePaths } from '../lib/incus/certificate-paths.js'
 import { transferHostIdentity } from '../lib/transfer-host-identity.js'
 import { decryptSensitiveData } from '../lib/security.js'
 import { hashAgentSecret, isValidAgentSecret } from '../lib/agent-auth.js'
-import { repairGatewayHostAgent } from './onboarding-ssh.js'
+import { repairGatewayHostAgent, probeGatewayHost } from './onboarding-ssh.js'
 import { recoveryHeld } from './platform-backup-core.js'
 import { recoveryScope } from './host-pool-recovery.js'
 import { automaticOperationAudit } from '../lib/automatic-operation-audit.js'
@@ -24,6 +25,11 @@ export function managementRepairView(value: unknown) {
     error: typeof state.error === 'string' && /^[A-Z_]{1,100}$/.test(state.error) ? state.error : null }
 }
 export const managementRepairDependencies = {
+  readCertificate: async (nodeId: string, input: {sshPort:number;sshFingerprint:string;nodePublicKey:string}, signal:AbortSignal) => {
+    const certificate=await probeGatewayHost(nodeId,{...input,serverCertificate:true},signal)
+    if(!certificate)throw Error('HOST_TLS_CERTIFICATE_INVALID')
+    return certificate
+  },
   async verify(host: { url: string; serverCertificate: string | null; serverFingerprint: string | null }, signal: AbortSignal) {
     if (!host.serverCertificate || !host.serverFingerprint) throw new Error('HOST_TLS_IDENTITY_MISSING')
     const client = new IncusClient({ ...host, ...panelCertificatePaths() })
@@ -38,7 +44,7 @@ export const managementRepairDependencies = {
 
 /** Repair only established onboarding identities. No new trust, credentials,
  * customer operations or inventory release is granted by this worker. */
-export async function repairHostManagement(hostId: number, deps = managementRepairDependencies): Promise<void> {
+export async function repairHostManagement(hostId: number, deps: Pick<typeof managementRepairDependencies,'verify'|'repairAgent'> & Partial<Pick<typeof managementRepairDependencies,'readCertificate'>> = managementRepairDependencies): Promise<void> {
   if (recoveryHeld()) return
   let attempted = false
   let originalIdentity = ''
@@ -63,6 +69,7 @@ export async function repairHostManagement(hostId: number, deps = managementRepa
       // the same gates still run before every write.
       if (current?.nextAttemptAt && Date.parse(current.nextAttemptAt) > Date.now()) return
       const missingCertificate = !host.certPath || !host.keyPath
+      const missingServerIdentity = !host.serverCertificate || !host.serverFingerprint
       const agent = host.agent
       const staleAgent = !!agent?.enabled && agent.status !== 'disabled' && !!agent.lastSeenAt &&
         agent.lastSeenAt.getTime() < Date.now() - 5 * 60000 && !!agent.version && !agent.installTokenKeepsIdentity
@@ -71,7 +78,7 @@ export async function repairHostManagement(hostId: number, deps = managementRepa
       const legacyAgent = !!agent?.enabled && agent.status !== 'disabled' && agent.lastSeenAt === null && agent.version === null &&
         !!agent.installTokenHash && agent.installTokenUsedAt === null && !agent.installTokenKeepsIdentity
       const awaitingHeartbeat = current?.status === 'waiting-heartbeat' || (!!current?.agentId && current.status !== 'done')
-      if (!missingCertificate && !legacyAgent && !staleAgent && !awaitingHeartbeat) return
+      if (!missingCertificate && !missingServerIdentity && !legacyAgent && !staleAgent && !awaitingHeartbeat) return
       attempted = true; originalIdentity = transferHostIdentity(host); originalState = host.managementRepair; attempts = (current?.attempts || 0) + 1
       auditActorId = node.batch.createdById
       await tx.$queryRaw`SELECT id FROM users WHERE id = ${node.batch.createdById} FOR SHARE`
@@ -82,23 +89,50 @@ export async function repairHostManagement(hostId: number, deps = managementRepa
       if (enrolled.status !== 'succeeded' || enrolled.deletedAt || enrolled.hostId !== hostId ||
           enrolled.managementIp !== node.managementIp || enrolled.sshFingerprint !== node.sshFingerprint || enrolled.nodePublicKey !== node.nodePublicKey) throw new Error('HOST_REPAIR_ENROLLMENT_CHANGED')
       if (host.installPending) throw new Error('HOST_REPAIR_BUSY')
-      if (await tx.instanceTask.count({ where: { status: { in: ['PENDING', 'PROCESSING'] }, OR: [
+      const pendingTasks=await tx.instanceTask.count({ where: { status: { in: ['PENDING', 'PROCESSING'] }, OR: [
         { hostId }, { targetHostId: hostId }, { replacementState: { path: ['sourceHostId'], equals: hostId } }
-      ] } })) throw new Error('HOST_REPAIR_BUSY')
+      ] } })
+      if(pendingTasks&&!missingServerIdentity)throw new Error('HOST_REPAIR_BUSY')
+      let identity: {serverCertificate:string;serverFingerprint:string}|undefined
+      if(missingServerIdentity){
+        step='通过原受信 SSH 核对 Incus 公有证书'
+        if(host.managementSshUser!=='root')throw Error('HOST_REPAIR_ENROLLMENT_CHANGED')
+        if(!deps.readCertificate)throw Error('HOST_TLS_IDENTITY_MISSING')
+        const pem=await scope.run(()=>deps.readCertificate!(node.id,{sshPort:node.sshPort,sshFingerprint:node.sshFingerprint!,nodePublicKey:node.nodePublicKey!},signal),15000)
+        let certificate:X509Certificate
+        try{certificate=new X509Certificate(pem)}catch{throw Error('HOST_TLS_CERTIFICATE_INVALID')}
+        let previousFingerprint:string|undefined
+        try{previousFingerprint=host.serverCertificate?new X509Certificate(host.serverCertificate).fingerprint256:undefined}catch{throw Error('HOST_TLS_CERTIFICATE_INVALID')}
+        if(host.serverFingerprint&&host.serverFingerprint!==certificate.fingerprint256 || previousFingerprint&&previousFingerprint!==certificate.fingerprint256)throw Error('HOST_TLS_IDENTITY_CHANGED')
+        identity={serverCertificate:pem,serverFingerprint:certificate.fingerprint256}
+      }
+      const verifiedHost={...host,...identity}
+      if(pendingTasks&&identity){
+        // A queued stop/delete/rebuild may itself be waiting for this missing
+        // pin. Only authenticate and publish the public identity here; leave
+        // Agent writes and all customer work to their existing task lanes.
+        await scope.run(()=>deps.verify(verifiedHost,signal),10000)
+        if(recoveryHeld())throw Error('PLATFORM_RECOVERY_HELD')
+        await tx.host.update({where:{id:hostId},data:{...identity,...(missingCertificate?panelCertificatePaths():{}),
+          managementRepair:json({status:'done',attempts,checkedAt:new Date().toISOString()})}})
+        await tx.log.create({data:{userId:node.batch.createdById,module:'host',action:'host.management.repaired',result:'success',
+          content:automaticOperationAudit({hostId,hostName:host.name,stage:step,attempt:attempts,result:'原 SSH 与 TLS 身份已核验并补齐；排队实例任务继续，未操作客户或 Agent'})}})
+        return
+      }
       if (awaitingHeartbeat && (!agent?.enabled || agent.status === 'disabled')) throw new Error('AGENT_REPAIR_DISABLED')
       if (awaitingHeartbeat && current?.agentId && agent?.agentId !== current.agentId) throw new Error('AGENT_REPAIR_IDENTITY_SUPERSEDED')
       if (awaitingHeartbeat && agent?.enabled && agent.lastSeenAt && agent.lastSeenAt.getTime() > Date.now() - 90000) {
         step = '核验受信连接与 Agent 心跳'
-        await scope.run(() => deps.verify(host, signal), 10000)
+        await scope.run(() => deps.verify(verifiedHost, signal), 10000)
         await tx.host.update({ where: { id: hostId }, data: { managementRepair: json({ status: 'done', attempts,
-          checkedAt: new Date().toISOString() }), ...(missingCertificate ? panelCertificatePaths() : {}) } })
+          checkedAt: new Date().toISOString() }), ...identity, ...(missingCertificate ? panelCertificatePaths() : {}) } })
         await tx.log.create({ data: { userId: node.batch.createdById, module: 'host', action: 'host.management.repaired', result: 'success',
           content: automaticOperationAudit({ hostId, hostName: host.name, stage: step, attempt: attempts, result: '恢复成功；原身份与当前心跳均已核验' }) } })
         return
       }
-      if (!missingCertificate && !legacyAgent && !staleAgent) throw new Error('AGENT_REPAIR_IDENTITY_SUPERSEDED')
+      if (!missingCertificate && !missingServerIdentity && !legacyAgent && !staleAgent) throw new Error('AGENT_REPAIR_IDENTITY_SUPERSEDED')
       step = '核验原 TLS 管理连接'
-      await scope.run(() => deps.verify(host, signal), 10000)
+      await scope.run(() => deps.verify(verifiedHost, signal), 10000)
       if ((legacyAgent || staleAgent) && agent) {
         step = '对齐原管理通道下的 Agent 认证配置'
         attemptedAgentId = agent.agentId
@@ -114,12 +148,13 @@ export async function repairHostManagement(hostId: number, deps = managementRepa
       scope.remaining(); if (recoveryHeld()) throw new Error('PLATFORM_RECOVERY_HELD')
       await tx.host.update({ where: { id: hostId }, data: {
         ...(missingCertificate ? panelCertificatePaths() : {}),
+        ...identity,
         managementRepair: json({ status: legacyAgent || staleAgent ? 'waiting-heartbeat' : 'done', attempts,
           checkedAt: new Date().toISOString(), agentId: attemptedAgentId, nextAttemptAt: new Date(Date.now() + 120000).toISOString() })
       } })
       await tx.log.create({ data: { userId: node.batch.createdById, module: 'host', action: 'host.management.repair_applied', result: 'success',
         content: automaticOperationAudit({ hostId, hostName: host.name, stage: step, attempt: attempts,
-          result: `修复已执行；补齐证书引用=${missingCertificate}；对齐 Agent 配置=${legacyAgent || staleAgent}；${legacyAgent || staleAgent ? '后台继续核验心跳' : '原管理连接已核验'}；客户机器保持原状`,
+          result: `修复已执行；补齐证书引用=${missingCertificate}；补齐服务器身份=${missingServerIdentity}；对齐 Agent 配置=${legacyAgent || staleAgent}；${legacyAgent || staleAgent ? '后台继续核验心跳' : '原管理连接已核验'}；客户机器保持原状`,
           nextAttemptAt: legacyAgent || staleAgent ? new Date(Date.now() + 120000).toISOString() : undefined }) } })
     }, { timeout: 59000, maxWait: 2000 })
   } catch (error) {
@@ -142,9 +177,9 @@ export async function repairHostManagement(hostId: number, deps = managementRepa
 }
 
 let managementCursor = 0
-export async function repairHostManagementQueue(deps = managementRepairDependencies, maxTargets = 5): Promise<void> {
+export async function repairHostManagementQueue(deps: Parameters<typeof repairHostManagement>[1] = managementRepairDependencies, maxTargets = 5): Promise<void> {
   const hosts = await prisma.host.findMany({ where: { singleTenant: true, isInstalled: true, onboardingNode: { is: { status: 'succeeded', deletedAt: null } },
-    OR: [{ certPath: null }, { keyPath: null }, { agent: { is: { enabled: true, lastSeenAt: null, version: null, installTokenHash: { not: null }, installTokenUsedAt: null, installTokenKeepsIdentity: false } } },
+    OR: [{ certPath: null }, { keyPath: null }, {serverCertificate:null}, {serverFingerprint:null}, { agent: { is: { enabled: true, lastSeenAt: null, version: null, installTokenHash: { not: null }, installTokenUsedAt: null, installTokenKeepsIdentity: false } } },
       { agent: { is: { enabled: true, status: { not: 'disabled' }, version: { not: null }, lastSeenAt: { lt: new Date(Date.now() - 5 * 60000) }, installTokenKeepsIdentity: false } } },
       ...['waiting-heartbeat', 'retry', 'blocked'].map(status => ({ managementRepair: { path: ['status'], equals: status } }))] }, orderBy: { id: 'asc' }, select: { id: true, managementRepair: true } })
   const due = hosts.filter(host => {

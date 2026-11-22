@@ -1,3 +1,19 @@
+# 2026-11-22 两轮安全修复实施中，暂不发版
+
+最新接续：原公开v1.8.14系统服务健康；本机原worker任务1解压重复依赖fixture超时failed、代码/DB未换，精简后任务2已解压进入原代码备份仍running。系统安全巡查补持久待激活/失败回执和宿主旧库映射，不将安装版本等同已生效；8项Linuxroot/planner、三类型、backup4/install5及更新专项通过。完整旧升级/root恢复worker/系统配套自动激活与正式双架构包仍待，详安全修复台账；无本轮commit/push/Release/生产写入。
+
+源码与依赖已实施修复，旧“报告完成、待修”是历史。较新状态以[安全修复台账](docs/security-repair-2026-11-22.md)首节及HANDOFF顶部为准。未提交／推送／正式发行／生产部署。认证seal首次迁移会退休旧refresh／PAT／OAuth bearer／一次性码，需重新登录与签发，原密码／实例／账务保持；迁移OS身份root私密、业务DB仅DML，保留root回退runtime，不能移除该兼容桥或给予业务DDL权来修升级。须先验双架构公开旧包原worker／回滚再升、完整低权限restore和系统组件／客户端实证，真实OSS／整机失联首要目标单独保留。
+
+较新本机证据：230全量第7轮全部过，money/auth四真实PG回归全过；完整147表GCM ZIP恢复及multi-schema／旧迁移／并发／array边界／sequence／缺表／foreign table演练全过。Incus7.0.1→7.6正确启动基线保UUID/PID/boot/disk/sysinfo，故障前进重试与同版本回退→再升、stop/start/restart均实证通过；不能以旧binary回退新schema。原生AlpineVM与FTPS已清测试guest/临时库后结束。新systemdVM固定hostkey在线，原v1.8.14包installer在PG依赖配置，不是完整旧worker已过；最终签名包／双架构原worker与系统服务patch激活继续。没有生产OTA。
+
+# 2026-11-22 整程序安全审计：报告完成，发现待修
+
+Owner追加联网公开漏洞核查已完成本轮资料整理：主报告5.1～5.6及[公告附表](docs/security-advisories-2026-11-22.md)含全npm310／prod263记录、官方102条程序公告、系统发行版与正式双架构Agent／daemon Go扫描。新增Incus7.0.1认证／归档／idmap缺补及正式AgentGo1.22.12风险须列上线阻断审查，既有cgroup安全锚定回补不误报；公开公告版本／功能前提、发行版revision与OpenSSL未来计划修复日期分开。Go binary匹配不等于已利用，prod图不等于所有工具公网运行。所有新增项仍待修／原生验收，生产PG／系统版本与实际监听ACL未核，不执行自动升级；报告仅本地，未commit／push／发版。
+
+Owner本轮要求检查整程序可利用漏洞与数据库防脱库，当前仅源码审查及本机隔离复现。基准`a5251f0cab9c7fdaf861f36d2c7563f838984d33`包含已推未发行资金加固，不能代生产部署证据。确认11项问题（7高／4中）及4项条件风险，尤其数据库只读摘要可换管理员JWT、DB写伪造会话／恢复码、普通用户远程存储SSRF和终端服务器pin缺失；两批守卫全过仍有攻击覆盖缺口。详见[整程序安全审计报告](docs/security-audit-2026-11-22.md)，逐项证据、前提、修复与验收均保留。
+
+本轮没有修产品、更新依赖、生产操作或提交推送／发行。临时本机审计库／角色及监听清理，原财务库和PG保持。下一步须先修源码并验证会话／加密／DB角色的旧包与OSS兼容；实际主控PG监听、HBA、防火墙、角色、日志和OSS ACL仍需生产只读取证，不据报告宣称生产已被脱库或彻底安全。此前暂不发版及完整OSS灾备未验收继续保持。
+
 # 2026-11-22 资金链审计当前阶段
 
 资金修复源码`5f02d45fa8cab1aee5dd4f574d1e77531c86d30a`已推送`origin/codex/financial-integrity-audit`并核远端一致。当前仅源码保存，版本仍1.8.14，无tag/Release/主控OTA；该分支暂无Actions运行，完整发行/生产验收仍未执行。

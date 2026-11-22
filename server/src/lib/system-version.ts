@@ -3,6 +3,7 @@ import { readFile } from 'fs/promises'
 import { join, resolve } from 'path'
 import { promisify } from 'util'
 import { fetchReleaseJson } from './system-update-download.js'
+import { verifyPanelPackageIdentity } from './panel-package-integrity.js'
 
 const execFileAsync = promisify(execFile)
 
@@ -41,6 +42,8 @@ export interface OtaArtifactInfo {
   url: string
   sha256: string
   size: number | null
+  signature?: string
+  version?: string
   /** Derived from matching GitHub Release metadata, never from the manifest. */
   apiUrl?: string
 }
@@ -124,7 +127,7 @@ function normalizeOtaArtifact(input: unknown): OtaArtifactInfo | null {
     : null
 
   if (!/^[A-Za-z0-9][A-Za-z0-9._-]*$/.test(name) || !platform || !arch || !url || !/^[a-f0-9]{64}$/.test(sha256)) return null
-  return { name, platform, arch, url, sha256, size }
+  return { name, platform, arch, url, sha256, size, ...(typeof value.signature==='string'?{signature:value.signature}:{}), ...(typeof value.version==='string'?{version:value.version}:{}) }
 }
 
 /**
@@ -187,7 +190,9 @@ export async function getOtaReleaseInfo(tag: string): Promise<OtaReleaseInfo> {
         if (!asset || (artifact.size !== null && asset.size !== artifact.size) || (asset.digest && asset.digest !== `sha256:${artifact.sha256}`)) {
           throw new Error('OTA manifest artifact does not match GitHub Release metadata')
         }
-        return { ...artifact, apiUrl: assetApiUrl(repository, asset) }
+        if (artifact.version !== undefined && artifact.version !== tag) throw new Error('OTA panel package version does not match the requested version')
+        if ((process.env.NODE_ENV==='production'||artifact.signature) && !verifyPanelPackageIdentity({...artifact,version:tag})) throw new Error('OTA panel publisher identity is invalid')
+        return { ...artifact, ...(artifact.signature?{version:tag}:{}), apiUrl: assetApiUrl(repository, asset) }
       })
 
     return {

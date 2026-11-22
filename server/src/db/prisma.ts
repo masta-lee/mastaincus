@@ -10,6 +10,7 @@ import { PrismaClient } from '@prisma/client'
 import { Pool } from 'pg'
 import { PrismaPg } from '@prisma/adapter-pg'
 import { protectFinancialClient, initializeFinancialIntegrity } from '../lib/financial-integrity.js'
+import { protectAuthenticationClient, initializeAuthenticationIntegrity } from '../lib/authentication-integrity.js'
 
 const globalForPrisma = globalThis as unknown as {
   prisma: PrismaClient | undefined
@@ -168,6 +169,7 @@ async function normalizeLegacyNetworkModesForPool(dbPool: Pool): Promise<void> {
 }
 
 export async function normalizeLegacyNetworkModes(): Promise<void> {
+  if(process.env.NODE_ENV==='production'&&new URL(process.env.DATABASE_URL||'').username==='incudal')return
   await normalizeLegacyNetworkModesForPool(pool)
 }
 
@@ -182,8 +184,14 @@ const rawPrisma = globalForPrisma.prisma ?? new PrismaClient({
     ? (process.env.PRISMA_LOG.split(',') as ('query' | 'error' | 'warn' | 'info')[])
     : ['error'],
 })
-export const prisma = protectFinancialClient(rawPrisma)
-export const initializeFinancialDatabaseIntegrity = () => initializeFinancialIntegrity(rawPrisma)
+const financialPrisma = protectFinancialClient(rawPrisma)
+export const prisma = protectAuthenticationClient(financialPrisma)
+export const initializeFinancialDatabaseIntegrity = async () => {
+  await initializeFinancialIntegrity(rawPrisma)
+  const { migrateSensitiveConfiguration } = await import('./system-config.js')
+  await migrateSensitiveConfiguration(rawPrisma)
+  await initializeAuthenticationIntegrity(rawPrisma)
+}
 
 if (process.env.NODE_ENV !== 'production') {
   globalForPrisma.prisma = rawPrisma

@@ -35,8 +35,9 @@ assert.ok(routeRenewSection.includes('authorizeUserWrite(tx, userId, request.use
   routeRenewSection.includes('SELECT id FROM mail_subscriptions WHERE id = ${subscription.id} FOR UPDATE') &&
   routeRenewSection.includes('SELECT id FROM mail_plans WHERE id = ${subscription.planId} FOR SHARE'),
 'mail renewal must lock current subscription/price and reject stale quotes or revoked sessions before debit')
-assert.ok(autoRenewSchedulerSource.includes("users[0]?.status !== 'active'") &&
-  autoRenewSchedulerSource.includes('SELECT status FROM users WHERE id = ${subscription.userId} FOR UPDATE'),
+assert.ok(autoRenewSchedulerSource.includes("user?.status !== 'active'") &&
+  autoRenewSchedulerSource.includes('SELECT id FROM users WHERE id = ${subscription.userId} FOR UPDATE') &&
+  autoRenewSchedulerSource.includes('tx.user.findUnique({where:{id:subscription.userId},select:{status:true,deletionIntent:true}})'),
 'mail automatic renewal must serialize account status with debit and reject banned accounts')
 const expiryUpdateSection = sectionBetween(
   expirySchedulerSource,

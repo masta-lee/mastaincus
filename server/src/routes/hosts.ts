@@ -1941,7 +1941,9 @@ export default async function hostRoutes(fastify: FastifyInstance) {
       const client = new IncusClient({
         url: host.url,
         certPath: host.cert_path,
-        keyPath: host.key_path
+        keyPath: host.key_path,
+        serverCertificate: host.server_certificate,
+        serverFingerprint: host.server_fingerprint
       })
 
       // 仅测试连通性：尝试连接并获取服务器信息

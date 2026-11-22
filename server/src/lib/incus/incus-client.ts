@@ -19,6 +19,7 @@ import { alpineSshFingerprintInspectionCommand } from '../alpine-ssh-security.js
 import { prisma } from '../../db/prisma.js'
 import { assertInstanceMayBoot } from '../instance-expiry.js'
 import { assertRebuildBootReady } from '../instance-rebuild-state.js'
+import { readBoundedResponse } from '../bounded-response.js'
 
 export class IncusApiError extends Error {
   constructor(message: string, readonly statusCode: number, readonly path: string) { super(message) }
@@ -105,6 +106,9 @@ export class IncusClient {
    * requests, even when they need their own connection and timeout settings.
    */
   createTransport(options: { connectTimeout?: number; headersTimeout?: number; bodyTimeout?: number } = {}): Agent {
+    if (process.env.NODE_ENV === 'production' && (!this.serverCertificate || !this.serverFingerprint || !this.baseUrl.startsWith('https://'))) {
+      throw Object.assign(new Error('Incus registered server identity is required'), { code: 'INCUS_SERVER_IDENTITY_REQUIRED' })
+    }
     if (!this.certPath || !this.keyPath) {
       throw new Error('Certificate or key path is missing')
     }
@@ -229,7 +233,7 @@ export class IncusClient {
       // Earlier refusal is safe to retry; a sent request needs its receipt.
       await conditions?.onDispatch?.()
       const response = await request(url, options)
-      const text = await response.body.text()
+      const text = await readBoundedResponse(response.body, 32 * 1024 ** 2)
 
       // Try to parse JSON, handle non-JSON responses (e.g., mTLS errors)
       let data: IncusApiResponse<T>
@@ -440,7 +444,7 @@ export class IncusClient {
         chunks.push(bytes)
       }
       content=Buffer.concat(chunks).toString('utf8')
-    }else content=await response.body.text()
+    }else content=await readBoundedResponse(response.body, 32 * 1024 ** 2)
 
     return { content, statusCode: response.statusCode }
   }

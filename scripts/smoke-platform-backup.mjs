@@ -46,6 +46,8 @@ const core = await import('/opt/incudal/server/dist/services/platform-backup-cor
 const { AliyunOssClient } = await import('/opt/incudal/server/dist/services/aliyun-oss-client.js')
 const { runPlatformBackupTask } = await import('/opt/incudal/server/dist/services/platform-backup-worker.js')
 const { pgQuery } = await import('/opt/incudal/server/dist/services/platform-backup-database.js')
+const secured=await import('/opt/incudal/server/dist/db/prisma.js')
+await secured.initializeFinancialDatabaseIntegrity()
 const controllerRoot = '/var/lib/incudal-gateway-controller'
 const controllerKeyBefore = createHash('sha256').update(await readFile(`${controllerRoot}/signing.pem`)).digest('hex')
 const controllerIdentityBefore = await readFile(`${controllerRoot}/identity.json`, 'utf8')
@@ -75,7 +77,10 @@ AliyunOssClient.prototype.download = async (record, destination) => { await copy
 async function task(kind, extras = {}) {
   config = await core.readBackupConfig()
   const id = randomUUID()
-  const request = { id, kind, createdBy: 0, createdAt: new Date().toISOString(), config, ...extras }
+  const held=core.recoveryHeld()
+  const recovery=held?await (await import('/opt/incudal/server/dist/services/platform-recovery-operator.js')).recoveryOperator():null
+  const admin=held?null:await secured.prisma.user.findFirstOrThrow({where:{username:'admin',role:'admin'}})
+  const request = { id, kind, createdBy: recovery?.actorId ?? admin.id, createdAt: new Date().toISOString(), config, ...extras }
   if (['restore', 'rollback', 'resume'].includes(kind)) {
     // Run the shipped oneshot with its actual PID/task argv and operation flock.
     // Startup recovery must recognize the live owner, not mistake this smoke
@@ -123,9 +128,9 @@ try {
   await exec('/usr/bin/sudo', ['-u', 'incudal', 'test', '-w', '/var/lib/incudal-backup/inbox'])
   await assert.rejects(exec('/usr/bin/sudo', ['-u', 'incudal', 'test', '-r', '/var/lib/incudal-backup/private']))
   const key = `backup_drill_${randomUUID()}`
-  await pgQuery('INSERT INTO system_configs (key, value, updated_at) VALUES ($1, $2, NOW())', [key, 'snapshot'])
+  await secured.prisma.systemConfig.create({data:{key,value:'snapshot',type:'string'}})
   const backup = await task('backup')
-  await pgQuery('UPDATE system_configs SET value=$1 WHERE key=$2', ['before-restore', key])
+  await secured.prisma.systemConfig.update({where:{key},data:{value:'before-restore'}})
   // Restore across different environment keys and verify explicit rollback also
   // recovers the destination key and its encrypted backup configuration.
   const targetKey = randomUUID() + randomUUID()

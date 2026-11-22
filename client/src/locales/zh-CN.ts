@@ -3072,6 +3072,8 @@ pool: {
             password: '密码',
             passwordUnchanged: '留空则不修改',
             basePath: '基础路径',
+            hostFingerprint: 'SFTP 服务器指纹',
+            hostFingerprintHelp: '填写从服务器受信渠道确认的 SHA256 指纹。服务器身份变化时将拒绝连接。',
             setAsDefault: '设为默认',
             default: '默认',
             setDefault: '设为默认',

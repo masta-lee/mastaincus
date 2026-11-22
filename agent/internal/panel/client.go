@@ -3,6 +3,9 @@ package panel
 import (
 	"bytes"
 	"context"
+	"crypto/hmac"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -40,12 +43,14 @@ type HeartbeatResult struct {
 }
 
 type UpgradeInstruction struct {
-	Available bool   `json:"available"`
-	Version   string `json:"version"`
-	URL       string `json:"url"`
-	SHA256    string `json:"sha256"`
-	Gzip      bool   `json:"gzip"`
-	Size      int64  `json:"size"`
+	Signature    string `json:"signature"`
+	Architecture string `json:"architecture"`
+	Available    bool   `json:"available"`
+	Version      string `json:"version"`
+	URL          string `json:"url"`
+	SHA256       string `json:"sha256"`
+	Gzip         bool   `json:"gzip"`
+	Size         int64  `json:"size"`
 }
 
 type heartbeatResponse struct {
@@ -63,7 +68,8 @@ func New(cfg config.Config) *Client {
 		agentID:     cfg.AgentID,
 		agentSecret: cfg.AgentSecret,
 		httpClient: &http.Client{
-			Timeout: cfg.RequestTimeout,
+			Timeout:       cfg.RequestTimeout,
+			CheckRedirect: func(_ *http.Request, _ []*http.Request) error { return http.ErrUseLastResponse },
 		},
 	}
 }
@@ -101,7 +107,10 @@ func (client *Client) Heartbeat(ctx context.Context, payload map[string]any) (He
 	}
 	defer response.Body.Close()
 
-	responseBody, err := io.ReadAll(io.LimitReader(response.Body, 1024*1024))
+	responseBody, err := io.ReadAll(io.LimitReader(response.Body, 1024*1024+1))
+	if len(responseBody) > 1024*1024 {
+		return HeartbeatResult{}, fmt.Errorf("heartbeat response too large")
+	}
 	if err != nil {
 		return HeartbeatResult{}, err
 	}
@@ -113,17 +122,27 @@ func (client *Client) Heartbeat(ctx context.Context, payload map[string]any) (He
 		LatencyMs:  time.Since(startedAt).Milliseconds(),
 	}
 	if !result.OK {
-		return result, fmt.Errorf("heartbeat failed: status=%d body=%s", response.StatusCode, result.Body)
+		result.Body = ""
+		return result, fmt.Errorf("heartbeat failed: status=%d", response.StatusCode)
 	}
 
 	var parsedResponse heartbeatResponse
 	if err := json.Unmarshal(responseBody, &parsedResponse); err == nil {
-		result.Upgrade = parsedResponse.Upgrade
-		result.PortProtocol = parsedResponse.PortProtocol
-		result.AbusePolicy = parsedResponse.AbusePolicy
-		result.PoolHostBBR = parsedResponse.PoolHostBBR
-		result.ResourceGuests = parsedResponse.ResourceGuests
-		result.IncusCompat = parsedResponse.IncusCompat
+		// Update authority must be bound to this signed request's nonce and the
+		// complete response bytes, independent of DNS or a transport cache.
+		signature := response.Header.Get("x-incudal-response-signature")
+		mac := hmac.New(sha256.New, []byte(client.agentSecret))
+		mac.Write([]byte("payincus/agent-response/v1\n" + nonce + "\n"))
+		mac.Write(responseBody)
+		decoded, decodeErr := hex.DecodeString(signature)
+		if decodeErr == nil && hmac.Equal(decoded, mac.Sum(nil)) {
+			result.Upgrade = parsedResponse.Upgrade
+			result.PortProtocol = parsedResponse.PortProtocol
+			result.AbusePolicy = parsedResponse.AbusePolicy
+			result.PoolHostBBR = parsedResponse.PoolHostBBR
+			result.ResourceGuests = parsedResponse.ResourceGuests
+			result.IncusCompat = parsedResponse.IncusCompat
+		}
 	}
 
 	var parsed map[string]any

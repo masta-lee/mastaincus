@@ -3,6 +3,10 @@ import { randomUUID } from 'node:crypto'
 import { mkdtemp, writeFile, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
+import { execFileSync } from 'node:child_process'
+import { readFile } from 'node:fs/promises'
+import { X509Certificate } from 'node:crypto'
+import { Prisma } from '@prisma/client'
 
 const database = new URL(process.env.DATABASE_URL || '')
 assert.ok(['localhost', '127.0.0.1', '[::1]'].includes(database.hostname) && database.pathname.endsWith('_pool_test'))
@@ -25,7 +29,7 @@ const hostIds: number[] = []
 async function fixture(legacy = true) {
   const seq = ++sequence, secret = generateAgentSecret()
   const host = await prisma.host.create({ data: { userId: admin.id, name: tag + seq, url: `https://10.253.240.${seq + 1}:8443`,
-    singleTenant: true, isInstalled: true, managementSshHost: `10.253.240.${seq + 1}`, managementSshPort: 22,
+    singleTenant: true, isInstalled: true,cpuAllowanceMax:100,memoryMax:768,storageSize:30, managementSshHost: `10.253.240.${seq + 1}`, managementSshPort: 22,managementSshUser:'root',
     serverCertificate: 'fixed-original-certificate', serverFingerprint: 'fixed-original-fingerprint',
     agent: { create: { agentId: generateAgentId(), secretHash: hashAgentSecret(secret), secretEncrypted: encryptSensitiveData(secret),
       enabled: true, status: 'offline', installTokenHash: legacy ? randomUUID() : null, installTokenExpiresAt: new Date(0) } },
@@ -57,6 +61,49 @@ const due = async (id: number) => {
   await prisma.host.update({ where: { id }, data: { managementRepair: { ...value, nextAttemptAt: new Date(0).toISOString() } } })
 }
 try {
+  const certificatePath=join(directory,'public.crt'),keyPath=join(directory,'private.key')
+  execFileSync(process.env.REVIEW_OPENSSL||'openssl',['req','-x509','-newkey','rsa:2048','-nodes','-days','1','-subj','/CN=repair-fixture','-keyout',keyPath,'-out',certificatePath],{stdio:'pipe',windowsHide:true})
+  const certificate=await readFile(certificatePath,'utf8'),fingerprint=new X509Certificate(certificate).fingerprint256
+  const missingPin=await fixture(false)
+  await prisma.host.update({where:{id:missingPin.id},data:{...panelCertificatePaths(),serverCertificate:null,serverFingerprint:null}})
+  let certificateReads=0,pinVerifications=0
+  const pinDeps={...deps,readCertificate:async(nodeId:string,input:{sshPort:number;sshFingerprint:string;nodePublicKey:string})=>{
+    assert.equal(nodeId,missingPin.onboardingNode!.id);assert.equal(input.sshFingerprint,missingPin.onboardingNode!.sshFingerprint)
+    certificateReads++;return certificate
+  },verify:async(host:{serverCertificate:string|null;serverFingerprint:string|null},signal:AbortSignal)=>{
+    signal.throwIfAborted();assert.equal(host.serverCertificate,certificate);assert.equal(host.serverFingerprint,fingerprint);pinVerifications++
+  }}
+  await repairHostManagement(missingPin.id,pinDeps)
+  assert.equal((await snapshot(missingPin.id)).serverFingerprint,fingerprint);assert.equal(certificateReads,1);assert.equal(pinVerifications,1)
+  await repairHostManagement(missingPin.id,pinDeps);assert.equal(certificateReads,1,'complete registered identity is not readopted')
+  await prisma.host.update({where:{id:missingPin.id},data:{serverCertificate:null,serverFingerprint:'AA:BB',managementRepair:Prisma.DbNull}})
+  await repairHostManagement(missingPin.id,pinDeps)
+  assert.equal((await snapshot(missingPin.id)).serverFingerprint,'AA:BB');assert.equal(state(await snapshot(missingPin.id)).error,'HOST_TLS_IDENTITY_CHANGED')
+  assert.equal(pinVerifications,1,'a changed previously registered pin receives zero Incus requests')
+  await prisma.host.update({where:{id:missingPin.id},data:{serverCertificate:certificate,serverFingerprint:fingerprint,managementRepair:Prisma.DbNull}})
+  const failedPin=await fixture(false)
+  await prisma.host.update({where:{id:failedPin.id},data:{...panelCertificatePaths(),serverCertificate:null,serverFingerprint:null}})
+  let failedReads=0
+  const failedDeps={...deps,readCertificate:async()=>{failedReads++;return certificate},verify:async()=>{throw Error('HOST_TLS_NOT_TRUSTED')}}
+  await repairHostManagement(failedPin.id,failedDeps)
+  assert.equal((await snapshot(failedPin.id)).serverCertificate,null);assert.equal((await snapshot(failedPin.id)).serverFingerprint,null)
+  assert.equal(state(await snapshot(failedPin.id)).error,'HOST_TLS_NOT_TRUSTED')
+  await due(failedPin.id)
+  await prisma.host.update({where:{id:failedPin.id},data:{managementSshUser:'operator'}})
+  await repairHostManagement(failedPin.id,failedDeps);assert.equal(failedReads,1,'non-root management identity is refused before public certificate read')
+  await prisma.host.update({where:{id:failedPin.id},data:{serverCertificate:certificate,serverFingerprint:fingerprint,managementSshUser:'root',managementRepair:Prisma.DbNull}})
+  console.log('PASS failed TLS retains missing pin; non-root management channel cannot trigger certificate adoption')
+  const queuedPin=await fixture(false)
+  await prisma.host.update({where:{id:queuedPin.id},data:{...panelCertificatePaths(),serverCertificate:null,serverFingerprint:null}})
+  const instance=await prisma.instance.create({data:{hostId:queuedPin.id,userId:admin.id,name:tag+'-queued',incusId:tag+'-queued',image:'alpine-test',cpu:1,memory:128,disk:1024,status:'stopped'}})
+  await prisma.instanceTask.create({data:{hostId:queuedPin.id,instanceId:instance.id,userId:admin.id,taskType:'stop'}})
+  await repairHostManagement(queuedPin.id,{...deps,readCertificate:async()=>certificate,verify:pinDeps.verify})
+  assert.equal((await snapshot(queuedPin.id)).serverFingerprint,fingerprint)
+  assert.equal(await prisma.instanceTask.count({where:{instanceId:instance.id,status:'PENDING'}}),1)
+  assert.equal((await prisma.instance.findUniqueOrThrow({where:{id:instance.id}})).status,'stopped')
+  await prisma.instanceTask.deleteMany({where:{instanceId:instance.id}});await prisma.instance.delete({where:{id:instance.id}})
+  console.log('PASS queued customer stop is not a pin-migration deadlock; original task and stopped instance preserved')
+  console.log('PASS missing Incus pin migrates only through original SSH/peer plus TLS verification; complete/changed identity never silently readopted')
   const historical = await fixture()
   await repairHostManagementQueue(deps)
   const repaired = await snapshot(historical.id)
@@ -166,6 +213,7 @@ try {
 } finally {
   verifying = undefined
   await prisma.hostOnboardingBatch.delete({ where: { id: batchId } })
+  await prisma.instance.deleteMany({where:{hostId:{in:hostIds}}})
   await prisma.host.deleteMany({ where: { id: { in: hostIds } } })
   await prisma.user.delete({ where: { id: admin.id } })
   await closePrismaDatabase(); await rm(directory, { recursive: true, force: true })

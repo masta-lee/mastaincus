@@ -6,7 +6,8 @@
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify'
 import { Prisma } from '@prisma/client'
 import { ABUSE_CAPABILITY, AbusePolicyError, abuseInstruction, normalizeAbuseStatus } from '../services/host-abuse-policy.js'
-import { createHash } from 'crypto'
+import { createHash, createHmac, createPublicKey, verify as verifySignature } from 'crypto'
+import { gunzipSync } from 'node:zlib'
 import { existsSync, readFileSync, statSync } from 'fs'
 import { isIP } from 'net'
 import { dirname, join } from 'path'
@@ -15,7 +16,7 @@ import { prisma } from '../db/prisma.js'
 import { acceptGuestProtectionStatus, GUEST_CLOCK_SKEW_MS, GUEST_REPORT_MAX_AGE_MS } from '../lib/guest-network-protection.js'
 import { acceptHostProvisioningStatus } from '../lib/host-provisioning-tools.js'
 import { createLog, LogModule, LogResult } from '../db/logs.js'
-import { decryptSensitiveData } from '../lib/security.js'
+import { decryptSensitiveDataStrict } from '../lib/security.js'
 import {
   agentNonceTtlMs,
   isAgentTimestampFresh,
@@ -79,8 +80,12 @@ interface AgentBinaryQuery {
 interface AgentInstallTokenParams {
   token: string
 }
+const responseAuthorities = new WeakMap<FastifyRequest, { agentId: string; secretEncrypted: string; nonce: string }>()
 
 interface AgentUpgradeManifestFile {
+  architecture?: string
+  signature?: string
+  binarySha256?: string
   name?: string
   sha256?: string
   size?: number
@@ -108,6 +113,8 @@ interface GitHubRelease {
 }
 
 interface AgentUpgradeInstruction {
+  architecture?: string
+  signature?: string
   available: boolean
   version?: string
   url?: string
@@ -324,6 +331,7 @@ function normalizeBaseUrl(value: string | null | undefined): string | null {
     if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') {
       return null
     }
+    if (parsed.username || parsed.password || parsed.hash || parsed.protocol !== 'https:' && !['localhost','127.0.0.1'].includes(parsed.hostname)) return null
     return `${parsed.protocol}//${parsed.host}`
   } catch {
     return null
@@ -341,6 +349,7 @@ function normalizeAgentBinaryUrl(value: string | null | undefined): string | nul
     if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') {
       return null
     }
+    if (parsed.username || parsed.password || parsed.hash || parsed.protocol !== 'https:') return null
     return parsed.toString()
   } catch {
     return null
@@ -399,7 +408,7 @@ function buildAgentInstallCommand(input: {
     envParts.push(`INCUDAL_AGENT_BINARY_SHA256=${shellEscape(input.binarySha256 || '')}`)
   }
 
-  return `curl -fsSL ${shellEscape(`${input.panelUrl}/api/agent/install.sh`)} | sudo env ${envParts.join(' ')} bash`
+  return `curl --proto '=https' --proto-redir '=https' -fsSL ${shellEscape(`${input.panelUrl}/api/agent/install.sh`)} | sudo env ${envParts.join(' ')} bash`
 }
 
 function buildAgentInstallConfig(input: {
@@ -425,6 +434,20 @@ function getLocalAgentReleaseDir(): string | null {
 
 function hashLocalFile(path: string): string {
   return createHash('sha256').update(readFileSync(path)).digest('hex')
+}
+const agentPublisherKey=createPublicKey({format:'der',type:'spki',key:Buffer.concat([Buffer.from('302a300506032b6570032100','hex'),Buffer.from('y6C9aLon6OtgHPp5KPVDpxoNha95YptW03o4Dp2djQA=','base64')])})
+function verifyAgentPublisherDigest(hash:string,version:string,architecture:string,signature:unknown):boolean {
+  if(typeof signature!=='string'||!/^[A-Za-z0-9+/]{86}==$/.test(signature))return false
+  return verifySignature(null,Buffer.from('payincus/agent-package/v1\n'+version.replace(/^v/,'')+'\nlinux-'+architecture+'\n'+hash),agentPublisherKey,Buffer.from(signature,'base64'))
+}
+function verifyAgentPublisher(binary:Buffer,version:string,architecture:string,signature:unknown):boolean {
+  return binary.length>20&&binary.readUInt16LE(18)===(architecture==='amd64'?62:183)&&verifyAgentPublisherDigest(createHash('sha256').update(binary).digest('hex'),version,architecture,signature)
+}
+async function readAgentMetadata(response:Response):Promise<string> {
+  if(!response.body)throw Error('AGENT_MANIFEST_EMPTY')
+  let size=0;const chunks:Buffer[]=[]
+  for await(const chunk of response.body){size+=chunk.length;if(size>1024*1024){await response.body.cancel().catch(()=>{});throw Error('AGENT_MANIFEST_TOO_LARGE')};chunks.push(Buffer.from(chunk))}
+  return Buffer.concat(chunks).toString('utf8')
 }
 
 function normalizeLocalAgentManifest(raw: unknown, releaseDir: string): AgentUpgradeManifest | null {
@@ -462,6 +485,9 @@ function normalizeLocalAgentManifest(raw: unknown, releaseDir: string): AgentUpg
     if (hashLocalFile(path) !== sha256) {
       return null
     }
+    const architecture=platform.slice(6)
+    const binary=file.gzip===true?gunzipSync(readFileSync(path),{maxOutputLength:64*1024*1024}):readFileSync(path)
+    if (!verifyAgentPublisher(binary,version,architecture,file.signature)) return null
 
     manifest.files![platform] = {
       name,
@@ -469,6 +495,8 @@ function normalizeLocalAgentManifest(raw: unknown, releaseDir: string): AgentUpg
       size: stat.size,
       gzip: typeof file.gzip === 'boolean' ? file.gzip : name.endsWith('.gz')
     }
+    manifest.files![platform]!.signature=String(file.signature)
+    manifest.files![platform]!.architecture=architecture
   }
 
   return manifest
@@ -742,6 +770,12 @@ async function refreshAgentUpgradeManifest(): Promise<AgentUpgradeManifest | nul
     files: {}
   }
   const assets = new Map<string, GitHubReleaseAsset>()
+  const publisherAsset=release.assets.find(asset=>isRecord(asset)&&asset.name==='publisher-manifest.json')
+  if(!publisherAsset?.browser_download_url)return null
+  assertTrustedAgentReleaseDownloadUrl(publisherAsset.browser_download_url)
+  const publisherResponse=await fetchGitHubWithRetry(publisherAsset.browser_download_url,'application/json','agent publisher manifest')
+  const publisher=JSON.parse(await readAgentMetadata(publisherResponse))
+  if(publisher.version!==version||!/^[a-f0-9]{40}$/.test(publisher.sourceCommit))return null
 
   for (const asset of release.assets) {
     if (!isRecord(asset)) {
@@ -766,6 +800,8 @@ async function refreshAgentUpgradeManifest(): Promise<AgentUpgradeManifest | nul
     if (!sha256) {
       continue
     }
+    const signed=publisher.files?.[platform]
+    if(!signed||signed.binarySha256!==sha256||!verifyAgentPublisherDigest(sha256,version,platform.slice(6),signed.signature))continue
 
     manifest.files![platform] = {
       name: platform === 'linux-amd64' ? 'incudal-agent-linux-amd64' : 'incudal-agent-linux-arm64',
@@ -773,6 +809,8 @@ async function refreshAgentUpgradeManifest(): Promise<AgentUpgradeManifest | nul
       size,
       gzip: false
     }
+    manifest.files![platform]!.signature=signed.signature
+    manifest.files![platform]!.architecture=platform.slice(6)
     assets.set(name, asset as GitHubReleaseAsset)
   }
 
@@ -944,6 +982,8 @@ async function buildAgentUpgradeInstruction(request: FastifyRequest, body: Agent
     sha256: file.sha256,
     gzip: file.gzip ?? name.endsWith('.gz')
   }
+  instruction.signature=file.signature
+  instruction.architecture=goarch
   if (typeof file.size === 'number' && Number.isFinite(file.size) && file.size > 0) {
     instruction.size = file.size
   }
@@ -1086,7 +1126,7 @@ async function authenticateAgentRequest(
     return null
   }
 
-  const secret = decryptSensitiveData(agent.secretEncrypted)
+  const secret = decryptSensitiveDataStrict(agent.secretEncrypted)
   if (!secret || !isValidAgentSecret(secret)) {
     reply.code(401).send({ error: 'Agent secret is not available', code: 'AGENT_SECRET_INVALID' })
     return null
@@ -1127,11 +1167,21 @@ async function authenticateAgentRequest(
     }
     throw error
   }
-
+  responseAuthorities.set(request, { agentId: agent.agentId, secretEncrypted: agent.secretEncrypted, nonce: headers.nonce })
   return agent
 }
 
 export default async function agentRoutes(fastify: FastifyInstance) {
+  fastify.addHook('onSend', async (request, reply, payload) => {
+    if (reply.statusCode !== 200 || !responseAuthorities.has(request)) return payload
+    if (typeof payload !== 'string' && !Buffer.isBuffer(payload)) throw new Error('AGENT_RESPONSE_FORMAT_UNAVAILABLE')
+    const { agentId, secretEncrypted, nonce } = responseAuthorities.get(request)!
+    const current = await prisma.hostAgent.findUnique({where:{agentId},select:{secretEncrypted:true,enabled:true,status:true}})
+    const secret = current?.enabled && current.status !== 'disabled' && current.secretEncrypted === secretEncrypted ? decryptSensitiveDataStrict(secretEncrypted) : null
+    if(!secret||!nonce)throw new Error('AGENT_RESPONSE_IDENTITY_UNAVAILABLE')
+    reply.header('x-incudal-response-signature',createHmac('sha256',secret).update('payincus/agent-response/v1\n'+nonce+'\n').update(payload).digest('hex'))
+    return payload
+  })
   fastify.decorateRequest('agentWireBodyHash', null)
   fastify.get('/install.sh', async (_request: FastifyRequest, reply: FastifyReply) => {
     const scriptPath = join(__dirname, '../../templates/agent-install.sh')

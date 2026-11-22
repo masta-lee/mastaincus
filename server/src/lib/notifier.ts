@@ -8,17 +8,22 @@ import * as db from '../db/index.js'
 import { createInboxMessage } from '../db/inbox.js'
 import { prisma } from '../db/prisma.js'
 import { assertSafeWebhookUrl, safeFetch } from './outbound-security.js'
-import { sanitizeTokensInString } from './log-sanitizer.js'
+import { sanitizeTokensInString, sanitizeObject } from './log-sanitizer.js'
 import { TICKET_REPLY_TITLE, formatTicketReplyNotice } from './ticket-notification.js'
 import { sendOperationVerificationEmail } from './mailer.js'
 import type { NotificationChannel as VerificationNotificationChannel } from '@prisma/client'
 import { customerNotificationData, customerNotificationText } from './customer-notification.js'
 import { telegramMarkdownText } from './telegram-format.js'
+import { openNotificationConfig } from './notification-config.js'
+import { readNotificationBody, readTelegramResponse } from './notification-response.js'
 
 // 重试配置
 const MAX_RETRIES = 3
 const RETRY_DELAY_MS = 2000
 const NOTIFICATION_FETCH_TIMEOUT_MS = 15_000
+async function readNotificationJson(response: Response):Promise<{ok:boolean;description?:string}> {
+  return await readTelegramResponse(response)
+}
 const NOTIFICATION_ERROR_PREVIEW_MAX_CHARS = 2_000
 
 type EventType =
@@ -933,14 +938,14 @@ async function sendWithRetry(
         return result
       }
 
-      lastError = result.error
-      console.warn(`[Notifier] ${channelType} attempt ${attempt}/${MAX_RETRIES} failed: ${result.error}`)
+      lastError = result.error ? sanitizeTokensInString(result.error) : result.error
+      console.warn(`[Notifier] ${channelType} attempt ${attempt}/${MAX_RETRIES} failed: ${lastError}`)
 
       if (attempt < MAX_RETRIES) {
         await delay(RETRY_DELAY_MS * attempt) // 递增延迟
       }
     } catch (err) {
-      lastError = err instanceof Error ? err.message : String(err)
+      lastError = sanitizeTokensInString(err instanceof Error ? err.message : String(err))
       console.warn(`[Notifier] ${channelType} attempt ${attempt}/${MAX_RETRIES} error: ${lastError}`)
 
       if (attempt < MAX_RETRIES) {
@@ -982,7 +987,7 @@ function isNonRetryableError(error: string | null): boolean {
 }
 
 async function readSafeNotificationError(response: Response): Promise<string> {
-  const text = await response.text()
+  const text = await readNotificationBody(response)
   const sanitized = sanitizeTokensInString(text)
   const preview = sanitized.slice(0, NOTIFICATION_ERROR_PREVIEW_MAX_CHARS)
   return preview || `HTTP ${response.status}`
@@ -1053,7 +1058,7 @@ async function deliverSiteBotNotification(
       }).catch(() => {})
     }
   } catch (err) {
-    console.warn('[Notifier] deliverSiteBotNotification error:', err)
+    console.warn('[Notifier] deliverSiteBotNotification error:', sanitizeObject(err))
   }
 }
 
@@ -1168,14 +1173,14 @@ export async function sendNotification(
         }
       } catch (err) {
         const error = err instanceof Error ? err.message : String(err)
-        console.error(`[Notifier] Failed to send notification to channel ${channel.id}:`, error)
+        console.error(`[Notifier] Failed to send notification to channel ${channel.id}:`, sanitizeObject(error))
         failed++
       }
     }
 
     return { sent, failed }
   } catch (err) {
-    console.error('[Notifier] sendNotification error:', err)
+    console.error('[Notifier] sendNotification error:', sanitizeObject(err))
     return { sent: 0, failed: 0 }
   }
 }
@@ -1383,7 +1388,7 @@ async function sendTelegram(
       })
     })
 
-    const result = await response.json() as { ok: boolean; description?: string }
+    const result = await readNotificationJson(response)
 
     if (!response.ok || !result.ok) {
       return { success: false, error: result.description || 'Unknown Telegram error' }
@@ -1446,6 +1451,7 @@ async function sendDiscord(
       return { success: false, error: await readSafeNotificationError(response) }
     }
 
+    await response.body?.cancel().catch(()=>{})
     return { success: true, error: null }
   } catch (err) {
     const error = err instanceof Error ? err.message : String(err)
@@ -1500,6 +1506,7 @@ async function sendWebhook(
       redirect: 'manual'
     }, 'Webhook URL')
 
+    await response.body?.cancel().catch(()=>{})
     if (!response.ok) {
       return { success: false, error: `HTTP ${response.status}` }
     }
@@ -1578,9 +1585,7 @@ export async function sendVerificationNotification(
   // The caller captures one personal channel. Every retry uses this snapshot;
   // rereading a list here can silently change both the transport and recipient.
   try {
-    const config = typeof channel.config === 'string'
-      ? JSON.parse(channel.config)
-      : channel.config
+    const config = openNotificationConfig(channel.config)
     if (!config || typeof config !== 'object' || Array.isArray(config)) {
       return { success: false, error: 'Invalid notification configuration' }
     }
@@ -1590,20 +1595,20 @@ export async function sendVerificationNotification(
     switch (channel.type) {
       case 'telegram':
         result = await sendWithRetry(
-          () => sendTelegram(config as TelegramConfig, title, message),
+          () => sendTelegram(config as unknown as TelegramConfig, title, message),
           'Telegram'
         )
         break
       case 'discord':
         result = await sendWithRetry(
-          () => sendDiscord(config as DiscordConfig, title, message),
+          () => sendDiscord(config as unknown as DiscordConfig, title, message),
           'Discord'
         )
         break
       case 'webhook':
         result = await sendWithRetry(
           () => sendWebhook(
-            config as WebhookConfig,
+            config as unknown as WebhookConfig,
             'verification' as EventType,
             title,
             message,
@@ -1697,7 +1702,7 @@ export async function sendToChannel(
               link_preview_options: { is_disabled: true }
             })
           })
-          const json = await response.json() as { ok: boolean; description?: string }
+          const json = await readNotificationJson(response)
           result = response.ok && json.ok
             ? { success: true, error: null }
             : { success: false, error: json.description || 'Unknown Telegram error' }

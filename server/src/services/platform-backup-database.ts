@@ -10,6 +10,7 @@ import { BackupError, ensure } from './platform-backup-core.js'
 import type { BackupMigration } from './platform-backup-compatibility.js'
 import { ensureBackupLocales } from './platform-backup-locale.js'
 import { verifyFinancialDatabaseSeals } from '../lib/financial-integrity.js'
+import { retainedMigrationIdentity } from '../lib/database-migration-identity.js'
 
 const exec = promisify(execFile)
 export function postgresConnection() {
@@ -40,7 +41,9 @@ export function databaseToolFailure(stderr: string, launchCode?: string, timedOu
   return new BackupError('OSS_DATABASE_TOOL_FAILED', 503)
 }
 export async function pgQuery<T extends import('pg').QueryResultRow>(sql: string, params: unknown[] = [], database?: string): Promise<T[]> {
-  const { url } = postgresConnection(); if (database) url.pathname = `/${database}`
+  let { url } = postgresConnection()
+  if (database && process.platform === 'linux' && process.getuid?.() === 0 && /^incudal_(check|restore|verify)_[a-f0-9]{32}$/.test(database)) url = await retainedMigrationIdentity(url)
+  if (database) url.pathname = `/${database}`
   const pool = new Pool({ connectionString: url.toString(), max: 1, connectionTimeoutMillis: 15000, statement_timeout: 60000 })
   try { return (await pool.query<T>(sql, params)).rows } finally { await pool.end() }
 }
@@ -75,10 +78,17 @@ export async function databaseMetadata(database?: string) {
 }
 // Child utilities run as the application OS user; secrets never enter argv or logs.
 async function pgProcess(command: 'pg_dump' | 'pg_restore' | 'psql', args: string[], database: string | undefined, input?: string, output?: string) {
-  const uid = Number((await exec('/usr/bin/id', ['-u', 'incudal'])).stdout.trim())
-  const gid = Number((await exec('/usr/bin/id', ['-g', 'incudal'])).stdout.trim())
+  let uid = Number((await exec('/usr/bin/id', ['-u', 'incudal'])).stdout.trim())
+  let gid = Number((await exec('/usr/bin/id', ['-g', 'incudal'])).stdout.trim())
   ensure(uid > 0 && gid > 0, 'OSS_RUNTIME_INVALID', 503)
-  const child = spawn(command, args, { uid, gid, env: pgEnv(database), stdio: ['pipe', 'pipe', 'pipe'] })
+  let environment = pgEnv(database)
+  if (database && command !== 'pg_dump') {
+    ensure(/^incudal_(check|restore|verify)_[a-f0-9]{32}$/.test(database), 'OSS_DATABASE_INVALID')
+    const migrationUrl=await retainedMigrationIdentity(postgresConnection().url)
+    uid=0;gid=0
+    environment={...environment,PGUSER:decodeURIComponent(migrationUrl.username),PGPASSWORD:decodeURIComponent(migrationUrl.password)}
+  }
+  const child = spawn(command, args, { uid, gid, env: environment, stdio: ['pipe', 'pipe', 'pipe'] })
   let timedOut = false, diagnostic = ''
   const timer = setTimeout(() => { timedOut = true; child.kill('SIGKILL') }, 60 * 60 * 1000)
   child.stderr.on('data', chunk => { diagnostic = (diagnostic + chunk.toString()).slice(-32768) })
@@ -101,30 +111,49 @@ async function pgProcess(command: 'pg_dump' | 'pg_restore' | 'psql', args: strin
     }
   } finally { clearTimeout(timer); if (child.exitCode === null) child.kill('SIGKILL') }
 }
-export async function dumpDatabase(destination: string, snapshot?: string) {
+export async function dumpDatabase(destination: string, snapshot?: string, database?: string) {
   // Preserve ownership and grants in the archive; restore maps them separately.
-  await pgProcess('pg_dump', ['--format=custom', '--create', '--large-objects', ...(snapshot ? [`--snapshot=${validateSnapshot(snapshot)}`] : [])], undefined, undefined, destination)
+  if(database)ensure(/^incudal_check_[a-f0-9]{32}$/.test(database),'OSS_DATABASE_INVALID')
+  await pgProcess('pg_dump', ['--format=custom', '--create', '--large-objects', ...(snapshot ? [`--snapshot=${validateSnapshot(snapshot)}`] : [])], database, undefined, destination)
 }
 export async function restoreDatabase(source: string, target: string) {
   await pgProcess('pg_restore', ['--dbname', target, '--no-owner', '--no-privileges', '--exit-on-error', '--single-transaction'], target, source)
+  await grantRestoredRuntime(target)
+}
+async function grantRestoredRuntime(target: string) {
+  ensure(/^incudal_(check|restore|verify)_[a-f0-9]{32}$/.test(target), 'OSS_DATABASE_INVALID')
+  const user=quoteIdentifier(postgresConnection().user)
+  const sql=`REVOKE ALL ON DATABASE ${quoteIdentifier(target)} FROM PUBLIC; REVOKE CREATE,TEMPORARY ON DATABASE ${quoteIdentifier(target)} FROM ${user}; GRANT CONNECT ON DATABASE ${quoteIdentifier(target)} TO ${user};
+    DO $incudal_grants$ DECLARE n record; role_name text:=${quoteLiteral(postgresConnection().user)}; BEGIN FOR n IN SELECT nspname FROM pg_namespace WHERE nspname !~ '^pg_' AND nspname<>'information_schema' LOOP
+      EXECUTE format('REVOKE CREATE ON SCHEMA %I FROM PUBLIC,%I',n.nspname,role_name);
+      EXECUTE format('REVOKE ALL ON ALL TABLES IN SCHEMA %I FROM PUBLIC,%I',n.nspname,role_name);
+      EXECUTE format('REVOKE ALL ON ALL SEQUENCES IN SCHEMA %I FROM PUBLIC,%I',n.nspname,role_name);
+      EXECUTE format('GRANT USAGE ON SCHEMA %I TO %I',n.nspname,role_name);
+      EXECUTE format('GRANT SELECT,INSERT,UPDATE,DELETE ON ALL TABLES IN SCHEMA %I TO %I',n.nspname,role_name);
+      EXECUTE format('GRANT USAGE,SELECT ON ALL SEQUENCES IN SCHEMA %I TO %I',n.nspname,role_name);
+    END LOOP; END $incudal_grants$; REVOKE INSERT,UPDATE,DELETE ON public._prisma_migrations FROM ${user};`
+  const environment=pgEnv(target),migrationUrl=await retainedMigrationIdentity(postgresConnection().url)
+  await exec('/usr/bin/psql',['-X','--set','ON_ERROR_STOP=1','-c',sql],{uid:0,gid:0,env:{...environment,PGUSER:decodeURIComponent(migrationUrl.username),PGPASSWORD:decodeURIComponent(migrationUrl.password)},timeout:15000,maxBuffer:4096})
 }
 
 export async function migrateBackupDatabase(app: string, database: string) {
   const uid = Number((await exec('/usr/bin/id', ['-u', 'incudal'])).stdout.trim())
   const gid = Number((await exec('/usr/bin/id', ['-g', 'incudal'])).stdout.trim())
   ensure(uid > 0 && gid > 0 && /^incudal_(check|restore)_[a-f0-9]{32}$/.test(database), 'OSS_RUNTIME_INVALID', 503)
-  const { url } = postgresConnection(); url.pathname = `/${database}`
+  const url = await retainedMigrationIdentity(postgresConnection().url); url.pathname = `/${database}`
   // Execute installed release tooling only, with destination credentials in env.
   // Never load archived .env or execute archived migration files.
   try {
     await exec('/usr/bin/node', [join(app, 'server/node_modules/prisma/build/index.js'), 'migrate', 'deploy'], {
-      cwd: join(app, 'server'), uid, gid, timeout: 10 * 60 * 1000, maxBuffer: 1024 * 1024,
+      cwd: join(app, 'server'), uid:0, gid:0, timeout: 10 * 60 * 1000, maxBuffer: 1024 * 1024,
       env: { PATH: '/usr/local/bin:/usr/bin:/bin', HOME: '/opt/incudal', NODE_ENV: 'production', DATABASE_URL: url.toString() }
     })
   } catch { throw new BackupError('OSS_BACKUP_MIGRATION_FAILED', 409) }
+  await grantRestoredRuntime(database)
 }
 export async function restoreDatabaseSql(source: string, target: string) {
   await pgProcess('psql', ['-X', '--set', 'ON_ERROR_STOP=1', '--single-transaction', '--dbname', target], target, source)
+  await grantRestoredRuntime(target)
 }
 // Derive SQL from the already verified custom archive, never a second live dump.
 export async function exportReadableDatabase(source: string, report: DatabaseIntegrity, directory: string) {
@@ -304,15 +333,16 @@ async function archivedSequenceStates(source: string, sequences: DatabaseIntegri
   ensure(states.size === sequences.length, 'OSS_DATABASE_SEQUENCE_INVALID')
   return sequences.map(sequence => { const value = states.get(sequence.reference); ensure(value, 'OSS_DATABASE_SEQUENCE_INVALID'); return { ...sequence, ...value } })
 }
-export async function captureDatabaseBackup(destination: string, directory: string) {
-  const connection = await snapshotConnection()
+export async function captureDatabaseBackup(destination: string, directory: string, database?: string) {
+  if(database)ensure(/^incudal_check_[a-f0-9]{32}$/.test(database),'OSS_DATABASE_INVALID')
+  const connection = await snapshotConnection(database)
   try {
     const [{ standby }] = (await connection.client.query<{ standby: boolean }>('SELECT pg_is_in_recovery() AS standby')).rows
     ensure(!standby, 'OSS_DATABASE_STANDBY_UNSUPPORTED', 409)
     const globals = join(directory, 'database-globals.sql'), globalsAfter = join(directory, 'database-globals-after.sql')
     await peerUtility('pg_dumpall', ['--globals-only', '--database=postgres'], 'postgres', globals)
-    const report = await inventory(connection, directory, 'source')
-    await dumpDatabase(destination, connection.snapshot)
+    const report = await inventory(connection, directory, 'source', database)
+    await dumpDatabase(destination, connection.snapshot, database)
     report.sequences = await archivedSequenceStates(destination, report.sequences, directory)
     const [{ version, bytes }] = (await connection.client.query<{ version: string; bytes: string }>("SELECT current_setting('server_version_num') AS version, pg_database_size(current_database())::text AS bytes")).rows
     const migrations = (await connection.client.query('SELECT migration_name, checksum FROM public."_prisma_migrations" WHERE finished_at IS NOT NULL AND rolled_back_at IS NULL ORDER BY migration_name')).rows
@@ -327,21 +357,24 @@ export async function verifyRestoredDatabase(database: string, expected: Databas
   const connection = await snapshotConnection(database)
   try { assertDatabaseIntegrity(expected, await inventory(connection, directory, suffix, database, toolchain)) } finally { await closeSnapshot(connection) }
 }
-export async function verifyDatabaseBackup(source: string, expected: DatabaseIntegrity, directory: string, taskId: string) {
+export async function verifyDatabaseBackup(source: string, expected: DatabaseIntegrity, directory: string, taskId: string, allowLegacy = false) {
   ensure(/^[0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12}$/.test(taskId), 'OSS_TASK_INVALID')
   const staging = `incudal_verify_${taskId.replace(/-/g, '')}`
   await createBackupRestoreDatabase(staging, expected)
   try {
     await restoreDatabase(source, staging)
     await verifyRestoredDatabase(staging, expected, directory, 'verified', source)
-    await verifyFinancialDatabaseSeals(staging, process.env.ENCRYPTION_KEY || '')
+    const authentication=expected.tables.find(table=>table.schema==='public'&&table.name==='authentication_integrity_seals')
+    // Historical unsealed archives retain their exact signed row fingerprints.
+    // Never treat a nonempty authenticated seal table as a legacy archive.
+    await verifyFinancialDatabaseSeals(staging, process.env.ENCRYPTION_KEY || '', allowLegacy, !allowLegacy||!!authentication&&authentication.rows!=='0')
   }
   finally { await localDatabaseAdmin(`DROP DATABASE ${quoteIdentifier(staging)} WITH (FORCE);`) }
 }
 export async function createBackupRestoreDatabase(staging: string, expected?: DatabaseIntegrity) {
   ensure(/^incudal_(check|restore|verify)_[a-f0-9]{32}$/.test(staging), 'OSS_RUNTIME_INVALID', 503)
   if (!expected) {
-    await localDatabaseAdmin(`CREATE DATABASE ${quoteIdentifier(staging)} OWNER ${quoteIdentifier(postgresConnection().user)} TEMPLATE template0;`)
+    await localDatabaseAdmin(`CREATE DATABASE ${quoteIdentifier(staging)} OWNER incudal_migrate TEMPLATE template0; REVOKE ALL ON DATABASE ${quoteIdentifier(staging)} FROM PUBLIC; GRANT CONNECT ON DATABASE ${quoteIdentifier(staging)} TO ${quoteIdentifier(postgresConnection().user)};`)
     return
   }
   const properties = expected.database
@@ -350,7 +383,7 @@ export async function createBackupRestoreDatabase(staging: string, expected?: Da
   ensure(!provider || provider === 'c', 'OSS_DATABASE_LOCALE_UNSUPPORTED', 409)
   await ensureBackupLocales([properties.datcollate, properties.datctype])
   // Locale differences must not silently change index or text semantics during verification.
-  await localDatabaseAdmin(`CREATE DATABASE ${quoteIdentifier(staging)} OWNER ${quoteIdentifier(postgresConnection().user)} TEMPLATE template0 ENCODING ${quoteLiteral(properties.encodingName)} LC_COLLATE ${quoteLiteral(properties.datcollate)} LC_CTYPE ${quoteLiteral(properties.datctype)};`)
+  await localDatabaseAdmin(`CREATE DATABASE ${quoteIdentifier(staging)} OWNER incudal_migrate TEMPLATE template0 ENCODING ${quoteLiteral(properties.encodingName)} LC_COLLATE ${quoteLiteral(properties.datcollate)} LC_CTYPE ${quoteLiteral(properties.datctype)}; REVOKE ALL ON DATABASE ${quoteIdentifier(staging)} FROM PUBLIC; GRANT CONNECT ON DATABASE ${quoteIdentifier(staging)} TO ${quoteIdentifier(postgresConnection().user)};`)
 }
 export function databaseAdminFailure(stderr: string, timedOut: boolean): string {
   if (timedOut) return 'OSS_DATABASE_ADMIN_TIMEOUT'

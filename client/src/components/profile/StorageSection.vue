@@ -19,6 +19,7 @@ interface StorageConfig {
     bucket?: string
     region?: string
     forcePathStyle?: boolean
+    hostFingerprint?: string
   } | null
   isDefault: boolean
   createdAt: string
@@ -41,6 +42,7 @@ const form = ref({
   s3Bucket: '',
   s3Region: 'auto',
   s3ForcePathStyle: false,
+  sftpHostFingerprint: '',
   isDefault: false
 })
 
@@ -53,7 +55,7 @@ const defaultPorts: Record<string, number> = {
 
 const typeLabels: Record<string, string> = {
   WEBDAV: 'WebDAV',
-  FTP: 'FTP',
+  FTP: 'FTPS',
   SFTP: 'SFTP',
   S3: 'S3 / R2'
 }
@@ -98,6 +100,7 @@ function resetForm() {
     s3Bucket: '',
     s3Region: 'auto',
     s3ForcePathStyle: false,
+    sftpHostFingerprint: '',
     isDefault: false
   }
   editingId.value = null
@@ -120,6 +123,7 @@ function openEditForm(config: StorageConfig) {
     s3Bucket: config.extra?.bucket || '',
     s3Region: config.extra?.region || 'auto',
     s3ForcePathStyle: config.extra?.forcePathStyle === true,
+    sftpHostFingerprint: config.extra?.hostFingerprint || '',
     isDefault: config.isDefault
   }
   editingId.value = config.id
@@ -148,7 +152,7 @@ async function saveConfig() {
             region: form.value.s3Region || 'auto',
             forcePathStyle: form.value.s3ForcePathStyle
           }
-        : undefined,
+        : form.value.type === 'SFTP' ? {hostFingerprint:form.value.sftpHostFingerprint.trim()} : undefined,
       isDefault: form.value.isDefault
     }
 
@@ -243,7 +247,7 @@ loadStorageConfigs()
           <label class="block text-xs text-themed-muted mb-1.5">{{ $t('profile.storage.type') }}</label>
           <select v-model="form.type" class="input">
             <option value="WEBDAV">WebDAV</option>
-            <option value="FTP">FTP</option>
+            <option value="FTP">FTPS</option>
             <option value="SFTP">SFTP</option>
             <option value="S3">S3 / Cloudflare R2</option>
           </select>
@@ -290,6 +294,12 @@ loadStorageConfigs()
       <div>
         <label class="block text-xs text-themed-muted mb-1.5">{{ $t('profile.storage.basePath') }}</label>
         <input v-model="form.basePath" type="text" class="input" placeholder="/backups/" />
+      </div>
+
+      <div v-if="form.type === 'SFTP'">
+        <label for="sftpHostFingerprint" class="block text-xs text-themed-muted mb-1.5">{{ $t('profile.storage.hostFingerprint') }}</label>
+        <input id="sftpHostFingerprint" v-model="form.sftpHostFingerprint" type="text" class="input" placeholder="SHA256:…" required aria-describedby="sftpFingerprintHelp" />
+        <p id="sftpFingerprintHelp" class="mt-1.5 text-xs text-themed-muted">{{ $t('profile.storage.hostFingerprintHelp') }}</p>
       </div>
 
       <div class="flex items-center gap-2">

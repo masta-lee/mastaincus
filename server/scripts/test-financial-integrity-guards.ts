@@ -9,7 +9,7 @@ process.env.ENCRYPTION_KEY = 'isolated-financial-guards-secret'
 const files = await Promise.all(['lib/financial-integrity.ts','db/prisma.ts','app.ts','services/platform-backup-worker.ts','services/platform-backup-database.ts','services/platform-recovery-registration.ts','services/platform-recovery-reconciliation.ts','scripts/run-platform-backup-task.ts']
   .map(path => readFile(new URL('../src/' + path, import.meta.url), 'utf8')))
 const [integrity, database, app, backup, dump, registration, reconcile, worker] = files
-assert.ok(database.includes('protectFinancialClient(rawPrisma)'))
+assert.ok(database.includes('protectFinancialClient(rawPrisma)') && database.includes('protectAuthenticationClient(financialPrisma)'))
 assert.ok(app.indexOf('await initializeFinancialDatabaseIntegrity()') < app.indexOf('if (recoveryHeld()) {\n      startRecoveryReviewWorker()'))
 for (const kind of ['rechargeLatePayment','deletedPaymentReceipt','balanceAdjustmentRequest','instanceBillingRecord','checkoutReceipt','checkoutRefund','renewalRequest']) assert.ok(integrity.includes(kind))
 assert.ok(integrity.includes('assertNoOrphanSeals') && integrity.includes('trackCascade') && integrity.includes('trackNullableRelations'))

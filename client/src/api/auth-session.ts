@@ -79,7 +79,7 @@ export function bindAuthSession(http: AxiosInstance, redirect: () => void) {
     let token = localStorage.getItem('token')
     const expires = claims(token)?.exp
     const authEndpoint = /^\/auth\/(?:login|register|refresh|check-2fa|logout)(?:[/?]|$)/.test(request.url || '')
-    if (token && !authEndpoint && !request.authRetried && expires && expires * 1000 - Date.now() < 86400_000 &&
+    if (token && !authEndpoint && !request.authRetried && expires && expires * 1000 - Date.now() < 60_000 &&
       (refresh?.session.current() || !lastAttempt?.session.current() || Date.now() - lastAttempt.time >= 5000)) {
       try { token = await refreshToken(session, redirect) } catch (error) {
         current(session)

@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict'
+import { X509Certificate } from 'node:crypto'
 import { EventEmitter, once } from 'node:events'
 import { execFileSync } from 'node:child_process'
 import { mkdtemp, readFile, rm } from 'node:fs/promises'
@@ -40,7 +41,8 @@ server.on('upgrade', (req, socket, head) => {
   if (mode === 'upgrade') held.push(accept); else accept()
 })
 server.listen(0, '127.0.0.1'); await once(server, 'listening')
-const host = { id: 1, url: `https://127.0.0.1:${(server.address() as { port: number }).port}`, cert_path: certPath, key_path: keyPath } as Host
+const host = { id: 1, url: `https://127.0.0.1:${(server.address() as { port: number }).port}`, cert_path: certPath, key_path: keyPath,
+  server_certificate: cert.toString(), server_fingerprint: new X509Certificate(cert).fingerprint256 } as Host
 class Client extends EventEmitter {
   OPEN = 1; readyState = 1; messages: string[] = []; closed = 0
   send(message: string) { this.messages.push(message) }

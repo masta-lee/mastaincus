@@ -5,6 +5,7 @@ on:
   pull_request:
     paths:
       - 'scripts/build-incus-sysinfo-compat.py'
+      - 'scripts/incus-security-modules.py'
       - 'scripts/incus-memory-default.go'
       - 'scripts/incus-memory-default_test.go'
       - 'scripts/incus-native-memory.go'
@@ -27,15 +28,15 @@ jobs:
       contents: read
     timeout-minutes: 35
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
       - name: Build pinned official daemon with anchored upstream monitor fix
         run: |
           mkdir -p output
-          docker run --rm -v "$PWD/scripts/build-incus-sysinfo-compat.py:/build.py:ro" -v "$PWD/scripts/incus-memory-default.go:/incus-memory-default.go:ro" -v "$PWD/scripts/incus-native-memory.go:/incus-native-memory.go:ro" -v "$PWD/scripts/incus-raft-memory.go:/incus-raft-memory.go:ro" -v "$PWD/scripts/incus-raft-memory_test.go:/incus-raft-memory_test.go:ro" -v "$PWD/scripts/incus-memory-default_test.go:/incus-memory-default_test.go:ro" -v "$PWD/scripts/test-incus-memory-runtime.go:/test-incus-memory-runtime.go:ro" -v "$PWD/output:/out" alpine:3.24 sh -ec '
+          docker run --rm -v "$PWD/scripts/build-incus-sysinfo-compat.py:/build.py:ro" -v "$PWD/scripts/incus-security-modules.py:/incus_security_modules.py:ro" -v "$PWD/scripts/incus-memory-default.go:/incus-memory-default.go:ro" -v "$PWD/scripts/incus-native-memory.go:/incus-native-memory.go:ro" -v "$PWD/scripts/incus-raft-memory.go:/incus-raft-memory.go:ro" -v "$PWD/scripts/incus-raft-memory_test.go:/incus-raft-memory_test.go:ro" -v "$PWD/scripts/incus-memory-default_test.go:/incus-memory-default_test.go:ro" -v "$PWD/scripts/test-incus-memory-runtime.go:/test-incus-memory-runtime.go:ro" -v "$PWD/output:/out" alpine:3.24 sh -ec '
             apk add --no-cache go python3 build-base acl-dev cowsql-dev raft-cowsql-dev eudev-dev libcap-dev libuv-dev linux-headers lxc-dev lz4-dev sqlite-dev gettext-dev
             python3 /build.py
           '
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: incudal-incusd-sysinfo-${{ matrix.architecture }}
           path: output/

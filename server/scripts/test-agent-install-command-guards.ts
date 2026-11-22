@@ -18,6 +18,7 @@ const onlineUpdateUnitSource = readFileSync(resolve(__dirname, '../../deploy/inc
 const onlineRollbackUnitSource = readFileSync(resolve(__dirname, '../../deploy/incudal-online-rollback@.service.example'), 'utf8')
 const onlineTaskHelperSource = readFileSync(resolve(__dirname, '../../deploy/incudal-online-task.sh.example'), 'utf8')
 const retiredReleaseRepository = 'retired-release-repository'
+assert.ok(installScriptSource.includes("--proto '=https'") && installScriptSource.includes('Agent installation credential response is invalid') && !installScriptSource.includes('. "${INSTALL_CONFIG_PATH}"'), 'Agent credential response is bounded HTTPS data, never shell code')
 
 for (const [name, source, mode] of [
   ['update', onlineUpdateUnitSource, 'update'],

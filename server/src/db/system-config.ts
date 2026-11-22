@@ -4,6 +4,8 @@
  */
 
 import { prisma } from './prisma.js'
+import { encryptSensitiveData, decryptSensitiveDataStrict } from '../lib/security.js'
+import { sealNotificationConfig, openNotificationConfig } from '../lib/notification-config.js'
 import {
     getCachedConfig,
     setCachedConfig,
@@ -11,7 +13,7 @@ import {
     invalidateAllConfigCache
 } from '../lib/config-cache.js'
 
-const SENSITIVE_CONFIG_KEYS = new Set([
+export const SENSITIVE_CONFIG_KEYS = new Set([
     'smtp_password',
     'turnstile_secret_key',
     'ticket_image_lsky_token',
@@ -19,6 +21,41 @@ const SENSITIVE_CONFIG_KEYS = new Set([
     'telegram_webhook_secret'
 ])
 const MASKED_SECRET_PLACEHOLDER = '********'
+
+export async function migrateSensitiveConfiguration(client: typeof prisma = prisma): Promise<void> {
+    await client.$transaction(async tx => {
+        await tx.$queryRaw`SELECT true FROM pg_advisory_xact_lock(4130, 3)`
+        const initialized = await tx.authenticationIntegritySeal.findUnique({where:{model_recordId:{model:'baseline',recordId:'v1'}}})
+        for (const row of await tx.systemConfig.findMany({ where: { key: { in: [...SENSITIVE_CONFIG_KEYS] } } })) {
+            if (!row.value) continue
+            if (/^[a-f0-9]{32}:[a-f0-9]{32}:/i.test(row.value)) {
+                if (decryptSensitiveDataStrict(row.value) === null) throw new Error('SYSTEM_SECRET_AUTHENTICATION_INVALID')
+            } else {
+                if(initialized) throw new Error('SYSTEM_SECRET_AUTHENTICATION_REQUIRED')
+                await tx.systemConfig.update({ where: { id: row.id }, data: { value: encryptSensitiveData(row.value) } })
+            }
+        }
+        const migrateNotification = async (row: {id:number;config:unknown}, update: (config:ReturnType<typeof sealNotificationConfig>)=>Promise<unknown>) => {
+            const config = typeof row.config === 'string' ? JSON.parse(row.config) : row.config as Record<string, unknown>
+            if (config?.version === 1 && Object.hasOwn(config, 'sealed')) { openNotificationConfig(config); return }
+            if(initialized)throw new Error('NOTIFICATION_CONFIG_AUTHENTICATION_REQUIRED')
+            if (!config || typeof config !== 'object' || Array.isArray(config)) throw new Error('NOTIFICATION_CONFIG_INVALID')
+            await update(sealNotificationConfig(config))
+        }
+        for (const row of await tx.notificationChannel.findMany()) await migrateNotification(row, config=>tx.notificationChannel.update({where:{id:row.id},data:{config}}))
+        for (const row of await tx.lotteryNotificationConfig.findMany()) await migrateNotification(row, config=>tx.lotteryNotificationConfig.update({where:{id:row.id},data:{config}}))
+        for (const row of await tx.oAuthConfig.findMany()) {
+            if (!row.clientSecret) continue
+            if (/^[a-f0-9]{32}:[a-f0-9]{32}:/i.test(row.clientSecret)) {
+                if (decryptSensitiveDataStrict(row.clientSecret) === null) throw new Error('OAUTH_SECRET_AUTHENTICATION_INVALID')
+            } else {
+                if (initialized) throw new Error('OAUTH_SECRET_AUTHENTICATION_REQUIRED')
+                await tx.oAuthConfig.update({ where: { id: row.id }, data: { clientSecret: encryptSensitiveData(row.clientSecret) } })
+            }
+        }
+    }, { timeout: 120000 })
+    invalidateAllConfigCache()
+}
 
 // 默认配额配置（新配额系统）
 // 注意：节点、套餐、好友功能默认不开放（默认值为 0），需要管理员授权
@@ -228,16 +265,7 @@ export async function getSystemConfig(key: string, decrypt: boolean = true): Pro
 
     // 解密敏感数据
     if (decrypt && isSensitive) {
-        // 检查是否是加密格式（iv:tag:encrypted）
-        if (config.value.includes(':')) {
-            try {
-                const { decryptSensitiveData } = await import('../lib/security.js')
-                return decryptSensitiveData(config.value)
-            } catch (err) {
-                console.error(`Failed to decrypt ${key}:`, err)
-                return null
-            }
-        }
+        return decryptSensitiveDataStrict(config.value)
     }
 
     // PERF001: 缓存结果（敏感数据不缓存）
@@ -294,7 +322,7 @@ export async function getSystemConfigValueWithUpdatedAt(key: string): Promise<{ 
 export async function updateSystemConfig(key: string, value: string): Promise<void> {
     await prisma.systemConfig.update({
         where: { key },
-        data: { value }
+        data: { value: SENSITIVE_CONFIG_KEYS.has(key) && value ? encryptSensitiveData(value) : value }
     })
     // PERF001: 清除缓存
     invalidateCachedConfigs([key])
@@ -306,7 +334,6 @@ export async function updateSystemConfig(key: string, value: string): Promise<vo
  */
 export async function updateSystemConfigs(configs: Array<{ key: string; value: string }>): Promise<void> {
     // Import encryption functions
-    const { encryptSensitiveData } = await import('../lib/security.js')
 
     const updates: Array<{ key: string; value: string }> = []
 
@@ -318,19 +345,16 @@ export async function updateSystemConfigs(configs: Array<{ key: string; value: s
         }
 
         if (SENSITIVE_CONFIG_KEYS.has(config.key) && config.value) {
-            if (!config.value.includes(':')) {
-                finalValue = encryptSensitiveData(config.value)
-            }
+            finalValue = encryptSensitiveData(config.value)
         }
 
         updates.push({ key: config.key, value: finalValue })
     }
 
     if (updates.length > 0) {
-        await prisma.$transaction(updates.map(config => prisma.systemConfig.update({
-            where: { key: config.key },
-            data: { value: config.value }
-        })))
+        await prisma.$transaction(async tx => {
+            for (const config of updates) await tx.systemConfig.update({where:{key:config.key},data:{value:config.value}})
+        })
     }
 
     // PERF001: 清除所有缓存（批量更新可能影响多个配置）

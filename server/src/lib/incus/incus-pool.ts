@@ -77,6 +77,7 @@ function ensureCleanupStarted(): void {
       }
     }
   }, 5 * 60 * 1000) // 每5分钟检查一次
+  cleanupInterval.unref()
 }
 
 /**

@@ -16,7 +16,7 @@ const sessionId = getRefreshTokenSessionId(rawToken)
 
 assert.notEqual(storageKey, rawToken, 'refresh token storage key must not equal raw token')
 assert.match(storageKey, /^sha256:[a-f0-9]{64}$/, 'refresh token storage key must be a sha256 digest')
-assert.equal(getRefreshTokenStorageKey(storageKey), storageKey, 'hashed refresh token storage key must be idempotent')
+assert.notEqual(getRefreshTokenStorageKey(storageKey), storageKey, 'external digest input must be hashed as data, never accepted as a bearer token')
 assert.match(sessionId, /^[a-f0-9]{32}$/, 'refresh token session id must be derived from the digest')
 assert.equal(rawToken.startsWith(sessionId), false, 'session id must not expose the raw token prefix')
 
@@ -41,6 +41,8 @@ assert.ok(
   securitySource.includes('getRefreshTokenLookupKeys(token)'),
   'refresh token revocation/activity updates must handle hashed and legacy plaintext keys'
 )
+assert.ok(securitySource.includes('if (token.startsWith(REFRESH_TOKEN_STORAGE_PREFIX)) return null'), 'external database digest credentials must fail closed')
+assert.ok(securitySource.includes('getStoredRefreshTokenSessionId(token.token)'), 'internal session listing uses the stored digest without exposing an external bypass')
 
 for (const relativePath of ['../src/routes/auth.ts', '../src/routes/oauth.ts']) {
   const routeSource = readFileSync(resolve(__dirname, relativePath), 'utf8')

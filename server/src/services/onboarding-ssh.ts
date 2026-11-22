@@ -219,17 +219,24 @@ export async function installGatewayHostDns(nodeId: string, input: { hostname: s
   finally { client.end() }
 }
 
-export async function probeGatewayHost(nodeId: string, input: { sshPort: number; sshFingerprint: string; nodePublicKey: string; portProtocol?: 'tcp'|'tcp_udp' }) {
+export async function probeGatewayHost(nodeId: string, input: { sshPort: number; sshFingerprint: string; nodePublicKey: string; portProtocol?: 'tcp'|'tcp_udp'; serverCertificate?: true }, signal?: AbortSignal) {
   if (!/^[a-f0-9]{8}-(?:[a-f0-9]{4}-){3}[a-f0-9]{12}$/.test(nodeId) || !gatewayConfigured()) throw new OnboardingError('GATEWAY_NOT_CONFIGURED')
+  if (input.portProtocol && input.serverCertificate) throw new OnboardingError('GATEWAY_RESPONSE_INVALID')
+  signal?.throwIfAborted()
   const privateKey = await readFile(process.env.ONBOARDING_GATEWAY_KEY_PATH!)
   const client = await connectOnboardingSsh({ host: process.env.ONBOARDING_GATEWAY_HOST!, port: Number(process.env.ONBOARDING_GATEWAY_PORT || 22), privateKey },
-    async fingerprint => fingerprint === process.env.ONBOARDING_GATEWAY_FINGERPRINT)
+    async fingerprint => !signal?.aborted && fingerprint === process.env.ONBOARDING_GATEWAY_FINGERPRINT)
+  const abort=()=>client.destroy()
+  signal?.addEventListener('abort',abort,{once:true})
   try {
+    signal?.throwIfAborted()
     const value = JSON.parse(await sshExec(client, `probe ${nodeId}`, JSON.stringify(input), 40000))
-    if (Object.keys(value).sort().join(',') !== (input.portProtocol ? 'keysAndRoutesPreserved,nodeId,portProtocolVerified,sshIdentityVerified' : 'keysAndRoutesPreserved,nodeId,sshIdentityVerified') || value.nodeId !== nodeId ||
+    if (Object.keys(value).sort().join(',') !== (input.portProtocol ? 'keysAndRoutesPreserved,nodeId,portProtocolVerified,sshIdentityVerified' : input.serverCertificate ? 'keysAndRoutesPreserved,nodeId,serverCertificate,sshIdentityVerified' : 'keysAndRoutesPreserved,nodeId,sshIdentityVerified') || value.nodeId !== nodeId ||
       (input.portProtocol && value.portProtocolVerified !== input.portProtocol) ||
+      (input.serverCertificate && (typeof value.serverCertificate !== 'string' || value.serverCertificate.length > 16384 || !/^-----BEGIN CERTIFICATE-----\n[A-Za-z0-9+/=\n]+\n-----END CERTIFICATE-----$/.test(value.serverCertificate))) ||
       value.sshIdentityVerified !== true || value.keysAndRoutesPreserved !== true) throw new OnboardingError('GATEWAY_RESPONSE_INVALID')
-  } finally { client.end() }
+    return input.serverCertificate ? value.serverCertificate as string : undefined
+  } finally { signal?.removeEventListener('abort',abort);client.destroy() }
 }
 
 export async function repairGatewayHostAgent(nodeId: string, input: {

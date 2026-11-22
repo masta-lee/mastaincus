@@ -47,7 +47,10 @@ export function getCookieSecure(): boolean {
   if (process.env.COOKIE_SECURE) {
     const value = process.env.COOKIE_SECURE.toLowerCase()
     if (value === 'true') return true
-    if (value === 'false') return false
+    if (value === 'false') {
+      if (isProductionEnv() && [process.env.SITE_URL,process.env.ADMIN_SITE_URL,process.env.FRONTEND_URL,process.env.ADMIN_FRONTEND_URL].some(url=>url?.startsWith('https://'))) throw new Error('HTTPS 生产站点必须启用 Secure Cookie')
+      return false
+    }
     console.warn(`[Cookie Config] Invalid COOKIE_SECURE value: ${process.env.COOKIE_SECURE}, using default`)
   }
 
@@ -93,6 +96,7 @@ export function getCookieSameSite(): 'strict' | 'lax' | 'none' {
  * 用于跨子域名共享 Cookie 的场景
  */
 export function getCookieDomain(): string | undefined {
+  if(isProductionEnv() && process.env.COOKIE_DOMAIN)throw new Error('生产双端登录 Cookie 必须使用各自独立域名，不能配置共享 COOKIE_DOMAIN')
   return process.env.COOKIE_DOMAIN || undefined
 }
 

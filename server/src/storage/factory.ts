@@ -3,7 +3,7 @@
  */
 
 import type { StorageConfig } from '@prisma/client'
-import { decryptSensitiveData } from '../lib/security.js'
+import { decryptSensitiveDataStrict } from '../lib/security.js'
 import type { IStorageProvider, StorageConfigData } from './types.js'
 import { WebDavProvider } from './providers/WebDavProvider.js'
 import { FtpProvider } from './providers/FtpProvider.js'
@@ -17,8 +17,9 @@ export class StorageFactory {
     static create(config: StorageConfig): IStorageProvider {
         // 解密密码
         const decryptedPassword = config.password
-            ? decryptSensitiveData(config.password)
+            ? decryptSensitiveDataStrict(config.password)
             : null
+        if (config.password && !decryptedPassword) throw new Error('STORAGE_PASSWORD_AUTHENTICATION_INVALID')
 
         const secureConfig: StorageConfigData = {
             type: config.type,

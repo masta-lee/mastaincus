@@ -9,7 +9,7 @@ import { createRequire } from 'node:module'
 assert.equal(process.platform, 'linux')
 assert.equal(process.getuid(), 0)
 assert.equal(process.env.RUN_BACKUP_COMPATIBILITY_DRILL, '1')
-const require = createRequire('/opt/incudal/server/package.json')
+const require = createRequire(process.env.BACKUP_COMPATIBILITY_PACKAGE || '/opt/incudal/server/package.json')
 Object.assign(process.env, require('dotenv').parse(await readFile('/opt/incudal/.env')))
 const originalUrl = process.env.DATABASE_URL, originalApp = process.env.INCUDAL_APP_DIR
 const modules = process.env.BACKUP_COMPATIBILITY_MODULE_DIR || '/opt/incudal/server/dist/services'
@@ -34,7 +34,7 @@ try {
   await writeFile(join(app, 'package.json'), JSON.stringify({ version: '1.7.1' }))
   await writeFile(join(app, 'server/prisma/schema.prisma'), 'datasource db {\n provider = "postgresql"\n}\nmodel ledger {\n id Int @id\n amount Decimal\n note String?\n}\n')
   await writeFile(join(app, 'server/prisma.config.ts'), "import { defineConfig, env } from 'prisma/config'; export default defineConfig({schema:'prisma/schema.prisma',migrations:{path:'prisma/migrations'},datasource:{url:env('DATABASE_URL')}});\n")
-  await symlink('/opt/incudal/server/node_modules', join(app, 'server/node_modules'))
+  await symlink(process.env.BACKUP_COMPATIBILITY_NODE_MODULES || '/opt/incudal/server/node_modules', join(app, 'server/node_modules'))
   // The parent smoke runner uses umask 077. Prisma migrates as the incudal
   // account, so this non-secret release fixture must be traversable/readable.
   const readableFixture = async path => {
@@ -46,33 +46,33 @@ try {
     }
   }
   await readableFixture(app)
-  await db.localDatabaseAdmin(`CREATE DATABASE ${q(target)} OWNER ${q(db.postgresConnection().user)} TEMPLATE template0;`); targetCreated = true
-  await db.localDatabaseAdmin(`CREATE DATABASE ${q(restored)} OWNER ${q(db.postgresConnection().user)} TEMPLATE template0;`); restoredCreated = true
+  await db.createBackupRestoreDatabase(target); targetCreated = true
+  await db.createBackupRestoreDatabase(restored); restoredCreated = true
   await db.migrateBackupDatabase(app, target)
-  const nextUrl = new URL(originalUrl); nextUrl.pathname = `/${target}`
-  process.env.DATABASE_URL = nextUrl.toString(); process.env.INCUDAL_APP_DIR = app
+  process.env.INCUDAL_APP_DIR = app
   await db.pgQuery('CREATE TABLE "_prisma_migrations" (id varchar(36) PRIMARY KEY, checksum varchar(64) NOT NULL, finished_at timestamptz, migration_name varchar(255) NOT NULL, logs text, rolled_back_at timestamptz, started_at timestamptz NOT NULL DEFAULT now(), applied_steps_count integer NOT NULL DEFAULT 0); ' + initialSql, [], restored)
   await db.pgQuery('INSERT INTO "_prisma_migrations"(id,checksum,migration_name,finished_at) VALUES($1,$2,$3,now());', [randomUUID(), hash(initialSql.replaceAll('\n', '\r\n')), initial], restored)
   await db.pgQuery('INSERT INTO ledger VALUES(1,0.12345678)', [], restored)
+  const verify=(manifest,expected)=>verifyBackupCompatibility(manifest,restored,directory,expected,target)
   const metadata = await db.databaseMetadata(restored)
   const manifest = { version: '1.6.8', migrationHash: metadata.migrationHash, postgresMajor: metadata.postgresMajor }
-  const compatibility = await verifyBackupCompatibility(manifest, restored, directory)
+  const compatibility = await verify(manifest)
   assert.equal((await db.pgQuery('SELECT amount::text,note FROM ledger WHERE id=1', [], restored))[0].amount, '0.12345678')
   assert.equal((await db.appliedBackupMigrations(restored)).length, 2)
   console.log('PASS: older release and verified CRLF history migrate in isolation; exact financial values survive')
   const compatibleMetadata = await db.databaseMetadata(restored)
   const currentManifest = { ...manifest, migrationHash: compatibleMetadata.migrationHash }
-  await assert.rejects(verifyBackupCompatibility({ ...currentManifest, version: '1.7.2' }, restored, directory), /OSS_BACKUP_VERSION_NEWER/)
-  await assert.rejects(verifyBackupCompatibility({ ...currentManifest, postgresMajor: metadata.postgresMajor + 1 }, restored, directory), /OSS_POSTGRES_VERSION_MISMATCH/)
+  await assert.rejects(verify({ ...currentManifest, version: '1.7.2' }), /OSS_BACKUP_VERSION_NEWER/)
+  await assert.rejects(verify({ ...currentManifest, postgresMajor: metadata.postgresMajor + 1 }), /OSS_POSTGRES_VERSION_MISMATCH/)
   await db.pgQuery('ALTER TABLE ledger ADD COLUMN unexpected text', [], restored)
-  await assert.rejects(verifyBackupCompatibility(currentManifest, restored, directory), /OSS_BACKUP_SCHEMA_MISMATCH/)
+  await assert.rejects(verify(currentManifest), /OSS_BACKUP_SCHEMA_MISMATCH/)
   await db.pgQuery('ALTER TABLE ledger DROP COLUMN unexpected', [], restored)
-  await db.pgQuery('ALTER TABLE ledger ADD COLUMN target_change text')
-  await assert.rejects(verifyBackupCompatibility(currentManifest, restored, directory, compatibility), /OSS_PREVIEW_TARGET_CHANGED/)
-  await db.pgQuery('ALTER TABLE ledger DROP COLUMN target_change')
+  await db.pgQuery('ALTER TABLE ledger ADD COLUMN target_change text',[],target)
+  await assert.rejects(verify(currentManifest,compatibility), /OSS_PREVIEW_TARGET_CHANGED/)
+  await db.pgQuery('ALTER TABLE ledger DROP COLUMN target_change',[],target)
   await db.pgQuery('UPDATE "_prisma_migrations" SET checksum=$1 WHERE migration_name=$2', ['f'.repeat(64), initial], restored)
   const changed = await db.databaseMetadata(restored)
-  await assert.rejects(verifyBackupCompatibility({ ...manifest, migrationHash: changed.migrationHash }, restored, directory), /OSS_MIGRATION_HISTORY_MISMATCH/)
+  await assert.rejects(verify({ ...manifest, migrationHash: changed.migrationHash }), /OSS_MIGRATION_HISTORY_MISMATCH/)
   console.log('PASS: newer backup, PostgreSQL mismatch, schema drift, destination change and unknown migration checksum are refused')
 } finally {
   process.env.DATABASE_URL = originalUrl

@@ -34,7 +34,7 @@ if (process.argv[1] && import.meta.url === pathToFileURL(resolve(process.argv[1]
   assert.match(commit || '', /^[a-f0-9]{40}$/)
   const repository = process.env.GITHUB_REPOSITORY
   assert.match(repository || '', /^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/)
-  const names = [`incudal-agent-x86_64-${version}`, `incudal-agent-aarch64-${version}`, 'LICENSE']
+  const names = [`incudal-agent-x86_64-${version}`, `incudal-agent-aarch64-${version}`, 'LICENSE', 'publisher-manifest.json']
   const assets = names.map(name => {
     const data = readFileSync(resolve(directory, name))
     return { name, size: data.length, digest: 'sha256:' + createHash('sha256').update(data).digest('hex') }

@@ -31,9 +31,9 @@ jobs:
       JWT_SECRET: native-provision-isolated-ci-only
       INCUDAL_NATIVE_IMAGE: ${{ matrix.image }}
     steps:
-      - uses: actions/checkout@v5
-      - uses: pnpm/action-setup@v5
-      - uses: actions/setup-node@v5
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+      - uses: pnpm/action-setup@fc06bc1257f339d1d5d8b3a19a8cae5388b55320 # v5
+      - uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5
         with:
           node-version: '24'
           cache: 'pnpm'
@@ -41,9 +41,9 @@ jobs:
       - run: |
           pnpm --filter server exec prisma generate
           pnpm --filter server exec prisma migrate deploy
-      - uses: actions/setup-go@v6
+      - uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6
         with:
-          go-version: '1.22.x'
+          go-version: '1.27.3'
           cache-dependency-path: agent/go.mod
       - name: Compile real host guard and tool receipt probe
         run: |
@@ -72,9 +72,9 @@ jobs:
       DATABASE_URL: postgresql://ip_review:ip_review@127.0.0.1:55453/onboarding_ip_pool_test
       JWT_SECRET: onboarding-ip-ci-isolated-only
     steps:
-      - uses: actions/checkout@v5
-      - uses: pnpm/action-setup@v5
-      - uses: actions/setup-node@v5
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+      - uses: pnpm/action-setup@fc06bc1257f339d1d5d8b3a19a8cae5388b55320 # v5
+      - uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5
         with:
           node-version: '24'
           cache: 'pnpm'
@@ -114,9 +114,9 @@ jobs:
       DATABASE_URL: postgresql://pool_test:pool_test@127.0.0.1:5432/actual_cleanup_pool_test
       JWT_SECRET: actual-incus-ci-fixture-only
     steps:
-      - uses: actions/checkout@v5
-      - uses: pnpm/action-setup@v5
-      - uses: actions/setup-node@v5
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+      - uses: pnpm/action-setup@fc06bc1257f339d1d5d8b3a19a8cae5388b55320 # v5
+      - uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5
         with:
           node-version: '24'
           cache: 'pnpm'
@@ -126,9 +126,9 @@ jobs:
           pnpm --filter server exec prisma migrate deploy
       - name: Real guest and disk release through the shipped deletion implementation
         run: sudo env "PATH=$PATH" "DATABASE_URL=$DATABASE_URL" "JWT_SECRET=$JWT_SECRET" GITHUB_ACTIONS=true RUNNER_ENVIRONMENT=github-hosted bash scripts/smoke-pool-cleanup-incus.sh
-      - uses: actions/setup-go@v6
+      - uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6
         with:
-          go-version: '1.22.x'
+          go-version: '1.27.3'
           cache-dependency-path: agent/go.mod
       - name: Real Agent service reconnects using reconciled credentials
         run: |
@@ -141,13 +141,13 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v5
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
 
       - name: Setup pnpm
-        uses: pnpm/action-setup@v5
+        uses: pnpm/action-setup@fc06bc1257f339d1d5d8b3a19a8cae5388b55320 # v5
 
       - name: Setup Node.js
-        uses: actions/setup-node@v5
+        uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5
         with:
           node-version: '24'
           cache: 'pnpm'
@@ -165,6 +165,12 @@ jobs:
 
       - name: Repository and installer guards
         run: |
+          node scripts/test-panel-package-signature.mjs
+          node scripts/test-publisher-installer-signatures.mjs
+          pnpm --filter server test:smtp-security-transport
+          sudo python3 scripts/test-system-security-inventory.py
+          python3 scripts/test-system-security-inventory.py
+          python3 scripts/test-nginx-security.py
           pnpm --filter server test:system-image-transport
           pnpm --filter server test:sample-seed-safety
           pnpm --filter server type-check:sample-seed
@@ -210,9 +216,9 @@ jobs:
           sudo python3 scripts/test-gateway-install-executor.py
 
       - name: Setup Go
-        uses: actions/setup-go@v6
+        uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6
         with:
-          go-version: '1.22.x'
+          go-version: '1.27.3'
           cache-dependency-path: agent/go.mod
 
       - name: Test Agent
@@ -248,9 +254,9 @@ jobs:
       JWT_SECRET: recovery-ci-disposable-fixture-only
       NODE_ENV: test
     steps:
-      - uses: actions/checkout@v5
-      - uses: pnpm/action-setup@v5
-      - uses: actions/setup-node@v5
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+      - uses: pnpm/action-setup@fc06bc1257f339d1d5d8b3a19a8cae5388b55320 # v5
+      - uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5
         with:
           node-version: '24'
           cache: 'pnpm'
@@ -258,6 +264,26 @@ jobs:
       - run: pnpm --filter server exec prisma generate
         env:
           DATABASE_URL: postgresql://recovery_test:recovery_test@127.0.0.1:55449/postgres
+      - name: Authentication integrity regressions
+        run: |
+          set -euo pipefail
+          command -v createdb >/dev/null || { sudo apt-get update -qq; sudo apt-get install -y -qq postgresql-client; }
+          for guard in authentication-integrity oauth-integrity authentication-functional; do
+            database="security_${guard//-/_}_pool_test"
+            createdb -h 127.0.0.1 -p 55449 -U recovery_test "$database"
+            export DATABASE_URL="postgresql://recovery_test:recovery_test@127.0.0.1:55449/$database"
+            pnpm --filter server exec prisma migrate deploy
+            pnpm --filter server "test:$guard"
+          done
+
+      - name: Storage request-layer security regressions
+        run: |
+          set -euo pipefail
+          pnpm --filter server test:storage-security-transport
+          pnpm --filter server test:webdav-security-transport
+          pnpm --filter server test:storage-security-dns
+          pnpm --filter server test:request-budget-transport
+
       - name: Restore continuation, final host gates and purchase accounting
         run: |
           set -euo pipefail
@@ -295,9 +321,9 @@ jobs:
       DATABASE_URL: postgresql://expiry_test:expiry_test@127.0.0.1:5432/ci_expiry_test
       BILLING_EXPIRY_INTEGRATION_TEST: '1'
     steps:
-      - uses: actions/checkout@v5
-      - uses: pnpm/action-setup@v5
-      - uses: actions/setup-node@v5
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+      - uses: pnpm/action-setup@fc06bc1257f339d1d5d8b3a19a8cae5388b55320 # v5
+      - uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5
         with:
           node-version: '24'
           cache: 'pnpm'
@@ -339,9 +365,9 @@ jobs:
       DATABASE_URL: postgresql://pool_test:pool_test@127.0.0.1:5432/ci_release_${{ matrix.shard }}_pool_test
       JWT_SECRET: isolated-ci-pool-test-only
     steps:
-      - uses: actions/checkout@v5
-      - uses: pnpm/action-setup@v5
-      - uses: actions/setup-node@v5
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+      - uses: pnpm/action-setup@fc06bc1257f339d1d5d8b3a19a8cae5388b55320 # v5
+      - uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5
         with:
           node-version: '24'
           cache: 'pnpm'
@@ -1150,9 +1176,9 @@ jobs:
     env:
       DATABASE_URL: postgresql://gateway_test:gateway_test@127.0.0.1:5432/ci_remote_gateway_test
     steps:
-      - uses: actions/checkout@v5
-      - uses: pnpm/action-setup@v5
-      - uses: actions/setup-node@v5
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+      - uses: pnpm/action-setup@fc06bc1257f339d1d5d8b3a19a8cae5388b55320 # v5
+      - uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5
         with:
           node-version: '24'
           cache: 'pnpm'
@@ -1195,15 +1221,15 @@ jobs:
           - runner: ubuntu-24.04-arm
             architecture: arm64
     steps:
-      - uses: actions/checkout@v5
-      - uses: pnpm/action-setup@v5
-      - uses: actions/setup-node@v5
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+      - uses: pnpm/action-setup@fc06bc1257f339d1d5d8b3a19a8cae5388b55320 # v5
+      - uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5
         with:
           node-version: '24'
           cache: 'pnpm'
-      - uses: actions/setup-go@v6
+      - uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6
         with:
-          go-version: '1.22.x'
+          go-version: '1.27.3'
           cache-dependency-path: agent/go.mod
       - name: Process audit exit races and redacted diagnostics
         working-directory: agent
@@ -1238,13 +1264,13 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v5
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
 
       - name: Setup pnpm
-        uses: pnpm/action-setup@v5
+        uses: pnpm/action-setup@fc06bc1257f339d1d5d8b3a19a8cae5388b55320 # v5
 
       - name: Setup Node.js
-        uses: actions/setup-node@v5
+        uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5
         with:
           node-version: '24'
           cache: 'pnpm'

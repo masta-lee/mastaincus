@@ -29,6 +29,7 @@ export async function withTerminalOpeningAuthorization<T>(
     const host = await tx.host.findUnique({ where: { id: instance.hostId } })
     if (!host || host.id !== originalHost.id || host.userId !== originalHost.user_id || host.url !== originalHost.url ||
       host.certPath !== originalHost.cert_path || host.keyPath !== originalHost.key_path ||
+      host.serverCertificate !== originalHost.server_certificate || host.serverFingerprint !== originalHost.server_fingerprint ||
       host.createdAt.toISOString() !== originalHost.created_at) {
       throw new Error('TERMINAL_HOST_CHANGED')
     }

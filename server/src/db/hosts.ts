@@ -132,6 +132,8 @@ export async function getHostById(id: number): Promise<Host | null> {
     status: host.status,
     cert_path: host.certPath,
     key_path: host.keyPath,
+    server_certificate: host.serverCertificate,
+    server_fingerprint: host.serverFingerprint,
     nat_public_ip: host.natPublicIp,
     nat_public_ipv6: host.natPublicIpv6,
     public_ipv6_sync: host.publicIpv6Sync,

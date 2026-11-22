@@ -100,16 +100,17 @@ try {
 
   process.env.TRUST_PROXY_HOPS = '3'
   setTrustProxy('true')
-  assert.equal(getTrustProxyConfig(), 3)
+  assert.equal((getTrustProxyConfig() as (address:string,hop:number)=>boolean)('127.0.0.1',2), true)
+  assert.equal((getTrustProxyConfig() as (address:string,hop:number)=>boolean)('127.0.0.1',3), false)
 
   process.env.TRUST_PROXY_HOPS = 'invalid'
   assert.deepEqual(getTrustProxyConfig(), ['127.0.0.0/8', '::1/128'], 'invalid TRUST_PROXY_HOPS must fall back to loopback addresses')
   delete process.env.TRUST_PROXY_HOPS
 
   setTrustProxy('2')
-  assert.equal(getTrustProxyConfig(), 2)
+  assert.equal((getTrustProxyConfig() as (address:string,hop:number)=>boolean)('127.0.0.1',1), true)
   process.env.TRUST_PROXY_HOPS = '3'
-  assert.equal(getTrustProxyConfig(), 2, 'explicit numeric trust config retains precedence over HOPS')
+  assert.equal((getTrustProxyConfig() as (address:string,hop:number)=>boolean)('127.0.0.1',2), false, 'explicit numeric trust config retains precedence over HOPS')
   delete process.env.TRUST_PROXY_HOPS
 
   setTrustProxy('127.0.0.1, 10.0.0.0/8')

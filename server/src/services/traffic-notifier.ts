@@ -14,6 +14,7 @@ import {
 import { assertSafeWebhookUrl, safeFetch } from '../lib/outbound-security.js'
 import { sanitizeTokensInString } from '../lib/log-sanitizer.js'
 import { telegramMarkdownText } from '../lib/telegram-format.js'
+import { readNotificationBody, readTelegramResponse } from '../lib/notification-response.js'
 
 // 重新导出 formatBytes 供其他模块使用
 export { formatBytes }
@@ -56,7 +57,7 @@ function isNonRetryableError(error: string | null): boolean {
 }
 
 async function readSafeNotificationError(response: Response): Promise<string> {
-    const text = await response.text()
+    const text = await readNotificationBody(response)
     const sanitized = sanitizeTokensInString(text)
     const preview = sanitized.slice(0, TRAFFIC_NOTIFICATION_ERROR_PREVIEW_MAX_CHARS)
     return preview || `HTTP ${response.status}`
@@ -320,7 +321,7 @@ async function sendTelegram(
             })
         })
 
-        const result = await response.json() as { ok: boolean; description?: string }
+        const result = await readTelegramResponse(response)
 
         if (!response.ok || !result.ok) {
             return { success: false, error: result.description || 'Unknown error' }
@@ -328,7 +329,7 @@ async function sendTelegram(
 
         return { success: true, error: null }
     } catch (err) {
-        const error = err instanceof Error ? err.message : String(err)
+        const error = sanitizeTokensInString(err instanceof Error ? err.message : String(err))
         return { success: false, error }
     }
 }

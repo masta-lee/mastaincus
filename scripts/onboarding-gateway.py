@@ -525,7 +525,8 @@ def probe_host(job, control):
     raw = sys.stdin.buffer.read(2049)
     if len(raw) > 2048: raise ValueError('input too large')
     request = json.loads(raw, object_pairs_hook=strict_json)
-    if not isinstance(request, dict) or set(request) not in ({'sshPort', 'sshFingerprint', 'nodePublicKey'}, {'sshPort', 'sshFingerprint', 'nodePublicKey', 'portProtocol'}): raise ValueError('invalid probe request')
+    if not isinstance(request, dict) or set(request) not in ({'sshPort', 'sshFingerprint', 'nodePublicKey'}, {'sshPort', 'sshFingerprint', 'nodePublicKey', 'portProtocol'}, {'sshPort', 'sshFingerprint', 'nodePublicKey', 'serverCertificate'}): raise ValueError('invalid probe request')
+    if 'serverCertificate' in request and request['serverCertificate'] is not True:raise ValueError('invalid certificate probe')
     if 'portProtocol' in request and request['portProtocol'] not in ('tcp', 'tcp_udp'): raise ValueError('invalid protocol')
     if type(request['sshPort']) is not int or not 1 <= request['sshPort'] <= 65535: raise ValueError('invalid port')
     if not isinstance(request['sshFingerprint'], str) or not re.fullmatch(r'SHA256:[A-Za-z0-9+/]{43}', request['sshFingerprint']): raise ValueError('invalid fingerprint')
@@ -549,6 +550,10 @@ def probe_host(job, control):
         command = 'head -c64 /etc/incudal-onboarding-id'
         if 'portProtocol' in request:
             command += '; printf "\\n"; nft -j list table inet incudal_ingress_protocol'
+        if 'serverCertificate' in request:
+            # Read only the public Incus certificate over the original pinned
+            # SSH/peer route. No caller-controlled path or remote shell input.
+            command += '; printf "\\n"; python3 -I -B -c '+shlex.quote("import pathlib,stat,os; p=pathlib.Path('/var/lib/incus/server.crt'); parents=[parent.lstat() for parent in p.parents]; assert all(stat.S_ISDIR(s.st_mode) and s.st_uid==0 and not s.st_mode&0o022 for s in parents); f=os.open(p,os.O_RDONLY|os.O_NOFOLLOW|os.O_NONBLOCK); s=os.fstat(f); assert stat.S_ISREG(s.st_mode) and s.st_uid==0 and s.st_nlink==1 and not s.st_mode&0o022 and s.st_size<=16384; data=os.read(f,16385); os.close(f); assert len(data)<=16384; print(data.decode(),end='')")
         result = recovery_probe_process(['ssh', '-T', '-o', 'BatchMode=yes', '-o', 'StrictHostKeyChecking=yes', '-o', 'GlobalKnownHostsFile=/dev/null',
                                  '-o', 'UserKnownHostsFile=' + str(trust), '-o', 'ConnectTimeout=8', '-o', 'IdentitiesOnly=yes',
                                  '-i', str(MANAGEMENT_PUBLIC_KEY.with_suffix('')), '-p', str(request['sshPort']), 'root@' + str(address),
@@ -563,7 +568,10 @@ def probe_host(job, control):
         if identity.strip() != job: raise GatewayOperationError('GATEWAY_DNS_HOST_IDENTITY_CHANGED')
         if 'portProtocol' in request:
             verify_recovery_port_protocol(json.loads(policy, object_pairs_hook=strict_json), request['portProtocol'])
+        if 'serverCertificate' in request:
+            if len(policy)>16384 or not re.fullmatch(r'-----BEGIN CERTIFICATE-----\n[A-Za-z0-9+/=\n]+\n-----END CERTIFICATE-----',policy):raise GatewayOperationError('HOST_TLS_CERTIFICATE_INVALID')
     return {'nodeId': job, 'sshIdentityVerified': True, 'keysAndRoutesPreserved': True,
+            **({'serverCertificate':policy} if 'serverCertificate' in request else {}),
             **({'portProtocolVerified': request['portProtocol']} if 'portProtocol' in request else {})}
 
 

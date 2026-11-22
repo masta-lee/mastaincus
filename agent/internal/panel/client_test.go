@@ -2,6 +2,9 @@ package panel
 
 import (
 	"context"
+	"crypto/hmac"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
@@ -38,6 +41,7 @@ func TestHeartbeatAbusePolicyContract(t *testing.T) {
 					t.Error("status lost on wire", body)
 				}
 				w.Header().Set("Content-Type", "application/json")
+				signTestResponse(w, r, "local-test-fixture", tc.response)
 				w.Write([]byte(tc.response))
 			}))
 			defer server.Close()
@@ -64,7 +68,10 @@ func TestPoolHostBBRContract(t *testing.T) {
 	}{
 		{`{"poolHostBbr":true}`, boolPointer(true)}, {`{"poolHostBbr":false}`, boolPointer(false)}, {`{"ok":true}`, nil}, {`{"poolHostBbr":"true"}`, nil},
 	} {
-		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { w.Write([]byte(tc.response)) }))
+		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			signTestResponse(w, r, "local-fixture", tc.response)
+			w.Write([]byte(tc.response))
+		}))
 		client := New(config.Config{PanelURL: server.URL, AgentID: "local-test", AgentSecret: "local-fixture", RequestTimeout: time.Second})
 		result, err := client.Heartbeat(context.Background(), map[string]any{})
 		server.Close()
@@ -77,3 +84,68 @@ func TestPoolHostBBRContract(t *testing.T) {
 	}
 }
 func boolPointer(value bool) *bool { return &value }
+func signTestResponse(w http.ResponseWriter, r *http.Request, secret, body string) {
+	mac := hmac.New(sha256.New, []byte(secret))
+	mac.Write([]byte("payincus/agent-response/v1\n" + r.Header.Get("x-incudal-nonce") + "\n"))
+	mac.Write([]byte(body))
+	w.Header().Set("x-incudal-response-signature", hex.EncodeToString(mac.Sum(nil)))
+}
+
+func TestHeartbeatUpgradeResponseAuthentication(t *testing.T) {
+	const secret = "isolated-response-authentication-fixture"
+	const body = `{"upgrade":{"available":true,"version":"2.0.0","url":"https://fixture.invalid/agent","sha256":"fixture"}}`
+	var savedSignature string
+	for _, scenario := range []string{"valid", "tampered", "replayed", "missing"} {
+		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			mac := hmac.New(sha256.New, []byte(secret))
+			mac.Write([]byte("payincus/agent-response/v1\n" + r.Header.Get("x-incudal-nonce") + "\n"))
+			mac.Write([]byte(body))
+			signature := hex.EncodeToString(mac.Sum(nil))
+			switch scenario {
+			case "valid":
+				savedSignature = signature
+			case "replayed":
+				signature = savedSignature
+			case "missing":
+				signature = ""
+			}
+			w.Header().Set("x-incudal-response-signature", signature)
+			response := body
+			if scenario == "tampered" {
+				response = body + " "
+			}
+			_, _ = w.Write([]byte(response))
+		}))
+		client := New(config.Config{PanelURL: server.URL, AgentID: "fixture", AgentSecret: secret, RequestTimeout: time.Second})
+		result, err := client.Heartbeat(context.Background(), map[string]any{})
+		server.Close()
+		if err != nil || (result.Upgrade != nil) != (scenario == "valid") {
+			t.Fatalf("%s: unexpected update authority: %v %v", scenario, result.Upgrade, err)
+		}
+	}
+}
+
+func TestHeartbeatRejectsRedirectAndOversizedResponse(t *testing.T) {
+	for _, scenario := range []string{"redirect", "oversized"} {
+		t.Run(scenario, func(t *testing.T) {
+			requests := 0
+			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				requests++
+				if scenario == "redirect" {
+					w.Header().Set("Location", "/replacement")
+					w.WriteHeader(307)
+					return
+				}
+				_, _ = w.Write(make([]byte, 1024*1024+1))
+			}))
+			defer server.Close()
+			client := New(config.Config{PanelURL: server.URL, AgentSecret: "fixture", RequestTimeout: time.Second})
+			if _, err := client.Heartbeat(context.Background(), map[string]any{}); err == nil {
+				t.Fatal("untrusted response accepted")
+			}
+			if requests != 1 {
+				t.Fatal("redirect was followed")
+			}
+		})
+	}
+}

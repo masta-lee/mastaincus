@@ -4,13 +4,17 @@ import (
 	"bytes"
 	"compress/gzip"
 	"context"
+	"crypto/ed25519"
+	"crypto/rand"
 	"crypto/sha256"
+	"encoding/base64"
 	"encoding/hex"
 	"errors"
 	"net/http"
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"runtime"
 	"testing"
 
 	"incudal-agent/internal/panel"
@@ -50,13 +54,21 @@ func TestApplyUpgradeReplacesBinaryAndRestarts(t *testing.T) {
 		},
 	}
 
-	err := runner.Apply(context.Background(), panel.UpgradeInstruction{
-		Available: true,
-		Version:   "v2",
-		URL:       server.URL + "/incudal-agent-linux-amd64.gz",
-		SHA256:    sha,
-		Gzip:      true,
-	}, "v1")
+	public, private, err := ed25519.GenerateKey(rand.Reader)
+	if err != nil {
+		t.Fatal(err)
+	}
+	runner.TrustedPublicKey = public
+	instruction := panel.UpgradeInstruction{
+		Available:    true,
+		Version:      "v2",
+		URL:          server.URL + "/incudal-agent-linux-amd64.gz",
+		SHA256:       sha,
+		Gzip:         true,
+		Architecture: runtime.GOARCH,
+		Signature:    base64.StdEncoding.EncodeToString(ed25519.Sign(private, []byte("payincus/agent-package/v1\n2\nlinux-"+runtime.GOARCH+"\n"+sha256HexBytes(nextBinary)))),
+	}
+	err = runner.Apply(context.Background(), instruction, "v1")
 	if err != nil {
 		t.Fatalf("apply upgrade: %v", err)
 	}
@@ -160,12 +172,19 @@ func TestApplyUpgradeDoesNotRollbackWhenSelfRestartIsInterrupted(t *testing.T) {
 		},
 	}
 
-	err := runner.Apply(context.Background(), panel.UpgradeInstruction{
-		Available: true,
-		Version:   "v2",
-		URL:       server.URL + "/incudal-agent-linux-amd64.gz",
-		SHA256:    sha,
-		Gzip:      true,
+	public, private, err := ed25519.GenerateKey(rand.Reader)
+	if err != nil {
+		t.Fatal(err)
+	}
+	runner.TrustedPublicKey = public
+	err = runner.Apply(context.Background(), panel.UpgradeInstruction{
+		Available:    true,
+		Version:      "v2",
+		URL:          server.URL + "/incudal-agent-linux-amd64.gz",
+		SHA256:       sha,
+		Gzip:         true,
+		Architecture: runtime.GOARCH,
+		Signature:    base64.StdEncoding.EncodeToString(ed25519.Sign(private, []byte("payincus/agent-package/v1\n2\nlinux-"+runtime.GOARCH+"\n"+sha256HexBytes(nextBinary)))),
 	}, "v1")
 	if err == nil {
 		t.Fatalf("expected restart error")

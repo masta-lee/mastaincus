@@ -62,6 +62,15 @@ func TestQueryUsesOnlyBoundedLocalGET(t *testing.T) {
 	if data, err = querySocket(context.Background(), path, "/internal/ready", true); err != nil || string(data) != response {
 		t.Fatal("internal readiness proof lost")
 	}
+	mu.Lock()
+	response = `{"type":"sync","status_code":200,"metadata":null}`
+	mu.Unlock()
+	if _, err = querySocket(context.Background(), path, "/internal/ready", true); err != nil {
+		t.Fatal("real null readiness metadata rejected", err)
+	}
+	if _, err = querySocket(context.Background(), path, "/1.0", false); err == nil {
+		t.Fatal("null normal API metadata accepted")
+	}
 	if _, err = querySocket(context.Background(), path, "/internal/other", true); err == nil {
 		t.Fatal("unrelated internal query accepted")
 	}

@@ -9,6 +9,7 @@ import { createLog } from '../db/logs.js'
 import { testNotificationChannel } from '../lib/notifier.js'
 import type { NotificationChannel } from '../types/database.js'
 import { ADMIN_ALERT_CATEGORIES } from '../lib/admin-alerts.js'
+import { sealNotificationConfig, openNotificationConfig } from '../lib/notification-config.js'
 
 const telegramBotTokenPattern = /^[1-9]\d{5,19}:[A-Za-z0-9_-]{20,}$/
 const telegramChatIdPattern = /^-?\d{1,20}$|^@[A-Za-z0-9_]{5,32}$/
@@ -82,7 +83,7 @@ export default async function adminNotificationChannelsRoutes(fastify: FastifyIn
 
     return {
       channels: channels.map(c => {
-        const config = typeof c.config === 'string' ? JSON.parse(c.config) : c.config as Record<string, unknown>
+        const config = openNotificationConfig(c.config)
         return {
           id: c.id,
           name: c.name,
@@ -109,7 +110,7 @@ export default async function adminNotificationChannelsRoutes(fastify: FastifyIn
     })
     if (!channel) return reply.code(404).send({ error: 'Channel not found' })
 
-    const config = typeof channel.config === 'string' ? JSON.parse(channel.config) : channel.config as Record<string, unknown>
+    const config = openNotificationConfig(channel.config)
 
     return {
       channel: {
@@ -171,7 +172,7 @@ export default async function adminNotificationChannelsRoutes(fastify: FastifyIn
         userId: request.user.id,
         type: 'telegram',
         name,
-        config: { botToken, chatId },
+        config: sealNotificationConfig({ botToken, chatId }),
         enabled,
         isGlobal: rawAlertCategory ? false : true,
         alertCategory: rawAlertCategory
@@ -222,7 +223,7 @@ export default async function adminNotificationChannelsRoutes(fastify: FastifyIn
       return reply.code(400).send({ error: normalized.error })
     }
     const { name, botToken, chatId } = normalized.value
-    const existingConfig = typeof existing.config === 'string' ? JSON.parse(existing.config) : existing.config as Record<string, unknown>
+    const existingConfig = openNotificationConfig(existing.config)
 
     // Merge config
     const newConfig = {
@@ -235,7 +236,7 @@ export default async function adminNotificationChannelsRoutes(fastify: FastifyIn
       data: {
         ...(name !== undefined && { name }),
         ...(enabled !== undefined && { enabled }),
-        ...(botToken || chatId ? { config: newConfig } : {})
+        ...(botToken || chatId ? { config: sealNotificationConfig(newConfig) } : {})
       }
     })
 
@@ -277,7 +278,7 @@ export default async function adminNotificationChannelsRoutes(fastify: FastifyIn
     })
     if (!channel) return reply.code(404).send({ error: 'Channel not found' })
 
-    const result = await testNotificationChannel(channel as unknown as NotificationChannel)
+    const result = await testNotificationChannel({ ...channel, config: JSON.stringify(openNotificationConfig(channel.config)) } as unknown as NotificationChannel)
 
     if (result.success) {
       return { message: 'Test notification sent successfully' }

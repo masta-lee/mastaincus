@@ -46,9 +46,9 @@ async function lock(tx: Prisma.TransactionClient) {
 async function activeAdmin(tx: Prisma.TransactionClient, id: number) {
   if (!Number.isSafeInteger(id) || id < 1) fail('GATEWAY_TASK_ADMIN_REQUIRED')
   // The row share lock also prevents demotion/banning during this commit.
-  const rows = await tx.$queryRaw<Array<{ role: string; status: string }>>`
-    SELECT role, status FROM users WHERE id = ${id} FOR SHARE`
-  if (rows[0]?.role !== 'admin' || rows[0]?.status !== 'active') fail('GATEWAY_TASK_ADMIN_REQUIRED')
+  await tx.$queryRaw`SELECT id FROM users WHERE id = ${id} FOR SHARE`
+  const user=await tx.user.findUnique({where:{id},select:{role:true,status:true,deletionIntent:true}})
+  if (user?.role !== 'admin' || user.status !== 'active' || user.deletionIntent!==null) fail('GATEWAY_TASK_ADMIN_REQUIRED')
 }
 async function currentApprovalCredentials(tx: Prisma.TransactionClient, task: { createdById: number; approvedCredentialHash: string | null }) {
   if (task.approvedCredentialHash === null) return

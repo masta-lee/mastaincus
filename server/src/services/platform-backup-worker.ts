@@ -8,6 +8,7 @@ import { initializeFinancialDatabaseIntegrity } from '../db/prisma.js'
 import { execFile } from 'node:child_process'
 import { randomUUID } from 'node:crypto'
 import { financialIntegrityStatePath, verifyFinancialDatabaseSeals, legacyFinancialBaseline, sealRecoveryOperatorWallet, verifyFinancialBaseline, prepareRecoveryCheckoutStatuses, changeRecoveryOperatorRole } from '../lib/financial-integrity.js'
+import { resealRestoredAuthentication } from '../lib/authentication-integrity.js'
 import { promisify } from 'node:util'
 import { existsSync } from 'node:fs'
 import { chmod, chown, copyFile, lstat, mkdir, readdir, readFile, rm, stat, statfs, unlink, writeFile } from 'node:fs/promises'
@@ -64,12 +65,13 @@ async function version(): Promise<string> {
   ensure(result, 'OSS_VERSION_UNKNOWN', 503); return result.replace(/^v/, '')
 }
 
-export async function verifyBackupCompatibility(manifest: BackupManifest, staging: string, directory: string, expected?: RestorePlan['compatibility']) {
+export async function verifyBackupCompatibility(manifest: BackupManifest, staging: string, directory: string, expected?: RestorePlan['compatibility'], currentDatabase?: string) {
+  if(currentDatabase)ensure(/^incudal_check_[a-f0-9]{32}$/.test(currentDatabase),'OSS_DATABASE_INVALID')
   const app = process.env.INCUDAL_APP_DIR || (existsSync(`${INSTALL}/current`) ? `${INSTALL}/current` : INSTALL)
-  const current = await databaseMetadata(), targetVersion = await version(), release = await releaseMigrations(app)
+  const current = await databaseMetadata(currentDatabase), targetVersion = await version(), release = await releaseMigrations(app)
   assertBackupVersion(manifest.version, targetVersion)
   ensure(manifest.postgresMajor === current.postgresMajor, 'OSS_POSTGRES_VERSION_MISMATCH', 409)
-  assertMigrationHistory(await appliedBackupMigrations(), release, true)
+  assertMigrationHistory(await appliedBackupMigrations(currentDatabase), release, true)
   const raw = await databaseMetadata(staging)
   // The authenticated manifest must describe exactly what was restored.
   ensure(raw.migrationHash === manifest.migrationHash, 'OSS_MIGRATION_HISTORY_MISMATCH', 409)
@@ -77,7 +79,7 @@ export async function verifyBackupCompatibility(manifest: BackupManifest, stagin
   assertMigrationHistory(rows, release)
   const targetDirectory = join(directory, `target-schema-${randomUUID()}`)
   await mkdir(targetDirectory, { mode: 0o700 })
-  await schemaFingerprint(targetDirectory, 'target')
+  await schemaFingerprint(targetDirectory, 'target', currentDatabase)
   const schemaHash = normalizedDumpHash(normalizedReleaseSchema(await readFile(join(targetDirectory, 'schema-target.sql'), 'utf8'), release))
   const compatibility = { targetVersion, postgresMajor: current.postgresMajor, migrationHash: current.migrationHash, releaseHash: releaseMigrationHash(release), schemaHash }
   if (expected) ensure(JSON.stringify(expected) === JSON.stringify(compatibility), 'OSS_PREVIEW_TARGET_CHANGED', 409)
@@ -419,7 +421,8 @@ export async function runPlatformBackupTask(request: BackupTaskRequest): Promise
         compatibility = await verifyBackupCompatibility(archive.manifest, staging, directory)
         const financeKey = parseEnv(await readFile(archive.files.get('runtime.env')!, 'utf8')).ENCRYPTION_KEY
         if (archive.files.has('finance-baseline.json')) verifyFinancialBaseline(await readFile(archive.files.get('finance-baseline.json')!, 'utf8'), financeKey)
-        await verifyFinancialDatabaseSeals(staging, financeKey, !archive.files.has('finance-baseline.json'))
+        const authRequired = archive.files.has('finance-baseline.json') && Boolean(JSON.parse(await readFile(archive.files.get('finance-baseline.json')!, 'utf8')).authenticationSignature)
+        await verifyFinancialDatabaseSeals(staging, financeKey, !archive.files.has('finance-baseline.json'), authRequired)
         await archivedGatewayForSnapshot(archive.files,staging)
         const [endpoint]=await pgQuery<{value:string}>("SELECT value FROM system_configs WHERE key='onboarding_gateway_dns_endpoint'",[],staging)
         if(endpoint)gatewayEndpoint=stableGatewayEndpointText(readGatewayEndpointPlan(endpoint.value))
@@ -521,7 +524,8 @@ export async function runPlatformBackupTask(request: BackupTaskRequest): Promise
       await verifyBackupCompatibility(plan.manifest, staging, directory, plan.compatibility)
       const restoredKey = parseEnv(await readFile(files.get('runtime.env')!, 'utf8')).ENCRYPTION_KEY
       if (files.has('finance-baseline.json')) verifyFinancialBaseline(await readFile(files.get('finance-baseline.json')!, 'utf8'), restoredKey)
-      await verifyFinancialDatabaseSeals(staging, restoredKey, !files.has('finance-baseline.json'))
+      const authRequired = files.has('finance-baseline.json') && Boolean(JSON.parse(await readFile(files.get('finance-baseline.json')!, 'utf8')).authenticationSignature)
+      await verifyFinancialDatabaseSeals(staging, restoredKey, !files.has('finance-baseline.json'), authRequired)
       if(request.restorePolicy==='snapshot-v1' && preparedGateway){
         const gateway=await archivedGatewayForSnapshot(files,staging)
         ensure(gateway,'OSS_REQUIRED_ASSET_MISSING')
@@ -537,7 +541,12 @@ export async function runPlatformBackupTask(request: BackupTaskRequest): Promise
       await pgQuery('UPDATE public_api_tokens SET revoked_at=NOW() WHERE revoked_at IS NULL', [], staging)
       await pgQuery('UPDATE oauth_access_tokens SET revoked_at=NOW() WHERE revoked_at IS NULL', [], staging)
       await pgQuery('UPDATE oauth_refresh_tokens SET revoked_at=NOW() WHERE revoked_at IS NULL', [], staging)
+      await pgQuery('DELETE FROM oauth_authorization_codes', [], staging)
+      await pgQuery('DELETE FROM operation_verifications', [], staging)
+      await pgQuery('DELETE FROM email_verification_codes', [], staging)
+      await pgQuery('DELETE FROM telegram_bind_tokens', [], staging)
       await pgQuery(`INSERT INTO token_invalidations (user_id, session_id, invalidated_at, created_at) SELECT id, '__USER_LEVEL__', EXTRACT(EPOCH FROM NOW())::integer, NOW() FROM users ON CONFLICT (user_id, session_id) DO UPDATE SET invalidated_at=EXCLUDED.invalidated_at`, [], staging)
+      await resealRestoredAuthentication(staging, restoredKey, id)
       if(request.restorePolicy!=='snapshot-v1')await prepareRecoveryCheckoutStatuses(staging, restoredKey, !files.has('finance-baseline.json'))
       // Historical queue items must not execute again after a database rewind.
       // Existing workers use several enum/status shapes, so enumerate only task

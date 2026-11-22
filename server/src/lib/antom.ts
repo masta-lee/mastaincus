@@ -86,7 +86,7 @@ interface AntomFetchResponse {
 
 type AntomFetch = (
   input: string | URL,
-  init?: RequestInit & { dispatcher?: unknown }
+  init?: Omit<RequestInit, 'dispatcher'> & { dispatcher?: unknown }
 ) => Promise<AntomFetchResponse>
 
 function normalizeString(value: unknown): string {

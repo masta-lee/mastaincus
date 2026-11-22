@@ -16,3 +16,4 @@ func incusCompatibilityStatus(context.Context) (string, string, string) { return
 func prepareIncusCompatibility(context.Context, *CompatPermit) error    { return nil }
 func validCompatPermit(*CompatPermit) bool                              { return false }
 func reconcileMemoryWatermark(context.Context) error                    { return nil }
+func repairSecurityPackages(context.Context) error                      { return nil }

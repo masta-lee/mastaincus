@@ -4,6 +4,7 @@
  */
 
 import { createLog, LogModule } from '../db/logs.js'
+import { sanitizeObject, sanitizeTokensInString } from './log-sanitizer.js'
 
 /**
  * 部署不变量：以下登录锁、导出任务、OAuth state nonce 与一次性登录码 nonce
@@ -559,9 +560,6 @@ const REFRESH_TOKEN_CONFIG = {
 const REFRESH_TOKEN_STORAGE_PREFIX = 'sha256:'
 
 export function getRefreshTokenStorageKey(token: string): string {
-    if (token.startsWith(REFRESH_TOKEN_STORAGE_PREFIX) && token.length === REFRESH_TOKEN_STORAGE_PREFIX.length + 64) {
-        return token
-    }
     return `${REFRESH_TOKEN_STORAGE_PREFIX}${crypto.createHash('sha256').update(token).digest('hex')}`
 }
 
@@ -570,7 +568,14 @@ export function getRefreshTokenSessionId(token: string): string {
     return storageKey.slice(REFRESH_TOKEN_STORAGE_PREFIX.length, REFRESH_TOKEN_STORAGE_PREFIX.length + 32)
 }
 
+function getStoredRefreshTokenSessionId(storedToken: string): string {
+    return /^sha256:[a-f0-9]{64}$/.test(storedToken)
+        ? storedToken.slice(REFRESH_TOKEN_STORAGE_PREFIX.length, REFRESH_TOKEN_STORAGE_PREFIX.length + 32)
+        : getRefreshTokenSessionId(storedToken)
+}
+
 function getRefreshTokenLookupKeys(token: string): string[] {
+    if (token.startsWith(REFRESH_TOKEN_STORAGE_PREFIX)) return []
     const storageKey = getRefreshTokenStorageKey(token)
     return storageKey === token ? [storageKey] : [storageKey, token]
 }
@@ -588,7 +593,7 @@ setInterval(() => {
             exportTaskStore.delete(id)
         }
     }
-}, 5 * 60 * 1000)
+}, 5 * 60 * 1000).unref()
 
 /**
  * 清理过期的 Refresh Token（定期任务）
@@ -742,6 +747,7 @@ export async function verifyRefreshToken(
     _currentUserAgent?: string
 ): Promise<RefreshTokenData | null> {
     try {
+        if (token.startsWith(REFRESH_TOKEN_STORAGE_PREFIX)) return null
         const storageKey = getRefreshTokenStorageKey(token)
         let record = await prisma.refreshToken.findUnique({
             where: { token: storageKey }
@@ -831,7 +837,7 @@ export async function getUserSessions(userId: number, currentToken?: string): Pr
     const currentTokenKeys = currentToken ? new Set(getRefreshTokenLookupKeys(currentToken)) : new Set<string>()
 
     return tokens.map(token => ({
-        token: getRefreshTokenSessionId(token.token) + '...',
+        token: getStoredRefreshTokenSessionId(token.token) + '...',
         ip: token.ip || 'unknown',
         userAgent: token.userAgent || 'unknown',
         createdAt: token.createdAt.getTime(),
@@ -856,7 +862,7 @@ export async function revokeSessionByTokenPrefix(userId: number, tokenPrefix: st
     const token = tokens.find(item =>
         item.token.startsWith(`${REFRESH_TOKEN_STORAGE_PREFIX}${prefix}`) ||
         item.token.startsWith(prefix) ||
-        getRefreshTokenSessionId(item.token).startsWith(prefix)
+        getStoredRefreshTokenSessionId(item.token).startsWith(prefix)
     )
 
     if (token) {
@@ -876,7 +882,7 @@ export async function updateSessionActivity(token: string): Promise<{ expiresAt:
         const now = new Date()
         const newExpiresAt = new Date(now.getTime() + REFRESH_TOKEN_CONFIG.expiresInSeconds * 1000)
         
-        await prisma.refreshToken.updateMany({
+        const result = await prisma.refreshToken.updateMany({
             where: { token: { in: getRefreshTokenLookupKeys(token) } },
             data: { 
                 lastActiveAt: now,
@@ -884,7 +890,7 @@ export async function updateSessionActivity(token: string): Promise<{ expiresAt:
             }
         })
         
-        return { expiresAt: newExpiresAt }
+        return result.count === 1 ? { expiresAt: newExpiresAt } : null
     } catch {
         // 忽略错误，不影响认证流程
         return null
@@ -935,6 +941,11 @@ export async function invalidateSessionAccessToken(userId: number, sessionId: st
  */
 export async function isAccessTokenInvalidated(userId: number, tokenIssuedAt: number, sessionId?: string): Promise<boolean> {
     try {
+        if (!sessionId?.startsWith('recovery:')) {
+            if (!sessionId || !/^[a-f0-9]{32}$/.test(sessionId)) return true
+            const sessions = await prisma.refreshToken.findMany({ where: { userId, expiresAt: { gt: new Date() } } })
+            if (!sessions.some(session => getStoredRefreshTokenSessionId(session.token) === sessionId)) return true
+        }
         // 检查会话级别的失效（优先级更高）
         if (sessionId) {
             const sessionInvalidation = await prisma.tokenInvalidation.findUnique({
@@ -968,7 +979,7 @@ export async function isAccessTokenInvalidated(userId: number, tokenIssuedAt: nu
 
         return false
     } catch (error) {
-        console.error('Failed to check token invalidation:', error)
+        console.error('Failed to check token invalidation:', sanitizeTokensInString(error instanceof Error ? error.message : String(error)))
         throw error
     }
 }
@@ -1152,6 +1163,22 @@ export function generateRecoveryCodes(count: number = 8): string[] {
     return codes
 }
 
+export function encodeRecoveryCodes(codes: string[]): string {
+    return encryptSensitiveData(JSON.stringify({ version: 1, hashes: codes.map(code => crypto.createHash('sha256').update(code.toUpperCase()).digest('hex')) }))
+}
+export function readRecoveryCodeHashes(encrypted: string): string[] | null {
+    const text = decryptSensitiveDataStrict(encrypted)
+    if (!text) return null
+    try {
+        const value = JSON.parse(text)
+        if (Array.isArray(value) && value.every(code => typeof code === 'string' && /^[A-Z0-9]{4}-[A-Z0-9]{4}$/.test(code))) {
+            return value.map(code => crypto.createHash('sha256').update(code).digest('hex'))
+        }
+        if (value?.version === 1 && Array.isArray(value.hashes) && value.hashes.length <= 8 && value.hashes.every((hash: unknown) => typeof hash === 'string' && /^[a-f0-9]{64}$/.test(hash))) return value.hashes
+    } catch { /* Invalid authenticated payload is not a recovery credential. */ }
+    return null
+}
+
 
 // ==================== 导出任务内存存储 ====================
 
@@ -1315,7 +1342,7 @@ setInterval(() => {
             usedNonces.delete(nonce)
         }
     }
-}, 10 * 60 * 1000)
+}, 10 * 60 * 1000).unref()
 
 /**
  * 验证并消费 OAuth State
@@ -1414,7 +1441,7 @@ export async function logAuditEvent(
                 userId,
                 module,
                 action,
-                ...details
+                ...sanitizeObject(details)
             })
         }
     } catch (error) {
@@ -1566,7 +1593,7 @@ setInterval(() => {
             usedLoginCodeNonces.delete(nonce)
         }
     }
-}, 2 * 60 * 1000)
+}, 2 * 60 * 1000).unref()
 
 /**
  * 生成 OAuth 一次性登录码

@@ -19,7 +19,7 @@ assert.ok(
   'main notifier must cap upstream error response previews before logging'
 )
 assert.ok(
-  notifierSource.includes("import { sanitizeTokensInString } from './log-sanitizer.js'"),
+  notifierSource.includes("import { sanitizeTokensInString, sanitizeObject } from './log-sanitizer.js'"),
   'main notifier must sanitize token-like upstream error responses'
 )
 assert.equal(
@@ -103,6 +103,7 @@ for (const [label, source] of [
   ['traffic notifier', trafficNotifierSource],
   ['lottery notifier', lotteryNotifierSource]
 ] as const) {
+  assert.ok(!/await response\.(?:text|json)\(/.test(source), `${label} must limit the body before parsing or taking an error preview`)
   assert.ok(
     source.includes("redirect: 'manual'"),
     `${label} must avoid automatic redirect following on outbound notification requests`

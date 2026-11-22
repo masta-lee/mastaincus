@@ -37,7 +37,7 @@ on:
         type: boolean
 
 env:
-  GO_VERSION: '1.22.x'
+  GO_VERSION: '1.27.3'
 
 jobs:
   incus-compat:
@@ -54,7 +54,7 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
           fetch-depth: 0
 
@@ -123,10 +123,10 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
 
       - name: Setup Go
-        uses: actions/setup-go@v5
+        uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5
         with:
           go-version: ${{ env.GO_VERSION }}
           cache-dependency-path: agent/go.mod
@@ -162,6 +162,18 @@ jobs:
           cp agent/dist/incudal-agent-linux-arm64 "agent/release/incudal-agent-aarch64-${VERSION}"
           cp LICENSE agent/release/LICENSE
 
+      - name: Sign Agent packages
+        if: github.event_name != 'pull_request'
+        env:
+          AGENT_SIGNING_KEY: ${{ secrets.GATEWAY_COMPONENT_SIGNING_KEY }}
+        run: |
+          key_dir=$(mktemp -d)
+          trap 'rm -rf "$key_dir"' EXIT
+          umask 077
+          printf '%s\n' "$AGENT_SIGNING_KEY" > "$key_dir/publisher.pem"
+          AGENT_PACKAGE_SIGNING_KEY_PATH="$key_dir/publisher.pem" node scripts/agent-package-signature.mjs agent/dist
+          cp agent/dist/publisher-manifest.json agent/release/publisher-manifest.json
+
       - name: Verify release assets
         shell: bash
         run: |
@@ -171,13 +183,14 @@ jobs:
           test -s "agent/release/incudal-agent-aarch64-${VERSION}"
 
       - name: Upload Agent artifacts
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: incudal-agent-${{ needs.version.outputs.version }}
           path: |
             agent/release/incudal-agent-x86_64-${{ needs.version.outputs.version }}
             agent/release/incudal-agent-aarch64-${{ needs.version.outputs.version }}
             agent/release/LICENSE
+            agent/release/publisher-manifest.json
           retention-days: 30
 
   guest-protection:
@@ -191,8 +204,8 @@ jobs:
     permissions:
       contents: read
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-go@v5
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5
         with:
           go-version: ${{ env.GO_VERSION }}
           cache-dependency-path: agent/go.mod
@@ -249,13 +262,13 @@ jobs:
 
     steps:
       - name: Checkout publication validator
-        uses: actions/checkout@v4
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
       - name: Setup publication validator
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
           node-version: '24'
       - name: Download Agent artifacts
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
         with:
           name: incudal-agent-${{ needs.version.outputs.version }}
           path: agent-release
@@ -268,7 +281,7 @@ jobs:
 
       - name: Publish GitHub Release
         if: steps.existing.outputs.exists != 'true'
-        uses: softprops/action-gh-release@v2
+        uses: softprops/action-gh-release@3bb12739c298aeb8a4eeaf626c5b8d85266b0e65 # v2
         with:
           tag_name: agent-${{ needs.version.outputs.version }}
           target_commitish: ${{ github.sha }}
@@ -277,6 +290,7 @@ jobs:
             agent-release/incudal-agent-x86_64-${{ needs.version.outputs.version }}
             agent-release/incudal-agent-aarch64-${{ needs.version.outputs.version }}
             agent-release/LICENSE
+            agent-release/publisher-manifest.json
           generate_release_notes: true
           draft: false
           make_latest: false

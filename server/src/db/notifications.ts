@@ -7,6 +7,7 @@ import { prisma } from './prisma.js'
 import type { NotificationChannel } from '../types/database.js'
 import type { Prisma } from '@prisma/client'
 import { authorizeUserWrite, type WriteActor } from './user-write-authorization.js'
+import { sealNotificationConfig, openNotificationConfig } from '../lib/notification-config.js'
 
 export class NotificationChannelMutationError extends Error {
   constructor(public readonly statusCode: number, public readonly code: string, message: string) {
@@ -70,7 +71,7 @@ export async function getNotificationChannelsByUserId(userId: number): Promise<N
     user_id: ch.userId,
     type: ch.type,
     name: ch.name,
-    config: JSON.stringify(ch.config as any),
+    config: JSON.stringify(openNotificationConfig(ch.config)),
     enabled: ch.enabled ? 1 : 0,
     created_at: ch.createdAt.toISOString()
   }))
@@ -91,7 +92,7 @@ export async function getNotificationChannelById(id: number): Promise<Notificati
     user_id: channel.userId,
     type: channel.type,
     name: channel.name,
-    config: JSON.stringify(channel.config as any),
+    config: JSON.stringify(openNotificationConfig(channel.config)),
     enabled: channel.enabled ? 1 : 0,
     created_at: channel.createdAt.toISOString()
   }
@@ -115,7 +116,7 @@ export async function createNotificationChannel(data: {
         userId: data.userId,
         type: data.type,
         name: data.name,
-        config: data.config as Prisma.InputJsonObject,
+        config: sealNotificationConfig(data.config) as Prisma.InputJsonObject,
         enabled: data.enabled !== false
       }
     })
@@ -138,7 +139,7 @@ export async function updateNotificationChannel(id: number, data: {
   } = {}
 
   if (data.name !== undefined) updateData.name = data.name
-  if (data.config !== undefined) updateData.config = data.config as Prisma.InputJsonObject
+  if (data.config !== undefined) updateData.config = sealNotificationConfig(data.config) as Prisma.InputJsonObject
   if (data.enabled !== undefined) updateData.enabled = data.enabled
 
   await prisma.$transaction(async tx => {
@@ -186,7 +187,7 @@ export async function getEnabledChannelsByUserId(userId: number): Promise<Notifi
     user_id: ch.userId,
     type: ch.type,
     name: ch.name,
-    config: JSON.stringify(ch.config as any),
+    config: JSON.stringify(openNotificationConfig(ch.config)),
     enabled: ch.enabled ? 1 : 0,
     created_at: ch.createdAt.toISOString()
   }))

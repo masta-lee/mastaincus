@@ -233,6 +233,11 @@ run_task() {
   [[ -f "${app_dir}/${script}" && ! -L "${app_dir}/${script}" ]] || fail "worker entry is missing or is a symlink"
 
   set +e
+  local security_import=()
+  if [[ -f /var/lib/incudal-database/migration.url ]]; then
+    [[ -f /usr/local/libexec/incudal/legacy-database-startup.mjs && ! -L /usr/local/libexec/incudal/legacy-database-startup.mjs ]] || fail "database compatibility startup is missing"
+    security_import=(--import=/usr/local/libexec/incudal/legacy-database-startup.mjs)
+  fi
   /usr/bin/env \
     -u NODE_OPTIONS \
     -u NODE_PATH \
@@ -246,7 +251,7 @@ run_task() {
     INCUDAL_APP_DIR="$app_dir" \
     INSTALL_DIR="$INSTALL_DIR" \
     SERVICE_NAME="incudal-backend" \
-    /usr/bin/node "${app_dir}/${script}" "$task_id"
+    /usr/bin/node "${security_import[@]}" "${app_dir}/${script}" "$task_id"
   local status=$?
   set -e
 

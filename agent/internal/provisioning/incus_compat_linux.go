@@ -23,6 +23,7 @@ type compatGuest struct {
 type compatJournal struct {
 	Version                 int
 	OldHash, NewHash        string
+	OldVersion, NewVersion  string
 	PID                     int
 	ProcessStart            string
 	RequestID, HostIdentity string
@@ -99,7 +100,7 @@ func incusCompatibilityStatus(ctx context.Context) (string, string, string) {
 			ServerVersion string `json:"server_version"`
 		}
 	}
-	if json.Unmarshal(raw, &server) != nil || server.Environment.ServerVersion != "7.0.1" {
+	if json.Unmarshal(raw, &server) != nil || !compatSourceVersion(server.Environment.ServerVersion) {
 		return "", "", ""
 	}
 	return "needed", j.RequestID, manifest.SHA256
@@ -379,6 +380,21 @@ func prepareIncusCompatibility(ctx context.Context, permit *CompatPermit) error 
 		return rollbackIncusCompatibility(ctx, journal)
 	}
 	if journal.Phase == "prepared" {
+		// A reboot can start the new on-disk daemon before this receipt advances.
+		// Restore the old binary only while the exact original process is still
+		// alive; otherwise a migrated database may already exist.
+		start, startErr := compatProcessStart(journal.PID)
+		stat, statErr := os.ReadFile(fmt.Sprintf("/proc/%d/stat", journal.PID))
+		end := strings.LastIndex(string(stat), ") ")
+		zombie := statErr == nil && end >= 0 && strings.HasPrefix(string(stat)[end+2:], "Z ")
+		if startErr != nil || start != journal.ProcessStart || syscall.Kill(journal.PID, 0) != nil || zombie {
+			installedHash, err := hashCompatFile(ctx, "/usr/sbin/incusd")
+			if err != nil || installedHash != journal.NewHash {
+				return fmt.Errorf("compatibility prepared daemon exited; forward binary identity required")
+			}
+			journal.Phase = "reloading"
+			return saveCompatJournal(journal)
+		}
 		oldHash, e := hashCompatFile(ctx, compatBackupPath)
 		if e != nil || oldHash != journal.OldHash {
 			return fmt.Errorf("compatibility prepared rollback invalid")
@@ -402,8 +418,8 @@ func prepareIncusCompatibility(ctx context.Context, permit *CompatPermit) error 
 		if e != nil || installedHash != journal.NewHash {
 			return fmt.Errorf("compatibility reloading binary changed")
 		}
-		if e = startCompatDaemon(ctx, journal.NewHash); e != nil {
-			return rollbackIncusCompatibility(ctx, journal)
+		if e = startNewCompatDaemon(ctx, journal); e != nil {
+			return e
 		}
 		rows, e := compatGuests(ctx)
 		if e != nil || !compatibleCurrentGuests(journal.Guests, rows) {
@@ -464,7 +480,7 @@ func prepareIncusCompatibility(ctx context.Context, permit *CompatPermit) error 
 	if json.Unmarshal(info, &server) != nil {
 		return fmt.Errorf("compatibility server read invalid")
 	}
-	if server.Environment.ServerVersion != "7.0.1" {
+	if !compatSourceVersion(server.Environment.ServerVersion) {
 		return nil
 	}
 	manifest, e := compatibilityMetadata()
@@ -566,7 +582,7 @@ func prepareIncusCompatibility(ctx context.Context, permit *CompatPermit) error 
 	if e != nil {
 		return e
 	}
-	journal = compatJournal{Version: 1, OldHash: installedHash, NewHash: manifest.SHA256, PID: pid, ProcessStart: start, RequestID: permit.RequestID, HostIdentity: permit.HostIdentity, Phase: "prepared", Guests: guests}
+	journal = compatJournal{Version: 1, OldHash: installedHash, NewHash: manifest.SHA256, OldVersion: server.Environment.ServerVersion, NewVersion: manifest.IncusVersion, PID: pid, ProcessStart: start, RequestID: permit.RequestID, HostIdentity: permit.HostIdentity, Phase: "prepared", Guests: guests}
 	if e = saveCompatJournal(journal); e != nil {
 		return e
 	}
@@ -595,8 +611,8 @@ func prepareIncusCompatibility(ctx context.Context, permit *CompatPermit) error 
 	if e = waitCompatDaemonExit(ctx, pid, start); e != nil {
 		return e
 	}
-	if e = startCompatDaemon(ctx, journal.NewHash); e != nil {
-		return rollbackIncusCompatibility(ctx, journal)
+	if e = startNewCompatDaemon(ctx, journal); e != nil {
+		return e
 	}
 	rows, e := compatGuests(ctx)
 	if e != nil || !compatibleCurrentGuests(guests, rows) {
@@ -604,6 +620,30 @@ func prepareIncusCompatibility(ctx context.Context, permit *CompatPermit) error 
 	}
 	journal.Phase = "verified"
 	return saveCompatJournal(journal)
+}
+func normalizedCompatVersion(version string) string {
+	if version == "7.6" {
+		return "7.6.0"
+	}
+	return version
+}
+func compatSourceVersion(version string) bool {
+	return version == "7.0.1" || normalizedCompatVersion(version) == "7.6.0"
+}
+func compatRollbackSafe(journal compatJournal) bool {
+	// Incus migrations are not reversed by replacing the executable. An older
+	// binary cannot open the migrated schema. Unknown legacy receipts must not
+	// authorize a downgrade either; retain the verified candidate and retry it.
+	return compatSourceVersion(journal.OldVersion) && normalizedCompatVersion(journal.OldVersion) == normalizedCompatVersion(journal.NewVersion)
+}
+func startNewCompatDaemon(ctx context.Context, journal compatJournal) error {
+	if err := startCompatDaemon(ctx, journal.NewHash); err != nil {
+		if compatRollbackSafe(journal) {
+			return rollbackIncusCompatibility(ctx, journal)
+		}
+		return fmt.Errorf("compatibility startup pending; retained verified new daemon for schema-safe retry: %w", err)
+	}
+	return nil
 }
 func compatOperationsIdle(response []byte) bool {
 	var envelope struct {
@@ -628,6 +668,36 @@ func compatOperationsIdle(response []byte) bool {
 	return true
 }
 func rollbackIncusCompatibility(ctx context.Context, journal compatJournal) error {
+	if !compatRollbackSafe(journal) {
+		return fmt.Errorf("compatibility downgrade refused after cross-version migration; verified new daemon retry required")
+	}
+	// A failed readiness check can leave the new daemon running. Quiesce only
+	// that exact verified executable before replacing it; never kill guests or
+	// restore an old database snapshot over newer stop/delete intent.
+	installedHash, e := hashCompatFile(ctx, "/usr/sbin/incusd")
+	if e != nil {
+		return e
+	}
+	if installedHash == journal.NewHash {
+		pid, err := compatStartingDaemon(ctx, "/run/incus/incusd.pid", "/usr/sbin/incusd", journal.NewHash)
+		if err != nil {
+			return err
+		}
+		if pid > 0 {
+			start, err := compatProcessStart(pid)
+			if err != nil {
+				return err
+			}
+			if err = syscall.Kill(pid, syscall.SIGTERM); err != nil {
+				return err
+			}
+			if err = waitCompatDaemonExit(ctx, pid, start); err != nil {
+				return err
+			}
+		}
+	} else if installedHash != journal.OldHash {
+		return fmt.Errorf("compatibility rollback executable changed")
+	}
 	backupHash, e := hashCompatFile(ctx, compatBackupPath)
 	if e != nil || backupHash != journal.OldHash {
 		return fmt.Errorf("compatibility rollback identity invalid")

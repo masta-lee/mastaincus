@@ -37,6 +37,10 @@ try {
   process.env.COOKIE_SECURE = 'false'
   assert.equal(getCookieSecure(), false, 'COOKIE_SECURE=false must support HTTP intranet split deployments')
   assert.equal(getRefreshTokenCookieOptions().secure, false, 'refresh token cookie must honor COOKIE_SECURE=false')
+  const previousSite=process.env.SITE_URL
+  process.env.SITE_URL='https://fixture.example'
+  assert.throws(()=>getCookieSecure(),/Secure Cookie/)
+  if(previousSite===undefined)delete process.env.SITE_URL;else process.env.SITE_URL=previousSite
 
   process.env.COOKIE_SAME_SITE = 'none'
   assert.equal(getCookieSameSite(), 'lax', 'SameSite=none must fall back without Secure=true')
@@ -45,10 +49,12 @@ try {
   assert.equal(getCookieSameSite(), 'none', 'SameSite=none is valid when Secure=true')
 
   process.env.COOKIE_DOMAIN = '.example.com'
+  assert.throws(()=>getRefreshTokenCookieOptions(),/COOKIE_DOMAIN/)
+  delete process.env.COOKIE_DOMAIN
   const options = getRefreshTokenCookieOptions()
   assert.equal(options.secure, true)
   assert.equal(options.sameSite, 'none')
-  assert.equal(options.domain, '.example.com')
+  assert.equal(options.domain, undefined)
 
   clearCookieEnv()
   process.env.NODE_ENV = 'development'

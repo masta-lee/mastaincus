@@ -69,7 +69,11 @@ func TestCPUUsageRejectsCounterRegression(t *testing.T) {
 }
 
 func TestIncusDetectionRequiresUnixSocket(t *testing.T) {
-	dir := t.TempDir()
+	dir, err := os.MkdirTemp("", "incus-r-")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer os.RemoveAll(dir)
 	path := filepath.Join(dir, "incus.socket")
 	prior := incusSocketCandidates
 	incusSocketCandidates = []string{path}
@@ -94,7 +98,11 @@ func TestIncusDetectionRequiresUnixSocket(t *testing.T) {
 }
 
 func TestIncusCollectionHonorsCancellationAndTotalDeadline(t *testing.T) {
-	dir := t.TempDir()
+	dir, err := os.MkdirTemp("", "incus-r-")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer os.RemoveAll(dir)
 	path := filepath.Join(dir, "incus.socket")
 	listener, err := net.Listen("unix", path)
 	if err != nil {
@@ -146,7 +154,11 @@ func TestIncusCollectionHonorsCancellationAndTotalDeadline(t *testing.T) {
 }
 
 func TestIncusPartialStateFailureIsMarkedIncomplete(t *testing.T) {
-	dir := t.TempDir()
+	dir, err := os.MkdirTemp("", "incus-r-")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer os.RemoveAll(dir)
 	path := filepath.Join(dir, "incus.socket")
 	listener, err := net.Listen("unix", path)
 	if err != nil {
@@ -220,9 +232,6 @@ func TestHeartbeatPayloadIncludesHostMetrics(t *testing.T) {
 		"swapTotalMb",
 		"swapUsedMb",
 		"swapUsagePercent",
-		"diskTotalBytes",
-		"diskUsedBytes",
-		"diskUsagePercent",
 	} {
 		if _, ok := resources[key]; !ok {
 			t.Fatalf("resource key %s missing: %#v", key, resources)
@@ -230,6 +239,7 @@ func TestHeartbeatPayloadIncludesHostMetrics(t *testing.T) {
 	}
 	if runtime.GOOS == "linux" {
 		for _, key := range []string{
+			"diskTotalBytes", "diskUsedBytes", "diskUsagePercent",
 			"cpuUsagePercent",
 			"memoryTotalMb",
 			"memoryUsedMb",

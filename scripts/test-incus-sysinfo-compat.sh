@@ -1,12 +1,20 @@
 #!/bin/sh
 # Only the disposable GitHub Docker host created by the compatibility workflow.
 set -eux
+# Native SSH/CI runners may keep stdin open. Non-terminal Incus commands read
+# YAML from stdin, so explicitly provide EOF instead of blocking forever.
+exec </dev/null
 test "${INCUDAL_SYSINFO_COMPAT_TEST:-}" = disposable
 test ! -e /var/lib/incus/database
 ls -ld /proc /proc/self
 cat /proc/self/status | head -n12
 mount | head -n12
 apk add --no-cache incus incus-client incus-openrc openrc apparmor-utils iproute2 python3
+if test -n "${INCUDAL_NATIVE_OLD_DAEMON:-}"; then
+  test -n "${INCUDAL_NATIVE_OLD_SHA256:-}"
+  printf '%s  %s\n' "$INCUDAL_NATIVE_OLD_SHA256" "$INCUDAL_NATIVE_OLD_DAEMON" | sha256sum -c -
+  install -m 0755 "$INCUDAL_NATIVE_OLD_DAEMON" /usr/sbin/incusd
+fi
 # The minirootfs has no interface configuration. OpenRC must validate a real
 # networking dependency, without reconfiguring the runner's external link.
 mkdir -p /etc/network
@@ -61,7 +69,7 @@ package main
 import("fmt";"syscall")
 func main(){var i syscall.Sysinfo_t;if e:=syscall.Sysinfo(&i);e!=nil{panic(e)};fmt.Printf("SYSINFO_BYTES=%d\n",uint64(i.Totalram)*uint64(i.Unit))}
 GO
-CGO_ENABLED=0 go build -o /tmp/sysinfo /tmp/sysinfo.go
+if test -x /out/sysinfo; then cp /out/sysinfo /tmp/sysinfo; else CGO_ENABLED=0 go build -o /tmp/sysinfo /tmp/sysinfo.go; fi
 incus file push --mode=0700 /tmp/sysinfo native-sysinfo/root/sysinfo
 timeout -s KILL 5 incus exec native-sysinfo -- timeout -s KILL 3 /root/sysinfo >/tmp/sysinfo-old || true
 if test -x /out/provisioning-test; then
@@ -170,4 +178,4 @@ PY
   echo 'PASS native Btrfs repeated rebuild and original empty-directory recovery'
 fi
 incus delete --force native-sysinfo
-echo 'PASS original Alpine daemon to fixed same version: UUID/PID/boot/disk retained and actual sysinfo=128MiB'
+echo 'PASS original Alpine daemon to security baseline: UUID/PID/boot/disk retained and actual sysinfo=128MiB'

@@ -1,7 +1,7 @@
 export function normalizeStorageBasePath(basePath: string | null | undefined): string {
   const raw = basePath?.trim() ?? ''
   if (!raw) return ''
-  if (raw.includes('\0') || raw.includes('\\')) {
+  if (/[\x00-\x1f\x7f]/.test(raw) || raw.includes('\\')) {
     throw new Error('Storage base path contains invalid characters')
   }
 
@@ -21,7 +21,7 @@ export function normalizeStorageFilename(filename: string): string {
     throw new Error('Storage filename cannot be empty')
   }
   if (
-    raw.includes('\0') ||
+    /[\x00-\x1f\x7f]/.test(raw) ||
     raw.includes('/') ||
     raw.includes('\\') ||
     raw === '.' ||

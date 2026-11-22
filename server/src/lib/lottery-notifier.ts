@@ -6,6 +6,7 @@ import * as db from '../db/index.js'
 import { assertSafeWebhookUrl, safeFetch } from './outbound-security.js'
 import { sanitizeTokensInString } from './log-sanitizer.js'
 import { telegramMarkdownText } from './telegram-format.js'
+import { readNotificationBody, readTelegramResponse } from './notification-response.js'
 
 const LOTTERY_NOTIFICATION_FETCH_TIMEOUT_MS = 15_000
 const LOTTERY_NOTIFICATION_ERROR_PREVIEW_MAX_CHARS = 2_000
@@ -52,7 +53,7 @@ interface LotteryWinNotification {
 }
 
 async function readSafeNotificationError(response: Response): Promise<string> {
-  const text = await response.text()
+  const text = await readNotificationBody(response)
   const sanitized = sanitizeTokensInString(text)
   const preview = sanitized.slice(0, LOTTERY_NOTIFICATION_ERROR_PREVIEW_MAX_CHARS)
   return preview || `HTTP ${response.status}`
@@ -130,7 +131,7 @@ export async function sendLotteryWinNotification(data: LotteryWinNotification): 
 
     console.log(`[LotteryNotifier] Sent ${data.prizeType} win notification for lottery ${data.lotteryId}, user ${data.username}`)
   } catch (err) {
-    console.error(`[LotteryNotifier] Failed to send notification:`, err)
+    console.error(`[LotteryNotifier] Failed to send notification:`, sanitizeTokensInString(err instanceof Error ? err.message : String(err)))
   }
 }
 
@@ -166,7 +167,7 @@ async function sendTelegram(
     })
   })
 
-  const result = await response.json() as { ok: boolean; description?: string }
+  const result = await readTelegramResponse(response)
 
   if (!response.ok || !result.ok) {
     throw new Error(result.description || 'Unknown Telegram error')

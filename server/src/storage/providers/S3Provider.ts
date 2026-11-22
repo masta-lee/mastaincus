@@ -10,9 +10,11 @@ import {
     S3Client
 } from '@aws-sdk/client-s3'
 import { Readable } from 'stream'
+import { limitReadable } from '../../lib/bounded-response.js'
 import type { IStorageProvider, StorageConfigData } from '../types.js'
 import { assertSafeStorageTarget } from '../../lib/outbound-security.js'
 import { joinStorageRemoteDirectory, joinStorageRemotePath, normalizeStorageBasePath } from '../path.js'
+import { storageHttpAgent, storageHttpsAgent, rejectStorageControlCharacters } from '../transport.js'
 
 interface NormalizedS3Config {
     bucket: string
@@ -69,10 +71,16 @@ export class S3Provider implements IStorageProvider {
     private readonly client: S3Client
 
     constructor(config: StorageConfigData) {
+        rejectStorageControlCharacters(config.host)
         this.rawHost = config.host
         this.basePath = normalizeStorageBasePath(config.basePath)
         this.s3Config = normalizeS3Config(config)
         this.client = new S3Client({
+            requestHandler: { httpAgent: storageHttpAgent, httpsAgent: storageHttpsAgent, connectionTimeout: 15000, requestTimeout: 60000 },
+            // Optional flexible checksums require a known decoded length and
+            // break real streaming backups on compatible S3 implementations.
+            // Keep SigV4 and required operation checksums; never buffer backups.
+            requestChecksumCalculation: 'WHEN_REQUIRED',
             region: this.s3Config.region,
             endpoint: this.s3Config.endpoint,
             forcePathStyle: this.s3Config.forcePathStyle,
@@ -81,6 +89,17 @@ export class S3Provider implements IStorageProvider {
                 secretAccessKey: this.s3Config.secretAccessKey
             }
         })
+        this.client.middlewareStack.add(next=>async args=>{
+            const request=args.request as {headers?:Record<string,string>}
+            if(request.headers)for(const key of Object.keys(request.headers))if(key.toLowerCase()==='expect')delete request.headers[key]
+            return next(args)
+        },{step:'finalizeRequest',name:'incudalNoUnverifiedContinueAgent',priority:'low'})
+        this.client.middlewareStack.add((next,context)=>async args=>{
+            const result=await next(args)
+            const response=(result as unknown as {response?:{body?:Readable}}).response
+            if(response?.body instanceof Readable)response.body=limitReadable(response.body,context.commandName==='GetObjectCommand'?32*1024**3:2*1024**2)
+            return result
+        },{step:'deserialize',name:'incudalBoundedStorageResponse',priority:'low'})
     }
 
     async uploadStream(fileStream: Readable, filename: string): Promise<void> {
@@ -88,7 +107,7 @@ export class S3Provider implements IStorageProvider {
         await this.client.send(new PutObjectCommand({
             Bucket: this.s3Config.bucket,
             Key: toObjectKey(joinStorageRemotePath(this.basePath, filename)),
-            Body: fileStream
+            Body: limitReadable(fileStream)
         }))
     }
 
@@ -103,9 +122,9 @@ export class S3Provider implements IStorageProvider {
             throw new Error('S3 object body is empty')
         }
         if (response.Body instanceof Readable) {
-            return response.Body
+            return limitReadable(response.Body)
         }
-        return Readable.from(response.Body as AsyncIterable<Uint8Array>)
+        return limitReadable(Readable.from(response.Body as AsyncIterable<Uint8Array>))
     }
 
     async testConnection(): Promise<void> {
@@ -115,7 +134,7 @@ export class S3Provider implements IStorageProvider {
                 Bucket: this.s3Config.bucket,
                 Prefix: toObjectKey(this.basePath),
                 MaxKeys: 1
-            }))
+            }), { abortSignal: AbortSignal.timeout(15000) })
         } catch (err) {
             const message = err instanceof Error ? err.message : String(err)
             throw new Error(`S3 连接测试失败: ${message}`)

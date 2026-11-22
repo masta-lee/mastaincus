@@ -16,6 +16,10 @@ def check(archive_path, root):
         expected.update({path.relative_to(root).as_posix(): path for path in files})
     for name in ['package.json', 'server/package.json', 'pnpm-lock.yaml', 'pnpm-workspace.yaml',
                  'scripts/ensure-time-sync.py', 'scripts/install-platform-backup.sh',
+                 'scripts/harden-database.py', 'scripts/migrate-database.sh',
+                 'scripts/system-security-inventory.py',
+                 'scripts/harden-nginx-logging.py',
+                 'scripts/legacy-database-startup.mjs',
                  'scripts/install-gateway-controller.sh', 'scripts/provision-gateway-controller.py',
                  'scripts/enroll-gateway-controller.py', 'scripts/verify-gateway-component-package.py']:
         expected[name] = root / name

@@ -7,6 +7,7 @@ import { prisma } from './prisma.js'
 import type { Log } from '../types/database.js'
 import type { Prisma } from '@prisma/client'
 import { normalizeLogContentForStorage } from '../lib/log-localization.js'
+import { sanitizeTokensInString, sanitizeObject } from '../lib/log-sanitizer.js'
 import { classifyLogRisk, redactAuditText, type RiskLevel } from '../lib/risk-audit.js'
 
 // ==================== 日志模块常量 ====================
@@ -204,7 +205,7 @@ export async function createLog(
     const instanceId = options.instanceId !== undefined
       ? options.instanceId
       : await inferLogInstanceId(userId, content)
-    const normalizedContent = normalizeLogContentForStorage(content)
+    const normalizedContent = normalizeLogContentForStorage(sanitizeTokensInString(content))
 
     await prisma.log.create({
       data: {
@@ -218,7 +219,7 @@ export async function createLog(
     })
   } catch (error) {
     // 日志记录失败不应该影响主业务流程，只打印错误
-    console.error('日志记录失败:', error)
+    console.error('日志记录失败:', sanitizeObject(error))
   }
 }
 

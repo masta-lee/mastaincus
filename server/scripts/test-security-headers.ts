@@ -23,8 +23,8 @@ assert.ok(
     appSource.includes("frameAncestors: [\"'none'\"]") &&
     appSource.includes("baseUri: [\"'self'\"]") &&
     appSource.includes("formAction: [\"'self'\"]") &&
-    appSource.includes("'ws:',   // HTTP-only intranet WebSocket validation") &&
-    appSource.includes("'wss:',  // WebSocket 连接"),
+    appSource.includes("process.env.SITE_URL?.startsWith('https://') ? [] : ['ws:']") &&
+    !appSource.includes("'wss:',  // WebSocket 连接"),
   'backend Helmet CSP must stay enabled in production with anti-clickjacking/object/base/form controls'
 )
 
@@ -43,8 +43,9 @@ for (const [name, source] of [
   assert.ok(
     source.includes('add_header Content-Security-Policy') &&
       source.includes("default-src 'self'") &&
-      source.includes("script-src 'self' 'unsafe-inline' https://challenges.cloudflare.com https://static.cloudflareinsights.com") &&
-      source.includes("connect-src 'self' ws: wss:") &&
+      source.includes("script-src 'self' https://challenges.cloudflare.com https://static.cloudflareinsights.com") &&
+      !source.includes("script-src 'self' 'unsafe-inline'") &&
+      source.includes("connect-src 'self'") &&
       source.includes("object-src 'none'") &&
       source.includes("frame-ancestors 'none'") &&
       source.includes('always;'),

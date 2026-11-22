@@ -22,6 +22,8 @@ print('Release archive ownership verified for legacy root OTA extraction.')
 PY
 install -d -m 755 /tmp/incudal
 cp "$package" /tmp/incudal/
+test -s "$package.sig"
+cp "$package.sig" /tmp/incudal/
 sha256sum "/tmp/incudal/$(basename "$package")" > "/tmp/incudal/$(basename "$package").sha256"
 
 report_failure() {

@@ -1,4 +1,5 @@
-import { realpath } from 'node:fs/promises'
+import { realpath, access } from 'node:fs/promises'
+import { retainedMigrationIdentity } from './database-migration-identity.js'
 import { resolve } from 'node:path'
 import { runSystemUpdateCommand } from './system-update-command.js'
 
@@ -48,7 +49,16 @@ export async function runBundledSystemUpdateMigrations(directory: string, option
   label:'校验发行包内的 Prisma 迁移入口'
  })
  // Prisma runs its command only as the main module, not when require() loads it.
+ const environment = { ...options.env }
+ // Root migration code must never inherit a business-process import shim or
+ // library-injection environment when it executes the privileged CLI.
+ for(const name of ['NODE_OPTIONS','NODE_PATH','LD_PRELOAD','LD_LIBRARY_PATH','BASH_ENV','ENV','PYTHONPATH','PYTHONHOME'])delete environment[name]
+ if(process.platform==='linux'&&process.getuid?.()===0){
+  const path='/var/lib/incudal-database/migration.url'
+  const present=await access(path).then(()=>true,error=>{if(error.code==='ENOENT')return false;throw error})
+  if(present)environment.DATABASE_URL=(await retainedMigrationIdentity(new URL(environment.DATABASE_URL||''))).href
+ }
  await runSystemUpdateCommand(process.execPath,[cli,'migrate','deploy'],{
-  cwd:resolve(root,'server'),...options,timeoutMs:300000,label:'执行发行包内的 Prisma 数据库迁移'
+  cwd:resolve(root,'server'),...options,env:environment,timeoutMs:300000,label:'执行发行包内的 Prisma 数据库迁移'
  })
 }

@@ -24,6 +24,7 @@ type compatManifest struct {
 	MemorySourceSha256, MemoryBuildDefault, MemoryBudgetRevision string
 	MemoryNamespaceSourceSha256                                  string
 	MemoryRaftSourceSha256                                       string
+	SecurityModulesScriptSha256                                  string
 	Size                                                         int64
 }
 
@@ -50,12 +51,13 @@ func validateCompatibilityArtifact(files fs.FS, arch string) (compatManifest, er
 		return manifest, err
 	}
 	if len(data) > 16384 || json.Unmarshal(data, &manifest) != nil ||
-		manifest.Purpose != "alpine-incus-sysinfo-compat" || manifest.IncusVersion != "7.0.1" ||
-		manifest.SourceSha256 != "5e415fa1684f0945d45ca780af6662f143b857681e18d29038725cde70c26ee6" ||
-		manifest.LifecycleSourceSha256 != "a60cea54e5d1e5397292556627fdcf7a808494e6abcbb180dd3b3710f03eb222" ||
+		manifest.Purpose != "alpine-incus-sysinfo-compat" || manifest.IncusVersion != "7.6.0" ||
+		manifest.SourceSha256 != "f57dcf2b781f6664b04b264e680d6b05a86303bbee717161110282e2a8891486" ||
+		manifest.LifecycleSourceSha256 != "819e0462aa64e4147520a8686b55f52f2ca6761b69fdb6058e8caa946741f637" ||
 		manifest.MemorySourceSha256 != "56b95831a97677406958326f0a2d42a1aebc4589ebab8c616d9e735df2194f63" ||
 		manifest.MemoryNamespaceSourceSha256 != "917e33a02226b436dd6724c59fdc04735cc7958a1ffa33bd80f5084b39fa2ed1" ||
-		manifest.MemoryRaftSourceSha256 != "1ff2c7651926aab3f7a5eb78d5cb481a5c2902a0b4ca102253e50e4c3fb99136" ||
+		manifest.MemoryRaftSourceSha256 != "08af4c3ed863c1b7ce25d95aed06ab6ac9eb4d8e95f1c5884b7f699ab6151dce" ||
+		manifest.SecurityModulesScriptSha256 != "3ebef435a855ff03f23eb330ee8749036aae9d9d8cc467167c91b3ae5d9d465a" ||
 		manifest.MemoryBuildDefault != "disablethp=1" || manifest.MemoryBudgetRevision != "daemon-memory-v3" ||
 		manifest.Size < 20 || manifest.Size > compatMaxBinaryBytes || len(manifest.SHA256) != 64 {
 		return manifest, fmt.Errorf("compatibility manifest invalid")
