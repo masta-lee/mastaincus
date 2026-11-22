@@ -15,7 +15,7 @@ const recoveryState = await mkdtemp(join(tmpdir(), 'payincus-auth-current-'))
 assert.ok(resolve(recoveryState).startsWith(resolve(tmpdir(), 'payincus-auth-current-')))
 process.env.PLATFORM_BACKUP_STATE_DIR = recoveryState
 const { prisma, closePrismaDatabase } = await import('../src/db/prisma.js')
-const { isAccessTokenInvalidated } = await import('../src/lib/security.js')
+const { isAccessTokenInvalidated, generateRefreshToken, getRefreshTokenSessionId } = await import('../src/lib/security.js')
 const { validateRecoverySession } = await import('../src/services/platform-recovery-operator.js')
 const { recoveryHeld } = await import('../src/services/platform-backup-core.js')
 const tag = 'auth-current-' + randomUUID(), app = Fastify(), users: number[] = []
@@ -46,7 +46,10 @@ try {
     const payload = { id: userId, sid, role, username: 'stale-name', iat }
     return app.jwt.sign(payload)
   }
-  const firstToken = token(first.id, tag), secondSession = token(first.id, tag + '-session2'), otherToken = token(other.id, tag, 'user')
+  const firstSid=getRefreshTokenSessionId(await generateRefreshToken(first.id,first.username,'admin'))
+  const secondSid=getRefreshTokenSessionId(await generateRefreshToken(first.id,first.username,'admin'))
+  const otherSid=getRefreshTokenSessionId(await generateRefreshToken(other.id,other.username,'user'))
+  const firstToken = token(first.id, firstSid), secondSession = token(first.id, secondSid), otherToken = token(other.id, otherSid, 'user')
   let requests = 0
   const check = async (path: string, accessToken: string | undefined, status: number, code?: string) => {
     requests++
@@ -75,10 +78,10 @@ try {
   await check('regular', otherToken, 200)
   await prisma.user.update({ where: { id: first.id }, data: { status: 'active' } })
   await check('read', firstToken, 200)
-  await prisma.tokenInvalidation.create({ data: { userId: first.id, sessionId: tag, invalidatedAt: issuedAt } })
+  await prisma.tokenInvalidation.create({ data: { userId: first.id, sessionId: firstSid, invalidatedAt: issuedAt } })
   for (const path of ['read', 'admin', 'regular', 'combined']) await check(path, firstToken, 401, 'SESSION_INVALIDATED')
   await check('read', secondSession, 200); await check('regular', otherToken, 200)
-  await check('read', token(first.id, tag, 'admin', issuedAt + 1), 200)
+  await check('read', token(first.id, firstSid, 'admin', issuedAt + 1), 200)
   await prisma.tokenInvalidation.create({ data: { userId: first.id, sessionId: '__USER_LEVEL__', invalidatedAt: issuedAt } })
   await check('read', secondSession, 401, 'SESSION_INVALIDATED'); await check('regular', otherToken, 200)
   await prisma.tokenInvalidation.deleteMany({ where: { userId: first.id } })
@@ -93,7 +96,7 @@ try {
   }
   await check('read', undefined, 401); await check('read', 'invalid', 401)
   await prisma.user.delete({ where: { id: first.id } })
-  await check('read', firstToken, 401, 'UNAUTHORIZED')
+  await check('read', firstToken, 401, 'SESSION_INVALIDATED')
   assert.equal(await prisma.log.count({ where: { userId: other.id } }), 0)
   console.log(`PASS ${requests} original application auth-hook requests with real JWT/PG: warm authorization never caches stale role, status, username, session or account revocation; other users and sessions remain isolated, database failure refuses access; ended recovery sessions are rejected by the real recovery validator`)
 } catch (error) { failure = error }

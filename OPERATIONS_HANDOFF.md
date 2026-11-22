@@ -1,5 +1,7 @@
 # 2026-11-22 两轮安全修复实施中，暂不发版
 
+最新已推fe05c5a5、第五无tag预览45057633656在途。第四45055789848双包/双Incus及六v1.8.14原worker三场景×双架构全部success，仅双首装runtime权限拒绝未修；新增分类诊断继续。PR第二轮56success/11failure/1skipped全失败日志已读，四内存fixture缺openssl及session/config/baseline兼容在本机精修，最新财务价格/PUSH/upload/terminal/auth/TLS验证码/完整instance-order恢复通过，state全流程仍637在途。以后恢复先查第五预览/当前PR终态和未提交夹具，不把本地绿或原升级成功等同首装/OSS/全池安全完成。
+
 较新源码已推`2bcb2dc5`、草稿PR19；第三预览45049591755终态failure已全8失败job取证。首装仍未查清DB角色准备后helper exit1，新增固定stage诊断与目录metadata待同来源原生；六旧worker到候选Agent404、回退日志成功，新夹具补同源码签名Agent。认证transaction递归已源码修复并真实PG/snapshot/Agent/auth/batch/hosting/expiry/finance及三90秒进程提升回归过；9对应类型/守卫609、build614/Gobinary616过。后文早期“在途/未提交”等为历史，最新依据HANDOFF首节/安全台账。本轮没有生产、tag或正式Release；完整恢复/系统配套自动激活仍未完成。
 
 2026-11-23源码阶段`aec5f0f8`已提交推送并核origin；无tag双架构预览45045980526执行中、所有job终态待，继续读失败并修。版本不变，无正式Release/生产OTA，安全修复台账记录精确边界。

@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict'
-import { randomUUID } from 'node:crypto'
+import { randomUUID, X509Certificate } from 'node:crypto'
 import { once } from 'node:events'
 import { execFileSync } from 'node:child_process'
 import { mkdtemp, readFile, rm } from 'node:fs/promises'
@@ -46,12 +46,14 @@ backend.listen(0, '127.0.0.1'); await once(backend, 'listening')
 const tag = `terminal-reservations-${randomUUID()}`
 const owner = await prisma.user.create({ data: { username: tag, passwordHash: 'unusable-fixture' } })
 const host = await prisma.host.create({ data: { userId: owner.id, name: tag,
-  url: `https://127.0.0.1:${(backend.address() as { port: number }).port}`, certPath, keyPath } })
+  url: `https://127.0.0.1:${(backend.address() as { port: number }).port}`, certPath, keyPath,
+  serverCertificate:cert.toString(),serverFingerprint:new X509Certificate(cert).fingerprint256 } })
 const instanceData = { userId: owner.id, hostId: host.id, image: 'fixture/debian', cpu: 50, memory: 256, disk: 1024, status: 'running' as const }
 const instance = await prisma.instance.create({ data: { ...instanceData, name: tag, incusId: tag } })
 const second = await prisma.instance.create({ data: { ...instanceData, name: tag + '-second', incusId: tag + '-second' } })
 const third = await prisma.instance.create({ data: { ...instanceData, name: tag + '-third', incusId: tag + '-third' } })
-const actor = { id: owner.id, role: 'user', sid: tag, iat: Math.floor(Date.now() / 1000) }
+const {generateRefreshToken,getRefreshTokenSessionId}=await import('../src/lib/security.js')
+const actor = { id: owner.id, role: 'user', sid: getRefreshTokenSessionId(await generateRefreshToken(owner.id,owner.username,'user')), iat: Math.floor(Date.now() / 1000) }
 const app = Fastify()
 app.decorate('authenticate', async (request: any) => { request.user = { ...actor, username: owner.username } })
 app.decorate('authenticateAdmin', app.authenticate)

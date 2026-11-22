@@ -10,7 +10,8 @@ const url=new URL(process.env.DATABASE_URL||'')
 assert.ok(url.hostname==='127.0.0.1' && url.port!=='5432' && url.pathname.endsWith('_recovery_test'))
 process.env.NODE_ENV='test';process.env.JWT_SECRET='isolated-recovery-gateway';process.env.ENCRYPTION_KEY='isolated-gateway-encryption'
 const folder=await mkdtemp(join(tmpdir(),'incudal-route-test-'));process.env.PLATFORM_BACKUP_STATE_DIR=folder
-const {prisma,closePrismaDatabase}=await import('../src/db/prisma.js')
+process.env.FINANCIAL_INTEGRITY_STATE_DIR=join(folder,'financial')
+const {prisma,closePrismaDatabase,initializeFinancialDatabaseIntegrity}=await import('../src/db/prisma.js')
 const core=await import('../src/services/platform-backup-core.js')
 const op=await import('../src/services/platform-recovery-operator.js')
 const {gatewayBaseline}=await import('../src/services/platform-recovery-gateway-baseline.js')
@@ -51,9 +52,12 @@ const server=new ssh2.Server({hostKeys:[keys.private]},connection=>{
 })
 try{
   await core.initBackupState()
+  await initializeFinancialDatabaseIntegrity()
   const actor=await prisma.user.create({data:{username:'admin',role:'admin',passwordHash:await bcrypt.hash('fixture-only',4)}})
   await op.captureRecoveryOperator(actor.id,batchId)
   const actorId=await op.installRecoveryOperator(batchId,batchId,'restore')
+  const {sealRecoveryOperatorWallet}=await import('../src/lib/financial-integrity.js')
+  await sealRecoveryOperatorWallet(url.pathname.slice(1),actorId,process.env.ENCRYPTION_KEY)
   await core.writeJson(join(folder,'recovery-hold.json'),{taskId:batchId,batchId,mode:'restore',createdAt:new Date(Date.now()-1000).toISOString(),gatewayBaseline:gatewayBaseline(identity)})
   const host=await prisma.host.create({data:{userId:actorId,name:'original-route-host',url:'https://10.253.240.2:8443'}});hostId=host.id
   const enrollment=await prisma.hostOnboardingBatch.create({data:{id:randomUUID(),createdById:actorId,name:'route-fixture',accountLabel:'isolated',defaults:{}}})

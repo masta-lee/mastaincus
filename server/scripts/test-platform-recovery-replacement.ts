@@ -10,17 +10,21 @@ const url=new URL(process.env.DATABASE_URL||'')
 assert.ok(url.hostname==='127.0.0.1' && url.port!=='5432' && url.pathname.endsWith('_recovery_test'),'Dedicated disposable recovery database required')
 process.env.NODE_ENV='test';process.env.JWT_SECRET='recovery-isolated-controller-key';process.env.ENCRYPTION_KEY='recovery-isolated-encryption-key'
 const folder=await mkdtemp(join(tmpdir(),'incudal-recovery-instance-'));process.env.PLATFORM_BACKUP_STATE_DIR=folder
-const {prisma,closePrismaDatabase}=await import('../src/db/prisma.js')
+process.env.FINANCIAL_INTEGRITY_STATE_DIR=join(folder,'financial')
+const {prisma,closePrismaDatabase,initializeFinancialDatabaseIntegrity}=await import('../src/db/prisma.js')
 const core=await import('../src/services/platform-backup-core.js')
 const operator=await import('../src/services/platform-recovery-operator.js')
 const registration=await import('../src/services/platform-recovery-registration.js')
 const password='isolated-recovery-operator',batchId=randomUUID()
 try {
   await core.initBackupState()
+  await initializeFinancialDatabaseIntegrity()
   const original=await prisma.user.create({data:{username:'admin',role:'admin',passwordHash:await bcrypt.hash(password,4)}})
   await operator.captureRecoveryOperator(original.id,batchId)
   await prisma.user.update({where:{id:original.id},data:{passwordHash:await bcrypt.hash('obsolete-snapshot-password',4),status:'banned'}})
   const actorId=await operator.installRecoveryOperator(batchId,batchId,'restore')
+  const {sealRecoveryOperatorWallet}=await import('../src/lib/financial-integrity.js')
+  await sealRecoveryOperatorWallet(url.pathname.slice(1),actorId,process.env.ENCRYPTION_KEY)
   await core.writeJson(join(folder,'recovery-hold.json'),{taskId:batchId,batchId,mode:'restore',createdAt:new Date(Date.now()-1000).toISOString(),
     snapshot:{createdAt:new Date(Date.now()-86400000).toISOString(),version:'1.8.0'}})
   const account=await registration.registerRecoveryAccount({id:randomUUID(),reference:'original-account-proof',evidenceHash:'8'.repeat(64),

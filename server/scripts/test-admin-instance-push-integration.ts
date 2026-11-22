@@ -18,6 +18,7 @@ const { closeAllClients } = await import('../src/lib/incus/incus-pool.js')
 const { notificationOperationVerificationBinding } = await import('../src/db/operation-verification-binding.js')
 const { loadAuthorizedOperationVerificationResource } = await import('../src/db/operation-verification-resource-authorization.js')
 const { transferHostIdentity } = await import('../src/lib/transfer-host-identity.js')
+const { sealNotificationConfig } = await import('../src/lib/notification-config.js')
 
 // Keep real routes, transactions, fees and ownership checks; only replace the remote host boundary.
 let connectionFails = false
@@ -145,7 +146,7 @@ try {
   await expectError(payload, 'TRANSFER_UNAVAILABLE', 409)
   await prisma.backupUploadTask.update({ where: { id: upload.id }, data: { status: 'COMPLETED' } })
 
-  const channel = await prisma.notificationChannel.create({ data: { userId: admin.id, type: 'email', name: prefix, config: { email: 'test@example.invalid' } } })
+  const channel = await prisma.notificationChannel.create({ data: { userId: admin.id, type: 'email', name: prefix, config: sealNotificationConfig({ email: 'test@example.invalid' }) as Prisma.InputJsonValue } })
   await expectError(payload, 'VERIFICATION_REQUIRED', 403)
   const verificationActor = { id: admin.id, sid: 'admin-push-fixture', iat: Math.floor(Date.now() / 1000) + 1 }
   const resourceBinding = await prisma.$transaction(tx => loadAuthorizedOperationVerificationResource(tx, verificationActor, 'transfer_instance', instance.id))
@@ -252,7 +253,7 @@ try {
   await setFee('2.5')
   const atomicActor = { id: owner.id, sid: 'transfer-atomic-fixture', iat: Math.floor(Date.now() / 1000) + 1 }
   const atomicChannel = await prisma.notificationChannel.create({ data: { userId: owner.id, name: prefix + '-atomic',
-    type: 'email', config: { email: 'atomic@example.test' } } })
+    type: 'email', config: sealNotificationConfig({ email: 'atomic@example.test' }) as Prisma.InputJsonValue } })
   const atomicResource = await prisma.$transaction(tx => loadAuthorizedOperationVerificationResource(tx, atomicActor, 'transfer_instance', feeInstance.id))
   if (atomicResource.kind !== 'allowed') throw new Error('atomic transfer fixture unavailable')
   const atomicGrant = await prisma.operationVerification.create({ data: { userId: owner.id, operationType: 'transfer_instance',

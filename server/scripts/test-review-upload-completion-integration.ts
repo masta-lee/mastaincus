@@ -26,6 +26,7 @@ const { default: backupRoutes } = await import('../src/routes/backups.js')
 const { default: storageConfigRoutes } = await import('../src/routes/storage-configs.js')
 const { StorageFactory } = await import('../src/storage/factory.js')
 const { closeAllClients } = await import('../src/lib/incus/incus-pool.js')
+const { sealNotificationConfig } = await import('../src/lib/notification-config.js')
 const tag = `upload-finalize-${randomUUID()}`
 const root = await mkdtemp(join(tmpdir(), tag))
 const previousBackupStateDir = process.env.PLATFORM_BACKUP_STATE_DIR
@@ -479,7 +480,7 @@ try {
   assert.equal((await prisma.backup.findUniqueOrThrow({ where: { id: backup.id } })).status, 'deleted')
   const beforeReplay = { backupDeletes, backupChecks }
   const replayChannel = await prisma.notificationChannel.create({ data: { userId: user.id, name: tag + '-replay-verification',
-    type: 'email', config: { email: 'replay@example.test' } } })
+    type: 'email', config: sealNotificationConfig({ email: 'replay@example.test' }) } })
   assert.equal((await app.inject({ method: 'DELETE', url: deleteUrl })).statusCode, 200)
   assert.deepEqual({ backupDeletes, backupChecks }, beforeReplay)
   await prisma.tokenInvalidation.create({ data: { userId: user.id, sessionId: actor.sid, invalidatedAt: actor.iat } })

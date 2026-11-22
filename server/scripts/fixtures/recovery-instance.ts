@@ -7,6 +7,7 @@ import { createServer } from 'node:https'
 import { join } from 'node:path'
 import ssh2 from 'ssh2'
 import { prisma } from '../../src/db/prisma.js'
+import { changeBalanceInTransaction } from '../../src/db/balance.js'
 import { sshFingerprint } from '../../src/services/onboarding-ssh.js'
 import { recoveryInstance, recordRecoveryInstance } from '../../src/services/platform-recovery-instance.js'
 import { recoveryHostSourceHash, activeRecoveryBatch, unresolvedLegacyRecoveryOrders, recoveryReadiness, recoveryDatasetHash } from '../../src/services/platform-recovery-state.js'
@@ -14,6 +15,26 @@ import { reconcileIntactLegacyOrders, restoreLegacyPurchaseLinks } from '../../s
 import { reconcileIntactCheckoutOrders } from '../../src/services/platform-recovery-orders.js'
 import { dedicatedIpv6Address } from '../../src/lib/host-public-ipv6.js'
 import { dedicatedIpv6NetworkDigest } from '../../src/lib/incus/dedicated-ipv6.js'
+
+// Build historical ledger fixtures through real wallet transactions. Preserve
+// the original recorded timestamps/links; never bypass the active money seals.
+async function historicalLedger(input: Prisma.BalanceLogUncheckedCreateInput) {
+  return prisma.$transaction(async tx=>{
+    const userId=input.userId
+    const account=await tx.user.findUniqueOrThrow({where:{id:userId}})
+    const before=Number(input.balanceBefore)
+    const funding=before-Number(account.balance)
+    if(funding)await changeBalanceInTransaction(tx,{userId,type:'admin_adjust',amount:funding,remark:'isolated historical ledger funding'})
+    if(Number(input.amount)===0){
+      assert.equal(before,Number(input.balanceAfter))
+      return tx.balanceLog.create({data:input})
+    }
+    const result=await changeBalanceInTransaction(tx,{userId,type:input.type,amount:Number(input.amount),
+      orderId:input.orderId||undefined,instanceId:input.instanceId||undefined,remark:input.remark||'isolated historical ledger'})
+    assert.equal(result.newBalance,Number(input.balanceAfter))
+    return input.createdAt?tx.balanceLog.update({where:{id:result.balanceLog.id},data:{createdAt:input.createdAt}}):result.balanceLog
+  })
+}
 
 // Real local SSH and mTLS transports; the endpoints emulate only read-only
 // identity replies. This is not an Incus or customer-network acceptance test.
@@ -336,11 +357,11 @@ export async function checkRecoveryInstance(folder:string,batchId:string,actorId
     await prisma.instanceTransfer.create({data:{instanceId:walletGuests[1].id,fromUserId:userId,toUserId:recipient.id,status:'accepted',
       acceptedAt:new Date(Date.now()-5000),snapshot:{fixture:true},cleanupState:{stage:'finalize',sourceOwnerId:userId,targetOwnerId:recipient.id,hostId:donorHost.id,
         remoteUuid:uuid,oldIncusId:walletGuests[1].incusId,newIncusId:walletGuests[1].incusId}}})
-    await prisma.balanceLog.create({data:{userId,orderId:walletId,type:'consume',amount:-15,balanceBefore:15,balanceAfter:0}})
-    const renewalDebit=await prisma.balanceLog.create({data:{userId:recipient.id,instanceId:walletGuests[1].id,type:'consume',amount:-3,balanceBefore:3,balanceAfter:0}})
+    await historicalLedger({userId,orderId:walletId,type:'consume',amount:-15,balanceBefore:15,balanceAfter:0})
+    const renewalDebit=await historicalLedger({userId:recipient.id,instanceId:walletGuests[1].id,type:'consume',amount:-3,balanceBefore:3,balanceAfter:0})
     const renewalBill=await prisma.instanceBillingRecord.create({data:{userId:recipient.id,instanceId:walletGuests[1].id,type:'renew',amount:3,months:1,
       balanceLogId:renewalDebit.id,createdAt:new Date(Date.now()-3000),periodStart:walletPaidAt,periodEnd:new Date(Date.now()+86400000)}})
-    const originalRefundLog=await prisma.balanceLog.create({data:{userId:recipient.id,instanceId:walletGuests[1].id,type:'refund',amount:8,balanceBefore:0,balanceAfter:8}})
+    const originalRefundLog=await historicalLedger({userId:recipient.id,instanceId:walletGuests[1].id,type:'refund',amount:8,balanceBefore:0,balanceAfter:8})
     const settledWalletBill=await prisma.instanceBillingRecord.create({data:{userId:recipient.id,instanceId:walletGuests[1].id,type:'refund',amount:-8,months:0,
       purchaseBatchId:null,balanceLogId:originalRefundLog.id,createdAt:new Date(Date.now()-1000),periodStart:walletPaidAt,periodEnd:new Date(Date.now()+86400000)}})
     const recipientDeletion={version:1,revision:randomUUID(),actor:{id:actorId},mode:'admin',refund:true,adminRefundType:'remaining',
@@ -353,13 +374,12 @@ export async function checkRecoveryInstance(folder:string,batchId:string,actorId
     const walletResolution={...resolution,id:randomUUID(),orderId:walletId,sourceHash:walletView.sourceHash,observedAt:new Date().toISOString(),
       conclusion:'partial' as const,refunds:[],walletTargets:[{userId,balance:'3.00'},{userId:recipient.id,balance:'1.00'}]}
     await assert.rejects(resolveRecoveryOrder({...walletResolution,walletTargets:undefined,walletBalance:'3.00'},actorId,{password}),/TRANSFER_BALANCE_REQUIRED/)
-    await prisma.balanceLog.update({where:{id:originalRefundLog.id},data:{userId}})
-    await assert.rejects(resolveRecoveryOrder({...walletResolution,sourceHash:(await recoveryOrder(walletId)).sourceHash},actorId,{password}),/WALLET_LINEAGE_REQUIRED/)
-    await prisma.balanceLog.update({where:{id:originalRefundLog.id},data:{userId:recipient.id}})
+    await assert.rejects(prisma.balanceLog.update({where:{id:originalRefundLog.id},data:{userId}}),/FINANCIAL_INTEGRITY_INVALID/)
+    assert.equal((await prisma.balanceLog.findUniqueOrThrow({where:{id:originalRefundLog.id}})).userId,recipient.id,'a historical refund cannot move to another wallet')
     await prisma.instanceBillingRecord.update({where:{id:renewalBill.id},data:{balanceLogId:null}})
     await assert.rejects(resolveRecoveryOrder({...walletResolution,sourceHash:(await recoveryOrder(walletId)).sourceHash},actorId,{password}),/WALLET_LINEAGE_REQUIRED/)
     await prisma.instanceBillingRecord.update({where:{id:renewalBill.id},data:{balanceLogId:renewalDebit.id}})
-    await prisma.user.update({where:{id:recipient.id},data:{balance:8}})
+    await prisma.$transaction(tx=>changeBalanceInTransaction(tx,{userId:recipient.id,type:'admin_adjust',amount:1,remark:'isolated concurrent recovery balance correction'}))
     await assert.rejects(resolveRecoveryOrder(walletResolution,actorId,{password}),/EVIDENCE_STALE/)
     const correctWallet={...walletResolution,sourceHash:(await recoveryOrder(walletId)).sourceHash}
     await resolveRecoveryOrder(correctWallet,actorId,{password});await resolveRecoveryOrder(correctWallet,actorId,{password})
@@ -393,8 +413,8 @@ export async function checkRecoveryInstance(folder:string,batchId:string,actorId
     console.log('PASS transferred wallet: original payer gets missing line, recipient retains already settled remaining-value refund, no invented full refund, final spent balances and replay')
     const legacyId=randomUUID()
     await prisma.poolOrder.create({data:{id:legacyId,userId,requestHash:'legacy-wallet-original',totalCents:700}})
-    const legacyDebit=await prisma.balanceLog.create({data:{userId,type:'consume',amount:-7,balanceBefore:7,balanceAfter:0,createdAt:walletPaidAt,
-      remark:'deliberately unrelated text; must not be parsed'}})
+    const legacyDebit=await historicalLedger({userId,type:'consume',amount:-7,balanceBefore:7,balanceAfter:0,createdAt:walletPaidAt,
+      remark:'deliberately unrelated text; must not be parsed'})
     const legacyGuests=[]
     for(const [index,amount] of [3,4].entries()){
       const item=await prisma.instance.create({data:{userId,hostId:donorHost.id,name:`legacy-guest-${index}`,incusId:`legacy-guest-${index}`,status:index?'deleted':'running',
@@ -410,7 +430,7 @@ export async function checkRecoveryInstance(folder:string,batchId:string,actorId
     assert.equal(await prisma.balanceLog.count(),logsBeforeMissingRefund)
     // Real poolProvision.failed is written only after the original wallet
     // settlement. Preserve that exact original refund instead of minting it.
-    const legacyRefundLog=await prisma.balanceLog.create({data:{userId,instanceId:legacyGuests[1].id,type:'refund',amount:4,balanceBefore:3,balanceAfter:7}})
+    const legacyRefundLog=await historicalLedger({userId,instanceId:legacyGuests[1].id,type:'refund',amount:4,balanceBefore:3,balanceAfter:7})
     await prisma.instanceBillingRecord.create({data:{userId,instanceId:legacyGuests[1].id,type:'refund',amount:-4,months:0,balanceLogId:legacyRefundLog.id,
       periodStart:walletPaidAt,periodEnd:walletPaidAt}})
     await prisma.platformRecoveryHost.update({where:{batchId_hostId:{batchId,hostId:donorHost.id}},data:{sourceHash:await recoveryHostSourceHash(donorHost.id),checkedAt:new Date()}})
@@ -464,8 +484,8 @@ export async function checkRecoveryInstance(folder:string,batchId:string,actorId
     await resolveRecoveryOrder({...legacyResolution,id:randomUUID(),sourceHash:(await recoveryOrder(legacyId)).sourceHash},actorId,{password})
     assert.equal(await prisma.balanceLog.count({where:{orderId:legacyId,type:'refund'}}),0)
     assert.equal(await unresolvedLegacyRecoveryOrders(batchId),0)
-    await prisma.balanceLog.create({data:{userId,type:'admin_adjust',amount:1,balanceBefore:2,balanceAfter:3}})
-    await prisma.user.update({where:{id:userId},data:{balance:3}})
+    await historicalLedger({userId,type:'admin_adjust',amount:1,balanceBefore:2,balanceAfter:3})
+    assert.equal(Number((await prisma.user.findUniqueOrThrow({where:{id:userId}})).balance),3)
     assert.equal((await recoveryOrder(legacyId)).status,'partial','an unrelated account correction cannot reopen a reconciled order')
     assert.equal(await unresolvedLegacyRecoveryOrders(batchId),0)
     await prisma.instanceBillingRecord.update({where:{id:missingBill.id},data:{amount:5}})
@@ -474,7 +494,7 @@ export async function checkRecoveryInstance(folder:string,batchId:string,actorId
     assert.equal(await unresolvedLegacyRecoveryOrders(batchId),0)
     const cleanId=randomUUID(),cleanAt=new Date(Date.now()-9000)
     await prisma.poolOrder.create({data:{id:cleanId,userId,requestHash:'intact-legacy',totalCents:300}})
-    const cleanDebit=await prisma.balanceLog.create({data:{userId,type:'consume',amount:-3,balanceBefore:3,balanceAfter:0,createdAt:cleanAt}})
+    const cleanDebit=await historicalLedger({userId,type:'consume',amount:-3,balanceBefore:3,balanceAfter:0,createdAt:cleanAt})
     const cleanGuest=await prisma.instance.create({data:{userId,hostId:donorHost.id,name:'intact-legacy',incusId:'intact-legacy',status:'running',
       cpu:100,memory:512,disk:1024,image:'fixture',purchaseBatchId:cleanId}})
     await prisma.instanceBillingRecord.create({data:{userId,instanceId:cleanGuest.id,type:'newPurchase',amount:3,months:1,purchaseBatchId:cleanId,
@@ -496,7 +516,8 @@ export async function checkRecoveryInstance(folder:string,batchId:string,actorId
     assert.equal((await recoveryOrder(cleanId)).status,'completed')
     assert.equal((await reviewProgress()).status,'completed');assert.equal((await reviewProgress()).code,null);assert.equal((await reviewProgress()).nextAt,null)
     assert.equal(await prisma.balanceLog.count({where:{orderId:cleanId}}),0,'automatic completion does not charge or refund')
-    assert.equal(Number((await prisma.user.findUniqueOrThrow({where:{id:userId}})).balance),3)
+    assert.equal(Number((await prisma.user.findUniqueOrThrow({where:{id:userId}})).balance),0,'historical purchase debit was committed; automatic completion adds no money')
+    await prisma.$transaction(tx=>changeBalanceInTransaction(tx,{userId,type:'admin_adjust',amount:3,remark:'isolated post-purchase independent balance correction'}))
     assert.equal(await unresolvedLegacyRecoveryOrders(batchId),0)
     console.log('PASS legacy automation: exact intact order resumes after host verification, cooldown, zero money movement, stable completion across unrelated balances and invalidation by changed bills')
     console.log('PASS legacy pool order: exact purchase/debit IDs, no remark parsing, mixed live/deleted guests, missing link refusal, original record preservation and refund replay')
@@ -504,13 +525,13 @@ export async function checkRecoveryInstance(folder:string,batchId:string,actorId
       const id=randomUUID(),paidAt=new Date(Date.now()-10000)
       await prisma.checkoutOrder.create({data:{id,userId,requestHash:'single-wallet-'+count,source:'direct',status:'recovery_review',totalCents:1000,
         snapshot:'fixture',display:[{quantity:2}],paymentId:'balance',paidAt,expiresAt:new Date()}})
-      await prisma.balanceLog.create({data:{userId,orderId:id,type:'consume',amount:-10,balanceBefore:10,balanceAfter:0}})
+      await historicalLedger({userId,orderId:id,type:'consume',amount:-10,balanceBefore:10,balanceAfter:0})
       if(count){
         const item=await prisma.instance.create({data:{userId,hostId:donorHost.id,name:'single-wallet-guest',incusId:'single-wallet-guest',status:'running',
           cpu:100,memory:512,disk:1024,image:'fixture',purchaseBatchId:id}})
         await prisma.instanceBillingRecord.create({data:{userId,instanceId:item.id,type:'newPurchase',amount:4,months:1,purchaseBatchId:id,
           createdAt:paidAt,periodStart:paidAt,periodEnd:new Date(Date.now()+86400000)}})
-        await prisma.balanceLog.create({data:{userId,orderId:id,type:'refund',amount:2,balanceBefore:0,balanceAfter:2}})
+        await historicalLedger({userId,orderId:id,type:'refund',amount:2,balanceBefore:0,balanceAfter:2})
         await prisma.platformRecoveryHost.update({where:{batchId_hostId:{batchId,hostId:donorHost.id}},data:{sourceHash:await recoveryHostSourceHash(donorHost.id),checkedAt:new Date()}})
       }
       const view=await recoveryOrder(id),input={...resolution,id:randomUUID(),orderId:id,sourceHash:view.sourceHash,
@@ -545,7 +566,7 @@ export async function checkRecoveryInstance(folder:string,batchId:string,actorId
     const closed=await prisma.instance.create({data:{userId,hostId:donorHost.id,name:'settled-checkout',incusId:'settled-checkout',status:'deleted',
       cpu:100,memory:512,disk:1024,image:'fixture',purchaseBatchId:closedId,deletionIntent:{...settled,name:'settled-checkout',instanceVersion:0}}})
     await prisma.instance.update({where:{id:closed.id},data:{deletionIntent:{...settled,name:closed.incusId,instanceVersion:closed.version}}})
-    const closedDebit=await prisma.balanceLog.create({data:{userId,orderId:closedId,type:'consume',amount:-3,balanceBefore:3,balanceAfter:0}})
+    const closedDebit=await historicalLedger({userId,orderId:closedId,type:'consume',amount:-3,balanceBefore:3,balanceAfter:0})
     await prisma.instanceBillingRecord.create({data:{userId,instanceId:closed.id,type:'newPurchase',amount:3,months:1,purchaseBatchId:closedId,
       balanceLogId:closedDebit.id,createdAt:cleanAt,periodStart:cleanAt,periodEnd:new Date(Date.now()+86400000)}})
     await prisma.platformRecoveryHost.update({where:{batchId_hostId:{batchId,hostId:donorHost.id}},data:{sourceHash:await recoveryHostSourceHash(donorHost.id),checkedAt:new Date()}})
@@ -577,7 +598,7 @@ export async function checkRecoveryInstance(folder:string,batchId:string,actorId
     console.log('PASS historical destroy receipt: exact account/host/name/time, automatic zero-money completion and changed receipt invalidation')
     const giftId=randomUUID(),giftAt=new Date(Date.now()-5000)
     await prisma.poolOrder.create({data:{id:giftId,userId,requestHash:'original-free-first-period',totalCents:0}})
-    const giftDebit=await prisma.balanceLog.create({data:{userId,type:'consume',amount:0,balanceBefore:3,balanceAfter:3,createdAt:giftAt}})
+    const giftDebit=await historicalLedger({userId,type:'consume',amount:0,balanceBefore:3,balanceAfter:3,createdAt:giftAt})
     const gift=await prisma.instance.create({data:{userId,hostId:donorHost.id,name:'original-free-guest',incusId:'original-free-guest',status:'running',
       cpu:100,memory:512,disk:1024,image:'fixture',purchaseBatchId:giftId}})
     const giftBill=await prisma.instanceBillingRecord.create({data:{userId,instanceId:gift.id,type:'newPurchase',amount:0,months:1,purchaseBatchId:giftId,
@@ -626,10 +647,10 @@ export async function checkRecoveryInstance(folder:string,batchId:string,actorId
       cpu:100,memory:512,disk:1024,image:'fixture',purchaseBatchId:mixedId}})
     const purchaseMixed=await prisma.instanceBillingRecord.create({data:{userId,instanceId:mixedGuest.id,type:'newPurchase',amount:3,months:1,
       purchaseBatchId:mixedId,createdAt:mixedAt,periodStart:mixedAt,periodEnd:new Date()}})
-    const renewalMixedLog=await prisma.balanceLog.create({data:{userId,instanceId:mixedGuest.id,type:'consume',amount:-2,balanceBefore:7,balanceAfter:5,createdAt:new Date(mixedAt.getTime()+1000)}})
+    const renewalMixedLog=await historicalLedger({userId,instanceId:mixedGuest.id,type:'consume',amount:-2,balanceBefore:7,balanceAfter:5,createdAt:new Date(mixedAt.getTime()+1000)})
     const renewalMixedBill=await prisma.instanceBillingRecord.create({data:{userId,instanceId:mixedGuest.id,type:'renew',amount:2,months:1,balanceLogId:renewalMixedLog.id,
       createdAt:new Date(mixedAt.getTime()+1000),periodStart:mixedAt,periodEnd:new Date()}})
-    const refundMixedLog=await prisma.balanceLog.create({data:{userId,instanceId:mixedGuest.id,type:'refund',amount:2,balanceBefore:5,balanceAfter:7,createdAt:mixedRefundAt}})
+    const refundMixedLog=await historicalLedger({userId,instanceId:mixedGuest.id,type:'refund',amount:2,balanceBefore:5,balanceAfter:7,createdAt:mixedRefundAt})
     const refundMixedBill=await prisma.instanceBillingRecord.create({data:{userId,instanceId:mixedGuest.id,type:'refund',amount:-5,months:0,
       balanceLogId:refundMixedLog.id,createdAt:mixedRefundAt,periodStart:mixedAt,periodEnd:new Date()}})
     const mixedRefund=await prisma.checkoutRefund.create({data:{id:randomUUID(),orderId:mixedId,paymentId:mixedPayment.id,receiptId:mixedReceipt.id,
@@ -654,12 +675,16 @@ export async function checkRecoveryInstance(folder:string,batchId:string,actorId
     await assert.rejects(resolveRecoveryOrder(await mixedProof(),actorId,{password}),/WALLET_LINEAGE_REQUIRED/)
     await prisma.instanceBillingRecord.update({where:{id:renewalMixedBill.id},data:{balanceLogId:renewalMixedLog.id}})
     const unchangedProof=await mixedProof()
-    await prisma.balanceLog.update({where:{id:renewalMixedLog.id},data:{balanceBefore:8,balanceAfter:6}})
-    await assert.rejects(resolveRecoveryOrder(unchangedProof,actorId,{password}),/EVIDENCE_STALE/)
+    await assert.rejects(prisma.balanceLog.update({where:{id:renewalMixedLog.id},data:{balanceBefore:8,balanceAfter:6}}),/FINANCIAL_INTEGRITY_INVALID/)
     for(const patch of [{userId:recipient.id},{amount:-1},{createdAt:new Date(mixedRefundAt.getTime()+1)},{orderId:mixedId}]){
+      if(!('createdAt'in patch)){
+        await assert.rejects(prisma.balanceLog.update({where:{id:renewalMixedLog.id},data:patch}),/FINANCIAL_INTEGRITY_INVALID/)
+        continue
+      }
       await prisma.balanceLog.update({where:{id:renewalMixedLog.id},data:patch})
+      await assert.rejects(resolveRecoveryOrder(unchangedProof,actorId,{password}),/EVIDENCE_STALE/)
       await assert.rejects(resolveRecoveryOrder(await mixedProof(),actorId,{password}),/WALLET_LINEAGE_REQUIRED/)
-      await prisma.balanceLog.update({where:{id:renewalMixedLog.id},data:{userId,amount:-2,balanceBefore:7,balanceAfter:5,createdAt:new Date(mixedAt.getTime()+1000),orderId:null}})
+      await prisma.balanceLog.update({where:{id:renewalMixedLog.id},data:{createdAt:new Date(mixedAt.getTime()+1000)}})
     }
     const reusedExternalDebit=await prisma.instanceBillingRecord.create({data:{userId,instanceId:cleanGuest.id,type:'renew',amount:2,months:1,
       balanceLogId:renewalMixedLog.id,periodStart:mixedAt,periodEnd:new Date()}})
@@ -686,7 +711,7 @@ export async function checkRecoveryInstance(folder:string,batchId:string,actorId
     assert.equal((brokenAttempt.payload as any).status,'blocked')
     assert.equal((await recoveryOrder(unpaidId)).status,'cancelled','one broken order does not starve later orders')
     await prisma.platformRecoveryEvidence.update({where:brokenKey,data:{payload:{...(brokenAttempt.payload as object),nextAt:new Date(0).toISOString()}}})
-    await prisma.balanceLog.create({data:{userId,type:'admin_adjust',amount:1,balanceBefore:7,balanceAfter:8}})
+    await historicalLedger({userId,type:'admin_adjust',amount:1,balanceBefore:7,balanceAfter:8})
     for(let i=0;i<6;i++)await reconcileIntactCheckoutOrders(await activeRecoveryBatch())
     assert.equal((await prisma.platformRecoveryEvidence.findUniqueOrThrow({where:brokenKey})).observedAt.getTime(),brokenAttempt.observedAt.getTime(),
       'unrelated wallet changes do not rerun the same deterministic order failure')
@@ -699,7 +724,7 @@ export async function checkRecoveryInstance(folder:string,batchId:string,actorId
     console.log('PASS checkout queue: deterministic failure rotates without blocking other orders, unrelated wallet changes retain attempt, task acknowledgment cannot bypass pending orders')
     const {restoreRecoveryBillingLinks}=await import('../../src/services/platform-recovery-billing-links.js')
     const upgradeTime=new Date(Date.now()-500)
-    const originalUpgradeDebit=await prisma.balanceLog.create({data:{userId,instanceId:cleanGuest.id,type:'consume',amount:-1,balanceBefore:8,balanceAfter:7,createdAt:upgradeTime}})
+    const originalUpgradeDebit=await historicalLedger({userId,instanceId:cleanGuest.id,type:'consume',amount:-1,balanceBefore:8,balanceAfter:7,createdAt:upgradeTime})
     const originalUpgradeBill=await prisma.instanceBillingRecord.create({data:{userId,instanceId:cleanGuest.id,type:'upgrade',amount:1,months:0,
       createdAt:new Date(upgradeTime.getTime()+1),periodStart:upgradeTime,periodEnd:new Date(Date.now()+86400000)}})
     const linksView=await recoveryOrder(cleanId)

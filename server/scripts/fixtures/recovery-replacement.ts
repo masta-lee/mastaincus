@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict'
 import { randomUUID } from 'node:crypto'
 import { prisma } from '../../src/db/prisma.js'
+import { changeBalanceInTransaction } from '../../src/db/balance.js'
 import { activeRecoveryBatch, recoveryHostSourceHash } from '../../src/services/platform-recovery-state.js'
 import { recoveryOrder, reconcileIntactCheckoutOrders, resolveRecoveryOrder } from '../../src/services/platform-recovery-orders.js'
 import { reconcileIntactLegacyOrders } from '../../src/services/platform-recovery-legacy-order.js'
@@ -20,8 +21,12 @@ export async function checkRecoveryReplacement(batchId:string,actorId:number,pas
       snapshot:'isolated',display:[{quantity:1}],paidAt,paymentId:'balance',expiresAt:at(100000)}})
     const guest=await prisma.instance.create({data:{userId:recipient.id,hostId:target.id,name:id,incusId:id+'-final',status:'running',
       image:'fixture',cpu:100,memory:512,disk:1024,purchaseBatchId:id,snapshottedSpecs:{recoveryIdentity:{uuid:oldUuid,createdAt:paidAt.toISOString()}}}})
-    const debit=await prisma.balanceLog.create({data:{userId:payer.id,instanceId:guest.id,orderId:legacy?null:id,type:'consume',amount:-3,
-      balanceBefore:20,balanceAfter:17,createdAt:paidAt}})
+    const debit=await prisma.$transaction(async tx=>{
+      const account=await tx.user.findUniqueOrThrow({where:{id:payer.id}})
+      await changeBalanceInTransaction(tx,{userId:payer.id,type:'admin_adjust',amount:20-Number(account.balance),remark:'isolated replacement historical funding'})
+      const {balanceLog}=await changeBalanceInTransaction(tx,{userId:payer.id,instanceId:guest.id,orderId:legacy?undefined:id,type:'consume',amount:-3,remark:'isolated replacement purchase'})
+      return tx.balanceLog.update({where:{id:balanceLog.id},data:{createdAt:paidAt}})
+    })
     await prisma.instanceBillingRecord.create({data:{userId:payer.id,instanceId:guest.id,type:'newPurchase',amount:3,months:1,
       balanceLogId:debit.id,purchaseBatchId:id,createdAt:paidAt,periodStart:paidAt,periodEnd:at(86400000)}})
     for(const [from,to,hostId,remoteUuid,oldIncusId,newIncusId,time] of [

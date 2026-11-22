@@ -5,7 +5,8 @@ import { mkdtemp, readFile, rm } from 'node:fs/promises'
 import { createServer as createHttpsServer } from 'node:https'
 import { tmpdir } from 'node:os'
 import { join, resolve, sep } from 'node:path'
-import { createServer, type Socket } from 'node:net'
+import type { Socket } from 'node:net'
+import { createServer } from 'node:tls'
 import Fastify from 'fastify'
 import type { Prisma } from '@prisma/client'
 
@@ -27,13 +28,20 @@ const { executeTask } = await import('../src/workers/instanceTaskWorker.js')
 const { getHostHealth } = await import('../src/lib/incus/host-health.js')
 const { closeAllClients } = await import('../src/lib/incus/incus-pool.js')
 const { transferHostIdentity } = await import('../src/lib/transfer-host-identity.js')
+const {sealNotificationConfig,openNotificationConfig}=await import('../src/lib/notification-config.js')
+const {encryptSensitiveData}=await import('../src/lib/security.js')
 const tag = 'verification-resend-' + randomUUID().slice(0, 8), messages: string[] = [], sockets = new Set<Socket>()
 const originalFetch = globalThis.fetch
 let materialRemote: ReturnType<typeof createHttpsServer> | undefined
 let materialTemp: string | undefined
 let delivery: 'accepted' | 'held' | 'rejected' = 'accepted'
 const held: Array<{ message: string; finish: () => void }> = []
-const smtp = createServer(socket => {
+const mailRoot=await mkdtemp(join(tmpdir(),'verification-smtp-')),mailKey=join(mailRoot,'key.pem'),mailCert=join(mailRoot,'cert.pem')
+execFileSync(process.env.REVIEW_OPENSSL||(process.platform==='win32'?'C:/Program Files/Git/usr/bin/openssl.exe':'openssl'),['req','-x509','-newkey','rsa:2048','-nodes','-days','1','-subj','/CN=127.0.0.1','-addext','subjectAltName=IP:127.0.0.1','-keyout',mailKey,'-out',mailCert],{stdio:'pipe',windowsHide:true})
+const certificate=await readFile(mailCert,'utf8'),{rootCertificates}=await import('node:tls'),nodemailer=(await import('nodemailer')).default
+const originalTransport=nodemailer.createTransport.bind(nodemailer)
+nodemailer.createTransport=((options:any)=>originalTransport({...options,tls:{...options.tls,ca:[...rootCertificates,certificate]}}))as typeof nodemailer.createTransport
+const smtp = createServer({key:await readFile(mailKey),cert:certificate},socket => {
   sockets.add(socket); socket.on('close', () => sockets.delete(socket)); socket.setEncoding('utf8'); socket.write('220 isolated SMTP\r\n')
   let buffer = '', data = false, message = ''
   socket.on('data', chunk => {
@@ -59,7 +67,7 @@ const smtp = createServer(socket => {
 })
 await new Promise<void>(resolve => smtp.listen(0, '127.0.0.1', resolve))
 const config = { smtp_enabled: 'true', smtp_host: '127.0.0.1', smtp_port: String((smtp.address() as { port: number }).port),
-  smtp_secure: 'false', smtp_username: 'isolated', smtp_password: 'isolated-password', smtp_from_email: 'sender@example.test' }
+  smtp_secure: 'true', smtp_username: 'isolated', smtp_password: encryptSensitiveData('isolated-password'), smtp_from_email: 'sender@example.test' }
 const saved = await prisma.systemConfig.findMany({ where: { key: { in: Object.keys(config) } } })
 const users = await Promise.all(['a', 'b'].map(letter => prisma.user.create({ data: {
   username: `${tag}-${letter}`, passwordHash: 'unusable-fixture', email: `${tag}-${letter}@example.test`
@@ -192,16 +200,16 @@ try {
     }
   }
   const changedChannelType = await queuedRequest(tx => tx.notificationChannel.update({ where: { id: personalWriteId },
-    data: { type: 'telegram', config: { botToken: 'fixture-channel-type', chatId: '123' } } }), () => writePersonal('patch'))
+    data: { type: 'telegram', config: sealNotificationConfig({ botToken: 'fixture-channel-type', chatId: '123' }) } }), () => writePersonal('patch'))
   assert.equal(changedChannelType.blocked, true)
   assert.equal(changedChannelType.response.statusCode, 409, 'configuration validated for an old channel type must not overwrite a different current type')
-  await prisma.notificationChannel.update({ where: { id: personalWriteId }, data: { type: 'email', config: { email: actor.email } } })
+  await prisma.notificationChannel.update({ where: { id: personalWriteId }, data: { type: 'email', config: sealNotificationConfig({ email: actor.email }) } })
   const toggleReplies = await Promise.all(Array.from({ length: 8 }, () => writePersonal('toggle')))
   assert.ok(toggleReplies.every(response => response.statusCode === 200))
   assert.equal(toggleReplies.filter(response => response.json().enabled).length, 4)
   assert.equal((await prisma.notificationChannel.findUniqueOrThrow({ where: { id: personalWriteId } })).enabled, true)
   assert.equal((await writePersonal('patch')).statusCode, 200)
-  assert.deepEqual((await prisma.notificationChannel.findUniqueOrThrow({ where: { id: personalWriteId } })).config, { email: 'changed@example.test' })
+  assert.deepEqual(openNotificationConfig((await prisma.notificationChannel.findUniqueOrThrow({ where: { id: personalWriteId } })).config), { email: 'changed@example.test' })
   assert.equal((await writePersonal('delete')).statusCode, 200)
   assert.equal(await prisma.notificationChannel.count({ where: { userId: { in: users.map(user => user.id) } } }), 0)
   console.log('PASS personal notification writes recheck current status/session/ownership/scope after real account-lock waits; type changes reject and eight toggles apply once each')
@@ -218,7 +226,7 @@ try {
   for (const taskType of ['rebuild', 'recreate'] as const) {
     const operationType = taskType === 'rebuild' ? 'reinstall_instance' : 'recreate_instance'
     const admissionChannel = await prisma.notificationChannel.create({ data: { userId: actor.id, type: 'email', name: tag + '-admission',
-      config: { email: actor.email } } })
+      config: sealNotificationConfig({ email: actor.email }) } })
     const authorized = await prisma.$transaction(tx => loadAuthorizedOperationVerificationResource(tx, currentActor(), operationType, firstResourceId))
     if (authorized.kind !== 'allowed') throw new Error('admission grant fixture unavailable')
     const admissionGrant = await prisma.operationVerification.create({ data: { userId: actor.id, operationType, resourceId: firstResourceId,
@@ -1009,7 +1017,7 @@ try {
     return new Response(JSON.stringify({ ok: true }), { status: 200 })
   }
   const createChannel = (name: string, chatId: string, createdAt: number, extras: { isGlobal?: boolean; alertCategory?: string; enabled?: boolean } = {}) =>
-    prisma.notificationChannel.create({ data: { userId: actor.id, name, type: 'telegram', config: { botToken: 'fixture-token', chatId },
+    prisma.notificationChannel.create({ data: { userId: actor.id, name, type: 'telegram', config: sealNotificationConfig({ botToken: 'fixture-token', chatId }),
       createdAt: new Date(createdAt), ...extras } })
   const now = Date.now()
   await createChannel('newer inserted first', '222222222', now - 10_000)
@@ -1121,7 +1129,7 @@ try {
   assert.equal(notifyDuplicate.statusCode, 200); assert.equal(notifyDuplicate.json().alreadySent, true)
   assert.equal(notifyDuplicate.json().maskedTarget, notified.json().maskedTarget); assert.equal(deliveries.length, 1)
 
-  await prisma.notificationChannel.update({ where: { id: selected.id }, data: { enabled: false, config: { botToken: 'fixture-token', chatId: '999999999' } } })
+  await prisma.notificationChannel.update({ where: { id: selected.id }, data: { enabled: false, config: sealNotificationConfig({ botToken: 'fixture-token', chatId: '999999999' }) } })
   const changedTargetVerify = await app.inject({ method: 'POST', url: '/verification/verify', payload: {
     operationType: 'reinstall_instance', resourceId: firstResourceId, code: notificationCode
   } })
@@ -1135,13 +1143,13 @@ try {
   assert.ok((await prisma.operationVerification.findUniqueOrThrow({ where: { id: notifiedRecord.id } })).verifiedAt)
   for (const phase of ['verify', 'check', 'claim'] as const) {
     await prisma.notificationChannel.update({ where: { id: selected.id }, data: {
-      enabled: true, config: { botToken: 'fixture-token', chatId: '111111111' }
+      enabled: true, config: selected.config
     } })
     await prisma.operationVerification.update({ where: { id: notifiedRecord.id }, data: {
       verified: phase !== 'verify', verifiedAt: phase === 'verify' ? null : new Date()
     } })
     const queued = await queuedRequest(tx => tx.notificationChannel.update({ where: { id: selected.id }, data: {
-      config: { botToken: 'fixture-token', chatId: '999999999' }
+      config: sealNotificationConfig({ botToken: 'fixture-token', chatId: '999999999' })
     } }), () => phase === 'verify' ? app.inject({ method: 'POST', url: '/verification/verify', payload: {
       operationType: 'reinstall_instance', resourceId: firstResourceId, code: notificationCode
     } }) : phase === 'check' ? app.inject({ method: 'GET', url: `/verification/check?operationType=reinstall_instance&resourceId=${firstResourceId}` })
@@ -1155,12 +1163,12 @@ try {
     assert.equal(Boolean(unchanged.verifiedAt), phase !== 'verify')
   }
   await prisma.notificationChannel.update({ where: { id: selected.id }, data: {
-    enabled: true, config: { botToken: 'fixture-token', chatId: '111111111' }
+    enabled: true, config: selected.config
   } })
   const resourceClaims = await Promise.all(Array.from({ length: 8 }, () => claimOperationVerificationRequirement(actor.id, 'reinstall_instance', firstResourceId, currentActor())))
   assert.equal(resourceClaims.filter(result => result.verified).length, 1)
   assert.equal((await prisma.operationVerification.findUniqueOrThrow({ where: { id: notifiedRecord.id } })).verifiedAt, null)
-  await prisma.notificationChannel.update({ where: { id: selected.id }, data: { enabled: false, config: { botToken: 'fixture-token', chatId: '999999999' } } })
+  await prisma.notificationChannel.update({ where: { id: selected.id }, data: { enabled: false, config: sealNotificationConfig({ botToken: 'fixture-token', chatId: '999999999' }) } })
   await prisma.operationVerification.update({ where: { id: notifiedRecord.id }, data: { verified: false, verifiedAt: null } })
   console.log('PASS changed personal targets reject old codes/checks/claims before resend, actual row-lock mutations recheck each phase, and eight current-target claims consume once')
   const changedDuplicate = await notifyRequest(910001)
@@ -1213,7 +1221,7 @@ try {
 
   const emailTarget = `${tag}-channel@example.test`
   await prisma.operationVerification.update({ where: { id: notifiedRecord.id }, data: { createdAt: new Date(Date.now() - 61_000) } })
-  await prisma.notificationChannel.create({ data: { userId: actor.id, name: 'personal email', type: 'email', config: { email: emailTarget } } })
+  await prisma.notificationChannel.create({ data: { userId: actor.id, name: 'personal email', type: 'email', config: sealNotificationConfig({ email: emailTarget }) } })
   const beforeChannelMail = messages.length
   const mailed = await notifyRequest(910003)
   assert.equal(mailed.statusCode, 200, mailed.body)
@@ -1261,7 +1269,7 @@ try {
   assert.equal(messages.length, beforeAccountBudget + 1)
   console.log('PASS different sensitive operations share the same account sixty-second send budget')
 
-  await prisma.notificationChannel.update({ where: { id: personalEmail.id }, data: { config: { email: emailTarget } } })
+  await prisma.notificationChannel.update({ where: { id: personalEmail.id }, data: { config: sealNotificationConfig({ email: emailTarget }) } })
   const crossResource = await notifyRequest(910005)
   assert.equal(crossResource.statusCode, 400); assert.equal(crossResource.json().code, 'VERIFICATION_RATE_LIMITED')
   assert.equal(messages.length, beforeAccountBudget + 1)
@@ -1443,6 +1451,7 @@ try {
   invalidateAllConfigCache()
   for (const socket of sockets) socket.destroy()
   await new Promise<void>(resolve => smtp.close(() => resolve())); await closePrismaDatabase()
+  nodemailer.createTransport=originalTransport;await rm(mailRoot,{recursive:true,force:true})
 }
 if (failure) { console.error(failure); process.exit(1) }
 process.exit(0)

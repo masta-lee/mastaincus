@@ -1,5 +1,7 @@
 # 2026-11-22 两轮安全修复续接，仍在验收
 
+较新自然终态：源码`7802ab1d`已推、第四预览45055789848现failure，其中双完整包/双Incus/候选Agent与**全部六个公开v1.8.14原worker升级、已迁移再升、故障回滚再升成功**；只剩双首装helper拒绝目录权限，日志明确DATABASE_MIGRATION_RUNTIME_UNTRUSTED，current不存在/原root/迁移私密文件正确。新固定metadata诊断已保存推送`fe05c5a5`，第五无tag预览45057633656已启动，必须跟终态。原source PR第二轮56success/11failure/1skipped全部11日志已读：四内存缺openssl、state缺baseline、renewal/auth/terminal旧会话及通知plaintext夹具（push/upload/verification）逐项精修，测试守卫不放宽。最新本机626价格/PUSH/upload、632terminal部分、638auth42请求/完整TLS验证码、633完整instance/order恢复、624gateway/631replacement都自然通过；完整state637仍在途，历史Dockerrestore待，新CI待。正式Release/生产仍未执行。
+
 2026-11-23最新接续：当前已推源码`2bcb2dc5`，草稿[PR19](https://github.com/mastalee928/payincus/pull/19)。第三预览[45049591755](https://github.com/mastalee928/payincus/actions/runs/45049591755)已自然failure，全部8失败job日志查清：双首装在DB角色准备后启动助手exit1，具体根因仍待新增分类/运行目录诊断；六旧升级实际到了生产Agent清单检查，未发布候选Agent输入404，原回退日志成功。新预览补同source signed Agent输入，不放宽验签。认证事务代理覆盖导致递归已修，真实PG Agent/snapshot/auth559、批量/托管600、管理员到期/资金592、正常认证/OAuth590、真实TLS销毁邮件576及进程提升冷mTLS/三90秒超时605全部自然通过；三类型/六相关专项609共9/9与后端build614、Go兼容binary616过。原生HTTP测试夹具改HTTPS/CA/nonce响应签名，Go模块网络获取补有界重试/预算并同步固定脚本hash，相关测试过。准备阶段保存；恢复state/instance及历史Docker恢复未全部过、双首装/六旧worker仍待，正式Release/生产不执行。
 
 本轮环境/测试错误也保留：临时PG库名超过63字节导致OSS_DATABASE_INVALID，改短名后真实资金592过；旧到期JWT未建立真实session被正确拒绝，改真实refresh会话并加未登记session拒绝后过。空current目录猜测没有复现，不能认定首装已修；Linux私有挂载中的helper仅验到缺迁移身份被正确拒绝604，原服务606健康。Go测试本身过但Windows临时exe删除拒绝两次，改固定本机test binary并运行616自然0，不把工具清理失败写为整体绿。恢复旧夹具直接改余额/批量流水/改历史退款被资金守卫拒绝，改真实记账和拒绝断言中；不能删除保护或把夹具适配当成完整OSS灾备通过。

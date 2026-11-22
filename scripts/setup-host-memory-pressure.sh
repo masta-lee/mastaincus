@@ -3,7 +3,7 @@ set -eu
 test "${INCUDAL_MEMORY_PRESSURE_TEST:-}" = disposable
 umount -l /.oldroot
 mount -t proc proc /proc
-apk add --no-cache incus incus-client incus-openrc openrc apparmor apparmor-utils apparmor-profiles-tunables apparmor-profiles-abstractions iproute2 python3 lxcfs lxcfs-openrc tar gzip xz squashfs-tools rsync util-linux lvm2 lvm2-extra device-mapper btrfs-progs btrfs-progs-extra wireguard-tools
+apk add --no-cache incus incus-client incus-openrc openrc apparmor apparmor-utils apparmor-profiles-tunables apparmor-profiles-abstractions iproute2 python3 openssl lxcfs lxcfs-openrc tar gzip xz squashfs-tools rsync util-linux lvm2 lvm2-extra device-mapper btrfs-progs btrfs-progs-extra wireguard-tools
 command -v apparmor_parser
 test -d /sys/kernel/security/apparmor
 test -f /etc/apparmor.d/tunables/global

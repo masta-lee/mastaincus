@@ -4,6 +4,10 @@
 
 ## 续接实施状态（2026-11-22，尚未完成）
 
+最新第四45055789848终态failure：双签名实包/Incus构建与候选Agent全部过、六个公开v1.8.14原worker正常/保留迁移/后半程回滚再升**全部自然success**（含rollback137313703512/529日志）；双首装helper固定码DATABASE_MIGRATION_RUNTIME_UNTRUSTED，已证current不存在/root与migration.url权限正确，仍需定位哪个server运行文件被拒绝。fe05c5a5追加仅分类uid/mode、不含文件名/资料的metadata并推送，第五45057633656无tag预览在途，正式发行暂停。
+
+当前source PR第二轮56success/11failure/1skipped，11日志全部查：4memory openssl未装；snapshot-recovery-state旧baseline；expiry后轮继续terminal ticket无真实session/缺pin；price与auth旧JWT无session；PUSH与backup删除验证/verification旧plaintext channel。已有本机626价格/PUSH/upload全部终态0、632terminal实际单实例3/账户5pending和可再用mTLS连接过、638auth42请求与完整真实TLS验证码全过、633整个实例/账务/转让/换机恢复终态0、624gateway与631replacement过；state637千宿主全流程仍进行，historyDockerrestore待。临时fixture历史funding/charge/refund改实际记账；原流水金额/归属改写直接拒绝，零金额历史记录仍保持实际语义。新源码/夹具未全CI过，不报安全清单完成。
+
 2026-11-23当前HEAD`2bcb2dc5`已推、PR19草稿。第三预览45049591755已failure全部job日志读取：双首装DB角色准备后helper exit1尚未定位，新增固定stage/路径/环境/CLI分类与metadata，不能将空current推断当根因实证；六旧worker实际生产检查Agent404，回退成功，新预览补同source signed Agent本地输入并保正常验签。首轮PR50success/17failure/1skipped的17日志已读，递归与HTTP/明文旧fixture、history缺依赖/recovery缺baseline、模块TLS超时分别修；未全复验不称全部闭环。
 
 本轮新增自然终态证据：认证proxy固定原transaction/独立override避免向底层写覆盖后的栈递归，真实PG559 Agent/snapshot/auth、batch/hosting600、expiry/finance592、auth/OAuth590、真实TLS销毁576全过；真实进程提升605冷mTLS/坏pin/三90秒timeout/无晚写/单DB连接自然过。三types+6相关guard609共9/9、最新security618、backendbuild614、WindowsGo固定binary616过。Go模块固定zip不变、fetch最大3次30秒、32MiB/64KiB预算；TLS cert/404/超预算不重试，4Python专项过、固定script SHA同步`025e7a6456f97e4b28fad8d2d2b437cc177452001e65248345158f914f07c4a3`，新双daemon实际构建/源hash待CI。原生Agent测试HTTPS/合成CA/response nonceHMAC已补，真实原生待新CI。

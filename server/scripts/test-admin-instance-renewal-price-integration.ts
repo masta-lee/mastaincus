@@ -21,7 +21,7 @@ const { prisma, closePrismaDatabase } = await import('../src/db/prisma.js')
 const billing = await import('../src/db/billing-operations.js')
 const { withInstanceBillingMutation } = await import('../src/lib/instance-billing-mutation.js')
 const { INSTANCE_OPERATION_LOCK_NAMESPACE, USER_AFF_BALANCE_LOCK_NAMESPACE, advisoryTransactionLock } = await import('../src/db/advisory-locks.js')
-const { isAccessTokenInvalidated } = await import('../src/lib/security.js')
+const { isAccessTokenInvalidated, generateRefreshToken, getRefreshTokenSessionId } = await import('../src/lib/security.js')
 const { recoveryHeld } = await import('../src/services/platform-backup-core.js')
 const { validateRecoverySession } = await import('../src/services/platform-recovery-operator.js')
 const { default: adminRoutes } = await import('../src/routes/admin-billing.js')
@@ -50,7 +50,9 @@ const make = (suffix: string) => prisma.instance.create({ data: { userId: buyer.
 const instance = await make('-one'), second = await make('-two'), instanceIds = [instance.id, second.id]
 const aff = await prisma.affCode.create({ data: { code: prefix, userId: other.id, discountRate: 0.5, commissionRate: 0.1 } })
 await prisma.affBinding.create({ data: { instanceId: instance.id, affCodeId: aff.id } })
-const session = { sid: prefix, iat: Math.floor(now / 1000) + 1 }
+const sessionIds = new Map<number,string>()
+for(const account of [admin,buyer,other])sessionIds.set(account.id,getRefreshTokenSessionId(await generateRefreshToken(account.id,account.username,account.role as 'user'|'admin')))
+const session = { sid: sessionIds.get(admin.id)!, iat: Math.floor(now / 1000) + 1 }
 const app = Fastify()
 await app.register(jwt, { secret: process.env.JWT_SECRET })
 // Execute the production decorators verbatim; no app.ts listener or workers.
@@ -64,7 +66,7 @@ await app.register(adminRoutes)
 await app.register(instanceBillingRoutes, { prefix: '/api/instances' })
 await app.register(hostRoutes, { prefix: '/api/hosts' })
 await app.register(instanceRoutes, { prefix: '/api/instances' })
-const token = (id = admin.id, role = 'admin', extra: Record<string, unknown> = {}) => app.jwt.sign({ id, username: prefix, role, ...session, ...extra })
+const token = (id = admin.id, role = 'admin', extra: Record<string, unknown> = {}) => app.jwt.sign({ id, username: prefix, role, ...session, sid:sessionIds.get(id), ...extra })
 const authHeaders = (value = token()) => ({ authorization: 'Bearer ' + value, origin: process.env.ADMIN_FRONTEND_URL! })
 const url = `/api/admin/instances/${instance.id}/renewal-price`
 const get = () => app.inject({ method: 'GET', url, headers: authHeaders() })
