@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict'
 import Fastify from 'fastify'
-import { createHash, randomUUID } from 'node:crypto'
+import { createHash, randomUUID, generateKeyPairSync,sign as signPackage } from 'node:crypto'
+import {readFile,writeFile,unlink}from'node:fs/promises'
 
 const database = new URL(process.env.DATABASE_URL || '')
 assert.ok(['127.0.0.1', 'localhost', '[::1]'].includes(database.hostname) && database.pathname.endsWith('_pool_test'), 'Use an isolated local *_pool_test database')
@@ -13,7 +14,13 @@ const host = await prisma.host.create({ data: { userId: user.id, name: tag, url:
 const actor = { id: user.id, sid: tag, iat: Math.floor(Date.now() / 1000) + 1 }
 const bytes = Buffer.from('upgrade deadline test binary'), hash = createHash('sha256').update(bytes).digest('hex')
 const version = 'v1.0.999', body = { version: 'v1.0.1', runtime: { goos: 'linux', goarch: 'amd64' }, metrics: { heartbeatIntervalSeconds: 30 } }
-const release = [{ tag_name: 'agent-' + version, assets: ['x86_64', 'aarch64'].map((arch, index) => ({ name: `incudal-agent-${arch}-${version}`, size: bytes.length, url: `https://api.github.com/repos/mastalee928/payincus/releases/assets/${index + 1}` })) }]
+const publisher=generateKeyPairSync('ed25519'),publicKey=publisher.publicKey.export({format:'der',type:'spki'}).subarray(12).toString('base64')
+const publisherManifest={version,sourceCommit:'a'.repeat(40),files:Object.fromEntries(['amd64','arm64'].map(arch=>['linux-'+arch,{binarySha256:hash,signature:signPackage(null,Buffer.from('payincus/agent-package/v1\n'+version.slice(1)+'\nlinux-'+arch+'\n'+hash),publisher.privateKey).toString('base64')}]))}
+const release = [{ tag_name: 'agent-' + version, assets: [...['x86_64', 'aarch64'].map((arch, index) => ({ name: `incudal-agent-${arch}-${version}`, size: bytes.length, url: `https://api.github.com/repos/mastalee928/payincus/releases/assets/${index + 1}` })),{name:'publisher-manifest.json',browser_download_url:'https://github.com/mastalee928/payincus/releases/download/agent-'+version+'/publisher-manifest.json'}] }]
+const originalRoute=await readFile(new URL('../src/routes/agent.ts',import.meta.url),'utf8')
+const fixtureRoute=new URL('../src/routes/.agent-upgrade-deadline-'+tag+'.ts',import.meta.url)
+assert.equal(originalRoute.split('y6C9aLon6OtgHPp5KPVDpxoNha95YptW03o4Dp2djQA=').length,2)
+await writeFile(fixtureRoute,originalRoute.replace('y6C9aLon6OtgHPp5KPVDpxoNha95YptW03o4Dp2djQA=',publicKey),{flag:'wx'})
 let app: ReturnType<typeof Fastify> | undefined
 try {
   for (const mode of ['headers', 'metadata-body', 'checksum-body']) {
@@ -22,6 +29,7 @@ try {
     let gated = false
     globalThis.fetch = async (url, options) => {
       assert.ok(options?.signal instanceof AbortSignal, 'external lookup keeps its own bounded fetch timeout')
+      if(String(url).endsWith('/publisher-manifest.json'))return Response.json(publisherManifest)
       if (String(url).endsWith('/releases')) {
         if (mode === 'headers') { gated = true; startedGate(); await gate }
         if (mode === 'metadata-body') return new Response(new ReadableStream({ start(controller) { gated = true; startedGate(); void gate.then(() => { controller.enqueue(new TextEncoder().encode(JSON.stringify(release))); controller.close() }) } }), { headers: { 'content-type': 'application/json' } })
@@ -30,7 +38,7 @@ try {
       if (mode === 'checksum-body' && !gated) return new Response(new ReadableStream({ start(controller) { gated = true; startedGate(); void gate.then(() => { controller.enqueue(bytes); controller.close() }) } }))
       return new Response(bytes)
     }
-    const routeUrl = new URL('../src/routes/agent.ts', import.meta.url); routeUrl.searchParams.set('deadline', mode)
+    const routeUrl = new URL(fixtureRoute); routeUrl.searchParams.set('deadline', mode)
     const routes = (await import(routeUrl.href)).default
     app = Fastify()
     for (const name of ['authenticate', 'authenticateAdmin']) app.decorate(name, async (request: any) => { request.user = actor })
@@ -58,5 +66,6 @@ try {
   console.log('PASS actual HMAC/PostgreSQL heartbeat optional upgrade deadline for stalled headers/metadata body/checksum body, online records and later verified upgrades; external fetch controlled locally')
 } finally {
   globalThis.fetch = originalFetch; await app?.close(); await prisma.host.delete({ where: { id: host.id } }); await prisma.user.delete({ where: { id: user.id } }); await closePrismaDatabase()
+  await unlink(fixtureRoute)
 }
 process.exit(0)
