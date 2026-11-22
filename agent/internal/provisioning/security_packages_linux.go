@@ -15,7 +15,8 @@ import (
 // Signed same-branch leaf packages only. Kernel, Incus, storage and service
 // restarts stay under their separately validated maintenance recipes.
 var securityLeaves = []string{"openssl", "libssl3", "libcrypto3", "curl", "libcurl", "ca-certificates",
-	"lxc", "lxc-libs", "sqlite-libs", "libseccomp", "libcap2", "acl-libs", "libattr", "libuv", "lz4-libs", "zstd-libs", "xz-libs", "libintl", "libgcc"}
+	"lxc", "lxc-libs", "sqlite-libs", "libseccomp", "libcap2", "acl-libs", "libattr", "libuv", "lz4-libs", "zstd-libs", "xz-libs", "libintl", "libgcc",
+	"tar", "gzip", "xz", "squashfs-tools", "rsync", "libpsl", "libidn2", "libunistring", "c-ares", "brotli-libs", "nghttp2-libs"}
 var securityPackageVersionChange = regexp.MustCompile(`(?m)Upgrading ([a-zA-Z0-9+_.-]+) \(([0-9][a-zA-Z0-9+_.~-]*) -> ([0-9][a-zA-Z0-9+_.~-]*)\)`)
 var installedSecurityPackage = regexp.MustCompile(`^([a-zA-Z0-9+_.-]+)-([0-9][a-zA-Z0-9+_.~-]*)$`)
 

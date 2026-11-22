@@ -59,6 +59,13 @@ func TestNativeSecurityPackageInventoryAndUpdate(t *testing.T) {
 }
 
 func TestSecurityPackageCompleteInventoryAndPinnedInstall(t *testing.T) {
+	seen := map[string]bool{}
+	for _, name := range securityLeaves {
+		if seen[name] {
+			t.Fatal("duplicate security target", name)
+		}
+		seen[name] = true
+	}
 	before, err := securityInstalledPackages("openssl-3.5.7-r0\nlibssl3-3.5.7-r0\nlinux-virt-6.12.1-r0\n")
 	if err != nil || before["linux-virt"] != "6.12.1-r0" || before["libssl3"] != "3.5.7-r0" {
 		t.Fatal(before, err)
