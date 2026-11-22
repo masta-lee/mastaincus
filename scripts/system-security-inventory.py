@@ -98,8 +98,19 @@ def inventory(all_loaded_code=False):
         pending=[line for line in output.splitlines() if line.startswith('Inst ')]
     else:raise ValueError('SYSTEM_SECURITY_DISTRIBUTION_UNSUPPORTED')
     running_kernel=os.uname().release
-    restart_required=pathlib.Path('/var/run/reboot-required').exists() or any(not version.startswith(running_kernel.split('-')[0]) for name,version in packages.items() if name in ['linux-virt','linux-lts','linux-edge'])
+    restart_required=pathlib.Path('/var/run/reboot-required').exists() or alpine_kernel_replaced(running_kernel,packages)
     return {'version':1,'checkedAt':time.strftime('%Y-%m-%dT%H:%M:%SZ',time.gmtime()),'distribution':system,'release':release.get('VERSION_ID','').strip('"'),'runningKernel':running_kernel,'packages':packages,'pending':pending,'loadedCode':replaced_host_mappings(all_host=all_loaded_code),'restartRequired':restart_required,'policy':'same-distribution-signed-packages; no-major-upgrade; no-automatic-customer-reboot','unreleasedAdvisories':['OpenSSL-20261117: official release planned 2026-12-01; feature conditions require review']}
+
+def alpine_kernel_replaced(running,packages):
+    # Alpine package revisions are part of the actual uname release. Prefix
+    # comparisons confuse 6.12.1 with 6.12.10 and miss same-version rN fixes.
+    # An installed alternative flavour is not the kernel currently in use.
+    for name in ['linux-virt','linux-lts','linux-edge']:
+        flavour=name.removeprefix('linux-')
+        if not running.endswith('-'+flavour)or name not in packages:continue
+        version=packages[name];match=re.fullmatch(r'([0-9]+\.[0-9]+\.[0-9]+)-r([0-9]+)',version)
+        return not match or running!=match.group(1)+'-'+match.group(2)+'-'+flavour
+    return False
 
 def patch_plan(output,installed,allowed):
     """Only explicit existing packages, same major; no solver expansion."""
