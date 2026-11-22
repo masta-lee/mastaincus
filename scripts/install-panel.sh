@@ -986,12 +986,14 @@ setup_database() {
     step "配置 PostgreSQL 数据库..."
     # Passwords never enter SQL text, process argv or PostgreSQL statement logs.
     # A resumed installation authenticates the retained role without resetting it.
-    env "INCUDAL_INSTALL_DB_PASSWORD=$db_password" /usr/bin/python3 -I -B - <<'DATABASE_BOOTSTRAP'
+    (
+    export INCUDAL_INSTALL_DB_PASSWORD="$db_password"
+    /usr/bin/python3 -I -B - <<'DATABASE_BOOTSTRAP'
 import os,subprocess,secrets,hashlib,hmac,base64
 password=os.environ['INCUDAL_INSTALL_DB_PASSWORD']
 if not password or not password.isascii() or any(ord(c)<32 or ord(c)==127 for c in password):raise SystemExit('DATABASE_BOOTSTRAP_PASSWORD_INVALID')
 def query(sql):
-    result=subprocess.run(['/usr/sbin/runuser','-u','postgres','--','/usr/bin/psql','-X','-v','ON_ERROR_STOP=1','-At','-d','postgres'],input=sql.encode(),capture_output=True,timeout=15)
+    result=subprocess.run(['/usr/sbin/runuser','-u','postgres','--','/usr/bin/psql','-X','-v','ON_ERROR_STOP=1','-At','-d','postgres'],input=sql.encode(),env={'PATH':'/usr/sbin:/usr/bin:/sbin:/bin'},capture_output=True,timeout=15)
     if result.returncode:raise SystemExit('DATABASE_BOOTSTRAP_QUERY_FAILED')
     return result.stdout.decode().strip()
 try:
@@ -1009,6 +1011,7 @@ try:
 except (OSError,subprocess.TimeoutExpired):raise SystemExit('DATABASE_BOOTSTRAP_QUERY_FAILED')
 print('DATABASE_BOOTSTRAP_READY')
 DATABASE_BOOTSTRAP
+    )
     log "PostgreSQL 数据库与原登录身份已核验"
 }
 

@@ -193,6 +193,7 @@ const integrityQuery = `SELECT n.nspname AS schema, c.relname AS name, c.relkind
   FROM pg_class c JOIN pg_namespace n ON n.oid=c.relnamespace
   WHERE n.nspname !~ '^pg_' AND n.nspname<>'information_schema' AND c.relkind IN ('r','p','m','f')
   ORDER BY n.nspname COLLATE "C", c.relname COLLATE "C"`
+const publicSchemaComment="\n--\n-- Name: public; Type: SCHEMA; Schema: -; Owner: -\n--\n\n-- *not* creating schema, since initdb creates it\n"
 async function snapshotConnection(database?: string) {
   const { url } = postgresConnection(); if (database) url.pathname = `/${database}`
   const pool = new Pool({ connectionString: url.toString(), max: 1, connectionTimeoutMillis: 15000, statement_timeout: 3600000 })
@@ -251,7 +252,7 @@ export async function schemaFingerprint(directory: string, suffix: string, datab
 // from initdb; --no-owner restore maps that owner to the destination creator.
 // Normalize only the exact pre-table generated block, never SQL or body text.
 export function normalizePublicSchemaPrologue(value:string):string {
-  const block="\n--\n-- Name: public; Type: SCHEMA; Schema: -; Owner: -\n--\n\n-- *not* creating schema, since initdb creates it\n"
+  const block=publicSchemaComment
   const start=value.indexOf('\nSET row_security = off;\n'),end=value.indexOf('\nSET default_table_access_method =',start)
   if(start<0||end<0)return value
   const prologue=value.slice(start,end)
@@ -264,9 +265,10 @@ export function publicSchemaFingerprint(value:string,expectedHash?:string):strin
   // Old authenticated archives used the literal generated comment. Accept
   // that exact cosmetic representation while retaining every SQL byte.
   if(normalizedDumpHash(value)===expectedHash)return expectedHash
-  const block="\n--\n-- Name: public; Type: SCHEMA; Schema: -; Owner: -\n--\n\n-- *not* creating schema, since initdb creates it\n"
+  const block=publicSchemaComment
   const marker='\nSET row_security = off;\n\nSET default_table_access_method ='
-  if(normalized.includes(marker)){
+  const prologueStart=normalized.indexOf('\nSET row_security = off;\n'),tableStart=normalized.indexOf('\nSET default_table_access_method =',prologueStart)
+  if(prologueStart>=0&&tableStart>=0&&normalized.slice(prologueStart,tableStart)==='\nSET row_security = off;\n'){
     for(const gap of ['','\n']){
       const literal=normalized.replace(marker,'\nSET row_security = off;\n'+block+gap+'\nSET default_table_access_method =')
       if(normalizedDumpHash(literal)===expectedHash)return expectedHash

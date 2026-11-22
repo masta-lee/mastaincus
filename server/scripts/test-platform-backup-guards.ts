@@ -250,6 +250,10 @@ try {
   assert.equal(normalizePublicSchemaPrologue('\n'+withPublic),'\n'+plain)
   assert.equal(publicSchemaFingerprint('\n'+plain,normalizedDumpHash('\n'+withPublic)),normalizedDumpHash('\n'+withPublic),'legacy signed literal comment remains compatible')
   assert.notEqual(publicSchemaFingerprint('\n'+plain.replace('id integer','id text'),normalizedDumpHash('\n'+withPublic)),normalizedDumpHash('\n'+withPublic),'SQL type change still fails the old authenticated hash')
+  const sameCommentInFunction='\n'+plain+'\nCREATE FUNCTION banner() RETURNS text LANGUAGE sql AS $$ SELECT '+JSON.stringify(publicBlock)+' $$;'
+  assert.equal(normalizePublicSchemaPrologue(sameCommentInFunction),sameCommentInFunction,'a function string resembling generated comments is never removed')
+  const changedPrologue='\n'+withPublic.replace('since initdb creates it','since a different policy creates it')
+  assert.equal(normalizePublicSchemaPrologue(changedPrologue),changedPrologue,'only the exact pg_dump cosmetic block is equivalent')
   assert.equal(normalizePublicSchemaPrologue(withPublic+'\nCREATE FUNCTION text() RETURNS text LANGUAGE sql AS $$ SELECT '+JSON.stringify(publicBlock)+' $$;'),withPublic+'\nCREATE FUNCTION text() RETURNS text LANGUAGE sql AS $$ SELECT '+JSON.stringify(publicBlock)+' $$;')
   const schemaBody = "CREATE TABLE example (id bigint);\nCREATE FUNCTION example_banner() RETURNS text LANGUAGE sql AS $$ SELECT '-- Dumped by pg_dump version 16.15 (Ubuntu fixture)' $$;\n"
   const schemaHeader = `--\n-- PostgreSQL database dump\n--\n\n\\restrict SchemaKey\n\n-- Dumped from database version ${dumpToolchain.databaseVersion}\n-- Dumped by pg_dump version ${dumpToolchain.dumpVersion}\n\n`

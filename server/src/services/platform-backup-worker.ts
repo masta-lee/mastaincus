@@ -17,7 +17,7 @@ import { parse as parseEnv } from 'dotenv'
 import { AliyunOssClient, sanitizedOssError } from './aliyun-oss-client.js'
 import { atomicFileCopy, decryptBackup, encryptBackup, hashFile, validAssetName, type BackupManifest, type BackupSource } from './platform-backup-archive.js'
 import { BACKUP_INTERVALS, BACKUP_RETENTIONS, backupRoot, BackupError, ensure, openSecret, readJson, recoveryHeld, sealSecret, statePath, validateBucket, validateId, validatePrefix, validateObjectPrefix, validateRegion, writeBackupConfig, writeJson, type BackupConfig, type BackupTaskRequest, type BackupTaskResult } from './platform-backup-core.js'
-import { appliedBackupMigrations, captureDatabaseBackup, createBackupRestoreDatabase, databaseMetadata, localDatabaseAdmin, migrateBackupDatabase, normalizedDumpHash, pgQuery, postgresConnection, quoteIdentifier, restoreDatabase, schemaFingerprint, verifyDatabaseBackup, verifyRestoredDatabase, type DatabaseIntegrity } from './platform-backup-database.js'
+import { appliedBackupMigrations, captureDatabaseBackup, createBackupRestoreDatabase, databaseMetadata, localDatabaseAdmin, migrateBackupDatabase, normalizedDumpHash, normalizePublicSchemaPrologue, pgQuery, postgresConnection, quoteIdentifier, restoreDatabase, schemaFingerprint, verifyDatabaseBackup, verifyRestoredDatabase, type DatabaseIntegrity } from './platform-backup-database.js'
 import { assertBackupVersion, assertMigrationHistory, normalizedReleaseSchema, releaseMigrationHash, releaseMigrations } from './platform-backup-compatibility.js'
 import { exportReadableDatabase } from './platform-backup-database.js'
 import { createReadableZip, readableZipName, validReadableZipName } from './platform-backup-readable.js'
@@ -80,7 +80,7 @@ export async function verifyBackupCompatibility(manifest: BackupManifest, stagin
   const targetDirectory = join(directory, `target-schema-${randomUUID()}`)
   await mkdir(targetDirectory, { mode: 0o700 })
   await schemaFingerprint(targetDirectory, 'target', currentDatabase)
-  const schemaHash = normalizedDumpHash(normalizedReleaseSchema(await readFile(join(targetDirectory, 'schema-target.sql'), 'utf8'), release))
+  const schemaHash = normalizedDumpHash(normalizePublicSchemaPrologue(normalizedReleaseSchema(await readFile(join(targetDirectory, 'schema-target.sql'), 'utf8'), release)))
   const compatibility = { targetVersion, postgresMajor: current.postgresMajor, migrationHash: current.migrationHash, releaseHash: releaseMigrationHash(release), schemaHash }
   if (expected) ensure(JSON.stringify(expected) === JSON.stringify(compatibility), 'OSS_PREVIEW_TARGET_CHANGED', 409)
   // Canonicalize only release-verified newline aliases in the isolated database.
@@ -92,7 +92,7 @@ export async function verifyBackupCompatibility(manifest: BackupManifest, stagin
   const restoredDirectory = join(directory, `restored-schema-${randomUUID()}`)
   await mkdir(restoredDirectory, { mode: 0o700 })
   await schemaFingerprint(restoredDirectory, 'restored', staging)
-  const restoredHash = normalizedDumpHash(normalizedReleaseSchema(await readFile(join(restoredDirectory, 'schema-restored.sql'), 'utf8'), release))
+  const restoredHash = normalizedDumpHash(normalizePublicSchemaPrologue(normalizedReleaseSchema(await readFile(join(restoredDirectory, 'schema-restored.sql'), 'utf8'), release)))
   ensure(restoredHash === schemaHash, 'OSS_BACKUP_SCHEMA_MISMATCH', 409)
   return compatibility
 }
