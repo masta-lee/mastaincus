@@ -491,7 +491,7 @@ func TestNativeCompatibilityEmptyPoolReload(t *testing.T) {
 	// Replace only the same bytes of a real mapped host library in this
 	// disposable root. The old daemon retains its deleted mapping until the
 	// authorized graceful reload; no guest or library content is changed.
-	library, err := filepath.EvalSymlinks("/usr/lib/libssl.so.3")
+	library, err := filepath.EvalSymlinks("/usr/lib/liblxc.so.1")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -533,5 +533,5 @@ func TestNativeCompatibilityEmptyPoolReload(t *testing.T) {
 	if status != "verified" || request != p.RequestID {
 		t.Fatal("mapped library reload not confirmed", status)
 	}
-	t.Log("PASS actual mapped OpenSSL library replacement: original permit graceful reloads same Incus binary; kernel peer and loaded code confirmed")
+	t.Log("PASS actual mapped LXC library replacement: original permit graceful reloads same Incus binary; kernel peer and loaded code confirmed")
 }
