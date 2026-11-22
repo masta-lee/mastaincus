@@ -2,6 +2,8 @@
 
 基准a5251f0／codex/financial-integrity-audit，版本1.8.14／Agent1.0.16保持。本轮已按owner指令修源码、锁图、Incus7.6及Go安全基线，不再是“仅报告未修”的阶段；准备按既有阶段保存授权提交推送并运行无tag双架构发行预览，暂不Release/生产OTA。较新实施和证据见[安全修复台账](docs/security-repair-2026-11-22.md)首节，下面审计历史保留。
 
+阶段已保存：`aec5f0f8d10d80454511ebd54a2ccae9d2bfb2e8`已推`origin/codex/financial-integrity-audit`并核远端相同，187文件只含源码/测试/脱敏文档；本地凭据扫描通过，无logs/私有档案。无tag发行预览[45045980526](https://github.com/mastalee928/payincus/actions/runs/45045980526)刚启动，须继续核全部job和失败日志，尚未CI/签名双包/六旧升级通过。版本仍1.8.14/Agent1.0.16；没有正式Release/生产OTA。
+
 2026-11-23较新：S05旧缺Incus pin通过原受信SSH/peer公有证书+TLS trusted后补齐、错误原pin/非root拒绝、排队stop不互等，真实PG管理回归425全过；类型421/后端build427、bootstrap415/gateway437/security436等过。系统库存8原生测试及待激活持久/旧映射/失败脱敏通过。原worker任务2已实际246迁移，但封存120秒/回退封存均在TCG超时，最终failed，未降权；本机仅用原helper重新封存后旧backend启动已派发，继续等健康，不能称旧升级验收通过。公开完整签名双架构六升级与root恢复worker必须在本批同来源预览核，不发正式版本。全gateway本机完整套件仍运行（probe389），必须继续跟终态。
 
 接续较新证据：原公开v1.8.14在systemd VM已唯一后端健康、244迁移/admin正常。原worker首次任务1只在解压344MiB本地重复依赖夹具超时，未切代码/DB；精简237MiB后任务2已解压并实际备份原代码，仍running，不能写升级成功。补系统库存待激活持久合并、失败状态/固定代码、实际宿主PID namespace旧库扫描，8项Linuxroot测试与本机planner通过；检出sshd/nginx/postgres旧映射。发行快捷start/migrate改唯一service/root迁移，更新专项通过；最新三类型、backup4专项、install5专项全过。全量第7轮230/230是较早冻结点，后续更新仅按对应证据记录。暂不发版、无生产写入。

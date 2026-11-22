@@ -6,6 +6,8 @@
 
 本轮已修产品源码及锁图，准备阶段提交推送并运行无tag发行预览；尚未正式发行／部署生产。以下逐次补记与表格记录较新验证事实，早期过程不代最新验收。
 
+当前已保存源码`aec5f0f8d10d80454511ebd54a2ccae9d2bfb2e8`并核origin同分支相同；无tag发行预览45045980526已启动、未终态。187文件不含本机logs/凭据/隔离库或无关taste目录，staged私有凭据检查通过；分支保存不代表全部问题已验收或正式发行。
+
 2026-11-22接续补记：原公开v1.8.14 AMD64包在本机systemd VM已实际启动，唯一后端`/api/health`返回businessStartupReady=true、管理员存在、244迁移已完成（`security-systemd-lab140/current317.log`）。较早连接超时和组件目录检查失败保留原日志；当前目录root:root/0700及lock0600正确，不能据固定stage推断身份坏或修改权限。模拟器前置安装超过原systemd90秒默认，仅隔离观察增加10分钟fixture上限；不是产品修复证据，原worker升级仍待自然终态。
 
 本轮复审修复系统库存覆盖待激活状态：`system-security-inventory.py`按root私密receipt锁合并精确待激活包，定时刷新与后续无变更更新不能清除，失败/准备状态与待激活清单共同保留，兼容此前格式；不据安装版本宣称运行服务已装载补丁。六专项含真实root策略权限测试全过，原10项systemd补丁待激活receipt实际保留（`security-systemd-lab140/inventory328.log`），最新本机planner终态全过（`security-repair-planner329.log`）。激活完成的产品回执／全配套自动更新仍未闭环。
