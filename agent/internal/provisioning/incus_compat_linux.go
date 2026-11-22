@@ -87,7 +87,9 @@ func incusCompatibilityStatus(ctx context.Context) (string, string, string) {
 	}
 	if installedHash == manifest.SHA256 {
 		if j.Phase == "verified" && j.NewHash == installedHash {
-			return "verified", j.RequestID, manifest.SHA256
+			if ready, err := compatReadyOnce(ctx, installedHash); err == nil && ready {
+				return "verified", j.RequestID, manifest.SHA256
+			}
 		}
 		return "needed", j.RequestID, manifest.SHA256
 	}
@@ -323,6 +325,22 @@ func compatStartingDaemon(ctx context.Context, pidPath, binaryPath, expectedHash
 	return pid, nil
 }
 
+func compatReadyOnce(ctx context.Context, expectedHash string) (bool, error) {
+	if _, err := localincus.Query(ctx, "/internal/ready", true); err != nil {
+		return false, err
+	}
+	pid, err := compatStartingDaemon(ctx, "/run/incus/incusd.pid", "/usr/sbin/incusd", expectedHash)
+	if err != nil {
+		return false, err
+	}
+	raw, err := localincus.Query(ctx, "/1.0", false)
+	var server struct {
+		Environment struct {
+			PID int `json:"server_pid"`
+		} `json:"environment"`
+	}
+	return err == nil && json.Unmarshal(raw, &server) == nil && pid > 0 && server.Environment.PID == pid, err
+}
 func waitCompatReady(ctx context.Context, expectedHash string) error {
 	ctx, cancel := context.WithTimeout(ctx, 60*time.Second)
 	defer cancel()
