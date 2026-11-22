@@ -13,7 +13,8 @@ await verifyRecoveryDatabaseCatalog()
 process.env.NODE_ENV = 'test'; process.env.JWT_SECRET = 'recovery-test-b-controller-secret'
 process.env.ENCRYPTION_KEY = 'recovery-test-b-encryption-key'
 const folder = await mkdtemp(join(tmpdir(),'incudal-recovery-state-')); process.env.PLATFORM_BACKUP_STATE_DIR=folder
-const {prisma,closePrismaDatabase}=await import('../src/db/prisma.js')
+process.env.FINANCIAL_INTEGRITY_STATE_DIR=join(folder,'financial')
+const {prisma,closePrismaDatabase,initializeFinancialDatabaseIntegrity}=await import('../src/db/prisma.js')
 const core=await import('../src/services/platform-backup-core.js')
 const op=await import('../src/services/platform-recovery-operator.js')
 const state=await import('../src/services/platform-recovery-state.js')
@@ -22,16 +23,20 @@ const registrationService=await import('../src/services/platform-recovery-regist
 const queue=await import('../src/services/platform-recovery-queue.js')
 const {isAccessTokenInvalidated,invalidateSessionAccessToken}=await import('../src/lib/security.js')
 const {pgRecoveryTransaction}=await import('../src/services/platform-backup-database.js')
+const {changeBalanceInTransaction}=await import('../src/db/balance.js')
 const {recoveryOrder,resolveRecoveryOrder}=await import('../src/services/platform-recovery-orders.js')
 const activation=await import('../src/services/platform-recovery-activation.js')
 const password='B-only-password-for-test', holdId=randomUUID()
 try {
   await core.initBackupState()
+  await initializeFinancialDatabaseIntegrity()
   const original=await prisma.user.create({data:{username:'admin',role:'admin',passwordHash:await bcrypt.hash(password,4)}})
   await op.captureRecoveryOperator(original.id,holdId)
   // The restored old user collides with B's original numeric ID and username.
   await prisma.user.update({where:{id:original.id},data:{passwordHash:await bcrypt.hash('old-snapshot-password',4),status:'banned'}})
   const actorId=await op.installRecoveryOperator(holdId,holdId,'restore')
+  const {sealRecoveryOperatorWallet}=await import('../src/lib/financial-integrity.js')
+  await sealRecoveryOperatorWallet(url.pathname.slice(1),actorId,process.env.ENCRYPTION_KEY)
   assert.notEqual(actorId,original.id)
   assert.equal(await op.installRecoveryOperator(holdId,holdId,'restore'),actorId,'install retry is idempotent')
   const createdAt=new Date(Date.now()-1000).toISOString()
@@ -57,7 +62,7 @@ try {
   await assert.rejects(evidence.recordRecoveryEvidence('finance',{reference:'statement-before',evidenceHash:'1'.repeat(64),observedAt:createdAt,sourceHash:'0'.repeat(64)},actorId,{password}),/STALE/)
   await evidence.recordRecoveryEvidence('finance',{reference:'statement-current',evidenceHash:'1'.repeat(64),observedAt:new Date().toISOString(),sourceHash:hash},actorId,{password})
   assert.equal((await state.recoveryReadiness()).categories.find(r=>r.category==='finance')?.verified,true)
-  await prisma.user.update({where:{id:original.id},data:{balance:11}})
+  await prisma.$transaction(tx=>changeBalanceInTransaction(tx,{userId:original.id,type:'admin_adjust',amount:11,remark:'isolated independent recovery review fixture'}))
   assert.equal((await state.recoveryReadiness()).categories.find(r=>r.category==='finance')?.verified,false)
   const host=await prisma.host.findFirstOrThrow({orderBy:{id:'asc'}})
   const sourceHash=await state.recoveryHostSourceHash(host.id)
@@ -217,9 +222,13 @@ try {
   assert.equal((await recoveryOrder(missingRefund.id)).status,'refunded','existing paid order can record a missing refund')
   const walletOrder=await prisma.checkoutOrder.create({data:{id:randomUUID(),userId:customer.id,requestHash:'wallet-fixture',source:'direct',status:'recovery_review',
     totalCents:1100,snapshot:'test',display:[],expiresAt:new Date(),paidAt:new Date(),paymentId:'balance'}})
-  await prisma.balanceLog.create({data:{userId:customer.id,type:'consume',orderId:walletOrder.id,amount:-11,balanceBefore:11,balanceAfter:0}})
+  await prisma.$transaction(async tx=>{
+    const account=await tx.user.findUniqueOrThrow({where:{id:customer.id}})
+    await changeBalanceInTransaction(tx,{userId:customer.id,type:'admin_adjust',amount:11-Number(account.balance),remark:'isolated historical payment funding fixture'})
+    await changeBalanceInTransaction(tx,{userId:customer.id,type:'consume',amount:-11,orderId:walletOrder.id,remark:'isolated historical purchase fixture'})
+  })
   // The independent account review already restored the final ¥11 balance.
-  await prisma.user.update({where:{id:customer.id},data:{balance:11}})
+  await prisma.$transaction(tx=>changeBalanceInTransaction(tx,{userId:customer.id,type:'admin_adjust',amount:11,remark:'isolated independent recovery balance review fixture'}))
   const walletView=await recoveryOrder(walletOrder.id)
   const walletResolution={...resolution,id:randomUUID(),reference:'wallet-refund-final',orderId:walletView.id,sourceHash:walletView.sourceHash,refunds:[],walletBalance:'3.00'}
   await resolveRecoveryOrder(walletResolution,actorId,{password})
@@ -233,8 +242,12 @@ try {
     status:'running',image:'fixture',cpu:100,memory:512,disk:1024,purchaseBatchId:partialWallet.id}})
   await prisma.instanceBillingRecord.create({data:{userId:customer.id,instanceId:walletGuest.id,type:'newPurchase',amount:4,months:1,
     periodStart:new Date(),periodEnd:new Date(Date.now()+86400000),purchaseBatchId:partialWallet.id}})
-  await prisma.balanceLog.createMany({data:[{userId:customer.id,type:'consume',orderId:partialWallet.id,amount:-10,balanceBefore:10,balanceAfter:0},
-    {userId:customer.id,type:'refund',orderId:partialWallet.id,amount:2,balanceBefore:0,balanceAfter:2}]})
+  await prisma.$transaction(async tx=>{
+    const account=await tx.user.findUniqueOrThrow({where:{id:customer.id}})
+    await changeBalanceInTransaction(tx,{userId:customer.id,type:'admin_adjust',amount:10-Number(account.balance),remark:'isolated historical partial order funding'})
+    await changeBalanceInTransaction(tx,{userId:customer.id,type:'consume',amount:-10,orderId:partialWallet.id,remark:'isolated historical partial order debit'})
+    await changeBalanceInTransaction(tx,{userId:customer.id,type:'refund',amount:2,orderId:partialWallet.id,remark:'isolated historical partial order refund'})
+  })
   await prisma.platformRecoveryHost.create({data:{batchId:holdId,hostId:walletHost.id,status:'success',sourceHash:await state.recoveryHostSourceHash(walletHost.id),checkedAt:new Date()}})
   const partialView=await recoveryOrder(partialWallet.id)
   assert.ok(partialView.partialAvailable)
