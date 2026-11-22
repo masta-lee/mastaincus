@@ -254,6 +254,9 @@ try {
   assert.notEqual(publicSchemaFingerprint('\n'+plain.replace('id integer','id text'),normalizedDumpHash('\n'+withPublic)),normalizedDumpHash('\n'+withPublic),'SQL type change still fails the old authenticated hash')
   const sameCommentInFunction='\n'+plain+'\nCREATE FUNCTION banner() RETURNS text LANGUAGE sql AS $$ SELECT '+JSON.stringify(publicBlock)+' $$;'
   assert.equal(normalizePublicSchemaPrologue(sameCommentInFunction),sameCommentInFunction,'a function string resembling generated comments is never removed')
+  const typesFirst='\n'+withPublic.replace('SET default_table_access_method = heap;','-- types before tables\nCREATE TYPE state AS ENUM (\'paid\');\nSET default_table_access_method = heap;')
+  const typesCanonical='\n'+plain.replace('SET default_table_access_method = heap;','-- types before tables\nCREATE TYPE state AS ENUM (\'paid\');\nSET default_table_access_method = heap;')
+  assert.equal(normalizePublicSchemaPrologue(typesFirst),typesCanonical,'types/functions may precede tables in the complete platform schema')
   const changedPrologue='\n'+withPublic.replace('since initdb creates it','since a different policy creates it')
   assert.equal(normalizePublicSchemaPrologue(changedPrologue),changedPrologue,'only the exact pg_dump cosmetic block is equivalent')
   assert.equal(normalizePublicSchemaPrologue(withPublic+'\nCREATE FUNCTION text() RETURNS text LANGUAGE sql AS $$ SELECT '+JSON.stringify(publicBlock)+' $$;'),withPublic+'\nCREATE FUNCTION text() RETURNS text LANGUAGE sql AS $$ SELECT '+JSON.stringify(publicBlock)+' $$;')

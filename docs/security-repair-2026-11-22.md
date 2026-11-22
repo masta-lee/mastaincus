@@ -4,6 +4,8 @@
 
 ## 续接实施状态（2026-11-22，尚未完成）
 
+最新第八45063248456failure已全部终态，六旧worker全部成功；首装745/750唯一schema差异仍在，完整平台有enum/functions先于table，归一定位首table失效。改精确session前导紧邻的public comment，不改SQL/body，types-first专项/真实导出749/backup749/type749/build749自然0；新同source完整包仍需跑，不称已恢复。E03/E04复审补Go patch重复/conflicting版本拒绝、APT拒弱源/allowunauth，真实LinuxGo+10项rootplanner749过、原库存/cache权限保持，完整自动patch/activation继续缺。230最终8轮仍执行，旧31bCI最后已27成功/3失败全日志读后700/713/716本机修0，最新CI待，正式发行/生产/实际OSS仍未完。
+
 最新0b17fd1b已推，复审stage迁移child环境也设JITI_FS_CACHE=false防installed release内再生成代码cache，backup731/types731/build731自然0准备保存。第八45063248456（537source）双包/双Incus已过，候选Agent queued、首装/rootbackup完整待；旧31b CI45061369559余137327818869仍在途与3已读失败保持（700/713/716本机修），继续跟终态。E03/E04仍只有inventory/leaf安全patch/独立激活核验，完整全宿主服务及kernel策略未闭环，不谎称全修。正式发行/生产/完整OSS灾备保持未完成。
 
 最新复审补同owner-comment比较至preview/final restore的原始schema文件，两条路径保持同规则与SQLbody完整；初装密码传递去envargv，仅子shell导出给Python且peer psql仅固定PATH，真实PG721两次/错密码拒绝0。backup719/722/726、实际schema725、types724/build724/726自然0；本批保存待。第八45063248456当前537d3590原包在构建，尚未实际双首装/root恢复；新sourceCI45061369559原最后137327818869在途，adminemail/注册cleanup/deadline失败已700/713/716全修验证0但最终CI待。正式Release/生产、E03/E04全配套宿主自动patch/服务activation和实际OSS灾备仍未完成。

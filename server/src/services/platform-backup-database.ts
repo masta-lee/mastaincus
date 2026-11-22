@@ -1,5 +1,5 @@
 import { spawn, execFile } from 'node:child_process'
-import { createReadStream, createWriteStream } from 'node:fs'
+import { createReadStream, createWriteStream, existsSync } from 'node:fs'
 import { chmod, mkdir, readFile, stat, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import { pipeline } from 'node:stream/promises'
@@ -253,11 +253,14 @@ export async function schemaFingerprint(directory: string, suffix: string, datab
 // Normalize only the exact pre-table generated block, never SQL or body text.
 export function normalizePublicSchemaPrologue(value:string):string {
   const block=publicSchemaComment
-  const start=value.indexOf('\nSET row_security = off;\n'),end=value.indexOf('\nSET default_table_access_method =',start)
-  if(start<0||end<0)return value
-  const prologue=value.slice(start,end)
-  if(prologue!== '\nSET row_security = off;\n'+block&&prologue!== '\nSET row_security = off;\n'+block+'\n')return value
-  return value.slice(0,start)+'\nSET row_security = off;\n'+value.slice(end)
+  const marker='\nSET row_security = off;\n',start=value.indexOf(marker)
+  if(start<0)return value
+  const end=start+marker.length
+  if(!value.startsWith(block,end))return value
+  // Types and functions may precede the first table. Match only the exact
+  // generated block immediately after pg_dump's session preamble.
+  const next=end+block.length,extra=value[next]==='\n'&&value[next+1]==='\n'?1:0
+  return value.slice(0,end)+value.slice(next+extra)
 }
 export function publicSchemaFingerprint(value:string,expectedHash?:string):string {
   const normalized=normalizePublicSchemaPrologue(value),canonical=normalizedDumpHash(normalized)
@@ -266,11 +269,11 @@ export function publicSchemaFingerprint(value:string,expectedHash?:string):strin
   // that exact cosmetic representation while retaining every SQL byte.
   if(normalizedDumpHash(value)===expectedHash)return expectedHash
   const block=publicSchemaComment
-  const marker='\nSET row_security = off;\n\nSET default_table_access_method ='
-  const prologueStart=normalized.indexOf('\nSET row_security = off;\n'),tableStart=normalized.indexOf('\nSET default_table_access_method =',prologueStart)
-  if(prologueStart>=0&&tableStart>=0&&normalized.slice(prologueStart,tableStart)==='\nSET row_security = off;\n'){
+  const marker='\nSET row_security = off;\n',prologueStart=normalized.indexOf(marker)
+  if(prologueStart>=0){
+    const end=prologueStart+marker.length
     for(const gap of ['','\n']){
-      const literal=normalized.replace(marker,'\nSET row_security = off;\n'+block+gap+'\nSET default_table_access_method =')
+      const literal=normalized.slice(0,end)+block+gap+normalized.slice(end)
       if(normalizedDumpHash(literal)===expectedHash)return expectedHash
     }
   }
@@ -387,7 +390,22 @@ export async function captureDatabaseBackup(destination: string, directory: stri
 export async function verifyRestoredDatabase(database: string, expected: DatabaseIntegrity, directory: string, suffix: string, source?: string) {
   const toolchain = source ? await archivedDumpToolchain(source) : undefined
   const connection = await snapshotConnection(database)
-  try { assertDatabaseIntegrity(expected, await inventory(connection, directory, suffix, database, toolchain,expected.schemaSha256)) } finally { await closeSnapshot(connection) }
+  try {
+    const actual=await inventory(connection,directory,suffix,database,toolchain,expected.schemaSha256)
+    if(actual.schemaSha256!==expected.schemaSha256){
+      const sourcePath=join(directory,'schema-source.sql'),targetPath=join(directory,`schema-${suffix}.sql`)
+      // Root-private local files only. Report categories, never SQL/table names,
+      // literal values or credentials. The full integrity refusal remains.
+      if(source&&existsSync(sourcePath)){
+        const [before,after]=await Promise.all([readFile(sourcePath,'utf8'),readFile(targetPath,'utf8')])
+        const original=normalizePublicSchemaPrologue(before),restored=normalizePublicSchemaPrologue(restoreDumpToolchainHeader(after,toolchain!))
+        const a=original.split('\n'),b=restored.split('\n');let index=0;while(index<a.length&&a[index]===b[index])index++
+        const category=(line:string|undefined)=>!line?'blank':line.startsWith('--')?'comment':line.startsWith('\\')?'session':line.startsWith('SET ')?'setting':line.startsWith('CREATE ')?'create':line.startsWith('ALTER ')?'alter':'sql'
+        console.error('Database schema mismatch location',{line:index,source:category(a[index]),restored:category(b[index]),sourceLines:a.length,restoredLines:b.length})
+      }
+    }
+    assertDatabaseIntegrity(expected,actual)
+  } finally { await closeSnapshot(connection) }
 }
 export async function verifyDatabaseBackup(source: string, expected: DatabaseIntegrity, directory: string, taskId: string, allowLegacy = false) {
   ensure(/^[0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12}$/.test(taskId), 'OSS_TASK_INVALID')

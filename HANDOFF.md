@@ -1,5 +1,7 @@
 # 2026-11-22 两轮安全修复续接，仍在验收
 
+最新第八45063248456已自然failure/六旧worker全部success，双首装745/750仍仅schema false/tables sequence LO true，已逐日志读取；新发现完整schema enums/functions排在table之前，原先注释归一定位首table导致未剔除该注释。改为只在固定pg_dump session前导后的精确public comment，保SQL、旧literal与空行兼容，types-first新guard/真实schema749/backup749/types749/build749自然0；同源新完整包待。新增sys security计划重复目标拒绝，APT明确拒弱源/未认证包，Go Linux测试及10项root planner749自然0，update753在途；E03/E04全服务自动activation仍未完成。当前230全量final8仍running（已越33），不先写绿；旧CI45061369559终态27success/3failure且3日志已700/713/716本机全修，新的完整CI待。本批准备提交，生产/Release仍暂停。
+
 最新已推0b17fd1b（537结构等价+restore preview/final同规则/私密bootstrapargv），当前stage migration的JITI_FS_CACHE禁缓存补入口并backup731/types731/build731自然0，准备保存。第八45063248456双构建/双Incussuccess、候选Agent queued，首装/root恢复仍待；保该运行继续跟。原31bCI45061369559目前3失败（adminemail/注册cleanup/deadline）已本机700/713/716全修，余137327818869仍running，不能弃漏。第六/第七六原worker全部success；首装结构注释根因709/真实schema715/725已修，完整新包仍待。真实PG其他业务与1001state通过不替代root整体restore/实际OSS。E03/E04剩完整宿主依赖自动patch/加载与内核政策未完，正式Release/生产暂停。
 
 当前产品537d3590/Agent deadline夹具4f75d687均已推，第八45063248456（537d3590）双Incus/ARM包过、AMD仍在途。原sourceCI45061369559剩4非success：admin-email/注册清理/deadline3失败已全读且700/713/716真实回归0，分片4/137327818869仍running需继续核；第八首装/root恢复还没开始，不能宣称已过。复审补restore preview/final `verifyBackupCompatibility` rawSQLschema两路径也归一同固定comment；初装bootstrap去env命令argv密码、仅子shell导出并清query子进程env，真实PG721再次0。对应backup719/722/726、真实schema725、types724/build724/726自然全过，本批待保存。完整系统配套自动patch/activation/真实OSS仍缺。
