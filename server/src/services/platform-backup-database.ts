@@ -239,13 +239,40 @@ async function archivedDumpToolchain(source: string): Promise<DumpToolchain> {
   }
   return { databaseVersion: field('Dumped from database version'), dumpVersion: field('Dumped by pg_dump version') }
 }
-export async function schemaFingerprint(directory: string, suffix: string, database?: string, snapshot?: string, toolchain?: DumpToolchain) {
+export async function schemaFingerprint(directory: string, suffix: string, database?: string, snapshot?: string, toolchain?: DumpToolchain, expectedHash?:string) {
   const path = join(directory, `schema-${suffix}.sql`)
   // Verification normalizes destination role/tablespace mapping only. The actual archive keeps this metadata.
   await pgProcess('pg_dump', ['--schema-only', '--no-owner', '--no-privileges', '--no-tablespaces', ...(snapshot ? [`--snapshot=${validateSnapshot(snapshot)}`] : [])], database, undefined, path)
   ensure((await stat(path)).size <= 64 * 1024 * 1024, 'OSS_DATABASE_SCHEMA_TOO_LARGE')
   const value = await readFile(path, 'utf8')
-  return normalizedDumpHash(toolchain ? restoreDumpToolchainHeader(value, toolchain) : value)
+  return publicSchemaFingerprint(toolchain ? restoreDumpToolchainHeader(value, toolchain) : value,expectedHash)
+}
+// pg_dump emits this comment-only public-schema entry when its owner differs
+// from initdb; --no-owner restore maps that owner to the destination creator.
+// Normalize only the exact pre-table generated block, never SQL or body text.
+export function normalizePublicSchemaPrologue(value:string):string {
+  const block="\n--\n-- Name: public; Type: SCHEMA; Schema: -; Owner: -\n--\n\n-- *not* creating schema, since initdb creates it\n"
+  const start=value.indexOf('\nSET row_security = off;\n'),end=value.indexOf('\nSET default_table_access_method =',start)
+  if(start<0||end<0)return value
+  const prologue=value.slice(start,end)
+  if(prologue!== '\nSET row_security = off;\n'+block&&prologue!== '\nSET row_security = off;\n'+block+'\n')return value
+  return value.slice(0,start)+'\nSET row_security = off;\n'+value.slice(end)
+}
+export function publicSchemaFingerprint(value:string,expectedHash?:string):string {
+  const normalized=normalizePublicSchemaPrologue(value),canonical=normalizedDumpHash(normalized)
+  if(!expectedHash||expectedHash===canonical)return canonical
+  // Old authenticated archives used the literal generated comment. Accept
+  // that exact cosmetic representation while retaining every SQL byte.
+  if(normalizedDumpHash(value)===expectedHash)return expectedHash
+  const block="\n--\n-- Name: public; Type: SCHEMA; Schema: -; Owner: -\n--\n\n-- *not* creating schema, since initdb creates it\n"
+  const marker='\nSET row_security = off;\n\nSET default_table_access_method ='
+  if(normalized.includes(marker)){
+    for(const gap of ['','\n']){
+      const literal=normalized.replace(marker,'\nSET row_security = off;\n'+block+gap+'\nSET default_table_access_method =')
+      if(normalizedDumpHash(literal)===expectedHash)return expectedHash
+    }
+  }
+  return canonical
 }
 // Fixed local postgres peer connection. Output goes only to a root-private file or a hash.
 async function peerUtility(command: 'pg_dumpall' | 'psql', args: string[], database: string, output?: string) {
@@ -269,7 +296,7 @@ async function peerUtility(command: 'pg_dumpall' | 'psql', args: string[], datab
     return { pages: lines.toString(), sha256: hash.digest('hex') }
   } finally { clearTimeout(timer); if (child.exitCode === null) child.kill('SIGKILL') }
 }
-async function inventory(connection: Awaited<ReturnType<typeof snapshotConnection>>, directory: string, suffix: string, database?: string, toolchain?: DumpToolchain): Promise<DatabaseIntegrity> {
+async function inventory(connection: Awaited<ReturnType<typeof snapshotConnection>>, directory: string, suffix: string, database?: string, toolchain?: DumpToolchain, expectedSchema?:string): Promise<DatabaseIntegrity> {
   const { client, snapshot } = connection
   const relations = (await client.query<{ schema: string; name: string; kind: string }>(integrityQuery)).rows
   ensure(relations.length <= 10000, 'OSS_DATABASE_TOO_MANY_TABLES')
@@ -306,7 +333,7 @@ async function inventory(connection: Awaited<ReturnType<typeof snapshotConnectio
     sequences.push({ ...sequence, lastValue: value, isCalled: called })
   }
   const pages = await peerUtility('psql', ['-X', '-q', '-A', '-t', '-v', 'ON_ERROR_STOP=1', '-c', `BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY; SET TRANSACTION SNAPSHOT ${quoteLiteral(snapshot)}; COPY (SELECT loid,pageno,pg_catalog.encode(pg_catalog.sha256(data),'hex') FROM pg_catalog.pg_largeobject ORDER BY loid,pageno) TO STDOUT; COMMIT;`], database || postgresConnection().database)
-  return { format: 1, dataEncoding: 'postgres-record-text-v1', database: properties, schemaSha256: await schemaFingerprint(directory, suffix, database, snapshot, toolchain), tables, sequences, largeObjects: { objects, ...pages } }
+  return { format: 1, dataEncoding: 'postgres-record-text-v1', database: properties, schemaSha256: await schemaFingerprint(directory, suffix, database, snapshot, toolchain, expectedSchema), tables, sequences, largeObjects: { objects, ...pages } }
 }
 export function assertDatabaseIntegrity(expected: DatabaseIntegrity, actual: DatabaseIntegrity) {
   ensure(expected?.format === 1 && actual?.format === 1 && expected.dataEncoding === 'postgres-record-text-v1' && actual.dataEncoding === expected.dataEncoding && /^[a-f0-9]{64}$/.test(expected.schemaSha256) && Array.isArray(expected.tables) && expected.tables.length <= 10000 && expected.largeObjects && expected.database, 'OSS_DATABASE_INTEGRITY_INVALID')
@@ -358,7 +385,7 @@ export async function captureDatabaseBackup(destination: string, directory: stri
 export async function verifyRestoredDatabase(database: string, expected: DatabaseIntegrity, directory: string, suffix: string, source?: string) {
   const toolchain = source ? await archivedDumpToolchain(source) : undefined
   const connection = await snapshotConnection(database)
-  try { assertDatabaseIntegrity(expected, await inventory(connection, directory, suffix, database, toolchain)) } finally { await closeSnapshot(connection) }
+  try { assertDatabaseIntegrity(expected, await inventory(connection, directory, suffix, database, toolchain,expected.schemaSha256)) } finally { await closeSnapshot(connection) }
 }
 export async function verifyDatabaseBackup(source: string, expected: DatabaseIntegrity, directory: string, taskId: string, allowLegacy = false) {
   ensure(/^[0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12}$/.test(taskId), 'OSS_TASK_INVALID')

@@ -4,6 +4,8 @@
 
 ## 续接实施状态（2026-11-22，尚未完成）
 
+最新第七45061365903终态failure、六旧worker全部success，双首装完整执行到backup比对仅schema失败（双708/711）。不同owner pg_dump→no-owner restore在真实PG709仅固定public-schema初始化注释差异，实际SQL一致；新schemaFingerprint只归一化表前精确生成注释、旧signed literal可匹配两原空行形态，保完整SQL/function，真实两份导出与column type篡改拒绝715过/backup715/types715/build715自然0。全表689自然完成只有实时logs新增差异，不与同snapshot产品备份证据混同。注册删除新JWT普通user session补713真实PG全过、admin-email700过；新Agent-upgrade-deadline16缺签名夹具已补实际Ed25519复制route716仍进行。新CI剩失败继续读；完整root restore/最终包/全配套宿主patch activation与实际OSS未完，正式发行不执行。
+
 最新第六45059247490终态failure、六旧worker全部success。首装Jiti权限修复后真实安装、唯一backend/双前端/admin/网关/Agent/原Prisma事务全部过，后backup完整性比对失败OSS_DATABASE_INTEGRITY_MISMATCH（双681/684），不是启动仍失败；新增4固定布尔诊断、不泄表/数据且保拒绝，继续查。local PG schema dump→restore686一致、全部147表689仍在途。初装setup_database原明文SQL已改SCRAM/verifier/固定身份/重复真实认证，隔离真实PG672两次幂等/错误口令拒绝过，split/panel/security/types/build688均过。当前第三PR61success/5failure/1skipped＋1在途，5日志全部读后terminal675、hostextend677、notification679、port680、Agentpublisher concurrency687真实PG/TLS/签名回归全过；最终新CI/包恢复待。
 
 首装根因进一步实证：第五双首装657/660分类显示node_modules root0/mode0666，current/release不存在/certs和migration.url正常，排除旧空目录猜测。Prisma7 config经c12/Jiti生成磁盘代码缓存，root启动命令缺显式umask导致新缓存可写；helper补umask077和JITI_FS_CACHE=false，不复用或放宽未知cache，真实Linux原Jiti TypeScript import且fsCache=false/无磁盘cache661过、security659过。既有flat+releases安全分支另已3320f6b2推送并真实652验，不混称此首装根因。完整新同source包/原worker仍需重验；当前第五其它任务/新PR要继续跟终态，正式Release/生产暂停。

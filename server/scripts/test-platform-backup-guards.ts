@@ -10,7 +10,7 @@ import { openPromise } from 'yauzl'
 import { BackupError, normalizeConfig, openSecret, sealSecret, publicConfig, recoveryRequestAllowed, validatePrefix, nextScheduledTime } from '../src/services/platform-backup-core.js'
 import { decryptBackup, encryptBackup, hashFile, validAssetName, validateManifest } from '../src/services/platform-backup-archive.js'
 import { AliyunOssClient, sanitizedOssError } from '../src/services/aliyun-oss-client.js'
-import { assertDatabaseIntegrity, normalizedDumpHash, restoreDumpToolchainHeader, databaseToolFailure, type DatabaseIntegrity } from '../src/services/platform-backup-database.js'
+import { assertDatabaseIntegrity, normalizedDumpHash, normalizePublicSchemaPrologue, publicSchemaFingerprint, restoreDumpToolchainHeader, databaseToolFailure, type DatabaseIntegrity } from '../src/services/platform-backup-database.js'
 import { createReadableZip, readableZipName, verifyReadableZip } from '../src/services/platform-backup-readable.js'
 import { waitForProtectedBackendHealth, waitForRestoredAgentHeartbeats } from '../src/services/platform-backup-health.js'
 import { retainGatewayEndpoints, reconcileArchivedGatewayPeers } from '../src/services/platform-backup-gateway.js'
@@ -244,6 +244,13 @@ try {
   assert.equal(normalizedDumpHash(firstDump), normalizedDumpHash(nextDump))
   assert.notEqual(normalizedDumpHash(firstDump), normalizedDumpHash(nextDump.replace('CREATE ROLE example;', 'CREATE ROLE different;')))
   const dumpToolchain = { databaseVersion: '16.15 (Debian 16.15-1.pgdg13+2)', dumpVersion: '16.15 (Debian 16.15-1.pgdg13+2)' }
+  const publicBlock='\n--\n-- Name: public; Type: SCHEMA; Schema: -; Owner: -\n--\n\n-- *not* creating schema, since initdb creates it\n'
+  const plain='SET row_security = off;\n\nSET default_table_access_method = heap;\nCREATE TABLE test(id integer);'
+  const withPublic='SET row_security = off;\n'+publicBlock+'\nSET default_table_access_method = heap;\nCREATE TABLE test(id integer);'
+  assert.equal(normalizePublicSchemaPrologue('\n'+withPublic),'\n'+plain)
+  assert.equal(publicSchemaFingerprint('\n'+plain,normalizedDumpHash('\n'+withPublic)),normalizedDumpHash('\n'+withPublic),'legacy signed literal comment remains compatible')
+  assert.notEqual(publicSchemaFingerprint('\n'+plain.replace('id integer','id text'),normalizedDumpHash('\n'+withPublic)),normalizedDumpHash('\n'+withPublic),'SQL type change still fails the old authenticated hash')
+  assert.equal(normalizePublicSchemaPrologue(withPublic+'\nCREATE FUNCTION text() RETURNS text LANGUAGE sql AS $$ SELECT '+JSON.stringify(publicBlock)+' $$;'),withPublic+'\nCREATE FUNCTION text() RETURNS text LANGUAGE sql AS $$ SELECT '+JSON.stringify(publicBlock)+' $$;')
   const schemaBody = "CREATE TABLE example (id bigint);\nCREATE FUNCTION example_banner() RETURNS text LANGUAGE sql AS $$ SELECT '-- Dumped by pg_dump version 16.15 (Ubuntu fixture)' $$;\n"
   const schemaHeader = `--\n-- PostgreSQL database dump\n--\n\n\\restrict SchemaKey\n\n-- Dumped from database version ${dumpToolchain.databaseVersion}\n-- Dumped by pg_dump version ${dumpToolchain.dumpVersion}\n\n`
   const legacySchemaDump = schemaHeader + schemaBody + '\\unrestrict SchemaKey\n'

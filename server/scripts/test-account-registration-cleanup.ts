@@ -15,11 +15,11 @@ const{requestUserCleanup,processUserCleanup,userCleanupStatus}=await import('../
 const{assertPaymentNotDeleted,paymentTradeHash}=await import('../src/lib/deleted-payment-receipt.js')
 const{completeRecharge}=await import('../src/db/recharge-records.js')
 const{default:userRoutes}=await import('../src/routes/users.js')
-const{isAccessTokenInvalidated}=await import('../src/lib/security.js')
+const{isAccessTokenInvalidated,generateRefreshToken,getRefreshTokenSessionId}=await import('../src/lib/security.js')
 const{recoveryHeld}=await import('../src/services/platform-backup-core.js')
 const{validateRecoverySession}=await import('../src/services/platform-recovery-operator.js')
 const tag='account-review-'+randomUUID().slice(0,10),admin=await prisma.user.create({data:{username:tag+'-admin',role:'admin',passwordHash:'fixture'}})
-const actor={id:admin.id,sid:tag,iat:Math.floor(Date.now()/1000)+1},ids:number[]=[]
+const actor={id:admin.id,sid:getRefreshTokenSessionId(await generateRefreshToken(admin.id,admin.username,'admin')),iat:Math.floor(Date.now()/1000)+1},ids:number[]=[]
 const app=Fastify();await app.register(jwt,{secret:'account-cleanup-http-signature-only'})
 const appSource=readFileSync(new URL('../src/app.ts',import.meta.url),'utf8'),start=appSource.indexOf('async function ensureActiveAccessToken('),end=appSource.indexOf('// 注意: 安全响应头',start)
 assert.ok(start>=0&&end>start)
@@ -57,7 +57,8 @@ const provider=await prisma.paymentProvider.create({data:{name:tag,type:'manual'
 await prisma.rechargeRecord.create({data:{orderNo:tag,userId:target,providerId:provider.id,amount:12.34,actualAmount:12.34,status:'completed',tradeNo:'cleanup-original-trade'}})
 const lateRecharge=await prisma.rechargeRecord.findUniqueOrThrow({where:{orderNo:tag}})
 await prisma.rechargeLatePayment.create({data:{rechargeId:lateRecharge.id,providerId:provider.id,gatewayOrderNo:tag,tradeNo:'cleanup-late-trade',reason:'additional_payment',status:'pending',proof:{}}})
-const ordinary={id:ids[1],sid:'fake',iat:actor.iat}
+const ordinaryAccount=await prisma.user.findUniqueOrThrow({where:{id:ids[1]}})
+const ordinary={id:ids[1],sid:getRefreshTokenSessionId(await generateRefreshToken(ids[1],ordinaryAccount.username,'user')),iat:actor.iat}
 for(const invalid of ['0','-1','1.2','999999999999999999'])assert.equal((await app.inject({method:'POST',url:'/api/users/'+invalid+'/cleanup',headers,payload:{confirm:true}})).statusCode,400)
 for(const confirm of [false,null,'true'])assert.equal((await app.inject({method:'POST',url:'/api/users/'+target+'/cleanup',headers,payload:{confirm}})).statusCode,400)
 assert.equal((await app.inject({method:'POST',url:'/api/users/'+target+'/cleanup',payload:{confirm:true}})).statusCode,401)

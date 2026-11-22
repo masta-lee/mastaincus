@@ -1,5 +1,7 @@
 # 2026-11-22 两轮安全修复续接，仍在验收
 
+最新15c9aad6已推、第七45061365903已failure（六旧worker再次全success），双首装只schema=false、tables/sequence/largeobject=true，双708/711全日志读取。真实Linux不同DBowner709复现pg_dump只多public schema初始化注释，实际SQL一致；新精确前置注释归一化/旧原hash候选兼容、SQLtype篡改拒绝真实导出715过，backup715/type715/build715自然0，准备阶段保存。全表689结束，仅实时源日志新增差异1(logs)，不用于宣称共享snapshot已过；原客户无。新sourceCI45061369559后失败adminemail已700过；accountcleanup无真实用户session713过；upgrade-deadline缺publisher签名已补真实合成Ed25519复制route，716仍在途，必须跟。其它后续CI仍运行需继续查。E03/E04/root备份恢复全流程/实际OSS/最终新版双首装未完成，正式Release/生产暂停。
+
 接續最新：已推產品31b64bf5/文档15b4202e，第七45061365903双构建/Incus已success，候选Agent在途。源码CI45061369559新失败137327818763已取证，下一项admin-user-email旧JWT缺真实session；fixture补真实refresh会话后本机700自然全过（权限/会话/验证码/原钱不变/审计与锁timeout）。当前fixture未保存。第六全终态failure六旧worker全过、双首装backup完整性拒绝；诊断第七继续。全表对照689仍原run无输出，慢速TCG每表两次psql，进程6908/原服务健康、临时DB独立，继续核自然结果；schema686过不代数据全部过。旧15b文档触发的六重复普通CI已定向cancel，保31b原source CI/preview，cancelled不算验证。E03/E04系统依赖与全池自动activation、完整OSS仍未完成。
 
 阶段保存完成31b64bf51ba5d40532a622368f71f8df25d51624已推origin、版本不变、只留无关taste/log-temp。本机build688自然0、types684/backup684、真实SCRAM672/terminal675/port680/notification679/extend677/Agent签名并发687全0。第六45059247490终态failure、六旧worker再全过，双首装进入backup完整性比对拒绝；新增4类布尔诊断同source第七45061365903（31b64bf5）已启动、当前全部构建在途。最新source普通CI45061369559/原生Agent45061369668/内存45061369543等仍队列，继续核全部job；原629第三PR5失败全日志已读并本机修，末job仍在途。fulltable本机689仍运行，先核日志/自然终态，不重复开；只复制dump到独立临时DB，源客户生产未动。正式Release/生产及E03/E04完整自动激活/OSS灾备未完成。
