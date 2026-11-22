@@ -1,5 +1,7 @@
 # 2026-11-22 两轮安全修复续接，仍在验收
 
+最新源码3320f6b2已推。第五首装双失败日志657/660已明确：current/release目录均不存在，certs/root/migration.url受信，node_modules出现root-owned0666新文件；Prisma7 TS config的Jiti磁盘缓存无私密umask是执行路径。新helper设umask077/JITI_FS_CACHE=false，真实LinuxJiti加载TypeScript且无disk cache661自然通过，security659过；修复保存后需完整双包首装/全部旧worker复验，不能只硬chmod未知文件或排除依赖权限。第五其它旧worker仍在途；当前PR仍执行。第四六升级已全过，完整恢复/notification638/state637本机全过，正式Release/生产不执行。
+
 2026-11-23当前已推f56c6222，完整state637/instance633/notification638自然成功。修复新增平铺权限分支：active app仍/opt/incudal但releases已存在时旧harden只修releases，可能留下当前非root证书/代码；按实际app_dir分别处理，Linux实际root回归650/652通过、缓存归属保持，security/update651过。当前第五45057633656继续双首装分类取证/六旧升级；不能把分支复现当作这轮首装唯一根因。新CI f56运行45057928320/内存45057928347/兼容45057928385保留；旧已改输入的226/fe05普通CI和重复压力四轮已定向取消节省runner，cancelled不算通过，原失败56/11记录不删。当前修复尚未保存。
 
 最新阶段已推`226539f2`（原生HTTPS压力依赖/真实session/通知加密/恢复fixture），当前仅state脚本剩未提交。自然终态：637完整恢复state1001宿主/历史资金/原身份全过；633完整instance-order/转让换机恢复、631replacement、624gateway、63842auth请求+完整TLS验证码、626price/PUSH/upload均退出0。新PR与第五45057633656（诊断源码fe05c5a5）仍执行，务必跟全部终态。第四45055789848六原worker全过、双首装runtime权限拒绝已逐日志定位到精确分类code，未查明具体文件分类，不提前移除权限检查。新本机split643过/update643仍在途。真实OSS/完整rootworker/全配套安全自动激活依旧未完成，正式发行/生产没有执行。

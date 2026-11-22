@@ -56,6 +56,7 @@ assert.ok(retained.includes('/usr/bin/chown -R root:root "$stage"')&&!/^\s*chown
 const databasePreparation=await readFile(new URL('../../scripts/harden-database.py',import.meta.url),'utf8')
 assert.ok(databasePreparation.match(/node_check=subprocess\.run\([^\n]+env=\{'PATH':'\/usr\/bin:\/bin'\}/),'Node patch preflight must not inherit the backend compatibility import or injection environment')
 const migrationHelper=await readFile(new URL('../../scripts/migrate-database.sh',import.meta.url),'utf8')
+assert.ok(migrationHelper.includes('umask 077')&&migrationHelper.includes('export JITI_FS_CACHE=false'),'root migrations must not generate reusable writable code caches inside node_modules')
 assert.ok(migrationHelper.includes('[[ ! -L /opt/incudal/current ]]')&&!migrationHelper.includes('[[ -e "$root" ]] || root=/opt/incudal'),'only an actual atomic symlink selects the current runtime')
 const python = spawnSync(process.env.PYTHON || 'python', ['../scripts/test-incus-security-modules.py'], { encoding: 'utf8', windowsHide: true })
 assert.equal(python.status,0,python.stdout+python.stderr)

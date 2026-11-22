@@ -1,5 +1,10 @@
 #!/usr/bin/env bash
 set -Eeuo pipefail
+# Prisma's TypeScript config loader writes a Jiti code cache inside node_modules.
+# Never generate group/world-writable executable cache when systemd's '+' root
+# startup command runs without inheriting the service account's usual umask.
+umask 077
+export JITI_FS_CACHE=false
 stage=runtime-directory
 trap 'printf "DATABASE_MIGRATION_PREPARATION_FAILED:%s\n" "$stage" >&2' ERR
 root=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd -P)
