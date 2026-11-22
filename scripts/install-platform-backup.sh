@@ -101,7 +101,9 @@ if [[ -f "$root/scripts/migrate-database.sh" && -f "$root/scripts/harden-databas
     install -d -m 0755 "$stage/server"
     cp -a "$root/server/dist" "$root/server/templates" "$root/server/node_modules" "$root/server/package.json" "$stage/server/"
     cp -a "$root/node_modules" "$root/package.json" "$stage/"
-    chown -R root:root "$stage"
+    # Old workers prepend their strictly scoped chown wrapper to PATH. This
+    # retained root runtime is outside /opt/incudal, so use the real utility.
+    /usr/bin/chown -R root:root "$stage"
     chmod -R go-w "$stage"
     chmod 0755 "$stage"
     python3 -I -B - "$stage" <<'PY'

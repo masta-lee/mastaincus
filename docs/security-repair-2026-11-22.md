@@ -8,6 +8,8 @@
 
 当前已保存源码`aec5f0f8d10d80454511ebd54a2ccae9d2bfb2e8`并核origin同分支相同；无tag发行预览45045980526已启动、未终态。187文件不含本机logs/凭据/隔离库或无关taste目录，staged私有凭据检查通过；分支保存不代表全部问题已验收或正式发行。
 
+预览45045980526已自然failure：双构建/双Incus/Agent准备过，原生230/230和双实际签名包/3461文件校验过；双首装在run_migrations失败（对readonly ENV_FILE临时赋值），六原worker在新backup installer失败exit64（旧PATH chown wrapper拒绝root retained runtime目录）。均已读每个固定job失败日志并定位源码：改env子进程传路径、不重赋readonly；保留runtime用/usr/bin/chown，不放宽原wrapper参数。新增真实Bash readonly回归、相关守卫480/system481过，split旧断言更新复验。没有重跑旧输入或正式Release；修复阶段后再新预览完整验。原本机任务2failed/迁移246保留，旧目录原helper封存复原后旧service已启动，17:05自然到期巡查执行；fixture只加DB连接30秒改善TCG预算，不能作为原版零故障证据。
+
 2026-11-22接续补记：原公开v1.8.14 AMD64包在本机systemd VM已实际启动，唯一后端`/api/health`返回businessStartupReady=true、管理员存在、244迁移已完成（`security-systemd-lab140/current317.log`）。较早连接超时和组件目录检查失败保留原日志；当前目录root:root/0700及lock0600正确，不能据固定stage推断身份坏或修改权限。模拟器前置安装超过原systemd90秒默认，仅隔离观察增加10分钟fixture上限；不是产品修复证据，原worker升级仍待自然终态。
 
 本轮复审修复系统库存覆盖待激活状态：`system-security-inventory.py`按root私密receipt锁合并精确待激活包，定时刷新与后续无变更更新不能清除，失败/准备状态与待激活清单共同保留，兼容此前格式；不据安装版本宣称运行服务已装载补丁。六专项含真实root策略权限测试全过，原10项systemd补丁待激活receipt实际保留（`security-systemd-lab140/inventory328.log`），最新本机planner终态全过（`security-repair-planner329.log`）。激活完成的产品回执／全配套自动更新仍未闭环。

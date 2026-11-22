@@ -387,7 +387,7 @@ assert.ok(
     installPanel.includes('Environment=XDG_CACHE_HOME=${INSTALL_DIR}/.cache') &&
     installPanel.includes('app_dir="${INSTALL_DIR}/current"') &&
     installPanel.includes('NoNewPrivileges=false') &&
-    installPanel.includes('ENV_FILE="$ENV_FILE" bash "$INSTALL_DIR/scripts/migrate-database.sh"') &&
+    installPanel.includes('env "ENV_FILE=$ENV_FILE" bash "$INSTALL_DIR/scripts/migrate-database.sh"') &&
     !installPanel.includes('npx prisma'),
   'install script systemd service must keep runtime cache paths writable, allow restricted online-update sudo, and run locked local Prisma migrations under ProtectSystem=strict'
 )

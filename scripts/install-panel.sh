@@ -1132,8 +1132,8 @@ run_migrations() {
 
     cd "${INSTALL_DIR}/server"
 
-    ENV_FILE="$ENV_FILE" python3 "$INSTALL_DIR/scripts/harden-database.py"
-    ENV_FILE="$ENV_FILE" bash "$INSTALL_DIR/scripts/migrate-database.sh"
+    env "ENV_FILE=$ENV_FILE" python3 "$INSTALL_DIR/scripts/harden-database.py"
+    env "ENV_FILE=$ENV_FILE" bash "$INSTALL_DIR/scripts/migrate-database.sh"
 
     log "数据库迁移完成"
 }

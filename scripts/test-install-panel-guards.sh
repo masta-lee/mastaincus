@@ -9,6 +9,33 @@ WORK_DIR="$(mktemp -d)"
 HTTP_FIXTURE_PID=""
 trap '[[ -z "$HTTP_FIXTURE_PID" ]] || kill "$HTTP_FIXTURE_PID" 2>/dev/null || true; rm -rf "$WORK_DIR"' EXIT
 
+# Real Bash readonly assignment semantics differ from an ordinary fixture
+# variable. Pass the fixed path only to the two children, never reassign it.
+declare -f run_migrations > "$WORK_DIR/migration-function.sh"
+mkdir "$WORK_DIR/migration-bin"
+mkdir -p "$WORK_DIR/install/server"
+for migration_program in python3 bash; do
+    cat > "$WORK_DIR/migration-bin/$migration_program" <<'MIGRATION_PROGRAM'
+#!/bin/sh
+printf '%s|%s\n' "$ENV_FILE" "$1" >> "$MIGRATION_CALLS"
+MIGRATION_PROGRAM
+    chmod 0755 "$WORK_DIR/migration-bin/$migration_program"
+done
+bash -s -- "$WORK_DIR" <<'MIGRATION_ENV_GUARD'
+    set -euo pipefail
+    migration_work="$1"
+    source "$migration_work/migration-function.sh"
+    readonly ENV_FILE="$migration_work/retained.env"
+    readonly INSTALL_DIR="$migration_work/install"
+    export MIGRATION_CALLS="$migration_work/migration-calls"
+    export PATH="$migration_work/migration-bin:$PATH"
+    step() { :; }; log() { :; }
+    run_migrations
+    [[ "$(wc -l < "$MIGRATION_CALLS")" == 2 ]]
+    grep -Fxq "$ENV_FILE|$INSTALL_DIR/scripts/harden-database.py" "$MIGRATION_CALLS"
+    grep -Fxq "$ENV_FILE|$INSTALL_DIR/scripts/migrate-database.sh" "$MIGRATION_CALLS"
+MIGRATION_ENV_GUARD
+
 if [[ "$(uname -s)" == Linux ]]; then
   python3 "$REPO_ROOT/scripts/test-platform-recovery-lock.py"
 fi

@@ -48,6 +48,7 @@ const oauth=await readFile(new URL('../src/lib/oauth-provider.ts',import.meta.ur
 assert.ok(oauth.includes('WHERE code_hash=${codeHash} FOR UPDATE')&&oauth.includes('WHERE token_hash=${refreshTokenHash} FOR UPDATE'))
 const retained=await readFile(new URL('../../scripts/install-platform-backup.sh',import.meta.url),'utf8')
 assert.ok(retained.includes('"$root/server/templates"')&&retained.includes('server/dist server/templates'),'rollback security modules need their matching runtime templates')
+assert.ok(retained.includes('/usr/bin/chown -R root:root "$stage"')&&!/^\s*chown -R root:root "\$stage"/m.test(retained),'new root runtime preparation must not hit the old worker PATH chown wrapper')
 const shim=await readFile(new URL('../../scripts/legacy-database-startup.mjs',import.meta.url),'utf8')
 assert.ok(shim.includes("marker.authenticationSignature||existsSync('/var/lib/incudal-database/migration.url')")&&shim.includes(": {'lib/system-update-runtime.js':'lib/system-update-runtime.js'}"),'pre-baseline role separation needs the root-only migration bridge on an old-worker retry')
 const migrationRepair=await readFile(new URL('../src/services/host-management-repair.ts',import.meta.url),'utf8')
