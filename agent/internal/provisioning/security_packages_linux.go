@@ -151,6 +151,10 @@ func repairSecurityPackages(ctx context.Context) error {
 	if len(pinned) == 0 {
 		return nil
 	}
+	world, err := os.ReadFile("/etc/apk/world")
+	if err != nil {
+		return err
+	}
 	// Exact add atoms would persist in /etc/apk/world and block the next patch.
 	// upgrade accepts package names. The same verified cached index and complete
 	// second plan bind their exact versions without modifying world constraints.
@@ -186,6 +190,10 @@ func repairSecurityPackages(ctx context.Context) error {
 	afterPackages, err := securityInstalledPackages(string(after))
 	if err != nil || !reflect.DeepEqual(expected, afterPackages) {
 		return fmt.Errorf("security package installation not confirmed")
+	}
+	currentWorld, err := os.ReadFile("/etc/apk/world")
+	if err != nil || string(world) != string(currentWorld) {
+		return fmt.Errorf("security package administrator constraints changed")
 	}
 	return nil
 }
