@@ -264,6 +264,14 @@ try {
         } catch { /* Wait for the real second boot. */ }
         await new Promise(resolve => setTimeout(resolve, 1500))
       }
+      if (!booted) {
+        // Capture fixed service/ordering evidence before the disposable guest
+        // is removed. Do not print cloud-init user-data, password or key files.
+        const diagnostic = await execWithOutput(transport, name, ['sh', '-c',
+          'systemctl show payincus-ipv6.service cloud-final.service cloud-init-main.service cloud-init.target multi-user.target -p Id -p ActiveState -p SubState -p Result -p After -p Before -p Wants -p Requires; systemctl list-jobs --no-pager; journalctl -b -u payincus-ipv6.service -u cloud-final.service --no-pager -n 45; ls -l /etc/systemd/system/cloud-init.target.wants/payincus-ipv6.service /etc/systemd/system/multi-user.target.wants/payincus-ipv6.service; test -f /var/lib/cloud/instance/boot-finished; true'], {}, 15000)
+          .catch(() => null)
+        if (diagnostic) console.error('Native Debian IPv6 boot diagnostics', diagnostic.stdout.replaceAll(password, '[redacted]'))
+      }
       assert.equal(booted, true, 'new IPv6 service boots without a cloud-final ordering cycle')
       assert.deepEqual(await instanceSshFingerprints(transport, name), pinnedKeys, 'host keys are preserved across repair and reboot')
       await checkSshLogin('11.0.0.99', password, pinnedKeys)
