@@ -460,8 +460,18 @@ install_postgresql() {
     info "添加 PostgreSQL 官方 APT 源..."
     apt-get install -y -qq gnupg lsb-release >/dev/null 2>&1
 
-    curl -fsSL https://www.postgresql.org/media/keys/ACCC4CF8.asc \
-        | gpg --yes --dearmor -o /etc/apt/keyrings/postgresql.gpg
+    local pg_key
+    pg_key=$(mktemp)
+    if ! curl --proto '=https' --proto-redir '=https' -fsSL --connect-timeout 15 --max-time 60 \
+        https://www.postgresql.org/media/keys/ACCC4CF8.asc -o "$pg_key" ||
+       [[ $(sha256sum "$pg_key" | awk '{print $1}') != 0144068502a1eddd2a0280ede10ef607d1ec592ce819940991203941564e8e76 ]]; then
+        rm -f "$pg_key"; error 'PostgreSQL 软件源签名身份校验失败'; return 1
+    fi
+    install -d -o root -g root -m 0755 /etc/apt/keyrings
+    if ! gpg --batch --yes --dearmor -o /etc/apt/keyrings/postgresql.gpg "$pg_key"; then
+        rm -f "$pg_key"; error 'PostgreSQL 软件源签名密钥无效'; return 1
+    fi
+    rm -f "$pg_key"
     # APT verifies repositories as _apt, including when the caller uses umask 077.
     # This is a public verification key; keep private runtime files restricted.
     chmod 0644 /etc/apt/keyrings/postgresql.gpg

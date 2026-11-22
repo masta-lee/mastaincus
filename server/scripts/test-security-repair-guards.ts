@@ -57,6 +57,10 @@ assert.ok(retained.includes('"$root/server/templates"')&&retained.includes('serv
 assert.ok(retained.includes('/usr/bin/chown -R root:root "$stage"')&&!/^\s*chown -R root:root "\$stage"/m.test(retained),'new root runtime preparation must not hit the old worker PATH chown wrapper')
 const databasePreparation=await readFile(new URL('../../scripts/harden-database.py',import.meta.url),'utf8')
 const panelInstaller=await readFile(new URL('../../scripts/install-panel.sh',import.meta.url),'utf8')
+const pgRepository=panelInstaller.slice(panelInstaller.indexOf('install_postgresql() {'),panelInstaller.indexOf('# ========================== 安装 Redis'))
+assert.ok(pgRepository.includes('0144068502a1eddd2a0280ede10ef607d1ec592ce819940991203941564e8e76') &&
+  pgRepository.includes("--proto '=https' --proto-redir '=https'") && pgRepository.indexOf('sha256sum "$pg_key"') < pgRepository.indexOf('gpg --batch --yes --dearmor'),
+  'PGDG repository trust must pin the official key before importing it, with bounded HTTPS download')
 const bootstrap=panelInstaller.slice(panelInstaller.indexOf('setup_database() {'),panelInstaller.indexOf('# ========================== 生成环境变量'))
 assert.ok(bootstrap.includes('SCRAM-SHA-256$4096:')&&bootstrap.includes("'PGPASSWORD':password")&&!bootstrap.includes('PASSWORD \'${db_password}'),'first install must not send plaintext database passwords to SQL or argv')
 assert.ok(databasePreparation.match(/node_check=subprocess\.run\([^\n]+env=\{'PATH':'\/usr\/bin:\/bin'\}/),'Node patch preflight must not inherit the backend compatibility import or injection environment')

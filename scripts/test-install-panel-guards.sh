@@ -194,6 +194,8 @@ done
 postgresql_function=$(declare -f install_postgresql)
 postgresql_function=${postgresql_function//\/etc\/apt\/keyrings\/postgresql.gpg/$WORK_DIR\/postgresql-public.gpg}
 postgresql_function=${postgresql_function//\/etc\/apt\/sources.list.d\/pgdg.list/$WORK_DIR\/pgdg.list}
+postgresql_fixture_hash=$(printf 'public-key-fixture\n' | sha256sum | awk '{print $1}')
+postgresql_function=${postgresql_function//0144068502a1eddd2a0280ede10ef607d1ec592ce819940991203941564e8e76/$postgresql_fixture_hash}
 printf '%s\n' "$postgresql_function" > "$WORK_DIR/postgresql-functions.sh"
 bash -s -- "$WORK_DIR" <<'PG_KEY_GUARD'
     set -euo pipefail
@@ -206,8 +208,22 @@ bash -s -- "$WORK_DIR" <<'PG_KEY_GUARD'
     step() { :; }
     info() { :; }
     log() { :; }
-    curl() { printf 'public-key-fixture\n'; }
-    gpg() { cat > "${@: -1}"; }
+    error() { :; }
+    install() { :; }
+    curl() {
+        local destination=""
+        while [[ $# -gt 0 ]]; do
+            if [[ "$1" == -o ]]; then destination="$2"; shift 2; else shift; fi
+        done
+        printf 'public-key-fixture\n' > "$destination"
+    }
+    gpg() {
+        local destination=""
+        while [[ $# -gt 1 ]]; do
+            if [[ "$1" == -o ]]; then destination="$2"; shift 2; else shift; fi
+        done
+        cat "$1" > "$destination"
+    }
     apt-get() {
         if [[ "$1" == update && "$(uname -s)" == Linux ]]; then
             [[ "$(stat -c %a "$key_work/postgresql-public.gpg")" == 644 ]] || {
@@ -218,6 +234,16 @@ bash -s -- "$WORK_DIR" <<'PG_KEY_GUARD'
     }
     ensure_postgresql_running() { :; }
     install_postgresql
+    rm -f "$key_work/postgresql-public.gpg"
+    curl() {
+        local destination=""
+        while [[ $# -gt 0 ]]; do
+            if [[ "$1" == -o ]]; then destination="$2"; shift 2; else shift; fi
+        done
+        printf 'different-public-key\n' > "$destination"
+    }
+    if install_postgresql; then echo 'untrusted PGDG identity accepted' >&2; exit 1; fi
+    [[ ! -e "$key_work/postgresql-public.gpg" ]]
 PG_KEY_GUARD
 
 # Preinstalled PostgreSQL can be stopped (for example, on a fresh CI image).
