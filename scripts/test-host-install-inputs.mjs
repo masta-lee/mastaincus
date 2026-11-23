@@ -108,3 +108,5 @@ console.log('PASS Btrfs package preparation signals a resumable failure without 
 const incusInstall = extract('install_incus')
 assert.ok(incusInstall.includes('install -d -m 0755 /etc/apt/keyrings') && incusInstall.includes('chmod 0644 /etc/apt/keyrings/zabbly.gpg') &&
   incusInstall.includes('chmod 0644 /etc/apt/sources.list.d/zabbly-incus-stable.sources'), 'apt sandbox must read public signing keys/sources even under the enrollment 077 umask')
+assert.equal(incusInstall.split('f1adb44fdf82083f983a392b5b406d34e473dce3d66a51de3118cdc1f51d3f87').length-1,2,'both Incus repository setup paths must verify the independent pinned official key before importing it')
+assert.ok(!source.includes('raw.githubusercontent.com/0xdabiaoge/incudal/main'),'root shortcut cannot execute a mutable third-party main branch')

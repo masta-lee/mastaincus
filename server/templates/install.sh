@@ -1766,10 +1766,11 @@ install_incus() {
         install -d -m 0755 /etc/apt/keyrings
         local key_file
         key_file=$(mktemp /etc/apt/keyrings/.incudal-zabbly.XXXXXX)
-        if ! curl --retry 3 --retry-delay 5 --retry-max-time 100 --connect-timeout 15 --max-time 30 -fsSL https://pkgs.zabbly.com/key.asc -o "$key_file"; then
+        if ! curl --proto '=https' --proto-redir '=https' --retry 3 --retry-delay 5 --retry-max-time 100 --connect-timeout 15 --max-time 30 -fsSL https://pkgs.zabbly.com/key.asc -o "$key_file"; then
             rm -f "$key_file"; exit 75
         fi
-        gpg --yes --dearmor -o /etc/apt/keyrings/zabbly.gpg "$key_file" || { rm -f "$key_file"; exit 1; }
+        [[ $(sha256sum "$key_file" | awk '{print $1}') == f1adb44fdf82083f983a392b5b406d34e473dce3d66a51de3118cdc1f51d3f87 ]] || { rm -f "$key_file"; exit 1; }
+        gpg --batch --yes --dearmor -o /etc/apt/keyrings/zabbly.gpg "$key_file" || { rm -f "$key_file"; exit 1; }
         chmod 0644 /etc/apt/keyrings/zabbly.gpg
         rm -f "$key_file"
         cat > /etc/apt/sources.list.d/zabbly-incus-stable.sources <<SRC
@@ -1788,9 +1789,16 @@ SRC
     fi
 
     # 导入 Zabbly GPG 密钥
-    mkdir -p /etc/apt/keyrings
-    curl -fsSL https://pkgs.zabbly.com/key.asc \
-        | gpg --yes --dearmor -o /etc/apt/keyrings/zabbly.gpg
+    install -d -m 0755 /etc/apt/keyrings
+    local key_file
+    key_file=$(mktemp /etc/apt/keyrings/.incudal-zabbly.XXXXXX)
+    if ! curl --proto '=https' --proto-redir '=https' -fsSL --connect-timeout 15 --max-time 30 https://pkgs.zabbly.com/key.asc -o "$key_file"; then
+        rm -f "$key_file"; exit 75
+    fi
+    [[ $(sha256sum "$key_file" | awk '{print $1}') == f1adb44fdf82083f983a392b5b406d34e473dce3d66a51de3118cdc1f51d3f87 ]] || { rm -f "$key_file"; exit 1; }
+    gpg --batch --yes --dearmor -o /etc/apt/keyrings/zabbly.gpg "$key_file" || { rm -f "$key_file"; exit 1; }
+    chmod 0644 /etc/apt/keyrings/zabbly.gpg
+    rm -f "$key_file"
 
     # 添加 Zabbly APT 源（同时支持 Ubuntu 和 Debian）
     cat > /etc/apt/sources.list.d/zabbly-incus-stable.sources <<SRC
@@ -2227,21 +2235,13 @@ show_result() {
         nat_ipv6) mode_label="NAT + IPv6" ;;
     esac
 
-    # 快捷入口只保存无凭据的下载包装器，绝不复制面板渲染后含 token/secret 的本脚本。
+    # 快捷入口保留无凭据引导，不下载执行可变第三方main脚本。
     cat > /usr/local/bin/incudal <<'SHORTCUT'
 #!/bin/bash
-# Incudal 节点管理快捷入口 - 自动下载最新版本
-SCRIPT_CACHE="/root/incudal.sh"
-SCRIPT_URL="https://raw.githubusercontent.com/0xdabiaoge/incudal/main/server/templates/install.sh"
-echo "正在获取最新的节点管理脚本..."
-if curl -sSfL "$SCRIPT_URL" -o "$SCRIPT_CACHE" 2>/dev/null; then
-    chmod 0700 "$SCRIPT_CACHE"
-    exec bash "$SCRIPT_CACHE" "$@"
-else
-    echo "下载失败。如果本机是纯 IPv6 环境，请确保 WARP 已开启后重试。"
-    echo "或手动从面板获取安装脚本保存到 /root/incudal.sh"
-    exit 1
-fi
+# Incudal 节点管理快捷入口
+echo "请从当前主控的机器池获取此宿主的维护指令。"
+echo "宿主日常修复由受信 Agent 自动处理；本入口不下载执行外部脚本。"
+exit 1
 SHORTCUT
     chown root:root /usr/local/bin/incudal
     chmod 0755 /usr/local/bin/incudal
