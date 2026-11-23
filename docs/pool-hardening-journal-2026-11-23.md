@@ -22,6 +22,8 @@ security.4/source e470547b9107400575bd0b5a5317270dbd09e5d3：完整231/231、Go�
 
 21:15接续：完整231/231自然exit0（1652）；真实库存20:58为204available/4assigned/0unavailable，21:02为203/4/1，#130原receipt到期；所以不能宣称彻底稳定。候选45177810363双架构首装均恢复preview失败OSS_APP_VERSION_UNSUPPORTED，完整job137709176945/137709176868日志1670/1673已读取。失败发生在同一候选版本的备份预览，不是数据库或seal损坏。源码仅允许相同有效候选版本恢复，数字越界/不同候选/候选和正式互转仍拒绝，保迁移/资金/原身份核验。旧worker演练另改读取实际version.json签名target，应用与组件版本单独核；此前按package.json稳定版target通过不能证明测试版真路径。部署工具新增sealed当前源码/字面link核验、在途恢复上传/只读preflight，后续六原worker演练将实际运行此入口preflight。最终专项1672/types/backendbuild全部通过；新完整signed测试包及真实原worker热更新仍待，未直接改主控或客户。
 
+最终22d1ab34本机full1675自然231/231，CI45181874055全部30success，native/SSH/memory/Agent同source全部success。完整测试版本v1.8.14-test.22d1ab3/workflow45181889126双首装root恢复＋六原v1.8.14worker正常/迁移留库/后半失败回滚再升全13success/Release预期skipped；旧worker实际target版本和候选preflight成功日志独立读过。双包1702独立publisher/SHA与archive真实rootowner/receipt/backup3模块与本地build一致：ARMcb48536843926ef45c578242d676bd2eb69cc5d4c6bb0695141d2aab18c86fb6，AMD057e641d98bf7a553bf29c569aaa4cd9fe35fae7a666b6d706c8a1cb4460af5e。主控部署前sealed检查检出双首页外部脚本注入，事件另见controller-static-tampering报告；未绕过seal或部署失败候选。Owner单独授权撤销未知rootkey/断两个SSH已做，原backend客户钱保持。仓库可信恢复工具及原生/目标只读check通过；另恢复/原worker热更授权问题待答复。21:36库存202available/4assigned/2unavailable仍例行expiry波动，不误报已稳定完成。
+
 2026-11-23，北京时间。Owner先授权只读取证，随后明确授权本问题源码修复后，将此前已做安全修复同批热更新主控作为测试；不正式发版。
 
 主控实际v1.8.14／ced7c10cd17d、唯一后端健康。208台专属宿主中12台故障一致：#16、#21、#24、#26、#30～#36、#46。均管理在线、无客户实例、Agent工具/网络防护有效、AppArmor维护已完成，后续检查反复`HARDENING_JOURNAL_CONFLICT`。它们不是离线宿主。

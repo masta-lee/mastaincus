@@ -8,6 +8,7 @@ import { systemUpdateUnitStillStarting } from '../src/lib/system-update-worker-s
 import { assertBundledSystemUpdateRuntime, runBundledSystemUpdateMigrations } from '../src/lib/system-update-runtime.js'
 import { runSystemUpdateCommand } from '../src/lib/system-update-command.js'
 import { verifySystemUpdateDownloads } from './test-system-update-download.js'
+await import('../../scripts/test-verified-static-recovery.mjs')
 
 for (const ActiveState of ['activating', 'active', 'reloading']) {
   assert.equal(systemUpdateUnitStillStarting({ ActiveState, SubState: 'start', Result: 'success', ExecMainStatus: '0', Job: '0' }), true, 'slow sealed-file verification must remain pending')
