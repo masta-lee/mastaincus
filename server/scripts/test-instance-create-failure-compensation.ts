@@ -212,6 +212,8 @@ for (const config of emptyCloudInitConfigs) {
 await prepareNewContainerCloudInit(cloudInitClient, 'vm', { 'user.user-data': '#cloud-config\n{}' }, 'vm')
 assert.equal(cloudInitRequests.length, 0, 'VMs and creates without requested cloud-init must not touch guest files')
 await prepareNewContainerCloudInit(cloudInitClient, 'new-cloud-key', { 'cloud-init.user-data': '#cloud-config\n{}' })
+const initializationSource=readFileSync(resolve(__dirname,'../src/lib/new-container-cloud-init.ts'),'utf8')
+assert.ok(initializationSource.includes('Date.now() + 10 * 60 * 1000')&&initializationSource.includes("result.stdout === 'INCUDAL_INITIALIZATION_READY'"),'slow first-boot package installation retains a bounded ten-minute window and requires the real completion marker')
 assert.equal(cloudInitRequests.length, 1)
 const missingMarkerClient = { async request<T>(method: string, path: string): Promise<T> { if(method==='GET')return {} as T; throw new IncusApiError('marker absent', 404, path) } }
 await prepareNewContainerCloudInit(missingMarkerClient, 'new-no-marker', { 'user.user-data': '#cloud-config\n{}' })

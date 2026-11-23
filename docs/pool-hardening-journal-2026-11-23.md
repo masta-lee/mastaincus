@@ -33,3 +33,7 @@ Agent测试候选版为v1.0.17-security.1，使宿主能通过原版本比较/�
 实际主控正常admin口令登录／只读me/hosts/users/manifest及双端页面和health200；测试用户原密码登录／自己的实例200、管理users/hosts403、伪造roleJWT401通过。实际双架构Agent下载hash/ELF/publisher再核过，原身份/密钥和其它DB归属保持。自然五分钟expiry巡检17:05/17:10等success，4付费未到期客户无stop/delete测试注入；traffic/status成功且新热补后无再现PG死锁。最后109源码完整231和CI/原生仍在进行，保持不正式tag/Release/main，真实OSS等旧缺口继续保留。
 
 观察另发现Agent empty-host维护判据：兼容fence会让主控暂不发资源客机列表，Agent误把空列表当空宿主，再次请求LXCFS维护；签名permit实际仍有客户。新增candidate同时检查permit占用（远端原精确空库存/签名门禁不变），避免持久反复待核验。测试候选Agent递增v1.0.17-security.2，等待Go／真实Linux／signed双Agent后由主控原自动升级跟进；不把已部署.1写成.2已通过。
+
+security.2/source5d04cf8d：Go全套、signed Agent工作流45146231875双原生与签名双资产success/正式Release skipped；完整预览45146243719双首装root恢复／六旧升级全部success。实际主控候选目录更新后208/208自动升级.2，4客户宿主17:35～17:38多轮连续compat verified／fence verified，12目标继续全部可售。最后109全量231/231过，5d最新CI仅Ubuntu24AMD64首次初始化等待240秒到期失败，其余实机影像通过／六browser仍在途，不能把CI写全绿。
+
+Ubuntu失败完整日志显示cloud-init仍running／无failure marker，首启动软件源更新到SSH依赖安装消耗既定4分钟；原程序初始化成功门槛正确、窗口过短。源码精修改首次新盘等待10分钟仍必须真实ready marker，取消/过期守卫保持，不在现有客户磁盘重跑初始化；相关守卫/type/build后重验原Ubuntu活体job，不将单次网络慢等同已有客户失败。

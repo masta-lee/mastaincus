@@ -24,7 +24,10 @@ export async function prepareNewContainerCloudInit(
 /** Only for a new disk carrying this generator's explicit completion marker. */
 export async function waitForNewGuestInitialization(client: IncusClient, name: string, cloudInitConfig?: Record<string, string>): Promise<void> {
   if (!Object.values(cloudInitConfig || {}).some(value => value.includes('/var/lib/incudal/initialization-ready'))) return
-  const deadline = Date.now() + 240000
+  // Cloud images can spend several minutes in their first package/index pass
+  // before our SSH script starts. Keep the new disk pending for the full
+  // bounded delivery window; only its actual completion marker grants success.
+  const deadline = Date.now() + 10 * 60 * 1000
   while (Date.now() < deadline) {
     try {
       const result = await execWithOutput(client, name, ['sh', '-c',
