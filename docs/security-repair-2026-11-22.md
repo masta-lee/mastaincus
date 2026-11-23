@@ -4,6 +4,10 @@
 
 ## 续接实施状态（2026-11-22，尚未完成）
 
+2026-11-24继续执行E03/E04：实际Node24.22.2→24.22.3＋zstd及PG16.15→16.16/客户端精确APT计划、原后端排空、两份原生dump、新exeinode/PG设置和全部include/原env+unit+finance/auth/seals核验与重复续接均通过（Node2130、PG2162/2165）；慢启动首轮失败未抹除。真实zstd半解包dpkg状态自动配置至原精确计划、无额外安装/服务重启、原基线保持2168通过，Linux34最新2169全过。原TCG CPUmax候选Node产生JIT不可执行匿名地址SIGSEGV（2036/2051/2054）；jitless禁Wasm不支持，noopt及CPUqemu64保持原配置业务就绪2082/2098通过，仅隔离诊断，不进入产品或称所有真机兼容。调试依赖/原备份/崩溃材料在专用副本保存，生产未触碰。
+
+新发现完整启动缺预算：systemd默认90s会杀掉原迁移prestart；首装/atomic/原workerhook/保留DB启动override统一10min，restart命令46min覆盖原stop35min＋start10min，原stop命令36min保持，自动patchstart11min。后端types2159/build2163、OTA2171、安全2170通过；实际systemd31秒活请求排空+95秒ExecStartPre在10min预算正常完成2164、无强杀。自动维护原型仍未提交，剩下载前置/异常恢复/历史备份持久化及最终same-source首装/旧worker/双arch实际事务待验；基础库/内核/旧APK/真实OSS首要门槛仍未完成，正式发行暂停。
+
 2026-11-24隔离候选真实准备新发现：root严格umask077使harden-database创建的incudal-local-only.conf成为0600，PostgreSQL无法读取include，配置核验正确拒绝。源码改root0644原子发布、不受umask影响；新建conf.d显式0755，已有目录/固定配置要求可信属主、权限及精确原内容，不接受陌生内容/软链/可写file。真实postgres身份读取、两次重复、旧固定0600安全修复、未知内容/link/write拒绝和完整scopeownership/重复/原数据共享DBowner保护1969通过；实际副本执行源码后pg_file_settings错误0/原PGprocess保持，1971安全守卫通过。本轮生产未改。0241f305源码主CI45235974021及配套六工作流已全部success。独立副本原workertask3下载/hash通过但TCG解压>180s失败、尚未停止后端/改DB；失败1922/1934保留，后续独立完整签名候选23719文件比对和原安装脚本准备1943通过不冒充该任务成功。NodePG自动事务仍原型，真实资金/更新/中断及最终同source完整包待验。
 
 2026-11-24源码8684c9d833da2490fc426ce49012dca6ef2208e5主CI45227143944及Agent/原生Incus/SSH/内存六工作流全部终态success。完整935候选实际AMD64/ARM64签名与SHA1870、实际tar来源/运行模块/35min预算/属主/无重复1874通过；预览45221379889独立证据保持。新增owner候选只读链接核验使用一次find取目标再保持原Bash百分号q格式与字节序，避免每link启动readlink拖慢TCG；空格/中文/换行/尾换行特殊名称原生1909与原候选postflight负对照通过、OTA专项1914过。副本历史security-candidate570额外link被正确拒绝，完整树移出active封存目录保存，原seal未重写；1913真实preflight通过，实际候选原worker安装仍在途。NodePG原型34真实Linux1914全过，实际包事务/中断/资金及配置前后闭环仍未通过，不提交自动上线。

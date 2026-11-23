@@ -14,7 +14,9 @@ assert.equal(process.env.INCUDAL_DRAIN_NATIVE_TEST,'disposable')
 const app=resolve(process.env.INCUDAL_DRAIN_APP||fileURLToPath(new URL('..',import.meta.url)))
 const source=await readFile(join(app,'deploy/incudal-backend.service.example'),'utf8')
 const timeout=/^TimeoutStopSec=(.+)$/m.exec(source)?.[1];assert.equal(timeout,'35min')
+assert.equal(/^TimeoutStartSec=(.+)$/m.exec(source)?.[1],'10min')
 const temporary=await mkdtemp(join(tmpdir(),'incudal-drain-')),unit='incudal-drain-test-'+process.pid
+const startupUnit=unit+'-startup'
 const require=createRequire(join(app,'server/package.json')),fastify=require.resolve('fastify')
 const fixture=join(temporary,'fixture.mjs'),ready=join(temporary,'ready.json'),receipt=join(temporary,'closed.json')
 const drainModule=join(app,'server/dist/lib/http-shutdown.js')
@@ -30,7 +32,7 @@ process.on('SIGTERM',()=>{if(stopped)return;stopped=true;void(async()=>{await cl
 `)
 let active,idleAgent,activeAgent
 try{
- await exec('systemd-run',['--unit='+unit,'--property=Type=exec','--property=User=root','--property=TimeoutStopSec='+timeout,process.execPath,fixture],{timeout:20000})
+ await exec('systemd-run',['--unit='+unit,'--property=Type=exec','--property=User=root','--property=TimeoutStopSec='+timeout,'--property=TimeoutStartSec=10min',process.execPath,fixture],{timeout:20000})
  let metadata;for(let n=0;n<100;n++){try{metadata=JSON.parse(await readFile(ready));break}catch{}await new Promise(r=>setTimeout(r,100))}
  assert.ok(metadata)
  const get=(path,agent)=>new Promise((resolve,reject)=>{http.get({host:'127.0.0.1',port:metadata.port,path,agent},r=>{let body='';r.on('data',b=>body+=b);r.on('end',()=>resolve(JSON.parse(body)))}).on('error',reject)})
@@ -43,9 +45,18 @@ try{
  const{stdout}=await exec('journalctl',['-u',unit,'--no-pager'],{timeout:10000})
  assert.ok(!/timed out|signal SIGKILL|code=killed/.test(stdout))
  console.log('PASS real systemd: original 35min budget, 31sec active work completes, idle HTTP drains, no forced kill')
+ const startupStarted=Date.now()
+ await exec('systemd-run',['--unit='+startupUnit,'--wait','--property=Type=oneshot','--property=TimeoutStartSec=10min',
+   '--property=ExecStartPre=/usr/bin/sleep 95','/usr/bin/true'],{timeout:125000})
+ assert.ok(Date.now()-startupStarted>90000,'startup prerequisites exceeding the original systemd default must complete')
+ const{stdout:startupLog}=await exec('journalctl',['-u',startupUnit,'--no-pager'],{timeout:10000})
+ assert.ok(!/timed out|signal SIGKILL|code=killed/.test(startupLog))
+ console.log('PASS real systemd: 95sec startup prerequisite completes with original 10min policy and no forced termination')
 }finally{
  idleAgent?.destroy();activeAgent?.destroy()
  await exec('systemctl',['stop',unit],{timeout:10000}).catch(()=>{})
  await exec('systemctl',['reset-failed',unit],{timeout:10000}).catch(()=>{})
+ await exec('systemctl',['stop',startupUnit],{timeout:10000}).catch(()=>{})
+ await exec('systemctl',['reset-failed',startupUnit],{timeout:10000}).catch(()=>{})
  await rm(temporary,{recursive:true,force:true})
 }

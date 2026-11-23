@@ -84,6 +84,7 @@ RestartSec=10
 KillMode=mixed
 KillSignal=SIGTERM
 TimeoutStopSec=35min
+TimeoutStartSec=10min
 LimitNOFILE=65536
 
 NoNewPrivileges=false

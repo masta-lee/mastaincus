@@ -598,7 +598,7 @@ async function refreshLocalOnboardingGateway(): Promise<void> {
 async function verifyUpdatedRuntime(isArtifactMode: boolean): Promise<void> {
   await chownInstallDir()
   await refreshLocalOnboardingGateway()
-  await run('systemctl', ['restart', serviceName], { timeoutMs: 36 * 60 * 1000 })
+  await run('systemctl', ['restart', serviceName], { timeoutMs: 46 * 60 * 1000 })
   await waitForBackendHealth()
   await run('bash', ['scripts/verify-split-host.sh'], {
     timeoutMs: 180000,
@@ -657,7 +657,7 @@ async function autoRollbackFromBackup(backupDir: string, timestamp: string): Pro
     await switchCurrentRelease(backupDir)
     await chownInstallDir()
     await refreshLocalOnboardingGateway()
-    await run('systemctl', ['restart', serviceName], { timeoutMs: 36 * 60 * 1000 })
+    await run('systemctl', ['restart', serviceName], { timeoutMs: 46 * 60 * 1000 })
     await waitForBackendHealth()
     await run('bash', ['scripts/verify-split-host.sh'], {
       timeoutMs: 180000,
@@ -687,7 +687,7 @@ async function autoRollbackFromBackup(backupDir: string, timestamp: string): Pro
   await mkdir(join(installDir, 'server/certs'), { recursive: true })
   await chownInstallDir()
   await refreshLocalOnboardingGateway()
-  await run('systemctl', ['restart', serviceName], { timeoutMs: 36 * 60 * 1000 })
+  await run('systemctl', ['restart', serviceName], { timeoutMs: 46 * 60 * 1000 })
   await waitForBackendHealth()
   await run('bash', ['scripts/verify-split-host.sh'], {
     timeoutMs: 180000,

@@ -79,6 +79,7 @@ work_dir=/opt/incudal
 cat > /etc/systemd/system/incudal-backend.service.d/platform-backup.conf <<EOF
 [Service]
 TimeoutStopSec=35min
+TimeoutStartSec=10min
 ReadWritePaths=/var/lib/incudal-backup/inbox
 ReadWritePaths=/var/lib/incudal-images
 ReadWritePaths=/var/lib/incudal-finance
@@ -159,6 +160,7 @@ EOF
   cat > /etc/systemd/system/incudal-backend.service.d/zz-database-security.conf <<'EOF'
 [Service]
 TimeoutStopSec=35min
+TimeoutStartSec=10min
 ExecStartPre=
 ExecStartPre=+/usr/bin/python3 -I -B /usr/local/libexec/incudal/harden-database.py
 ExecStartPre=+/usr/local/libexec/incudal/incudal-online-task recovery-startup

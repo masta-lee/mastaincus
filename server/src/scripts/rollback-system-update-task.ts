@@ -179,7 +179,7 @@ async function main(): Promise<void> {
     if (process.platform === 'linux' && existsSync(gatewayRefresh)) {
       await run('bash', [gatewayRefresh], { timeoutMs: 30000 })
     }
-    await run('systemctl', ['restart', serviceName], { timeoutMs: 36 * 60 * 1000 })
+    await run('systemctl', ['restart', serviceName], { timeoutMs: 46 * 60 * 1000 })
     await waitForBackendHealth()
     await run('bash', ['scripts/verify-split-host.sh'], {
       timeoutMs: 180000,

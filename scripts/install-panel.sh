@@ -1202,6 +1202,7 @@ ExecStart=/usr/bin/node ${app_dir}/server/dist/app.js
 KillMode=mixed
 KillSignal=SIGTERM
 TimeoutStopSec=35min
+TimeoutStartSec=10min
 
 # 自动重启
 Restart=on-failure
