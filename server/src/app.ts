@@ -821,7 +821,11 @@ function gracefulShutdown(signal: string): Promise<void> {
       // Protected startup exits its wait as soon as shuttingDown is set. Any
       // current initializer must finish before its DB connection is closed.
       await startupPromise?.catch(() => {})
-      await closeApplicationHttp(fastify)
+      await closeApplicationHttp(fastify, async () => {
+        const results = await Promise.allSettled([beginBackgroundShutdown(), stopInstanceTaskWorker(), stopRestoreWorker(), stopBackupUploadWorker()])
+        const failed = results.find(result => result.status === 'rejected')
+        if (failed?.status === 'rejected') throw failed.reason
+      })
       await closePrismaDatabase()
       process.exit(0)
     } catch (error) {

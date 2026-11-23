@@ -25,10 +25,11 @@ import {closeApplicationHttp} from ${JSON.stringify(drainModule)};
 import {writeFile} from 'node:fs/promises';
 const f=Fastify({forceCloseConnections:'idle'});let stopped=false,workDone=false;let release;
 const work=new Promise(r=>release=r);
+f.addHook('preClose',async()=>{await work});
 f.get('/idle',async()=>({ok:true}));
 f.get('/active',async()=>{setTimeout(()=>{workDone=true;release()},31000);await work;return{finished:true}});
 await f.listen({host:'127.0.0.1',port:0});await writeFile(${JSON.stringify(ready)},JSON.stringify({port:f.server.address().port}));
-process.on('SIGTERM',()=>{if(stopped)return;stopped=true;void(async()=>{await closeApplicationHttp(f);await work;await writeFile(${JSON.stringify(receipt)},JSON.stringify({workDone}));process.exit(0)})()});
+process.on('SIGTERM',()=>{if(stopped)return;stopped=true;void(async()=>{await closeApplicationHttp(f,()=>work);await writeFile(${JSON.stringify(receipt)},JSON.stringify({workDone}));process.exit(0)})()});
 `)
 let active,idleAgent,activeAgent
 try{
@@ -44,7 +45,7 @@ try{
  assert.deepEqual(await active,{finished:true});assert.deepEqual(JSON.parse(await readFile(receipt)),{workDone:true})
  const{stdout}=await exec('journalctl',['-u',unit,'--no-pager'],{timeout:10000})
  assert.ok(!/timed out|signal SIGKILL|code=killed/.test(stdout))
- console.log('PASS real systemd: original 35min budget, 31sec active work completes, idle HTTP drains, no forced kill')
+ console.log('PASS real systemd: original 35min budget, 31sec HTTP and preClose resource work complete beyond plugin timeout, idle HTTP drains, no forced kill')
  const startupStarted=Date.now()
  await exec('systemd-run',['--unit='+startupUnit,'--wait','--property=Type=oneshot','--property=TimeoutStartSec=10min',
    '--property=ExecStartPre=/usr/bin/sleep 95','/usr/bin/true'],{timeout:125000})

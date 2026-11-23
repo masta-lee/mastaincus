@@ -77,8 +77,8 @@ export async function verifyAppWorkerLifecycle(source: string) {
   const steps:string[]=[]
   const shutdownProcess={exit:()=>{steps.push('exit')}}
   const shutdownFastify={close:async()=>{steps.push('fastify')},log:{error:()=>{}}}
-  const createShutdown=new Function('fastify','closePrismaDatabase','process','console','starting','closeApplicationHttp',`let startupPromise=starting,shutdownPromise=null,shuttingDown=false,businessStartupReady=true;${javascript};return {run:gracefulShutdown,state:()=>({shuttingDown,businessStartupReady})}`)
-  const shutdownHarness=createShutdown(shutdownFastify,async()=>{steps.push('database')},shutdownProcess,{log:()=>{}},starting,async(server:{close:()=>Promise<void>})=>server.close())
+  const createShutdown=new Function('fastify','closePrismaDatabase','process','console','starting','closeApplicationHttp','beginBackgroundShutdown','stopInstanceTaskWorker','stopRestoreWorker','stopBackupUploadWorker',`let startupPromise=starting,shutdownPromise=null,shuttingDown=false,businessStartupReady=true;${javascript};return {run:gracefulShutdown,state:()=>({shuttingDown,businessStartupReady})}`)
+  const shutdownHarness=createShutdown(shutdownFastify,async()=>{steps.push('database')},shutdownProcess,{log:()=>{}},starting,async(server:{close:()=>Promise<void>},drain:()=>Promise<void>)=>{await drain();await server.close()},async()=>{},async()=>{},async()=>{},async()=>{})
   const first=shutdownHarness.run('SIGTERM'),second=shutdownHarness.run('SIGINT')
   assert.equal(first,second,'two signals cannot race database/worker close')
   assert.deepEqual(shutdownHarness.state(),{shuttingDown:true,businessStartupReady:false})
@@ -104,6 +104,19 @@ export async function verifyAppWorkerLifecycle(source: string) {
   await new Promise(resolve=>setTimeout(resolve,10));assert.equal(httpClosed,false,'a real in-flight response is not destroyed')
   releaseResponse();assert.deepEqual(JSON.parse(await activeResponse),{completed:true});await httpClose
   idleAgent.destroy();activeAgent.destroy()
+  const slowClose=Fastify({pluginTimeout:30,forceCloseConnections:'idle'})
+  let releaseSlow!:()=>void
+  const slowWork=new Promise<void>(resolve=>{releaseSlow=resolve})
+  slowClose.addHook('preClose',async()=>{await slowWork})
+  await slowClose.listen({host:'127.0.0.1',port:0})
+  let slowClosed=false
+  const closingSlow=closeApplicationHttp(slowClose,()=>slowWork).then(()=>{slowClosed=true})
+  await new Promise(resolve=>setTimeout(resolve,80))
+  assert.equal(slowClosed,false,'resource work longer than pluginTimeout remains alive outside timed preClose')
+  assert.equal(slowClose.server.listening,false,'new HTTP connections stop before waiting for background work')
+  releaseSlow();await closingSlow
+  assert.equal(slowClosed,true)
+  console.log('PASS resource shutdown exceeds plugin timeout without timing out preClose; new HTTP admission stopped')
   let releaseInterval!:()=>void,intervalStarted!:()=>void
   const intervalGate=new Promise<void>(resolve=>{releaseInterval=resolve}),intervalEntered=new Promise<void>(resolve=>{intervalStarted=resolve})
   let intervalCalls=0
