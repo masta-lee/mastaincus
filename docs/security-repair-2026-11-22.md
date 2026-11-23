@@ -4,6 +4,10 @@
 
 ## 续接实施状态（2026-11-22，尚未完成）
 
+2026-11-24完整退出候选`9359256ae679ec0e66d675f3eccf67e426fcec54`的预览45221379889已终态success：双架构首装/root恢复、31秒活请求排空及六原v1.8.14 worker正常/迁移留库/失败回退再升级通过，Release预期skipped。实际双包独立下载核验另续，不作生产部署证据。同源主CI45221357628的auth-refresh分片失败137856355035已读完整日志1863；测试多处未return实际admission promise，且第二请求加入已有refresh时没有新fetch，原fixture会等待无法发生的第二fetch。补同身份未完成refresh gate和所有start await，真实Chrome1865全场景自然exit0，保共享刷新、28旧会话成功/401、角色和账号切换、重试上限、503及跨端freshlogin断言；产品鉴权逻辑未改。主CI其它末job继续核终态，修复源码新CI另记。
+
+Owner确认未授权root密码登录，明确暂不由agent轮换，修完由owner自行更换。只读取证及已授权撤钥/首页可信恢复保持；本轮没有执行密码轮换或重建任何控制/财务/客户身份。Node/PG自动事务仍为未提交原型，完整中断恢复和真实包更新待验，不将当前单测通过称自动激活完成。
+
 2026-11-24 owner明确继续剩余安全修复，恢复源码与隔离验证授权，原阶段暂停为历史。先处理两次生产30秒停止强杀：四个app cleanup interval未被managed stop跟踪，真实HTTP活请求在close期间完成后又留idle keepalive；新增同一activity timer admission/drain及只清idle连接，活响应继续返回。所有安装/原workerhook/atomic模板backend35min排空，update命令36min/rootupdate120min/rootrollback60min同步，涵盖现有30min资源任务。对应types/build/backup及OTA守卫通过，原生Linuxsystemd独立服务31秒完整请求正常返回/exit0/无SIGKILL，旧fixture再现125secidle等待保日志。本轮尚未应用生产，双完整包/原worker升级回退和实际停止验证后另记。篡改只读追溯发现11月20日15:35同来源先root password登录、15:48改公钥登录，云init未包含该key，具体add命令/秘密外传未证明，仍独立事件调查。
 
 本阶段最终full1832本机231/231自然exit0/14m3；后续旧rollbackhook补35min保持及rootupdate/rollback预算专项1835通过，不重复无变化全量。真实systemd1831>31sec原活请求完整结束且无强杀；独立service清理，本轮没有停止生产backend或客户。准备same-source双包首装/旧worker正常与迁移留库/后半失败回退继续，源代码阶段保存不代完整自动patch/所有安全完成。

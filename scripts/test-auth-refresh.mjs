@@ -19,7 +19,7 @@ try {
     await page.goto('http://127.0.0.1:19769', { settleMs: 200 }); const deadline = Date.now() + 10000
     while (!await page.eval(() => !!window.refreshHarness)) { if (Date.now() > deadline) throw Error('refresh fixture unavailable: ' + page.consoleErrors.join('\n')); await sleep(30) }
   }
-  await fresh(); await run(() => { const h = window.refreshHarness; h.session(1, 'refresh-session', 'user', 60); h.start('user'); h.start('admin') })
+  await fresh(); await run(async () => { const h = window.refreshHarness; h.session(1, 'refresh-session', 'user', 60); await Promise.all([h.start('user'), h.start('admin')]) })
   assert.equal(await page.eval(() => window.refreshHarness.refreshes.length), 1, 'user/admin API requests must share a single refresh for the current session')
   await run(() => { const h = window.refreshHarness; h.refreshes[0].resolve({ token: h.token(1, 'refresh-session', 'user', 7 * 86400, 'refreshed') }) })
   assert.equal(await page.eval(() => window.refreshHarness.pending.length), 2)
@@ -28,7 +28,7 @@ try {
   console.log('PASS both API wrappers share current-session refresh')
   let stale = 0
   for (const client of ['user', 'admin']) for (const mode of ['account', 'sid', 'role', 'clear', 'aba', 'storage', 'memory']) for (const failure of [false, true]) {
-    await fresh(); await run(client => { const h = window.refreshHarness; h.session(1, 'refresh-session', 'user', 60); h.start(client) }, client)
+    await fresh(); await run(client => { const h = window.refreshHarness; h.session(1, 'refresh-session', 'user', 60); return h.start(client) }, client)
     await run(mode => { const h = window.refreshHarness; if (mode === 'account') h.session(2); if (mode === 'sid') h.session(1, 'other-session'); if (mode === 'role') h.session(1, 'refresh-session', 'admin'); if (mode === 'clear') h.auth.clearLocalAuth(); if (mode === 'aba') { h.session(2); h.session(1) }; if (mode === 'storage') localStorage.setItem('token', h.token(2)); if (mode === 'memory') h.auth.clearInMemoryAuth() }, mode)
     const before = await page.eval(() => JSON.stringify({ stored: localStorage.getItem('token'), user: window.refreshHarness.auth.user }))
     await run(failure => { const h = window.refreshHarness; h.refreshes[0].resolve(failure ? {} : { token: h.token(1, 'refresh-session', 'user', 7 * 86400, 'old-refresh') }, failure ? 401 : 200) }, failure)
@@ -47,10 +47,10 @@ try {
     assert.equal(await page.eval(() => window.refreshHarness.auth.user.id), 2)
   }
   console.log('PASS both wrappers reject stale HTTP success and 401 before any refresh or retry')
-  await fresh(); await run(() => { const h = window.refreshHarness; localStorage.setItem('token', h.token(2)); h.start('user'); h.start('admin') })
+  await fresh(); await run(async () => { const h = window.refreshHarness; localStorage.setItem('token', h.token(2)); await Promise.all([h.start('user'), h.start('admin')]) })
   assert.equal(await page.eval(() => window.refreshHarness.pending.length), 0, 'requests before a queued storage event cannot borrow a replacement account token')
   assert.equal(await page.eval(() => window.refreshHarness.errors.length), 2)
-  await fresh(); await run(() => { const h = window.refreshHarness; h.start('user'); h.start('admin') })
+  await fresh(); await run(async () => { const h = window.refreshHarness; await Promise.all([h.start('user'), h.start('admin')]) })
   await run(() => { const h = window.refreshHarness; h.pending[0].reject(401); h.pending[1].reject(401) })
   assert.equal(await page.eval(() => window.refreshHarness.refreshes.length), 1, 'reactive refresh queue is shared')
   await run(() => { const h = window.refreshHarness; h.refreshes[0].resolve({ token: h.token(1, 'refresh-session', 'user', 7 * 86400, 'renewed') }) })
@@ -58,7 +58,7 @@ try {
   await run(() => { const h = window.refreshHarness; h.pending[2].resolve({ message: 'queued', taskId: 2, status: 'pending' }); h.pending[3].resolve({ message: 'queued', taskId: 3, status: 'pending' }) })
   assert.equal(await page.eval(() => window.refreshHarness.results.length), 2)
   for (const client of ['user', 'admin']) {
-    await fresh(); await run(client => { history.replaceState({}, '', client === 'admin' ? '/admin/login' : '/login'); window.refreshHarness.start(client) }, client)
+    await fresh(); await run(client => { history.replaceState({}, '', client === 'admin' ? '/admin/login' : '/login'); return window.refreshHarness.start(client) }, client)
     await run(() => window.refreshHarness.pending[0].reject(401))
     await run(() => { const h = window.refreshHarness; h.refreshes[0].resolve({ token: h.token(1, 'refresh-session', 'user', 7 * 86400, 'renewed') }) })
     await run(() => window.refreshHarness.pending[1].reject(401))
@@ -80,26 +80,26 @@ try {
   await run(() => window.refreshHarness.pending[1].resolve({ message: 'queued', taskId: 1, status: 'pending' }))
   await fresh(); await run(async () => { const h = window.refreshHarness; h.session(1, 'refresh-session', 'user', 60); await h.start('user'); h.session(2, 'new-session', 'user', 60); await h.start('admin') })
   assert.equal(await page.eval(() => window.refreshHarness.refreshes.length), 2, 'replacement session starts its own refresh without waiting for an obsolete one')
-  await run(() => { const h = window.refreshHarness; h.refreshes[0].resolve({ token: h.token(1) }); h.start('admin') })
+  await run(() => { const h = window.refreshHarness; h.refreshes[0].resolve({ token: h.token(1) }); return h.start('admin') })
   assert.equal(await page.eval(() => window.refreshHarness.refreshes.length), 2, 'old refresh finally cannot release the new-session lock')
   await run(() => { const h = window.refreshHarness; h.refreshes[1].resolve({ token: h.token(2, 'new-session', 'user', 7 * 86400, 'renewed') }) })
   assert.equal(await page.eval(() => window.refreshHarness.pending.length), 2)
   await run(() => { for (const req of window.refreshHarness.pending) req.resolve({ message: 'queued', taskId: 1, status: 'pending' }) })
   assert.equal(await page.eval(() => window.refreshHarness.auth.user.id), 2)
   for (const client of ['user', 'admin']) {
-    await fresh(); await run(client => { const h = window.refreshHarness; h.session(1, 'refresh-session', 'user', 60); h.start(client) }, client)
+    await fresh(); await run(client => { const h = window.refreshHarness; h.session(1, 'refresh-session', 'user', 60); return h.start(client) }, client)
     await run(() => window.refreshHarness.refreshes[0].resolve({}, 503))
     assert.equal(await page.eval(() => window.refreshHarness.pending.length), 1, 'temporary refresh 503 still sends the original-session request')
     await run(() => { const h = window.refreshHarness; h.pending[0].resolve({ message: 'queued', taskId: 1, status: 'pending' }) })
     assert.equal(await page.eval(() => window.refreshHarness.auth.user.id), 1)
-    await fresh(); await run(client => { history.replaceState({}, '', client === 'admin' ? '/admin/login' : '/login'); const h = window.refreshHarness; h.session(1, 'refresh-session', 'user', 60); h.start(client) }, client)
+    await fresh(); await run(client => { history.replaceState({}, '', client === 'admin' ? '/admin/login' : '/login'); const h = window.refreshHarness; h.session(1, 'refresh-session', 'user', 60); return h.start(client) }, client)
     await run(() => window.refreshHarness.refreshes[0].resolve({}, 401))
     assert.equal(await page.eval(() => window.refreshHarness.auth.token), null, 'current invalid refresh clears local state')
     assert.equal(await page.eval(() => window.refreshHarness.pending.length), 0, 'expired proactive refresh never dispatches a write')
   }
   console.log('PASS replacement refresh lock isolation, temporary 503 preservation and current refresh-401 cleanup')
   for (const client of ['user', 'admin']) for (const mode of ['foreign', 'sid', 'missing', 'string', 'expired', 'role-change']) {
-    await fresh(); await run(client => { const h = window.refreshHarness; h.session(1, 'refresh-session', 'user', 60); h.start(client) }, client)
+    await fresh(); await run(client => { const h = window.refreshHarness; h.session(1, 'refresh-session', 'user', 60); return h.start(client) }, client)
     await run(mode => { const h = window.refreshHarness; const values = { foreign: h.token(2), sid: h.token(1, 'foreign-session'), missing: null, string: 1, expired: h.token(1, 'refresh-session', 'user', -10), 'role-change': h.token(1, 'refresh-session', 'admin') }; h.refreshes[0].resolve({ token: values[mode] }) }, mode)
     if (mode === 'role-change') {
       assert.equal(await page.eval(() => window.refreshHarness.pending.length), 0, 'changed role invalidates a prepared operation')
