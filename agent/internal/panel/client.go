@@ -7,10 +7,13 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
+	"net"
 	"net/http"
 	"strings"
+	"syscall"
 	"time"
 
 	"incudal-agent/internal/abuse"
@@ -75,6 +78,46 @@ func New(cfg config.Config) *Client {
 }
 
 func (client *Client) Heartbeat(ctx context.Context, payload map[string]any) (HeartbeatResult, error) {
+	// A transient edge reset must not defer the next signed observation by a
+	// whole heartbeat interval. Every attempt gets a fresh nonce/signature;
+	// rejected identities, TLS trust, redirects and invalid bodies never retry.
+	budget, cancel := context.WithTimeout(ctx, 20*time.Second)
+	defer cancel()
+	var result HeartbeatResult
+	var err error
+	for attempt := 0; attempt < 3; attempt++ {
+		requestCtx, stop := context.WithTimeout(budget, 5*time.Second)
+		result, err = client.heartbeatOnce(requestCtx, payload)
+		stop()
+		if err == nil || ctx.Err() != nil || budget.Err() != nil || !transientHeartbeatFailure(result, err) {
+			return result, err
+		}
+		if attempt == 2 {
+			break
+		}
+		client.httpClient.CloseIdleConnections()
+		timer := time.NewTimer(time.Duration(attempt+1) * time.Second)
+		select {
+		case <-budget.Done():
+			timer.Stop()
+			return result, budget.Err()
+		case <-timer.C:
+		}
+	}
+	return result, err
+}
+
+func transientHeartbeatFailure(result HeartbeatResult, err error) bool {
+	if result.StatusCode != 0 {
+		return result.StatusCode == 408 || result.StatusCode == 429 || result.StatusCode == 502 || result.StatusCode == 503 || result.StatusCode == 504
+	}
+	var network net.Error
+	return errors.Is(err, io.EOF) || errors.Is(err, io.ErrUnexpectedEOF) || errors.Is(err, syscall.ECONNRESET) ||
+		errors.Is(err, syscall.ECONNREFUSED) || errors.Is(err, syscall.EPIPE) || errors.Is(err, context.DeadlineExceeded) ||
+		errors.As(err, &network) && network.Timeout()
+}
+
+func (client *Client) heartbeatOnce(ctx context.Context, payload map[string]any) (HeartbeatResult, error) {
 	body, err := protocol.CanonicalJSON(payload)
 	if err != nil {
 		return HeartbeatResult{}, err

@@ -6,6 +6,8 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"incudal-agent/internal/protocol"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -147,5 +149,88 @@ func TestHeartbeatRejectsRedirectAndOversizedResponse(t *testing.T) {
 				t.Fatal("redirect was followed")
 			}
 		})
+	}
+}
+
+func TestHeartbeatTransientDisconnectRetriesFreshSignedRequests(t *testing.T) {
+	for _, first := range []string{"reset", "edge-502"} {
+		t.Run(first, func(t *testing.T) {
+			calls := 0
+			nonces := map[string]bool{}
+			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				calls++
+				body, _ := io.ReadAll(r.Body)
+				nonce := r.Header.Get("x-incudal-nonce")
+				if nonces[nonce] || nonce == "" {
+					t.Error("replayed retry nonce")
+				}
+				nonces[nonce] = true
+				expected := protocol.Signature("retry-fixture", protocol.SigningPayload("POST", heartbeatPath, r.Header.Get("x-incudal-timestamp"), nonce, protocol.BodySHA256(body)))
+				if r.Header.Get("x-incudal-signature") != expected {
+					t.Error("retry request signature invalid")
+				}
+				if calls == 1 {
+					if first == "edge-502" {
+						w.WriteHeader(502)
+					} else {
+						conn, _, _ := w.(http.Hijacker).Hijack()
+						_ = conn.Close()
+					}
+					return
+				}
+				const response = `{"poolHostBbr":true}`
+				signTestResponse(w, r, "retry-fixture", response)
+				_, _ = w.Write([]byte(response))
+			}))
+			defer server.Close()
+			client := New(config.Config{PanelURL: server.URL, AgentSecret: "retry-fixture", RequestTimeout: time.Second})
+			result, err := client.Heartbeat(context.Background(), map[string]any{"observed": "unchanged"})
+			if err != nil || calls != 2 || result.PoolHostBBR == nil {
+				t.Fatalf("retry did not recover: %d %v", calls, err)
+			}
+		})
+	}
+}
+
+func TestHeartbeatRetryDoesNotBypassRejectionOrCancellation(t *testing.T) {
+	for _, status := range []int{401, 403, 400, 307} {
+		calls := 0
+		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { calls++; w.WriteHeader(status) }))
+		client := New(config.Config{PanelURL: server.URL, RequestTimeout: time.Second})
+		_, err := client.Heartbeat(context.Background(), map[string]any{})
+		server.Close()
+		if err == nil || calls != 1 {
+			t.Fatalf("status %d retried: %d", status, calls)
+		}
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	calls := 0
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { calls++; w.WriteHeader(502); cancel() }))
+	defer server.Close()
+	client := New(config.Config{PanelURL: server.URL, RequestTimeout: time.Second})
+	started := time.Now()
+	_, err := client.Heartbeat(ctx, map[string]any{})
+	if err == nil || calls != 1 || time.Since(started) > time.Second {
+		t.Fatal("cancelled retry kept sending")
+	}
+}
+
+func TestHeartbeatRetryIsFiniteAndRejectsTLSIdentityFailure(t *testing.T) {
+	calls := 0
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { calls++; w.WriteHeader(503) }))
+	client := New(config.Config{PanelURL: server.URL, RequestTimeout: time.Second})
+	started := time.Now()
+	_, err := client.Heartbeat(context.Background(), map[string]any{})
+	server.Close()
+	if err == nil || calls != 3 || time.Since(started) > 5*time.Second {
+		t.Fatalf("unbounded retry: %d %v", calls, err)
+	}
+	tlsServer := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { t.Error("untrusted TLS reached application") }))
+	defer tlsServer.Close()
+	client = New(config.Config{PanelURL: tlsServer.URL, RequestTimeout: time.Second})
+	started = time.Now()
+	_, err = client.Heartbeat(context.Background(), map[string]any{})
+	if err == nil || time.Since(started) > time.Second {
+		t.Fatal("TLS identity failure retried or accepted")
 	}
 }

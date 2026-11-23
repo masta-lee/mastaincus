@@ -36,6 +36,10 @@ source994fff285e9be9658c77b83802835708a17cf6d5本机full1730完整231/231自然0
 
 部署入口/原生测试source1f24cbf502ec6c87a06266ea40328077071e3368已推；工具通过原worker自然成功beforeExit运行finalize，25730完整已签文件/links与原确认生成的cache核验后调用原launcher seal，task60收尾自动成功，最终封存无需手改。最后helper源码CI45196816578在途，994源码CI45191382295因后续helper提交取消、不能称全绿，994完整包守卫/原生/两首装六worker及独立资产过。最终helper需要继续核其CI失败/终态，不重建产品包仅为文档或工具核验。
 
+最终目标验收：22:45:08恢复204available/4assigned/0unavailable后，22:47:40/22:49:26/22:51:06/22:53:08/22:55:30真实库存API保持；1770/1776/1780多个40秒窗口每5秒采样及完整receipt208/208，没有再现routine撤回或compat/package循环。22:50:00与22:55:00两轮自然五分钟到期巡检均finished/success/failureCount0/lastErrornull（1781）；最后1780四客户PIDUUID磁盘created/密码/原价格已付期及19财务、574认证/384财务seal、12宿主原身份、.env字节、唯一backend3299522/NRestarts0正常，1781原测试用户own200/admin403/forgedJWT401。只证明本次短期目标自然周期稳定，不是全天/72h或全系统安全完整验收。私有证据不提交，专用本机55469 PG已停止且保夹具/日志；正常本机PG与客户实例不动。最新文档/工具同产品CI45198421894尚在途，未发现失败；此前1f24CI因文档更新取消，取消不绿。正式Release/tag/main仍未执行。
+
+23:04新变化必须纠正稳定范围：真实API3暂不可售105/106/107，随后#37心跳119秒；receipt仍verified/finished/未expired、compatverified，无backend异常/锁失败。真实受信SSH宿主日志1789全部指向CloudflareIPv6 HTTPS入口read connection reset by peer；四宿主低负载、单Agent、无重启，后续200心跳恢复23:06全库存204/4/0。Agent每分钟只发一次，网络瞬时失败后等下一分钟可能突破90秒门禁。不得放宽90秒或签名；新增Client Heartbeat20秒总预算、单次≤5秒、瞬时EOF/reset/timeout及408/429/502/503/504最多3次、新nonce/HMAC/关闭旧连接，每次独立response signature验证；401/403/重定向/TLS身份/oversize和取消不重试。Go全套/vet/双Linux编译/真实断连HTTP原生通过，候选security.5待signed双架构及实际自动升级/两轮观察。本机Go测试第一次清理exe被Windows拒绝，测试断言过但exit1保留，后续自然exit0。不能将已部署.4说成.5。
+
 2026-11-23，北京时间。Owner先授权只读取证，随后明确授权本问题源码修复后，将此前已做安全修复同批热更新主控作为测试；不正式发版。
 
 主控实际v1.8.14／ced7c10cd17d、唯一后端健康。208台专属宿主中12台故障一致：#16、#21、#24、#26、#30～#36、#46。均管理在线、无客户实例、Agent工具/网络防护有效、AppArmor维护已完成，后续检查反复`HARDENING_JOURNAL_CONFLICT`。它们不是离线宿主。
