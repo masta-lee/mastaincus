@@ -6,6 +6,7 @@ import (
 	"context"
 	"os"
 	"reflect"
+	"strings"
 	"testing"
 	"time"
 )
@@ -30,6 +31,22 @@ func TestNativeSecurityPackageInventoryAndUpdate(t *testing.T) {
 	}
 	if err = repairSecurityPackages(ctx); err != nil {
 		t.Fatal("signed bounded leaf update", err)
+	}
+	repositories, err := os.ReadFile("/etc/apk/repositories")
+	if err != nil {
+		t.Fatal(err)
+	}
+	legacy := strings.ReplaceAll(string(repositories), "https://dl-cdn.alpinelinux.org/", "http://dl-cdn.alpinelinux.org/")
+	if err = os.WriteFile("/etc/apk/repositories", []byte(legacy), 0644); err != nil {
+		t.Fatal(err)
+	}
+	defer os.WriteFile("/etc/apk/repositories", repositories, 0644)
+	if err = repairSecurityPackages(ctx); err != nil {
+		t.Fatal("legacy official HTTP settings must use independent signed HTTPS transaction", err)
+	}
+	retained, err := os.ReadFile("/etc/apk/repositories")
+	if err != nil || string(retained) != legacy {
+		t.Fatal("security patch rewrote the original administrator repository file", err)
 	}
 	afterOutput, err := run(ctx, "apk", "info", "-v")
 	if err != nil {

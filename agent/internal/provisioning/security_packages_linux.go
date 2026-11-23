@@ -95,23 +95,13 @@ func repairSecurityPackageSet(ctx context.Context, targets []string, authorize f
 	if err != nil {
 		return fmt.Errorf("security package distribution needs reviewed update")
 	}
-	parts := strings.Split(strings.TrimSpace(string(release)), ".")
-	if len(parts) < 2 || !regexp.MustCompile(`^3\.(22|23|24)$`).MatchString(strings.Join(parts[:2], ".")) {
-		return fmt.Errorf("security package branch unsupported")
-	}
 	repositories, err := os.ReadFile("/etc/apk/repositories")
 	if err != nil {
 		return err
 	}
-	for _, line := range strings.Split(string(repositories), "\n") {
-		line = strings.TrimSpace(line)
-		if line == "" || strings.HasPrefix(line, "#") {
-			continue
-		}
-		base := "https://dl-cdn.alpinelinux.org/alpine/v" + strings.Join(parts[:2], ".") + "/"
-		if line != base+"main" && line != base+"community" {
-			return fmt.Errorf("security package repository needs reviewed update")
-		}
+	reviewedRepositories, err := reviewedSecurityRepositories(string(release), string(repositories))
+	if err != nil {
+		return err
 	}
 	unlock, err := lock()
 	if err != nil {
@@ -150,7 +140,11 @@ func repairSecurityPackageSet(ctx context.Context, targets []string, authorize f
 	if filepath.Dir(cache) != "/var/lib/incudal-agent" {
 		return fmt.Errorf("security package cache invalid")
 	}
-	base := []string{"--cache-dir", cache, "--cache-max-age", "60", "--wait", "5", "--timeout", "15"}
+	repositoryPath := filepath.Join(cache, "repositories")
+	if err = os.WriteFile(repositoryPath, []byte(reviewedRepositories), 0600); err != nil {
+		return err
+	}
+	base := []string{"--repositories-file", repositoryPath, "--cache-dir", cache, "--cache-max-age", "60", "--wait", "5", "--timeout", "15"}
 	// apk --simulate intentionally never writes missing indexes, even with
 	// --update-cache. Fetch and verify them explicitly once before simulation.
 	if _, err = run(ctx, "apk", append(append([]string{}, base...), "update")...); err != nil {
@@ -208,6 +202,10 @@ func repairSecurityPackageSet(ctx context.Context, targets []string, authorize f
 			return err
 		}
 	}
+	currentRepositories, err := os.ReadFile("/etc/apk/repositories")
+	if err != nil || string(currentRepositories) != string(repositories) {
+		return fmt.Errorf("security package administrator repositories changed")
+	}
 	if _, err = run(ctx, "apk", append(append([]string{}, base...), append([]string{"upgrade"}, pinned...)...)...); err != nil {
 		return err
 	}
@@ -222,6 +220,10 @@ func repairSecurityPackageSet(ctx context.Context, targets []string, authorize f
 	currentWorld, err := os.ReadFile("/etc/apk/world")
 	if err != nil || string(world) != string(currentWorld) {
 		return fmt.Errorf("security package administrator constraints changed")
+	}
+	currentRepositories, err = os.ReadFile("/etc/apk/repositories")
+	if err != nil || string(currentRepositories) != string(repositories) {
+		return fmt.Errorf("security package administrator repositories changed")
 	}
 	return nil
 }

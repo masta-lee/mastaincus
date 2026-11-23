@@ -228,6 +228,9 @@ jobs:
           sudo modprobe fuse
           sudo modprobe autofs4
           docker run --rm --privileged -v /lib/modules:/lib/modules:ro -v /tmp/incudal-provisioning-tests:/test:ro -e INCUDAL_PROVISIONING_NATIVE_TEST=disposable -e INCUDAL_PROVISIONING_VISIBILITY_TEST=1 alpine:3.24 sh -ec 'apk add --no-cache openrc; mkdir -p /run/openrc; touch /run/openrc/softlevel; /test -test.run TestNativeRepairAndDrift -test.v'
+      - name: Legacy official HTTP repositories use signed HTTPS security transactions
+        run: |
+          docker run --rm -v /tmp/incudal-provisioning-tests:/test:ro -e INCUDAL_SYSINFO_COMPAT_TEST=disposable alpine:3.24 sh -ec 'apk add --no-cache openssl curl; mkdir -p /var/lib/incudal-agent; chmod 700 /var/lib/incudal-agent; /test -test.run TestNativeSecurityPackageInventoryAndUpdate -test.v'
       - name: Native pool host BBR, customer preservation and automatic repair
         run: |
           (cd agent && CGO_ENABLED=0 go test -c -o /tmp/incudal-bbr-tests ./internal/performance)
