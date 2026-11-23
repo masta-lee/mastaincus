@@ -105,9 +105,9 @@ func (e *Engine) Run(ctx context.Context) {
 				// maintenance pass. The Agent's guest list alone cannot authorize
 				// interrupting a host service while a checkout is in flight.
 				if validCompatPermit(permit) && len(permit.Guests) == 0 {
-					securityContext, done := context.WithTimeout(c, 60*time.Second)
-					lxcfsError := repairLxcfsSecurity(securityContext, permit)
-					done()
+					// Package/service activation and DNS reload have independent
+					// sixty-second deadlines inside the original maintenance lane.
+					lxcfsError := repairEmptyHostServiceSecurity(c, permit)
 					if lxcfsError == nil {
 						lxcfsChecked = time.Now()
 						loadedChecked = time.Time{}
@@ -117,6 +117,7 @@ func (e *Engine) Run(ctx context.Context) {
 						lxcfsChecked = time.Now().Add(-6*time.Hour + 5*time.Minute)
 						securityState = "retry"
 					}
+					compatStatus, compatRequest, compatHashValue = incusCompatibilityStatus(c)
 				} else {
 					compatStatus = "needed"
 				}

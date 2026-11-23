@@ -10,14 +10,15 @@ import (
 	"strconv"
 	"strings"
 	"syscall"
+	"time"
 )
 
 // musl cannot unload LXCFS's module safely. The original controller fence and
 // a second all-projects local inventory must both prove an empty host before
 // installing or activating these packages. A paid guest is never restarted.
-var securityLxcfsTargets = append(append([]string{}, securityLeaves...), "lxcfs", "lxcfs-openrc", "fuse3-libs")
+var securityLxcfsTargets = append(append([]string{}, securityLeaves...), "lxcfs", "lxcfs-openrc", "fuse3-libs", "dnsmasq")
 
-func authorizeEmptySecurityHost(ctx context.Context, permit *CompatPermit) error {
+func verifyEmptySecurityHost(ctx context.Context, permit *CompatPermit) error {
 	if !validCompatPermit(permit) || len(permit.Guests) != 0 {
 		return fmt.Errorf("LXCFS security maintenance waits for empty host authority")
 	}
@@ -29,12 +30,19 @@ func authorizeEmptySecurityHost(ctx context.Context, permit *CompatPermit) error
 	if json.Unmarshal(raw, &guests) != nil || guests == nil || len(guests) != 0 {
 		return fmt.Errorf("LXCFS security maintenance host is occupied or inventory unavailable")
 	}
-	raw, err = run(ctx, "incus", "query", "--raw", "/1.0/operations?recursion=1")
-	if err != nil || !compatOperationsIdle(raw) {
-		return fmt.Errorf("LXCFS security maintenance waits for host operations")
-	}
 	if !validCompatPermit(permit) {
 		return fmt.Errorf("LXCFS security maintenance authority expired")
+	}
+	return nil
+}
+
+func authorizeEmptySecurityHost(ctx context.Context, permit *CompatPermit) error {
+	if err := verifyEmptySecurityHost(ctx, permit); err != nil {
+		return err
+	}
+	raw, err := run(ctx, "incus", "query", "--raw", "/1.0/operations?recursion=1")
+	if err != nil || !compatOperationsIdle(raw) {
+		return fmt.Errorf("LXCFS security maintenance waits for host operations")
 	}
 	return nil
 }
@@ -106,7 +114,63 @@ func repairLxcfsSecurity(ctx context.Context, permit *CompatPermit) error {
 	if err != nil || old {
 		return fmt.Errorf("LXCFS security activation still pending")
 	}
-	return authorizeEmptySecurityHost(ctx, permit)
+	return verifyEmptySecurityHost(ctx, permit)
+}
+
+func repairEmptyHostServiceSecurity(ctx context.Context, permit *CompatPermit) error {
+	packages, done := context.WithTimeout(ctx, 60*time.Second)
+	err := repairLxcfsSecurity(packages, permit)
+	done()
+	if err != nil {
+		return err
+	}
+	ctx, cancel := context.WithTimeout(ctx, 60*time.Second)
+	defer cancel()
+	old, err := managedDNSActivationPending(ctx, "/var/lib/incus/networks", "/proc")
+	if err != nil || !old {
+		return err
+	}
+	// Incus owns its DNS subprocess, leases and network configuration. Reuse
+	// its same-binary graceful reload under the exact empty-host fence instead
+	// of killing dnsmasq or constructing a replacement command from YAML.
+	unlock, err := lock()
+	if err != nil {
+		return err
+	}
+	if err = authorizeEmptySecurityHost(ctx, permit); err == nil {
+		var journal compatJournal
+		data, readErr := os.ReadFile(compatJournalPath)
+		if readErr != nil || json.Unmarshal(data, &journal) != nil || journal.Phase != "verified" || journal.RequestID != permit.RequestID || journal.HostIdentity != permit.HostIdentity {
+			err = fmt.Errorf("DNS service maintenance original daemon authority unavailable")
+		} else {
+			journal.Phase = "reloading"
+			journal.Guests = nil
+			journal.PID, err = compatStartingDaemon(ctx, "/run/incus/incusd.pid", "/usr/sbin/incusd", journal.NewHash)
+			if err == nil && journal.PID > 1 {
+				journal.ProcessStart, err = compatProcessStart(journal.PID)
+				if err == nil {
+					err = saveCompatJournal(journal)
+				}
+			} else if err == nil {
+				err = fmt.Errorf("DNS service maintenance current Incus process unavailable")
+			}
+		}
+	}
+	unlock()
+	if err != nil {
+		return err
+	}
+	if err := prepareIncusCompatibility(ctx, permit); err != nil {
+		return err
+	}
+	old, err = managedDNSActivationPending(ctx, "/var/lib/incus/networks", "/proc")
+	if err != nil || old {
+		return fmt.Errorf("DNS service installed patch activation not confirmed")
+	}
+	// Reload starts Incus's own image/instance-type background refresh. Those
+	// tasks are not evidence of a new customer; the original fence remains held
+	// and current all-projects empty inventory plus loaded DNS code is required.
+	return verifyEmptySecurityHost(ctx, permit)
 }
 
 func replacedLxcfsProcess(ctx context.Context, pidPath, binaryPath string) (int, error) {

@@ -9,7 +9,7 @@ test ! -e /var/lib/incus/database
 ls -ld /proc /proc/self
 cat /proc/self/status | head -n12
 mount | head -n12
-apk add --no-cache incus incus-client incus-openrc openrc apparmor-utils iproute2 python3
+apk add --no-cache incus incus-client incus-openrc openrc apparmor apparmor-utils apparmor-profiles-tunables apparmor-profiles-abstractions iproute2 python3
 /out/provisioning-test -test.run '^TestNativeSecurityPackageInventoryAndUpdate$' -test.v
 if test -n "${INCUDAL_NATIVE_OLD_DAEMON:-}"; then
   test -n "${INCUDAL_NATIVE_OLD_SHA256:-}"
@@ -44,6 +44,8 @@ if test "${INCUDAL_COMPAT_RELOAD_SCENARIO:-}" = empty-pool; then
   /out/provisioning-test -test.run '^(TestCompatibilityStartingDaemonRequiresCurrentExecutable|TestCompatibilityRejectsPublishedBinaryWithOldRunningInode|TestCompatibilityRetiresOnlyExitedPIDReceipt|TestNativeCompatibilityEmptyPoolReload)$' -test.v
   /out/provisioning-test -test.run '^TestNativeCompatibilityStatusAllocations$' -test.v
   /out/provisioning-test -test.run '^TestNativeLxcfsEmptyHostSecurityActivation$' -test.v
+  incus network create security-dns0 ipv4.address=10.249.231.1/24 ipv4.nat=true ipv6.address=none
+  /out/provisioning-test -test.run '^TestNativeManagedDNSPatchActivation$' -test.v
   /out/provisioning-test -test.run '^(TestCompatibilityStreamRejectsCorruption|TestCompatibilityFileHashAndRollbackCopy)$' -test.v
   INCUDAL_MEMORY_RUNTIME_TEST=1 /out/memory-budget-test -test.run '^TestNativeAgentBudgetRuntime$' -test.v
   for mode in legacy stream; do

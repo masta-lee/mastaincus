@@ -4,6 +4,10 @@
 
 ## 续接实施状态（2026-11-22，尚未完成）
 
+DNS服务安全补丁继续精修：仅原空闲fence下同签名Alpinebranch更新dnsmasq，读root-owned／有界pidreceipt、hostnamespace、实际exe／旧maps；缺pid但有DHCPstate不写已成功。DNS由Incus管理，不按YAML自己构造命令或kill进程；同原daemonhash／原permit／持久journal重载后核真实DNS新代码与原bridgeconfig。服务包与DNS各原60秒deadline、整轮仍原180秒，不叠在一个60秒里使正常后续步骤挨超时；维护前完整idle不放宽，完成后核空实例／原许可／实际code，不拿Incus自身启动刷新任务拒绝已正确服务恢复。真实Alpine原dns executable同bytesreplace负对照→空闲fenced Incus自动接续→新maps和原网络Name/Config完全一致：956／74.03秒、最终960／74.56秒自然0；固定fixture proc负对照960过，双compile/vet955/956/959/960、全Agent958/961、guard956过。
+
+原938把已有upgrade／exit／libreload／DNS串一个permit导致TCG240秒expired失败，保日志，不放宽产品或旧测试：DNS改独立60秒阶段，原empty120秒／normal240秒测试期限保持。934原AppArmorparser缺失、936tunables/global缺失各已读取实际日志，CI miniroot补与真实宿主一致apparmor／tunables／abstractions；948复用旧namespaceFUSE不代产品缺陷。951服务恢复已成功但最后用原idle校验遇自身task，956拆“动作前idle／完成后空customer＋loaded”正确回读。当前待保存及新same-source双archnativeCI；7e0a00c517bbaa9acd43c9f5b93d8c52fd0ccc53原native45088052433全14success、主CI45088052397当前29success/1在途零failure，阶段后继续终态。系统基础库／chrony／kernel／旧world自动迁移、最终发行包/真实OSS仍未完成，正式发版／生产暂停。
+
 后续工具约束精修：真实917发现旧首次tools `apk add name=version`不仅锁工具，还把所有solver依赖固定写入world，阻断后续安全revision。改仅为缺失工具以包名添加、已存在工具用原版本fix；一次root私密签名index、两完整plan＋前后完整installedmap绑定，不允许首次安装夹带升级已有runtime；管理员world原constraints逐项保持，只添加实际请求的裸包名，不固定依赖。APK3新old→new计划此前legacyregex漏读，补准确解析／拒未知、重复、降级、其它runtime，保持签名与不删包。真实Alpine完整首次安装925／70.30秒、最终source缺文件fix928／75.12秒自然0，world只20条必要裸包名、aa-exec丢失自修及幂等／原world保持；newunit928、双compile-vet918/920/927/929、全Agent929、securityguard921通过。920仅miniroot无/dev/null、921无/proc导致LVMprobe失败，补真实隔离/dev/proc/sys原检查925/928通过，失败日志保留。本阶段准备提交，旧固定world无可靠原所有权不能擅自删除管理员约束，通用历史自迁移仍待。
 
 前f2aed14af0791e1207ac2b356c59e1aca7481021已推，native`45086894967`双build＋12runtime全14success（新增双LXCFS实证）；Agent`45086894972`全6、SSH`45086894955`全9均success，CI`45086895244`24success／余6在途零failure必须终态，memory`45086895251`／build`45086895246`状态继续查。原64efCI因本PR新source自动cancel，不算30success；原4d30/30和3a第十三13success保持精确source。当前E03/E04服务DNS／libc/kernel自动闭环、最终同source完整包与真实OSS/A整机失联仍未完成；暂不正式Release/生产。
