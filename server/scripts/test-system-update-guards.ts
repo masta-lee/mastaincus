@@ -9,6 +9,7 @@ import { assertBundledSystemUpdateRuntime, runBundledSystemUpdateMigrations } fr
 import { runSystemUpdateCommand } from '../src/lib/system-update-command.js'
 import { verifySystemUpdateDownloads } from './test-system-update-download.js'
 await import('../../scripts/test-verified-static-recovery.mjs')
+await import('../../scripts/test-candidate-postflight.mjs')
 
 for (const ActiveState of ['activating', 'active', 'reloading']) {
   assert.equal(systemUpdateUnitStillStarting({ ActiveState, SubState: 'start', Result: 'success', ExecMainStatus: '0', Job: '0' }), true, 'slow sealed-file verification must remain pending')
@@ -56,6 +57,8 @@ const legacyUpgrade=read('scripts/smoke-legacy-online-upgrade.sh')
 const ownerCandidate=read('scripts/apply-verified-owner-candidate.mjs')
 assert.ok(ownerCandidate.includes("verify(null,Buffer.from('payincus/panel-package/v1")&&ownerCandidate.includes("INCUDAL_OWNER_CANDIDATE_DEPLOY,'authorized-test'")&&ownerCandidate.includes("server/dist/scripts/run-system-update-task.js")&&ownerCandidate.includes("assert.notEqual(process.env.RUN_DB_CHECKS,'0')")&&!ownerCandidate.includes("writeFileSync('/opt/incudal"),'owner test candidate must verify publisher and use the genuine installed worker without direct live-file edits or DB check bypass')
 assert.ok(ownerCandidate.includes("sha256sum',['--check','--strict','--quiet',sourceManifest]")&&ownerCandidate.includes("assert.equal(links,readFileSync(sourceManifest+'.links','utf8'))"),'candidate deployment must check the sealed installed worker and literal link set before importing it')
+const candidatePostflight=read('scripts/finalize-verified-owner-candidate.mjs')
+assert.ok(ownerCandidate.includes("process.once('beforeExit'")&&candidatePostflight.includes('verifyPanelDigest(version,arch')&&candidatePostflight.includes("task.status,'success'")&&candidatePostflight.includes("incudal-online-task',['seal']")&&candidatePostflight.includes('hashlib.sha256(old).digest()==hashlib.sha256(current).digest()'),'candidate owner launcher must perform the original postflight only after exact signed content and a successful real task')
 const legacyTransport=read('scripts/smoke-legacy-online-upgrade.mjs')
 assert.ok(legacyTransport.includes('verifyPanelDigest(candidateVersion')&&legacyTransport.includes('candidateVersion : \'v\' + applicationVersion')&&legacyTransport.includes("version, state.candidateVersion")&&legacyTransport.includes('version.version, state.applicationVersion'),'semver preview must exercise its actual signed target while recording application and component versions separately')
 assert.ok(releaseWorkflow.includes('needs: [build, preview-agent]')&&legacyUpgrade.includes('INCUDAL_AGENT_RELEASE_DIR=/opt/incudal/agent-release'),'old-worker preview must use the same signed Agent artifacts verified by the candidate backend')

@@ -12,6 +12,8 @@ assert.equal(process.platform,'linux');assert.equal(process.getuid(),0)
 assert.equal(process.env.INCUDAL_OWNER_CANDIDATE_DEPLOY,'authorized-test')
 const archive=resolve(process.argv[2]||''),version=String(process.argv[3]||'')
 assert.ok(process.argv.length===4||process.argv.length===5&&process.argv[4]==='--preflight')
+const finalizeTool=join(import.meta.dirname,'finalize-verified-owner-candidate.mjs')
+const finalizer=lstatSync(finalizeTool);assert.ok(finalizer.isFile()&&!finalizer.isSymbolicLink()&&finalizer.uid===0&&!(finalizer.mode&0o022))
 assert.match(version,/^v1\.8\.14-test\.[a-f0-9]{7}$/)
 const arch=process.arch==='arm64'?'arm64':'amd64',name=`incudal-${version}-linux-${arch}.tar.gz`
 assert.equal(basename(archive),name)
@@ -54,3 +56,9 @@ process.env.PATH='/usr/local/libexec/incudal/ota-path:'+process.env.PATH
 process.argv=[process.execPath,join(app,'server/dist/scripts/run-system-update-task.js'),String(task.id),version]
 console.log('OWNER_SIGNED_CANDIDATE_TASK:'+task.id)
 await import(join(app,'server/dist/scripts/run-system-update-task.js'))
+// The installed worker starts its asynchronous main without exporting it.
+// Match the root wrapper's postflight on natural successful worker completion.
+process.once('beforeExit',()=>{
+ if(process.exitCode)return
+ execFileSync(process.execPath,[finalizeTool,archive,version,String(task.id)],{stdio:'inherit',timeout:180000})
+})

@@ -28,6 +28,10 @@ Owner随后明确授权可信恢复两首页并原worker完整候选热更新。
 
 新代码自然只读续验58～61期间原expiry/verified/finished/saleability保持，完成才续expiry（1717）。进一步发现启动cursor从低ID先续尚有效receipt，137/138已过期却排后，随后139/140也过期；21:57～22:09的1～4不可售不是Agent软件包重试。新增优先lane按过期时间核原verified/finished/同revision且无维护/已付创建占用的expired宿主，先完整重验，失败按原backoff退出lane；旧identity/expiry/核远端/受信权限保持，不手动加expiry/标绿。真实PG1729高ID过期优先/低ID健康不撤回/已付创建不占住lane通过，fullsaleability1724双架构/type/backendbuild通过。测试fixture曾因重复publicIP/缺配额被原守卫正确拒绝，补真实fixture不改产品门槛。新完整signed候选及原worker部署/两轮自然期仍待；不能将已部署22d1说成priority已上线。
 
+source994fff285e9be9658c77b83802835708a17cf6d5本机full1730完整231/231自然0；无tag测试包45191398150双首装root恢复及六原worker13success/Release预期skipped，独立双包签名SHA/core/runtime/owner1741通过（ARM03b70146f44aa87394f87e297e6f940fac1acd3ea24b065fcc69ba0e0760ea45/AMDc940012b1565c36d20ef672fe62584cb2b3080f42b518473334b0d0a2db76c3e）。主控22d1补验于22:13完成，22:14～22:21真实API多轮204available/4assigned/0unavailable，178～180只读续验保持saleability，全客户账目/pins/user403/伪role401/env字节保持。
+
+准备priority热更新时新增部署工具收尾漏点：owner入口直接原worker未调用原rootlauncher的成功后seal，原清单仍旧版本，24项差异是已signed新源码/maps/catalog/version，非新注入。源码新增独立finalize先核原包完整25,730项文件/链接（pnpm原hardlinks实际digest）、唯一允许部署时间差异、旧seal中保留的原内容、Prisma cache实际jiti从原配置fsCache=false再生成逐字同，再核真实task success才调用原launcher seal。原生1757 changedcode/identity/extra/cache拒绝/真实hardlink过，主控仅check1760完整通过；下一步对应守卫/types和源码保存后补任务59原postflight，再priority原worker完整更新。不能对未知差异直接seal，本步骤不是手工修改主控代码。
+
 2026-11-23，北京时间。Owner先授权只读取证，随后明确授权本问题源码修复后，将此前已做安全修复同批热更新主控作为测试；不正式发版。
 
 主控实际v1.8.14／ced7c10cd17d、唯一后端健康。208台专属宿主中12台故障一致：#16、#21、#24、#26、#30～#36、#46。均管理在线、无客户实例、Agent工具/网络防护有效、AppArmor维护已完成，后续检查反复`HARDENING_JOURNAL_CONFLICT`。它们不是离线宿主。
