@@ -11,7 +11,7 @@ assert.ok(['127.0.0.1', 'localhost', '[::1]'].includes(database.hostname) && dat
   'Use isolated local *_pool_test PostgreSQL')
 const { prisma, closePrismaDatabase } = await import('../src/db/prisma.js')
 const { createRestoreTask, cancelRestoreTask } = await import('../src/db/restore-tasks.js')
-const { claimNextTask, executeRestoreTask } = await import('../src/workers/restoreTaskWorker.js')
+const { claimNextTask, executeRestoreTask, stopRestoreWorker } = await import('../src/workers/restoreTaskWorker.js')
 const { transferHostIdentity } = await import('../src/lib/transfer-host-identity.js')
 const { default: Fastify } = await import('fastify')
 const { default: backupRoutes } = await import('../src/routes/backups.js')
@@ -260,13 +260,16 @@ try {
   const entered = new Promise<void>(resolve => { connectEntered = resolve })
   const before = requests
   const execution = executeRestoreTask(accepted.id)
+    let drained=false
+    const drain=stopRestoreWorker().then(()=>{drained=true})
   const nextAttempt = randomUUID()
   try {
     await Promise.race([entered, execution.then(() => { throw new Error('dispatch exited before mTLS') })])
+      assert.equal(drained,false,'worker stop must wait for its actual in-flight mTLS execution')
     await executeRestoreTask(accepted.id)
     assert.equal(requests, before + 1)
     await prisma.restoreTask.update({ where: { id: accepted.id }, data: { attemptId: nextAttempt, progress: 'successor' } })
-  } finally { release(); await execution }
+    } finally { release(); await execution; await drain }
   const successor = await prisma.restoreTask.findUniqueOrThrow({ where: { id: accepted.id } })
   assert.equal(successor.status, 'PROCESSING'); assert.equal(successor.attemptId, nextAttempt); assert.equal(successor.progress, 'successor')
   await finish(accepted.id)

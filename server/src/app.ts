@@ -9,6 +9,9 @@ import hostPoolPriceRoutes from './routes/host-pool-prices.js'
 import poolOrderRoutes from './routes/pool-orders.js'
 import checkoutRoutes from './routes/checkout.js'
 import { startCheckoutWorker, stopCheckoutWorker } from './workers/checkoutWorker.js'
+import { stopInstanceTaskWorker } from './workers/instanceTaskWorker.js'
+import { stopRestoreWorker } from './workers/restoreTaskWorker.js'
+import { stopBackupUploadWorker } from './workers/backupUploadWorker.js'
 import { startHostOnboardingWorker, stopHostOnboardingWorker } from './workers/hostOnboardingWorker.js'
 import { startHostRepairWorker, stopHostRepairWorker } from './workers/hostRepairWorker.js'
 import { startSecurityHardeningWorker, stopSecurityHardeningWorker } from './workers/securityHardeningWorker.js'
@@ -540,6 +543,7 @@ await fastify.register(adminAliyunOssRoutes, { prefix: '/api/admin/aliyun-oss' }
 fastify.addHook('onClose', async () => { stopPlatformBackupScheduler() })
 fastify.addHook('onClose', async () => { stopRecoveryReviewWorker() })
 fastify.addHook('onClose', async () => { await stopCheckoutWorker() })
+fastify.addHook('onClose', async () => { await Promise.all([stopInstanceTaskWorker(), stopRestoreWorker(), stopBackupUploadWorker()]) })
 
 // 注册 API 路由
 await fastify.register(authRoutes, { prefix: '/api/auth' })
@@ -869,13 +873,11 @@ const start = async (): Promise<void> => {
     // 启动备份恢复和远程上传队列 Worker
     const {
       cleanupStaleTasks: cleanupStaleRestoreTasks,
-      startRestoreWorker,
-      stopRestoreWorker
+      startRestoreWorker
     } = await import('./workers/restoreTaskWorker.js')
     const {
       cleanupStaleUploadTasks,
-      startBackupUploadWorker,
-      stopBackupUploadWorker
+      startBackupUploadWorker
     } = await import('./workers/backupUploadWorker.js')
     await cleanupStaleRestoreTasks()
     await cleanupStaleUploadTasks()
@@ -913,8 +915,6 @@ const start = async (): Promise<void> => {
       stopSessionCleanup()
       stopHostNotificationEmailWorker()
       await stopProxySiteOperationWorker()
-      stopRestoreWorker()
-      stopBackupUploadWorker()
       
       // 清理所有活跃终端会话
       const { closeAllSessions } = await import('./lib/terminal-proxy.js')

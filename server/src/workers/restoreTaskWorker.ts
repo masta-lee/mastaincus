@@ -28,6 +28,7 @@ import {
     tryAdvisoryTransactionLock
 } from '../db/advisory-locks.js'
 import { createWorkerDbBackoff } from './db-failure-backoff.js'
+import { WorkerActivity } from './worker-activity.js'
 
 // 恢复任务超时时间 (10 分钟)
 const RESTORE_TIMEOUT = 10 * 60 * 1000
@@ -42,6 +43,8 @@ let workerInterval: ReturnType<typeof setInterval> | null = null
 let timeoutCheckInterval: ReturnType<typeof setInterval> | null = null
 const runningRestoreTaskIds = new Set<number>()
 const dbBackoff = createWorkerDbBackoff('RestoreWorker')
+const activity = new WorkerActivity()
+let stopping = false
 
 /**
  * 服务启动时清理僵尸任务
@@ -110,7 +113,7 @@ export async function cleanupTimeoutTasks(): Promise<void> {
  * 检查队列并执行任务
  */
 async function processQueue(): Promise<void> {
-    if (dbBackoff.shouldSkip()) return
+    if (stopping || dbBackoff.shouldSkip()) return
     try {
         // 1. 获取所有有 PENDING 任务的宿主机 ID (去重)
         const hostsWithPendingTasks = await prisma.restoreTask.groupBy({
@@ -207,6 +210,10 @@ export async function claimNextTask(hostId: number) {
  * 注意：任务已在 claimNextTask 中标记为 PROCESSING
  */
 export async function executeRestoreTask(taskId: number): Promise<void> {
+    return activity.run(() => executeRestoreTaskInternal(taskId))
+}
+
+async function executeRestoreTaskInternal(taskId: number): Promise<void> {
     const startTime = Date.now()
 
     // 获取任务信息（已在事务中标记为 PROCESSING）
@@ -454,9 +461,10 @@ export function startRestoreWorker(): void {
         console.warn('[RestoreWorker] Worker 已在运行')
         return
     }
+    stopping = false
     console.log('[RestoreWorker] 启动恢复任务调度器')
     workerInterval = setInterval(() => {
-        processQueue().catch(err => {
+        activity.run(processQueue).catch(err => {
             console.error('[RestoreWorker] 队列处理错误:', err)
             dbBackoff.arm(err)
         })
@@ -465,7 +473,7 @@ export function startRestoreWorker(): void {
     // 启动超时检查定时器
     if (!timeoutCheckInterval) {
         timeoutCheckInterval = setInterval(() => {
-            cleanupTimeoutTasks().catch(err => {
+            activity.run(cleanupTimeoutTasks).catch(err => {
                 console.error('[RestoreWorker] 超时检查错误:', err)
                 dbBackoff.arm(err)
             })
@@ -477,7 +485,8 @@ export function startRestoreWorker(): void {
 /**
  * 停止恢复任务 Worker
  */
-export function stopRestoreWorker(): void {
+export async function stopRestoreWorker(): Promise<void> {
+    stopping = true
     if (workerInterval) {
         clearInterval(workerInterval)
         workerInterval = null
@@ -488,6 +497,7 @@ export function stopRestoreWorker(): void {
         timeoutCheckInterval = null
         console.log('[RestoreWorker] 超时任务检查器已停止')
     }
+    await activity.drain()
 }
 
 /**

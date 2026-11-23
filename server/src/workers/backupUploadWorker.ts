@@ -21,6 +21,7 @@ import {
     tryAdvisoryTransactionLock
 } from '../db/advisory-locks.js'
 import { createWorkerDbBackoff } from './db-failure-backoff.js'
+import { WorkerActivity } from './worker-activity.js'
 
 // Worker 轮询间隔 (5 秒)
 const POLL_INTERVAL = 5000
@@ -41,6 +42,8 @@ let workerInterval: ReturnType<typeof setInterval> | null = null
 let timeoutCheckInterval: ReturnType<typeof setInterval> | null = null
 const runningUploadTaskIds = new Set<number>()
 const dbBackoff = createWorkerDbBackoff('UploadWorker')
+const activity = new WorkerActivity()
+let stopping = false
 
 /**
  * 服务启动时清理僵尸任务
@@ -109,7 +112,7 @@ export async function cleanupTimeoutUploadTasks(): Promise<void> {
  * 检查队列并执行任务
  */
 async function processQueue(): Promise<void> {
-    if (dbBackoff.shouldSkip() || recoveryHeld()) return
+    if (stopping || dbBackoff.shouldSkip() || recoveryHeld()) return
     try {
         // 1. 获取所有有 PENDING 任务的宿主机 ID (去重)
         const hostsWithPendingTasks = await prisma.backupUploadTask.groupBy({
@@ -239,6 +242,10 @@ async function updateUploadProgress(task: BackupUploadTask, progress: string): P
  * 注意：任务已在 claimNextUploadTask 中标记为 PROCESSING
  */
 export async function executeUploadTask(taskId: number): Promise<void> {
+    return activity.run(() => executeUploadTaskInternal(taskId))
+}
+
+async function executeUploadTaskInternal(taskId: number): Promise<void> {
     const startTime = Date.now()
     
     // 获取任务信息（已在事务中标记为 PROCESSING）
@@ -460,9 +467,10 @@ export function startBackupUploadWorker(): void {
         console.warn('[UploadWorker] Worker 已在运行')
         return
     }
+    stopping = false
     console.log('[UploadWorker] 启动备份上传调度器')
     workerInterval = setInterval(() => {
-        processQueue().catch(err => {
+        activity.run(processQueue).catch(err => {
             console.error('[UploadWorker] 队列处理错误:', err)
             dbBackoff.arm(err)
         })
@@ -471,7 +479,7 @@ export function startBackupUploadWorker(): void {
     // 启动超时检查定时器
     if (!timeoutCheckInterval) {
         timeoutCheckInterval = setInterval(() => {
-            cleanupTimeoutUploadTasks().catch(err => {
+            activity.run(cleanupTimeoutUploadTasks).catch(err => {
                 console.error('[UploadWorker] 超时检查错误:', err)
                 dbBackoff.arm(err)
             })
@@ -483,7 +491,8 @@ export function startBackupUploadWorker(): void {
 /**
  * 停止备份上传 Worker
  */
-export function stopBackupUploadWorker(): void {
+export async function stopBackupUploadWorker(): Promise<void> {
+    stopping = true
     if (workerInterval) {
         clearInterval(workerInterval)
         workerInterval = null
@@ -494,4 +503,5 @@ export function stopBackupUploadWorker(): void {
         timeoutCheckInterval = null
         console.log('[UploadWorker] 超时任务检查器已停止')
     }
+    await activity.drain()
 }

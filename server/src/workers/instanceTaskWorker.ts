@@ -53,6 +53,7 @@ import {
   tryAdvisoryTransactionLock
 } from '../db/advisory-locks.js'
 import { createWorkerDbBackoff } from './db-failure-backoff.js'
+import { WorkerActivity } from './worker-activity.js'
 import { executeRenewalResume, RENEWAL_RESUME_ENTRY } from '../services/renewal-resume.js'
 import { recoverIpv6RouteAndStart } from '../lib/incus/ipv6-route-recovery.js'
 
@@ -106,6 +107,8 @@ let timeoutCheckInterval: ReturnType<typeof setInterval> | null = null
 let poolCleanupInterval: ReturnType<typeof setInterval> | null = null
 const runningTaskIds = new Set<number>()
 const dbBackoff = createWorkerDbBackoff('InstanceTaskWorker')
+const activity = new WorkerActivity()
+let stopping = false
 
 type InstanceTaskFailureNotice = {
   id: number
@@ -338,7 +341,7 @@ async function cleanupTimeoutTasks(): Promise<void> {
  * 高可用优化：批量查询 + 轻量任务并行
  */
 async function processQueue(): Promise<void> {
-  if (dbBackoff.shouldSkip()) return
+  if (stopping || dbBackoff.shouldSkip()) return
   const startTime = Date.now()
 
   try {
@@ -578,6 +581,10 @@ export async function finalizeInstanceTaskAttempt(taskId: number, attempt: Insta
 }
 
 export async function executeTask(taskId: number, attempt: InstanceTaskAttempt): Promise<void> {
+  return activity.run(() => executeTaskInternal(taskId, attempt))
+}
+
+async function executeTaskInternal(taskId: number, attempt: InstanceTaskAttempt): Promise<void> {
   if (runningTaskIds.has(taskId) || !attempt.startedAt) return
   const taskStartTime = Date.now()
   runningTaskIds.add(taskId)
@@ -2642,9 +2649,10 @@ export function startInstanceTaskWorker(): void {
     return
   }
 
+  stopping = false
   console.log('[InstanceTaskWorker] 启动 Worker...')
   const cleanupPool = () => {
-    if (!dbBackoff.shouldSkip()) void reconcileInterruptedRebuilds().then(() => reconcileInterruptedReinstalls(id => runningTaskIds.has(id))).then(() => processPoolCleanupQueue()).catch(err => {
+    if (!stopping && !dbBackoff.shouldSkip()) void activity.run(() => reconcileInterruptedRebuilds().then(() => reconcileInterruptedReinstalls(id => runningTaskIds.has(id))).then(() => processPoolCleanupQueue())).catch(err => {
       console.error('[InstanceTaskWorker] 机器池回收失败:', err)
       dbBackoff.arm(err)
     })
@@ -2653,14 +2661,14 @@ export function startInstanceTaskWorker(): void {
   poolCleanupInterval = setInterval(cleanupPool, 30000)
 
   // 立即清理僵尸任务
-  cleanupStaleTasks().catch(err => {
+  activity.run(cleanupStaleTasks).catch(err => {
     console.error('[InstanceTaskWorker] 清理僵尸任务失败:', err)
     dbBackoff.arm(err)
   })
 
   // 定时处理队列
   workerInterval = setInterval(() => {
-    processQueue().catch(err => {
+    activity.run(processQueue).catch(err => {
       console.error('[InstanceTaskWorker] 队列处理错误:', err)
       dbBackoff.arm(err)
     })
@@ -2668,7 +2676,7 @@ export function startInstanceTaskWorker(): void {
 
   // 定时检查超时任务
   timeoutCheckInterval = setInterval(() => {
-    cleanupTimeoutTasks().catch(err => {
+    activity.run(cleanupTimeoutTasks).catch(err => {
       console.error('[InstanceTaskWorker] 超时检查错误:', err)
       dbBackoff.arm(err)
     })
@@ -2680,7 +2688,8 @@ export function startInstanceTaskWorker(): void {
 /**
  * 停止 Worker
  */
-export function stopInstanceTaskWorker(): void {
+export async function stopInstanceTaskWorker(): Promise<void> {
+  stopping = true
   if (poolCleanupInterval) { clearInterval(poolCleanupInterval); poolCleanupInterval = null }
   if (workerInterval) {
     clearInterval(workerInterval)
@@ -2691,4 +2700,5 @@ export function stopInstanceTaskWorker(): void {
     timeoutCheckInterval = null
   }
   console.log('[InstanceTaskWorker] Worker 已停止')
+  await activity.drain()
 }
