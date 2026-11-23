@@ -7,6 +7,7 @@ import { readAlpineSshPreflight } from '../src/lib/alpine-ssh-preflight.js'
 import { hardeningPublicView } from '../src/lib/hardening-view.js'
 import { hostMaintenanceBlocked } from '../src/lib/host-maintenance-gate.js'
 import { hardeningIdentityHash, hardeningReceiptMatches } from '../src/lib/hardening-identity.js'
+import { hardeningJournalReadyForRetry, SSH_JOURNAL_POLICY_REVISION } from '../src/lib/security-hardening.js'
 import { customerBootIdentity, customerBootRecoveryAction, nextMaintenanceAction, readHostMaintenanceIntent, automaticMaintenanceRecipeAllowed, hardeningAcceptanceReadyForRetry } from '../src/lib/host-maintenance-plan.js'
 import { maintenanceWireOperation, maintenanceWireExpiry } from '../src/services/host-maintenance-channel.js'
 const check = { instanceId: 1, pid: 100, uidMap: '0 1000000 1000000000', gidMap: '0 1000000 1000000000', seccomp: 2, apparmor: 'incus-fixture (enforce)' }
@@ -28,6 +29,10 @@ for (const value of [{ ...report, apparmor: 'true' }, { ...report, guests: [] },
   assert.throws(() => validateHostSecurityRuntime(value, [{ instanceId: 1, pid: 100 }]), /UNSUPPORTED/)
 }
 const now = 1000000
+assert.equal(hardeningJournalReadyForRetry({status:'needs-maintenance',error:'HARDENING_JOURNAL_CONFLICT'}),true)
+assert.equal(hardeningJournalReadyForRetry({status:'needs-maintenance',error:'HARDENING_JOURNAL_CONFLICT',journalPolicyRevision:SSH_JOURNAL_POLICY_REVISION}),false)
+assert.equal(hardeningJournalReadyForRetry({status:'needs-maintenance',error:'HARDENING_IDENTITY_CHANGED'}),false)
+assert.equal(hardeningJournalReadyForRetry({status:'verified',error:'HARDENING_JOURNAL_CONFLICT'}),false)
 const deadlineOperation={action:'reboot' as const,deadline:new Date(now+1000).toISOString()} as Parameters<typeof maintenanceWireExpiry>[0]
 assert.equal(maintenanceWireExpiry(deadlineOperation,now),now+1000,'the wire deadline cannot extend the durable reboot deadline')
 assert.throws(()=>maintenanceWireExpiry(deadlineOperation,now+1000),/REQUEST_EXPIRED/)

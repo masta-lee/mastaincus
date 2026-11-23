@@ -155,6 +155,7 @@ class SecurityTests(unittest.TestCase):
 """
             source=gateway.HOST_HARDENING_SCRIPT.replace('updated=journal_update(before)','updated=journal_fixture(before)').replace('\n journal_readonly(before)\n','\n pass # journal tested independently\n')
             source=source.replace('try:\n identity();before,ticks=snapshot();updated=False',journal_fixture+'\ntry:\n identity();before,ticks=snapshot();updated=False')
+            source=source.replace('inspection_baseline=security_baseline()','inspection_baseline={}').replace('final_baseline=security_baseline()','final_baseline={}')
             try: exec(compile(source,'host-hardening-script','exec'), {'D':{**self.request,'nodeId':self.job,'template':base64.b64encode(b'# fixture').decode()}})
             except SystemExit: pass
         return writes,output.getvalue()
@@ -187,7 +188,7 @@ class SecurityTests(unittest.TestCase):
         self.assertNotIn('private-root',json.dumps(report))
 
     def test_real_journal_atomic_files_replay_busy_and_conflict(self):
-        functions=[node for node in ast.parse(gateway.HOST_HARDENING_SCRIPT).body if isinstance(node,ast.FunctionDef) and node.name in ['journal_update','journal_readonly','journal_identity_matches']]
+        functions=[node for node in ast.parse(gateway.HOST_HARDENING_SCRIPT).body if isinstance(node,ast.FunctionDef) and node.name in ['journal_update','journal_readonly','journal_identity_matches','journal_baseline_matches']]
         with tempfile.TemporaryDirectory() as directory:
             target=pathlib.Path(directory); calls=[]; fixed=False; baseline={'/etc/shadow':['local-only-hash']}
             original_path=pathlib.Path
@@ -227,11 +228,29 @@ class SecurityTests(unittest.TestCase):
                     self.assertEqual(receipt['baseline'],baseline)
                     self.assertEqual(receipt['version'],2)
                     self.assertEqual(receipt['owner'],{'pid':os.getpid(),'startTicks':'100'})
+                    originalBaseline=dict(baseline)
+                    baseline['/etc/ssh/sshd_config']=[__import__('stat').S_IFREG|0o644,0,0,'old-config']
+                    # Publish a completed original record, then change only
+                    # administrator policy. Read-only revalidation cannot write
+                    # it; an explicit next update archives the old terminal one.
+                    receipt=json.loads((target/'ssh.json').read_text())
+                    receipt['baseline']=dict(baseline)
+                    (target/'ssh.json').write_text(json.dumps(receipt))
+                    baseline['/etc/ssh/sshd_config']=[__import__('stat').S_IFREG|0o644,0,0,'new-config']
+                    before['fixed']=True
+                    with patch.object(scope['pathlib'],'Path',side_effect=lambda name:target if str(name)=='/var/lib/incudal-hardening' else types.SimpleNamespace(lstat=lambda:types.SimpleNamespace(st_mode=__import__('stat').S_IFREG|0o644,st_uid=0,st_nlink=1))):
+                        snapshot=(target/'ssh.json').read_bytes()
+                        scope['journal_readonly'](before)
+                        self.assertEqual((target/'ssh.json').read_bytes(),snapshot,'read-only recovery preserves old completed journal')
+                    baseline.clear();baseline.update(originalBaseline)
+                    (target/'ssh.json').write_text(json.dumps({**receipt,'baseline':originalBaseline}))
+                    receipt['baseline']=originalBaseline
                     receipt['phase']='started';(target/'ssh.json').write_text(json.dumps(receipt))
                     scope['owner_alive']=lambda *_:True
                     with self.assertRaisesRegex(ValueError,'REMOTE_BUSY'):scope['journal_update'](before)
                     with self.assertRaisesRegex(ValueError,'REMOTE_BUSY'):scope['journal_readonly'](before)
                     self.assertEqual(calls,['update'])
+
                     scope['owner_alive']=lambda *_:False
                     self.assertFalse(scope['journal_update'](before),'ended owner plus actual installed patch closes lost response')
                     scope['D']['requestId']='22222222-2222-4222-8222-222222222222'
@@ -244,6 +263,24 @@ class SecurityTests(unittest.TestCase):
                         with self.assertRaisesRegex(ValueError,'REMOTE_BUSY'):scope['journal_update'](before)
                     self.assertEqual(calls,['update'])
 
+    def test_completed_ssh_policy_change_revalidates_without_trusting_credentials(self):
+        functions=[node for node in ast.parse(gateway.HOST_HARDENING_SCRIPT).body if isinstance(node,ast.FunctionDef) and node.name=='journal_baseline_matches']
+        import stat
+        old={'/etc/shadow':[stat.S_IFREG|0o600,0,0,'account'],'/etc/ssh/ssh_host_ed25519_key':[stat.S_IFREG|0o600,0,0,'key'],'/etc/ssh/sshd_config':[stat.S_IFREG|0o644,0,0,'old-policy']}
+        current={**old,'/etc/ssh/sshd_config':[stat.S_IFREG|0o644,0,0,'current-policy']}
+        checks=[]
+        scope={'stat':stat,'pathlib':types.SimpleNamespace(Path=lambda _:types.SimpleNamespace(lstat=lambda:types.SimpleNamespace(st_mode=stat.S_IFREG|0o644,st_uid=0,st_nlink=1))),
+               'shell':lambda command,_:checks.append(command)or types.SimpleNamespace(returncode=0)}
+        exec(compile(ast.Module(body=functions,type_ignores=[]),'actual-baseline','exec'),scope)
+        verify=scope['journal_baseline_matches'];previous={'phase':'verified','baseline':old}
+        verify(previous,dict(current),{'fixed':True});self.assertEqual(len(checks),1)
+        for phase in ['started','failed']:
+            with self.assertRaisesRegex(ValueError,'JOURNAL_CONFLICT'):verify({**previous,'phase':phase},dict(current),{'fixed':True})
+        with self.assertRaisesRegex(ValueError,'JOURNAL_CONFLICT'):verify(previous,dict(current),{'fixed':False})
+        for changed in [{**current,'/etc/shadow':[stat.S_IFREG|0o600,0,0,'changed']},{**current,'/etc/ssh/ssh_host_ed25519_key':[stat.S_IFREG|0o600,0,0,'changed']},{**current,'/etc/ssh/sshd_config':[stat.S_IFREG|0o666,0,0,'policy']},{**current,'/etc/ssh/new.conf':[stat.S_IFREG|0o644,0,0,'new']}]:
+            with self.assertRaisesRegex(ValueError,'JOURNAL_CONFLICT'):verify(previous,dict(changed),{'fixed':True})
+        scope['shell']=lambda *_:types.SimpleNamespace(returncode=1)
+        with self.assertRaisesRegex(ValueError,'JOURNAL_CONFLICT'):verify(previous,dict(current),{'fixed':True})
     def test_owner_pid_reuse_and_inherited_lock_on_parent_timeout(self):
         functions=[node for node in ast.parse(gateway.HOST_HARDENING_SCRIPT).body if isinstance(node,ast.FunctionDef) and node.name in ['shell','process_owner','owner_alive']]
         state={'boot':self.job,'ticks':'100','exists':True}

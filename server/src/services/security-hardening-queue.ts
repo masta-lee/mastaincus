@@ -13,6 +13,7 @@ import { managedCleanupEndpointHash } from '../lib/managed-cleanup-identity.js'
 import { SECURITY_HARDENING_ENABLED_KEY, SECURITY_HARDENING_REVISION, hardeningFailure, hardeningReason,
   hardeningSchedule, hardeningUpdateBudget, hardeningDiagnostic, hardeningPhaseLabel, hardeningNeedsReadOnlyRecovery,
   type HardeningCheck, type HardeningState } from '../lib/security-hardening.js'
+import { hardeningJournalReadyForRetry, SSH_JOURNAL_POLICY_REVISION } from '../lib/security-hardening.js'
 import { inspectHostSecurity, safeCustomerRuntime, hardeningPreflightCheck } from './host-security-inspection.js'
 import { maintainAlpineCustomerSsh } from './alpine-ssh-maintenance.js'
 import { recoveryHeld } from './platform-backup-core.js'
@@ -79,7 +80,7 @@ export async function hardenExistingHost(hostId: number, deps = securityHardenin
     const previous = currentState(host.securityHardening)
     if(previous.incusCompat && (previous.incusCompat as {phase?:string}).phase!=='verified')return null
     if (previous.revision === SECURITY_HARDENING_REVISION && previous.nextCheckAt && Date.parse(previous.nextCheckAt) > Date.now() &&
-        !hardeningAcceptanceReadyForRetry(previous)) return null
+        !hardeningAcceptanceReadyForRetry(previous) && !hardeningJournalReadyForRetry(previous)) return null
     // Paid pool delivery already owns this host. A periodic inspection cannot
     // overwrite its admission receipt and then wait for that same delivery.
     // Keep the due time unchanged: after delivery/cleanup the next scan resumes.
@@ -94,6 +95,7 @@ export async function hardenExistingHost(hostId: number, deps = securityHardenin
       updateAttempts: hardeningUpdateBudget(previous), phase: 'authority',
       checkedAt: new Date().toISOString(), nextCheckAt: new Date(Date.now() + 600000).toISOString(), leaseToken,
       identityHash: identity(host) }
+    state.journalPolicyRevision = SSH_JOURNAL_POLICY_REVISION
     if (previous.maintenance !== undefined) state.maintenance = previous.maintenance
     if (previous.incusCompat !== undefined) state.incusCompat = previous.incusCompat
     state.remoteRequestId = typeof previous.remoteRequestId === 'string' && /^[a-f0-9-]{36}$/.test(previous.remoteRequestId)
@@ -373,7 +375,7 @@ export async function processSecurityHardeningQueue(deps = securityHardeningDepe
     if(onboardingOwnsHardening(host.onboardingNode))return false
     const state=currentState(host.securityHardening)
     return state.status!=='verified'&&state.maintenance&&typeof state.maintenance==='object'&&!Array.isArray(state.maintenance)&&
-      (state.maintenance as {phase?:unknown}).phase==='verified'&&(!state.nextCheckAt||Date.parse(state.nextCheckAt)<=Date.now())
+      (state.maintenance as {phase?:unknown}).phase==='verified'&&(!state.nextCheckAt||Date.parse(state.nextCheckAt)<=Date.now()||hardeningJournalReadyForRetry(state))
   })
   if(completed&&!deps.held()&&!stopped()) {
     // Recovery marks the intent complete, then the normal full inspection
@@ -394,7 +396,7 @@ export async function processSecurityHardeningQueue(deps = securityHardeningDepe
       if(!state.nextCheckAt||Date.parse(state.nextCheckAt)<=Date.now())await resumeAutomaticHostMaintenance(host.id)
       continue
     }
-    if (state.revision !== SECURITY_HARDENING_REVISION || !state.nextCheckAt || Date.parse(state.nextCheckAt) <= Date.now() || hardeningAcceptanceReadyForRetry(state)) {
+    if (state.revision !== SECURITY_HARDENING_REVISION || !state.nextCheckAt || Date.parse(state.nextCheckAt) <= Date.now() || hardeningAcceptanceReadyForRetry(state) || hardeningJournalReadyForRetry(state)) {
       await hardenExistingHost(host.id, deps)
       if(deps===securityHardeningDependencies)await prepareAutomaticHostMaintenance(host.id)
       return

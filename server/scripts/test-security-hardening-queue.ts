@@ -115,6 +115,10 @@ try {
   await hardenExistingHost(host.id,deps)
   assert.equal(allowHostUpdate,false,'interrupted lease performs a read-only host pass before further writes')
   assert.equal((await state()).status,'verified')
+  const beforeJournal=await state()
+  await prisma.host.update({where:{id:host.id},data:{securityHardening:{...beforeJournal,status:'needs-maintenance',error:'HARDENING_JOURNAL_CONFLICT',journalPolicyRevision:undefined,nextCheckAt:new Date(Date.now()+6*3600000).toISOString()}}})
+  await hardenExistingHost(host.id,deps)
+  assert.equal((await state()).status,'verified','new journal policy schedules a full verified recheck without waiting six hours')
   const beforeMaintenance=await state(),maintenanceIntent={revision:'host-maintenance-v1',requestId:randomUUID(),phase:'waiting-boot'}
   await prisma.host.update({where:{id:host.id},data:{securityHardening:{...beforeMaintenance,maintenance:maintenanceIntent,nextCheckAt:new Date(0).toISOString()}}})
   await assert.rejects(assertHostNotMaintaining(host.id),HostMaintenanceError)

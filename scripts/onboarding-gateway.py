@@ -218,6 +218,30 @@ def journal_identity_matches(previous,expected):
  if previous['phase']!='verified' or any(saved[key]!=expected[key] for key in ['nodeId','nodePublicKey','sshFingerprint','architecture']):raise ValueError('HARDENING_JOURNAL_CONFLICT')
  return False
 
+def journal_baseline_matches(previous,current,before):
+ saved=previous.get('baseline')
+ if not isinstance(saved,dict) or not saved:raise ValueError('HARDENING_JOURNAL_CONFLICT')
+ if '/etc/ssh/sshd_config.apk-new' not in saved:current.pop('/etc/ssh/sshd_config.apk-new',None)
+ if current==saved:return
+ # A verified SSH package transaction is history, not a permanent freeze of
+ # the administrator's SSH policy. Retain credential/host-key/account hashes;
+ # only a regular root-owned main config may be revalidated against the
+ # currently authenticated, patched listener. Started/failed work never adopts
+ # a changed baseline, and arbitrary new/deleted files remain conflicts.
+ path='/etc/ssh/sshd_config'
+ old=saved.get(path);new=current.get(path)
+ if previous.get('phase')!='verified' or not before.get('fixed') or not isinstance(old,list)or not isinstance(new,list)or len(old)!=4 or len(new)!=4:
+  raise ValueError('HARDENING_JOURNAL_CONFLICT')
+ if old[:3]!=new[:3]or not stat.S_ISREG(new[0])or new[0]&0o022 or new[1]!=0:
+  raise ValueError('HARDENING_JOURNAL_CONFLICT')
+ info=pathlib.Path(path).lstat()
+ if not stat.S_ISREG(info.st_mode)or info.st_nlink!=1 or info.st_uid!=0 or info.st_mode&0o022:
+  raise ValueError('HARDENING_JOURNAL_CONFLICT')
+ if {key:value for key,value in current.items()if key!=path}!={key:value for key,value in saved.items()if key!=path}:
+  raise ValueError('HARDENING_JOURNAL_CONFLICT')
+ if shell('alpine_ssh_standard_service && alpine_ssh_assert_fixed && alpine_ssh_listener_current && "$(alpine_ssh_listener_binary)" -t',8).returncode:
+  raise ValueError('HARDENING_JOURNAL_CONFLICT')
+
 def journal_readonly(before):
  # Query the original task before accepting even an already-fixed listener.
  # This path neither creates state nor removes a legacy lock.
@@ -242,10 +266,7 @@ def journal_readonly(before):
    'templateHash':hashlib.sha256(template.encode()).hexdigest()}
   journal_identity_matches(previous,expected)
   if previous['phase']=='started' and owner_alive(previous.get('owner'),expected['bootId']):raise ValueError('HARDENING_REMOTE_BUSY')
-  baseline=security_baseline();saved=previous.get('baseline')
-  if not isinstance(saved,dict) or not saved:raise ValueError('HARDENING_JOURNAL_CONFLICT')
-  if '/etc/ssh/sshd_config.apk-new' not in saved:baseline.pop('/etc/ssh/sshd_config.apk-new',None)
-  if baseline!=saved:raise ValueError('HARDENING_JOURNAL_CONFLICT')
+  journal_baseline_matches(previous,security_baseline(),before)
  finally:os.close(fd)
 
 def journal_update(before):
@@ -273,12 +294,8 @@ def journal_update(before):
   if previous and previous['phase']=='started' and owner_alive(previous.get('owner'),expected['bootId']):raise ValueError('HARDENING_REMOTE_BUSY')
   baseline=security_baseline()
   if previous:
-   saved=previous.get('baseline')
-   if not isinstance(saved,dict) or not saved:raise ValueError('HARDENING_JOURNAL_CONFLICT')
-   # The package may create the standard vendor sidecar. Never replace it.
-   if '/etc/ssh/sshd_config.apk-new' not in saved:baseline.pop('/etc/ssh/sshd_config.apk-new',None)
-   if baseline!=saved:raise ValueError('HARDENING_JOURNAL_CONFLICT')
-  if previous and not same_request:
+   journal_baseline_matches(previous,baseline,before)
+  if previous and (not same_request or previous.get('baseline')!=baseline):
    # Preserve the old terminal record locally before replacing the current
    # pointer. Only root owns these receipts; never discard failed history.
    archived=directory/('ssh-'+hashlib.sha256(json.dumps(previous,sort_keys=True).encode()).hexdigest()+'.json')
@@ -320,6 +337,7 @@ def journal_update(before):
 try:
  identity();before,ticks=snapshot();updated=False
  journal_readonly(before)
+ inspection_baseline=security_baseline()
  if D['allowUpdate'] and writable(before['preflight']) and all(safe(guest) for guest in before['guests']) and before['alpine'] and not before['fixed'] and before['branch'] in ['3.19','3.20','3.21','3.22','3.23','3.24']:
   identity();active()
   if D['expiresAt']-time.time()*1000 < 100000: raise ValueError('HARDENING_CHECK_FAILED')
@@ -327,6 +345,9 @@ try:
   if writable(preflight()):
    updated=journal_update(before)
  after,after_ticks=snapshot()
+ final_baseline=security_baseline()
+ if '/etc/ssh/sshd_config.apk-new' not in inspection_baseline:final_baseline.pop('/etc/ssh/sshd_config.apk-new',None)
+ if final_baseline!=inspection_baseline:raise ValueError('HARDENING_JOURNAL_CONFLICT')
  if ticks!=after_ticks or after['branch']!=before['branch'] or any(after['preflight'][key]!=before['preflight'][key] for key in ['bootId','architecture','pageSize']): raise ValueError('HARDENING_IDENTITY_CHANGED')
  if updated and not after['fixed']: raise ValueError('ALPINE_SSH_VERIFICATION_FAILED')
  # This very SSH process and channel remains alive through the service reload.
