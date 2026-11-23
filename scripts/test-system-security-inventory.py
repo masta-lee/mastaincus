@@ -6,6 +6,13 @@ spec=importlib.util.spec_from_file_location('inventory',pathlib.Path(__file__).w
 module=importlib.util.module_from_spec(spec);spec.loader.exec_module(module)
 
 class Plans(unittest.TestCase):
+    def test_distro_inventory_covers_shared_libc_clock_and_runtime_helpers(self):
+        for targets in [module.ALPINE,module.DEBIAN]:
+            self.assertEqual(len(targets),len(set(targets)),'duplicate distro package query')
+        for package in ['musl','musl-utils','chrony','chrony-openrc','ca-certificates','fuse3-libs','lvm2-libs','device-mapper-libs','tar','gzip','xz','rsync','libnftnl','libmnl']:
+            self.assertIn(package,module.ALPINE)
+        for package in ['libc6','libc-bin','chrony','libfuse3-3','libfuse3-4','libnftnl11','libmnl0','tar','gzip','xz-utils','rsync','libidn2-0']:
+            self.assertIn(package,module.DEBIAN)
     def test_complete_debian_inventory_distinguishes_architecture(self):
         output='libssl3\tamd64\tinstalled\t3.5.9-1\nlibssl3\ti386\tinstalled\t3.5.7-1\nremoved\tall\tconfig-files\t1.0\n'
         with patch.object(module,'command',return_value=output):

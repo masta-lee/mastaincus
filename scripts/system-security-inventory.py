@@ -5,6 +5,15 @@ import json,os,pathlib,subprocess,sys,time,tempfile,re,fcntl,signal,uuid,stat
 ALPINE=['openssl','libssl3','libcrypto3','curl','libcurl','openssh','openssh-server','openssh-client-default','dnsmasq','lxc','lxc-libs','lxcfs','lxcfs-openrc','lvm2','device-mapper','btrfs-progs','wireguard-tools','qemu-system-x86_64','qemu-system-aarch64','sqlite-libs','libseccomp','libcap2','acl-libs','libattr','libuv','lz4-libs','zstd-libs','xz-libs','libintl','libgcc','dbus-libs','eudev-libs','raft-cowsql','cowsql']
 DEBIAN=['openssl','libssl3','libssl3t64','curl','libcurl4','libcurl4t64','openssh-server','openssh-client','dnsmasq','lxc','liblxc1','liblxc-common','lxcfs','lvm2','libdevmapper1.02.1','libdevmapper-event1.02.1','btrfs-progs','wireguard-tools','nginx','nginx-common','nodejs','qemu-system-x86','qemu-system-arm','qemu-system-common','qemu-utils','systemd','systemd-dev','systemd-sysv','systemd-timesyncd','systemd-resolved','libsystemd0','libsystemd-shared','libpam-systemd','udev','libudev1','chrony','nftables','ca-certificates','libsqlite3-0','libseccomp2','libcap2','libacl1','libattr1','libuv1','libuv1t64','liblz4-1','libzstd1','liblzma5','libdbus-1-3','libgcc-s1']
 
+# libc, clock and the actual storage/network helper libraries must not vanish
+# from inventory just because a signed package transaction cannot safely
+# activate them while a customer is using the host. These are distro packages,
+# never guest software; installation and activation retain separate receipts.
+ALPINE+=['musl','musl-utils','chrony','chrony-openrc','ca-certificates','fuse3-libs','lvm2-libs','device-mapper-libs','device-mapper-event-libs',
+    'tar','gzip','xz','squashfs-tools','rsync','libpsl','libidn2','libunistring','c-ares','brotli-libs','nghttp2-libs','nftables','libnftnl','libmnl','iptables','ip6tables']
+DEBIAN+=['libc6','libc-bin','libfuse3-3','libfuse3-4','libnftnl11','libmnl0','iptables','libxtables12','libip4tc2','libip6tc2',
+    'tar','gzip','xz-utils','squashfs-tools','rsync','libpsl5','libpsl5t64','libidn2-0','libunistring5','libc-ares2','libbrotli1','libnghttp2-14']
+
 def command(args,timeout=90):
     # Keep the complete apt/dpkg process group under the deadline. A surviving
     # package hook must not outlive the temporary service policy or task lock.
