@@ -40,6 +40,14 @@ source994fff285e9be9658c77b83802835708a17cf6d5本机full1730完整231/231自然0
 
 23:04新变化必须纠正稳定范围：真实API3暂不可售105/106/107，随后#37心跳119秒；receipt仍verified/finished/未expired、compatverified，无backend异常/锁失败。真实受信SSH宿主日志1789全部指向CloudflareIPv6 HTTPS入口read connection reset by peer；四宿主低负载、单Agent、无重启，后续200心跳恢复23:06全库存204/4/0。Agent每分钟只发一次，网络瞬时失败后等下一分钟可能突破90秒门禁。不得放宽90秒或签名；新增Client Heartbeat20秒总预算、单次≤5秒、瞬时EOF/reset/timeout及408/429/502/503/504最多3次、新nonce/HMAC/关闭旧连接，每次独立response signature验证；401/403/重定向/TLS身份/oversize和取消不重试。Go全套/vet/双Linux编译/真实断连HTTP原生通过，候选security.5待signed双架构及实际自动升级/两轮观察。本机Go测试第一次清理exe被Windows拒绝，测试断言过但exit1保留，后续自然exit0。不能将已部署.4说成.5。
 
+Agentsecurity.5/sourcefa8bcac09bb4d4a12ac03af3d90458734bf6771f已推，完整signed工作流45202834465全部success/Release预期skipped；独立原生双网络防护/旧HTTP/Go全套/IPv6/signature通过。实际两ELF/hash独立验证：amd58da00fc3ae85b58202a3effdc7fb62788558011f980d0d4ab54e3385654959d，arm85cee01e5224e9cd42c58b56d3a0d913af5c97db6ce2860e6c89a806dc962cda。23:21仓库工具原子更新原Agent版本资产目录，.env/主控PID3299522/NRestarts0保持，不正式发布；23:24缓存自然变.5，随后自动全池升级。首次resources/compat检查一度未就绪数量增加，后逐个完成；23:32全部receipt208，最后#104仍旧.4因下载Cloudflare reset，原重试23:33自动应用.5，23:34全部208version.5仅104最后compat prepared，后续两自然周期待，不据全版本即宣称全可售。钱/客户原PID磁盘及身份检查继续保持，主控源码仍完整994。
+
+23:35:49全208security.5及tools/compatverified/receiptReady208、真实API204available/4assigned/0unavailable，prepared/stale0；23:37/39/40多轮保持。23:40自然巡检success/失败0，23:45仍待。1820原4客户PID/UUID/磁盘/账期/密码、19财务与seal/.env字节/原12identity/唯一backend保持，1821原user200/403/伪role401通过。最新fa8CI45202850652最后1组浏览器待无failure，Agent完整工作流已终态success。普通PR Agent/native等终态最后继续核，不能把本次全池接收/短期0和全安全或72h验收混为一谈。
+
+终态：fa8sourceCI45202850652完整30/30success，普通Agent45202850760/native45202850902/memory45202850534/SSH45202850522/build45202850489及signed45202834465全success。23:44:40继续Agent208/208security.5、receipt208、prepared0/stale0；1825最终原财务/4客户/密码账期/身份/env/唯一backend及双域HTTP200再次过。23:45自然周期最终结果随后记录，不能提前代入。
+
+最后23:45:08全208version.5/receipt208/prepared0/stale0，23:40和23:45自然巡检success/failureCount0/lastErrornull；实际库存API204available/4assigned/0unavailable，1827与连续窗口证据保留。故障修复与热推送本次目标完成，无正式发行，无原客户停启/改钱/改身份证据；真正长期全故障或整机未失陷、系统自动patch/真实OSS/A失联尚无完整证明。仅脱敏source/结果报告进Git，原日志、连接、文件证据留私密；停止预算事故两次原SIGKILL清楚保留，不宣称已修。
+
 2026-11-23，北京时间。Owner先授权只读取证，随后明确授权本问题源码修复后，将此前已做安全修复同批热更新主控作为测试；不正式发版。
 
 主控实际v1.8.14／ced7c10cd17d、唯一后端健康。208台专属宿主中12台故障一致：#16、#21、#24、#26、#30～#36、#46。均管理在线、无客户实例、Agent工具/网络防护有效、AppArmor维护已完成，后续检查反复`HARDENING_JOURNAL_CONFLICT`。它们不是离线宿主。
