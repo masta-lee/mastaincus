@@ -9,6 +9,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"reflect"
 	"regexp"
 	"strings"
 	"syscall"
@@ -278,7 +279,7 @@ func repair(ctx context.Context) error {
 			return e
 		}
 	} else {
-		prefix := []string{"-o", "DPkg::Lock::Timeout=5", "-o", "Acquire::Retries=1", "-o", "Acquire::http::Timeout=10", "-o", "Acquire::https::Timeout=10"}
+		prefix := []string{"-o", "DPkg::Lock::Timeout=5", "-o", "APT::Get::AllowUnauthenticated=false", "-o", "Acquire::AllowInsecureRepositories=false", "-o", "Acquire::AllowWeakRepositories=false", "-o", "Acquire::Retries=1", "-o", "Acquire::http::Timeout=10", "-o", "Acquire::https::Timeout=10"}
 		// Pin already installed tools to their exact version. --no-upgrade
 		// makes apt skip them even with --reinstall, so cannot heal lost files.
 		requested := []string{}
@@ -306,6 +307,14 @@ func repair(ctx context.Context) error {
 		if e = safePlan(string(out), false); e != nil {
 			return e
 		}
+		before, err := debianToolInventory(ctx)
+		if err != nil {
+			return err
+		}
+		expected, err := expectedDebianTools(before, string(out))
+		if err != nil {
+			return err
+		}
 		pinned := []string{}
 		for _, change := range aptVersion.FindAllStringSubmatch(string(out), -1) {
 			pinned = append(pinned, change[1]+"="+change[2])
@@ -313,10 +322,26 @@ func repair(ctx context.Context) error {
 		if len(pinned) == 0 {
 			return fmt.Errorf("tool repair plan unavailable")
 		}
+		actualPlan, err := run(ctx, "apt-get", append(append([]string{}, prefix...), append([]string{"--simulate", "install", "--reinstall", "--no-remove", "--no-install-recommends"}, pinned...)...)...)
+		if err != nil {
+			return err
+		}
+		actualExpected, err := expectedDebianTools(before, string(actualPlan))
+		if err != nil || !reflect.DeepEqual(expected, actualExpected) {
+			return fmt.Errorf("tool package pinned plan changed")
+		}
+		current, err := debianToolInventory(ctx)
+		if err != nil || !reflect.DeepEqual(current, before) {
+			return fmt.Errorf("tool package baseline changed")
+		}
 		args = append(append([]string{}, prefix...), "install", "-y", "--reinstall", "--no-remove", "--no-install-recommends")
 		args = append(args, pinned...)
 		if _, e = run(ctx, "apt-get", args...); e != nil {
 			return e
+		}
+		after, err := debianToolInventory(ctx)
+		if err != nil || !reflect.DeepEqual(after, expected) {
+			return fmt.Errorf("tool package complete installation not confirmed")
 		}
 	}
 	return check(ctx)
