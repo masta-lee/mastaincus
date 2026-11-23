@@ -32,6 +32,10 @@ source994fff285e9be9658c77b83802835708a17cf6d5本机full1730完整231/231自然0
 
 准备priority热更新时新增部署工具收尾漏点：owner入口直接原worker未调用原rootlauncher的成功后seal，原清单仍旧版本，24项差异是已signed新源码/maps/catalog/version，非新注入。源码新增独立finalize先核原包完整25,730项文件/链接（pnpm原hardlinks实际digest）、唯一允许部署时间差异、旧seal中保留的原内容、Prisma cache实际jiti从原配置fsCache=false再生成逐字同，再核真实task success才调用原launcher seal。原生1757 changedcode/identity/extra/cache拒绝/真实hardlink过，主控仅check1760完整通过；下一步对应守卫/types和源码保存后补任务59原postflight，再priority原worker完整更新。不能对未知差异直接seal，本步骤不是手工修改主控代码。
 
+22:44:55任务60原worker实际success，v1.8.14-test.994fff2来源994fff285e9b完整包运行，新backend3299522/NRestarts0/唯一监听。原systemd30s停止旧进程SIGKILL又实际复现，独立缺口保持；未改变客户Incus状态，原4客户PID UUID created磁盘/config仅旧ready元数据保持、19财务钱密码账期、原12权限identity和.env与第59备份字节一致、normaladmin/ownuser200/admin403/forgedrole401均过1772。启动心跳90s门禁20暂时未就绪，22:45:08全部208receiptReady及204available/4assigned/0unavailable，22:45:08～49九样本与22:47:40真实API继续0，尚需22:50/55自然周期。
+
+部署入口/原生测试source1f24cbf502ec6c87a06266ea40328077071e3368已推；工具通过原worker自然成功beforeExit运行finalize，25730完整已签文件/links与原确认生成的cache核验后调用原launcher seal，task60收尾自动成功，最终封存无需手改。最后helper源码CI45196816578在途，994源码CI45191382295因后续helper提交取消、不能称全绿，994完整包守卫/原生/两首装六worker及独立资产过。最终helper需要继续核其CI失败/终态，不重建产品包仅为文档或工具核验。
+
 2026-11-23，北京时间。Owner先授权只读取证，随后明确授权本问题源码修复后，将此前已做安全修复同批热更新主控作为测试；不正式发版。
 
 主控实际v1.8.14／ced7c10cd17d、唯一后端健康。208台专属宿主中12台故障一致：#16、#21、#24、#26、#30～#36、#46。均管理在线、无客户实例、Agent工具/网络防护有效、AppArmor维护已完成，后续检查反复`HARDENING_JOURNAL_CONFLICT`。它们不是离线宿主。
