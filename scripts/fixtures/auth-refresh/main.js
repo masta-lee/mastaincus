@@ -23,5 +23,20 @@ createApp({ setup() {
   }
   session()
   window.refreshHarness = { auth, userApi, adminApi, pending, refreshes, session, token, results: [], errors: [],
-    start(client = 'user') { void (client === 'user' ? userApi : adminApi).instances.start(1).then(value => this.results.push(value)).catch(error => this.errors.push(error.code || error.message || 'failure')) } }
+    start(client = 'user') {
+      const requests = pending.length + refreshes.length
+      let settled = false
+      void (client === 'user' ? userApi : adminApi).instances.start(1).then(value => this.results.push(value)).catch(error => this.errors.push(error.code || error.message || 'failure')).finally(() => { settled = true })
+      // Actual axios adapters run asynchronously. Observe request admission
+      // before a test switches session or consumes the synthetic response.
+      return new Promise((resolve, reject) => {
+        const deadline = performance.now() + 3000
+        const check = () => {
+          if (pending.length + refreshes.length > requests || settled) return resolve()
+          if (performance.now() > deadline) return reject(Error('refresh request admission timed out'))
+          setTimeout(check, 0)
+        }
+        check()
+      })
+    } }
 }, template: '<p>刷新隔离测试</p>' }).use(createPinia()).mount('#app')

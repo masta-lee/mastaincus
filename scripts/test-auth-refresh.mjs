@@ -78,7 +78,7 @@ try {
   assert.equal(await page.eval(() => window.refreshHarness.refreshes.length), 0, 'delayed old-token 401 uses the newer token in its same session without another refresh')
   assert.equal(await page.eval(() => window.refreshHarness.pending.length), 2)
   await run(() => window.refreshHarness.pending[1].resolve({ message: 'queued', taskId: 1, status: 'pending' }))
-  await fresh(); await run(() => { const h = window.refreshHarness; h.session(1, 'refresh-session', 'user', 60); h.start('user'); h.session(2, 'new-session', 'user', 60); h.start('admin') })
+  await fresh(); await run(async () => { const h = window.refreshHarness; h.session(1, 'refresh-session', 'user', 60); await h.start('user'); h.session(2, 'new-session', 'user', 60); await h.start('admin') })
   assert.equal(await page.eval(() => window.refreshHarness.refreshes.length), 2, 'replacement session starts its own refresh without waiting for an obsolete one')
   await run(() => { const h = window.refreshHarness; h.refreshes[0].resolve({ token: h.token(1) }); h.start('admin') })
   assert.equal(await page.eval(() => window.refreshHarness.refreshes.length), 2, 'old refresh finally cannot release the new-session lock')
