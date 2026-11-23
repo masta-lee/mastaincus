@@ -1,7 +1,7 @@
 // Owner-authorized test deployment only. Atomically exchange signed release
 // asset directories; never edit panel code, .env, host configuration or DB.
 import assert from 'node:assert/strict'
-import { readFileSync, readdirSync, lstatSync, mkdtempSync, writeFileSync, renameSync, rmSync } from 'node:fs'
+import { readFileSync, readdirSync, lstatSync, mkdtempSync, writeFileSync, renameSync, rmSync, chmodSync } from 'node:fs'
 import { resolve, dirname, join } from 'node:path'
 import { execFileSync } from 'node:child_process'
 import { createHash, createPublicKey, verify } from 'node:crypto'
@@ -41,6 +41,18 @@ function protectedPath(path,leafDirectory=true) {
 export function exchangeCandidateDirectories(stage,destination) {
   execFileSync('/usr/bin/python3',['-I','-B','-c',"import ctypes,os,sys;lib=ctypes.CDLL(None,use_errno=True);fn=lib.renameat2;fn.argtypes=[ctypes.c_int,ctypes.c_char_p,ctypes.c_int,ctypes.c_char_p,ctypes.c_uint];r=fn(-100,os.fsencode(sys.argv[1]),-100,os.fsencode(sys.argv[2]),2);assert r==0,ctypes.get_errno();fd=os.open(os.path.dirname(sys.argv[1]),os.O_RDONLY|os.O_DIRECTORY);os.fsync(fd);os.close(fd)",stage,destination])
 }
+export function prepareCandidateFiles(bundle,stage,gid) {
+  for(const name of readdirSync(bundle)) {
+    const path=join(stage,name)
+    writeFileSync(path,readFileSync(join(bundle,name)),{mode:0o640})
+    // A private deployment umask removes group-read from creation modes.
+    // Set the final service-readable mode explicitly before publication.
+    chmodSync(path,0o640)
+  }
+  execFileSync('/usr/bin/chown',['-R','0:'+gid,stage])
+  chmodSync(stage,0o750)
+  for(const name of readdirSync(stage))execFileSync('/usr/sbin/runuser',['-u','incudal','--','/usr/bin/test','-r',join(stage,name)])
+}
 function install(bundle) {
   assert.equal(process.platform,'linux');assert.equal(process.getuid(),0)
   const environment='/opt/incudal/.env';protectedPath(environment,false)
@@ -50,13 +62,13 @@ function install(bundle) {
   assert.ok(/^\/var\/lib\/incudal-agent-release\/[A-Za-z0-9._-]+$/.test(destination))
   protectedPath(destination);protectedPath(bundle)
   const current=verifyCandidateBundle(destination),candidate=verifyCandidateBundle(bundle)
-  assert.ok(BigInt(candidate.version.split('.').at(-1))>BigInt(current.version.split('.').at(-1)),'candidate must advance the installed test version')
+  const newer=BigInt(candidate.version.split('.').at(-1))>BigInt(current.version.split('.').at(-1))
+  const same=current.version===candidate.version&&current.sourceCommit===candidate.sourceCommit&&['amd64','arm64'].every(arch=>current.files['linux-'+arch].sha256===candidate.files['linux-'+arch].sha256&&current.files['linux-'+arch].signature===candidate.files['linux-'+arch].signature)
+  assert.ok(newer||same,'candidate must advance or reinstall the identical signed version')
   const info=lstatSync(destination),stage=mkdtempSync(join(dirname(destination),'.signed-candidate-'))
   let exchanged=false
   try {
-    for(const name of readdirSync(bundle))writeFileSync(join(stage,name),readFileSync(join(bundle,name)),{mode:0o640})
-    execFileSync('/usr/bin/chown',['-R','0:'+info.gid,stage])
-    execFileSync('/usr/bin/chmod',['750',stage])
+    prepareCandidateFiles(bundle,stage,info.gid)
     assert.equal(verifyCandidateBundle(stage).version,candidate.version)
     exchangeCandidateDirectories(stage,destination)
     exchanged=true

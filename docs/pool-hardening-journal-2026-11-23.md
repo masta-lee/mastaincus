@@ -6,6 +6,10 @@ owner随后明确仅源码修完后热推送，不直接修改主控文件/配�
 
 独立旧官方HTTP任务45166264584双架构均success，生产Go package实际HTTPS事务／保原repository/world/拒绝跨分支等通过。f084签名候选双ELF/publisher/fullhash再次通过；源码ddb后仅test/workflow变更，Agent产品输入相同。下一步只投送经验证版本包，原系统自动升级跟进后以真实inventoryAPI（不是裸DB就绪）核整个自然周期。
 
+本地完整231/231（1556）自然exit0，Go全套及旧源双Linux回归、发布签名/字节/架构/伪造版/篡改/额外文件拒绝、Linux原子目录exchange/原包保留/失败不半替换全部过。部署工具535a326e已仓库保存，只读取原本地Agent路径并投送签名版本包，.env/面板/DB/主控服务不改；失败日志保留。最终实际目标部署与两轮自然五分钟维护仍须核，不能仅一次inventory表示稳定。
+
+候选security.3版本包原子投送后未立即生效：主控服务读取包返回EACCES，不能误称只是五分钟缓存。新部署工具继承root umask077，writeFile mode0640实际落成0600；原目录路径／加载环境／mountnamespace一致，但服务账户读不到manifest。源码精修显式chmod0640＋发布前真正runuser incudal逐文件读权限核验，同一完整签名版本允许权限正确地重新投送；不手改主控配置或chmod线上文件。真实Linux root umask077前后交换和service读取回归1590，完整签名篡改拒绝/原子保旧测试及对应守卫后再部署。
+
 2026-11-23，北京时间。Owner先授权只读取证，随后明确授权本问题源码修复后，将此前已做安全修复同批热更新主控作为测试；不正式发版。
 
 主控实际v1.8.14／ced7c10cd17d、唯一后端健康。208台专属宿主中12台故障一致：#16、#21、#24、#26、#30～#36、#46。均管理在线、无客户实例、Agent工具/网络防护有效、AppArmor维护已完成，后续检查反复`HARDENING_JOURNAL_CONFLICT`。它们不是离线宿主。
