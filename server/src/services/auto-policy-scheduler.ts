@@ -1,5 +1,5 @@
 /** Automatic snapshot scheduling and durable recovery. */
-import { schedule } from 'node-cron'
+import { schedule } from './scheduler-lifecycle.js'
 import pLimit from 'p-limit'
 import { prisma } from '../db/prisma.js'
 import { acquireLock, releaseLock } from '../lib/distributed-lock.js'
@@ -68,7 +68,7 @@ export function startAutoPolicyScheduler(): void {
 
     // 每 5 分钟检查一次快照策略（支持10分钟频率）
     schedule('*/5 * * * *', () => {
-        runAutoSnapshotJob().catch(console.error)
+        return runAutoSnapshotJob().catch(console.error)
     })
 
     console.log('[AutoPolicy] Scheduler started')

@@ -5,6 +5,7 @@ import { randomUUID } from 'node:crypto'
 import { unlink } from 'node:fs/promises'
 import { backupRoot, ensure, nextScheduledTime, readBackupConfig, readJson, recoveryHeld, serializeBackupMutation, statePath, validateId, writeBackupConfig, writeJson, type BackupTaskKind, type BackupTaskRequest, type BackupTaskResult } from './platform-backup-core.js'
 import { join } from 'node:path'
+import { WorkerActivity } from '../workers/worker-activity.js'
 
 const exec = promisify(execFile)
 export function backupRuntimeReady(): boolean {
@@ -90,6 +91,7 @@ export async function enqueueBackupTask(kind: BackupTaskKind, createdBy: number,
   return pending
 }
 let timer: ReturnType<typeof setInterval> | undefined
+const activity = new WorkerActivity()
 let ticking = false
 let failures=0,nextTickAt=0
 export function startPlatformBackupScheduler() {
@@ -115,6 +117,6 @@ export function startPlatformBackupScheduler() {
     }
     finally { ticking = false }
   }
-  timer = setInterval(() => { void tick() }, 5000); timer.unref(); void tick()
+  timer = setInterval(() => { void activity.run(tick) }, 5000); timer.unref(); void activity.run(tick)
 }
-export function stopPlatformBackupScheduler() { if (timer) clearInterval(timer); timer = undefined }
+export async function stopPlatformBackupScheduler() { if (timer) clearInterval(timer); timer = undefined; await activity.drain() }

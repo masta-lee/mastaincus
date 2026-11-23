@@ -8,7 +8,7 @@
  * - 性能监控日志
  */
 
-import { schedule } from 'node-cron'
+import { schedule, trackScheduledWork } from './scheduler-lifecycle.js'
 import pLimit from 'p-limit'
 import { IncusClient } from '../lib/incus/incus-client.js'
 import { getIncusClientFromPool, updateClientResponseTime, recordClientError, getPoolStatus } from '../lib/incus/incus-pool.js'
@@ -372,7 +372,7 @@ export async function runTrafficJob(): Promise<void> {
     try {
         // 使用超时包装整个任务
         await withTimeout(
-            executeTrafficJob(startTime),
+            trackScheduledWork(() => executeTrafficJob(startTime)),
             JOB_TIMEOUT_MS,
             `[Traffic] Job timeout after ${JOB_TIMEOUT_MS}ms`
         )
@@ -723,27 +723,27 @@ export function startTrafficScheduler(): void {
 
     // 每 3 分钟采集流量
     schedule('*/3 * * * *', () => {
-        runTrafficJob().catch(console.error)
+        return runTrafficJob().catch(console.error)
     })
 
     // 每天 00:05 按节点 resetDay 逐实例重置，并同步用户级实例贡献
     schedule('5 0 * * *', () => {
-        runDailyHostTrafficResetJob().catch(console.error)
+        return runDailyHostTrafficResetJob().catch(console.error)
     }, { timezone: trafficDb.TRAFFIC_TIME_ZONE })
 
     // 每天 03:00 清理旧数据
     schedule('0 3 * * *', () => {
-        runCleanupJob().catch(console.error)
+        return runCleanupJob().catch(console.error)
     })
 
     // 每天 03:30 清理旧通知日志
     schedule('30 3 * * *', () => {
-        runNotificationCleanupJob().catch(console.error)
+        return runNotificationCleanupJob().catch(console.error)
     })
 
     // 每天 04:00 清理过期的 Token、验证码、分布式锁、操作验证记录
     schedule('0 4 * * *', () => {
-        runSystemCleanupJob().catch(console.error)
+        return runSystemCleanupJob().catch(console.error)
     })
 
     console.log('[Traffic] Scheduler started')

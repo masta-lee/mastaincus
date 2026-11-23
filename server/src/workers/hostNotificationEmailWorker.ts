@@ -8,6 +8,7 @@ import {
 import { sendHostAnnouncementEmail } from '../lib/mailer.js'
 import type { HostNotificationEmailTask } from '@prisma/client'
 import { createWorkerDbBackoff } from './db-failure-backoff.js'
+import { WorkerActivity } from './worker-activity.js'
 
 const POLL_INTERVAL = 5000
 const TIMEOUT_CHECK_INTERVAL = 60 * 1000
@@ -16,8 +17,11 @@ let workerInterval: ReturnType<typeof setInterval> | null = null
 let timeoutCheckInterval: ReturnType<typeof setInterval> | null = null
 let isProcessing = false
 const dbBackoff = createWorkerDbBackoff('HostNotifyEmailWorker')
+const activity = new WorkerActivity()
+let stopping = false
 
 async function processQueue(): Promise<void> {
+  if (stopping) return
   if (isProcessing) return
   if (dbBackoff.shouldSkip()) return
   isProcessing = true
@@ -73,16 +77,17 @@ export function startHostNotificationEmailWorker(): void {
     console.warn('[HostNotifyEmailWorker] Worker already running')
     return
   }
+  stopping = false
 
   console.log('[HostNotifyEmailWorker] Starting worker')
   workerInterval = setInterval(() => {
-    processQueue().catch(err => {
+    activity.run(processQueue).catch(err => {
       console.error('[HostNotifyEmailWorker] Worker tick failed:', err)
     })
   }, POLL_INTERVAL)
   timeoutCheckInterval = setInterval(() => {
     if (dbBackoff.shouldSkip()) return
-    cleanupTimeoutHostNotificationEmailTasks().then(count => {
+    activity.run(cleanupTimeoutHostNotificationEmailTasks).then(count => {
       if (count > 0) {
         console.warn(`[HostNotifyEmailWorker] Requeued ${count} timed-out task(s)`)
       }
@@ -92,19 +97,19 @@ export function startHostNotificationEmailWorker(): void {
     })
   }, TIMEOUT_CHECK_INTERVAL)
 
-  processQueue().catch(err => {
+  activity.run(processQueue).catch(err => {
     console.error('[HostNotifyEmailWorker] Initial queue processing failed:', err)
   })
 }
 
-export function stopHostNotificationEmailWorker(): void {
-  if (!workerInterval) return
-
-  clearInterval(workerInterval)
+export async function stopHostNotificationEmailWorker(): Promise<void> {
+  stopping = true
+  if (workerInterval) clearInterval(workerInterval)
   workerInterval = null
   if (timeoutCheckInterval) {
     clearInterval(timeoutCheckInterval)
     timeoutCheckInterval = null
   }
   console.log('[HostNotifyEmailWorker] Worker stopped')
+  await activity.drain()
 }

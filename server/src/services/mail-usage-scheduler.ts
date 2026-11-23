@@ -2,7 +2,7 @@
  * 邮箱上游实际用量同步任务。
  */
 
-import { schedule } from 'node-cron'
+import { schedule } from './scheduler-lifecycle.js'
 import { prisma } from '../db/prisma.js'
 import * as mailDb from '../db/mail.js'
 import { sanitizeTokensInString } from '../lib/log-sanitizer.js'
@@ -111,7 +111,7 @@ export function startMailUsageScheduler(): void {
   schedulerStarted = true
 
   schedule(MAIL_USAGE_CRON, () => {
-    syncMailUsage().catch(error => {
+    return syncMailUsage().catch(error => {
       console.error(`[MailUsage] Scheduled usage sync failed: ${safeErrorMessage(error)}`)
     })
   })

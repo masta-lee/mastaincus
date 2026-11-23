@@ -48,7 +48,9 @@ const host=await prisma.host.create({data:{userId:owner.id,name:'fixture',status
 const make=async(tag:string,status='running',planId:number|null=plan.id)=>{const name=tag+'-'+randomUUID(),g={name,status:status==='stopped'?'Stopped':'Running',type:'container',ephemeral:false,created_at:new Date().toISOString(),config:{'volatile.uuid':randomUUID(),'boot.autostart':'true'},devices:{root:{type:'disk',path:'/',pool:'default'}},profiles:[]};guests.set(name,g)
  return prisma.instance.create({data:{userId:buyer.id,hostId:host.id,packageId:pkg.id,packagePlanId:planId,name,incusId:name,image:'fixture/alpine',cpu:100,memory:128,disk:1024,status:status as any,expiresAt:new Date(Date.now()-60000),snapshottedSpecs:{recoveryIdentity:{uuid:g.config['volatile.uuid'],createdAt:g.created_at}}}})}
 const retire=(i:any)=>prisma.instance.update({where:{id:i.id},data:{status:'deleted',deletionBillingPending:false}})
-const Fastify=requireServer('fastify'),web=Fastify(),actor={id:buyer.id,role:'user',username:buyer.username,sid:'expiry-access-fixture',iat:Math.floor(Date.now()/1000)}
+const {generateRefreshToken,getRefreshTokenSessionId}=await import('../src/lib/security.js')
+const sessionId=getRefreshTokenSessionId(await generateRefreshToken(buyer.id,buyer.username,'user'))
+const Fastify=requireServer('fastify'),web=Fastify(),actor={id:buyer.id,role:'user',username:buyer.username,sid:sessionId,iat:Math.floor(Date.now()/1000)}
 web.decorate('authenticate',async(req:any)=>{req.user=actor});web.decorate('authenticateAdmin',web.authenticate);web.decorate('authenticateUser',web.authenticate)
 const outcomes:any[]=[],clients:any[]=[]
 let testFailure:unknown

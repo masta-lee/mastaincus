@@ -1,6 +1,6 @@
 import { lookup as dnsLookup } from 'dns/promises'
 import { isIP } from 'net'
-import { schedule } from 'node-cron'
+import { schedule, trackScheduledWork } from './scheduler-lifecycle.js'
 import { Address4, Address6 } from 'ip-address'
 import type { HostAddressCheckTrigger, HostAddressKind, Prisma } from '@prisma/client'
 import { acquireLock, releaseLock } from '../lib/distributed-lock.js'
@@ -462,12 +462,12 @@ export function startHostAddressMonitor(): void {
 
   schedulerStarted = true
 
-  runHostAddressBackfillJob().catch(error => {
+  trackScheduledWork(runHostAddressBackfillJob).catch(error => {
     console.error('[HostAddress] Initial backfill failed:', error)
   })
 
   schedule(HOST_ADDRESS_POLL_CRON, () => {
-    runHostAddressPollJob().catch(error => {
+    return runHostAddressPollJob().catch(error => {
       console.error('[HostAddress] Scheduled poll failed:', error)
     })
   }, {

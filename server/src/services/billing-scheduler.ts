@@ -3,7 +3,7 @@
  * 负责定时执行自动续费、到期封停、到期删除、到期提醒等任务
  */
 
-import { schedule } from 'node-cron'
+import { schedule, trackScheduledWork } from './scheduler-lifecycle.js'
 import pLimit from 'p-limit'
 import { randomUUID } from 'node:crypto'
 import { Prisma } from '@prisma/client'
@@ -70,6 +70,7 @@ const EXPIRY_NOTIFY_DAYS = [3, 2, 1] // 到期前 3/2/1 天各提醒一次
 const INSTANCE_BILLING_JOB_LOCK_EXPIRE_MS = 30 * 60 * 1000
 const INSTANCE_BILLING_JOB_LOCK_WAIT_MS = 100
 let schedulerStarted = false
+let billingStopping = false
 let autoRenewPromise: Promise<void> | null = null
 let allRenewalsRequested = false
 const renewalUsersRequested = new Set<number>()
@@ -93,6 +94,7 @@ function runExpiryTarget<T>(id:number,action:()=>Promise<T>):Promise<T|undefined
 async function executeDeadlineTargets():Promise<void>{
   if(!deadlineEnabled||recoveryHeld())return
   const due=await prisma.instance.findMany({where:{expiresAt:{lte:new Date()},OR:[{status:{not:'deleted'}},{deletionBillingPending:true},{provisioningCleanupPending:true}]},orderBy:{expiresAt:'asc'}})
+  if (!deadlineEnabled || billingStopping) return
   await Promise.allSettled(due.map(i=>runExpiryTarget(i.id,async()=>{
     const notice=await processExpirySuspend(i)
     if(expiryDeleteDue(i))await processExpiryDelete(i)
@@ -100,8 +102,9 @@ async function executeDeadlineTargets():Promise<void>{
   })))
 }
 function deadlineWake(){
-  void refreshExpiryDeadline()
-  void executeDeadlineTargets().catch(()=>{noteExpiryFailure('EXPIRY_DEADLINE_SCAN_RETRY')})
+  if (billingStopping) return
+  void trackScheduledWork(refreshExpiryDeadline)
+  void trackScheduledWork(executeDeadlineTargets).catch(()=>{noteExpiryFailure('EXPIRY_DEADLINE_SCAN_RETRY')})
 }
 
 /** Refresh at committed writes and once a minute to absorb direct DB imports
@@ -120,6 +123,7 @@ async function refreshExpiryDeadline():Promise<void>{
         prisma.instance.findFirst({where:{...occupied,expiresAt:{gt:now}},select:{expiresAt:true},orderBy:{expiresAt:'asc'}}),
         prisma.instance.findFirst({where:{...occupied,expiresAt:{gt:cutoff,lte:now}},select:{expiresAt:true},orderBy:{expiresAt:'asc'}})
       ])
+      if (!deadlineEnabled || billingStopping) return
       const deadlines=[now.getTime()+(expiryFailureCount?10000:60000),nextExpiry?.expiresAt?.getTime(),nextDelete?.expiresAt?nextDelete.expiresAt.getTime()+3*86400000:undefined].filter((v):v is number=>typeof v==='number')
       if(deadlineTimer)clearTimeout(deadlineTimer)
       deadlineTimer=setTimeout(deadlineWake,Math.max(1,Math.min(...deadlines)-Date.now()))
@@ -127,7 +131,7 @@ async function refreshExpiryDeadline():Promise<void>{
     }while(deadlineDirty)
   }catch{
     if(deadlineTimer)clearTimeout(deadlineTimer)
-    deadlineTimer=setTimeout(()=>{void refreshExpiryDeadline()},10000);deadlineTimer.unref()
+    if (!billingStopping) { deadlineTimer=setTimeout(()=>{void trackScheduledWork(refreshExpiryDeadline)},10000);deadlineTimer.unref() }
   }finally{deadlineRefreshing=false}
 }
 
@@ -208,7 +212,7 @@ function buildAutoRenewAttemptGuard(instance: any, now: Date, expiryThreshold: D
  * 执行自动续费
  */
 async function executeAutoRenew(userId?: number): Promise<void> {
-  if (recoveryHeld()) return
+  if (billingStopping || recoveryHeld()) return
   if (userId === undefined) allRenewalsRequested = true
   else {
     if (!Number.isSafeInteger(userId) || userId < 1) throw new Error('AUTO_RENEW_USER_INVALID')
@@ -218,11 +222,11 @@ async function executeAutoRenew(userId?: number): Promise<void> {
   return drainAutoRenewRequests()
 }
 async function drainAutoRenewRequests(): Promise<void> {
-  if (recoveryHeld()) return
+  if (billingStopping || recoveryHeld()) return
   if (autoRenewPromise) return autoRenewPromise
   // A recharge arriving during a scan must get a later fresh selection. Joining
   // only the old promise can otherwise lose the post-credit wakeup.
-  const running = Promise.resolve().then(async () => {
+  const running = trackScheduledWork(() => Promise.resolve().then(async () => {
     // Let expiry enforcement proceed even during a sustained stream of credits.
     for (let pass = 0; pass < 2 && (allRenewalsRequested || renewalUsersRequested.size); pass++) {
       const users = allRenewalsRequested ? undefined : [...renewalUsersRequested]
@@ -230,11 +234,11 @@ async function drainAutoRenewRequests(): Promise<void> {
       if (recoveryHeld()) return
       await runAutoRenew(users)
     }
-  })
+  }))
   autoRenewPromise = running
   try { await running } finally {
     if (autoRenewPromise === running) autoRenewPromise = null
-    if (allRenewalsRequested || renewalUsersRequested.size) {
+    if (!billingStopping && (allRenewalsRequested || renewalUsersRequested.size)) {
       setTimeout(() => { void drainAutoRenewRequests().catch(console.error) }, 0).unref()
     }
   }
@@ -1312,10 +1316,12 @@ export async function getExpiryEnforcementStatus() {
     lastError: expiryLastStartedAt ? expiryLastError : interrupted ? 'EXPIRY_RUN_INTERRUPTED' : saved?.lastError || null, recoveryHeld: recoveryHeld() }
 }
 export async function startExpiryEnforcement() {
+  if (billingStopping) throw new Error('BILLING_SCHEDULER_STOPPING')
   if (recoveryHeld()) throw new Error('EXPIRY_RECOVERY_HELD')
   if (!expiryStartPromise) {
     expiryStartPromise = (async () => {
       const status = await getExpiryEnforcementStatus()
+      if (billingStopping) return
       if (status.enabled) return
       if (expiryEnforcementTask && await expiryEnforcementTask.getStatus() !== 'destroyed') await expiryEnforcementTask.start()
       else expiryEnforcementTask = schedule('*/5 * * * *', async () => { await executeExpiryEnforcement() }, { noOverlap: true, name: 'instance-expiry-enforcement' })
@@ -1337,6 +1343,11 @@ export async function stopExpiryEnforcement():Promise<void>{
   if(expiryEnforcementTask)await expiryEnforcementTask.stop()
   await Promise.allSettled([...expiryTargets.values()])
 }
+export async function stopBillingScheduler(): Promise<void> {
+  billingStopping = true
+  await stopExpiryEnforcement()
+  await autoRenewPromise
+}
 
 /**
  * 启动计费调度器
@@ -1347,11 +1358,12 @@ export function startBillingScheduler(): void {
   }
 
   schedulerStarted = true
+  billingStopping = false
   registerRechargeRenewalConsumer(userId => executeAutoRenew(userId))
 
   // 每小时检查自动续费（整点）
   schedule('0 * * * *', () => {
-    executeAutoRenew().catch(console.error)
+    return executeAutoRenew().catch(console.error)
   })
 
   // Retry expiry actions after gateway reconnect; keep the existing 3-day grace.
@@ -1359,17 +1371,17 @@ export function startBillingScheduler(): void {
 
   // 每小时检查到期提醒
   schedule('15 * * * *', () => {
-    executeExpiryNotify().catch(console.error)
+    return executeExpiryNotify().catch(console.error)
   })
 
   // 每小时清理过期的充值订单（在 :30 执行）
   schedule('30 * * * *', () => {
-    cleanExpiredRechargeOrders().catch(console.error)
+    return cleanExpiredRechargeOrders().catch(console.error)
   })
 
   // 每天凌晨 4:30 清理旧的支付回调防重放记录（30天前）
   schedule('30 4 * * *', () => {
-    cleanOldPaymentCallbacks().catch(console.error)
+    return cleanOldPaymentCallbacks().catch(console.error)
   })
 
   console.log('[Billing] Scheduler started')

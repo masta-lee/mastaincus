@@ -7,7 +7,7 @@
  * - Webhook 告警异常情况
  */
 
-import { schedule } from 'node-cron'
+import { schedule, trackScheduledWork } from './scheduler-lifecycle.js'
 import { getDbPoolStats, prisma } from '../db/prisma.js'
 import { getPoolStatus } from '../lib/incus/incus-pool.js'
 import { assertSafeWebhookUrl } from '../lib/outbound-security.js'
@@ -22,6 +22,7 @@ const ALERT_COOLDOWN_MS = 10 * 60 * 1000  // 10分钟告警冷却
 const ALERT_TIMEOUT_MS = 10 * 1000  // 10秒请求超时
 let lastAlertTime = 0
 let schedulerStarted = false
+let startupTimer: ReturnType<typeof setTimeout> | undefined
 
 // 监控指标
 interface SystemMetrics {
@@ -237,17 +238,18 @@ export function startSystemMonitor(): void {
   schedulerStarted = true
 
   // 启动时输出一次
-  setTimeout(() => {
-    reportHealth().catch(console.error)
+  startupTimer = setTimeout(() => {
+    void trackScheduledWork(reportHealth).catch(console.error)
   }, 5000) // 延迟5秒，等系统初始化完成
   
   // 每10分钟输出健康报告
   schedule('*/10 * * * *', () => {
-    reportHealth().catch(console.error)
+    return reportHealth().catch(console.error)
   })
   
   console.log('[Monitor] System monitor started')
 }
+export function stopSystemMonitor(): void { if (startupTimer) clearTimeout(startupTimer) }
 
 /**
  * 获取系统指标（API 用）

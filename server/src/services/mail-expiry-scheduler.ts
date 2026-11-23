@@ -7,8 +7,10 @@ import { prisma } from '../db/prisma.js'
 import { createLog } from '../db/logs.js'
 import { getMailSourceById } from '../db/mail.js'
 import * as craneMailService from './cranemail.js'
+import { WorkerActivity } from '../workers/worker-activity.js'
 
 let schedulerInterval: NodeJS.Timeout | null = null
+const activity = new WorkerActivity()
 
 /**
  * 检查并更新过期的邮箱订阅
@@ -201,16 +203,22 @@ export function startMailExpiryScheduler(): NodeJS.Timeout {
   console.log('[Mail] Starting mail subscription expiry scheduler')
 
   // 启动时立即执行一次
-  checkMailSubscriptionExpiry().catch(err => {
+  activity.run(checkMailSubscriptionExpiry).catch(err => {
     console.error('[Mail] Initial mail expiry check failed:', err)
   })
 
   // 设置定时执行
   schedulerInterval = setInterval(() => {
-    checkMailSubscriptionExpiry().catch(err => {
+    activity.run(checkMailSubscriptionExpiry).catch(err => {
       console.error('[Mail] Scheduled mail expiry check failed:', err)
     })
   }, INTERVAL)
 
   return schedulerInterval
+}
+
+export async function stopMailExpiryScheduler(): Promise<void> {
+  if (schedulerInterval) clearInterval(schedulerInterval)
+  schedulerInterval = null
+  await activity.drain()
 }

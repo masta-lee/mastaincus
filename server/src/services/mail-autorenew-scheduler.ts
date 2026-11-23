@@ -2,7 +2,7 @@
  * 邮箱订阅自动续费任务：每天扫描临期订阅，并统一按 1 个月从余额续费。
  */
 
-import { schedule } from 'node-cron'
+import { schedule } from './scheduler-lifecycle.js'
 import { Prisma } from '@prisma/client'
 import { prisma } from '../db/prisma.js'
 import { createLog } from '../db/logs.js'
@@ -259,7 +259,7 @@ export function startMailAutoRenewScheduler(): void {
 
   schedulerStarted = true
   schedule(MAIL_AUTORENEW_CRON, () => {
-    runMailAutoRenew().catch(error => {
+    return runMailAutoRenew().catch(error => {
       console.error(`[MailAutoRenew] Scheduled run failed: ${safeErrorMessage(error)}`)
     })
   })

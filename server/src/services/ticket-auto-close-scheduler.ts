@@ -12,6 +12,9 @@ import { getTicketsForAutoClose, autoCloseTickets } from '../db/tickets.js'
 import { sendNotification } from '../lib/notifier.js'
 import { createLog } from '../db/logs.js'
 import { getHostById, getSystemConfigBoolean, getSystemConfigNumber } from '../db/index.js'
+import { WorkerActivity } from '../workers/worker-activity.js'
+
+const activity = new WorkerActivity()
 
 // 配置常量
 const TICKET_AUTO_CLOSE_ENABLED_CONFIG_KEY = 'ticket_auto_close_enabled'
@@ -93,10 +96,10 @@ export function startTicketAutoCloseScheduler(): void {
   }
 
   // 启动时执行一次
-  processTicketAutoClose()
+  void activity.run(processTicketAutoClose)
 
   // 定期执行
-  schedulerInterval = setInterval(processTicketAutoClose, CHECK_INTERVAL_MS)
+  schedulerInterval = setInterval(() => { void activity.run(processTicketAutoClose) }, CHECK_INTERVAL_MS)
 
   console.log('🎫 工单自动关闭调度器已启动（超时可配置，每小时检查）')
 }
@@ -104,10 +107,11 @@ export function startTicketAutoCloseScheduler(): void {
 /**
  * 停止工单自动关闭调度器
  */
-export function stopTicketAutoCloseScheduler(): void {
+export async function stopTicketAutoCloseScheduler(): Promise<void> {
   if (schedulerInterval) {
     clearInterval(schedulerInterval)
     schedulerInterval = null
     console.log('[TicketAutoClose] 调度器已停止')
   }
+  await activity.drain()
 }

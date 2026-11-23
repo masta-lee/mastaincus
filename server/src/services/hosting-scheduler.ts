@@ -3,7 +3,7 @@
  * 负责定时解冻到期的托管收入
  */
 
-import { schedule } from 'node-cron'
+import { schedule } from './scheduler-lifecycle.js'
 import { prisma } from '../db/prisma.js'
 import {
   HOSTING_BALANCE_LOG_LOCK_NAMESPACE,

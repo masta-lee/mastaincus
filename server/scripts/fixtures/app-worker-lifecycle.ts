@@ -33,11 +33,11 @@ export async function verifyAppWorkerLifecycle(source: string) {
     } finally { await fastify.close() }
     assert.ok(checkoutStopped && recoveryStopped, 'Real Fastify close waits for the shipped worker shutdown callbacks')
   }
-  const resourceHook=hooks.find(hook=>/stopInstanceTaskWorker.*stopRestoreWorker.*stopBackupUploadWorker/.test(hook.getText(file)))
+  const resourceHook=hooks.find(hook=>/stopInstanceTaskWorker.*stopRestoreWorker.*stopBackupUploadWorker/s.test(hook.getText(file)))
   assert.ok(resourceHook,'instance, restore and upload drains must be registered before listen')
   assert.ok(resourceHook.getText(file).includes("'preClose'"),'stop resource admission before waiting for existing HTTP/WebSocket connections')
-  const connectionHook=hooks.find(hook=>hook.getText(file).includes('closeAllSessions'))
-  assert.ok(connectionHook?.getText(file).includes("'preClose'"),'terminal connections close before HTTP server waits for connections')
+  const connectionHook=hooks.find(hook=>hook.getText(file).includes('void beginBackgroundShutdown()'))
+  assert.ok(connectionHook?.getText(file).includes("'preClose'"),'terminal connections and scheduler admissions close before HTTP server waits for connections')
   const fastify=Fastify()
   const released:Array<()=>void>=[]
   const stopped:string[]=[]
@@ -84,6 +84,45 @@ export async function verifyAppWorkerLifecycle(source: string) {
   releaseStartup();await first
   assert.deepEqual(steps,['fastify','database','exit'])
   console.log('PASS protected startup shutdown: signals registered early, startup drain precedes database close, repeated signals share one close')
+  const managed=await import('../../src/services/scheduler-lifecycle.js')
+  let releaseSchedule!:()=>void,releaseNested!:()=>void
+  const gate=new Promise<void>(resolve=>{releaseSchedule=resolve})
+  const nestedGate=new Promise<void>(resolve=>{releaseNested=resolve})
+  let runs=0
+  const task=managed.schedule('0 0 1 1 *',async()=>{runs++;await gate;void managed.trackScheduledWork(()=>nestedGate)},{name:'isolated-lifecycle'})
+  await task.stop()
+  const execution=task.execute()
+  await new Promise(resolve=>setTimeout(resolve,10))
+  assert.equal(runs,1)
+  let schedulesStopped=false
+  const stop=managed.stopManagedSchedules().then(()=>{schedulesStopped=true})
+  assert.equal(schedulesStopped,false)
+  releaseSchedule();await execution
+  await new Promise(resolve=>setTimeout(resolve,10))
+  assert.equal(schedulesStopped,false,'late nested scheduler work remains part of shutdown')
+  releaseNested();await stop
+  await task.execute()
+  assert.equal(runs,1,'stopped schedule cannot begin new work even when manually executed')
+  await task.destroy()
+  const background=file.statements.find(node=>ts.isFunctionDeclaration(node)&&node.name?.text==='beginBackgroundShutdown')
+  assert.ok(background)
+  const backgroundJs=ts.transpileModule(background.getText(file),{compilerOptions:{target:ts.ScriptTarget.ES2022}}).outputText
+  const stops=['stopManagedSchedules','stopBillingScheduler','stopMailExpiryScheduler','stopTicketAutoCloseScheduler','stopPlatformBackupScheduler','stopHostNotificationEmailWorker','stopProxySiteOperationWorker','stopCheckoutWorker','stopHostOnboardingWorker','stopHostRepairWorker','stopSecurityHardeningWorker','stopSystemImageCacheWorker','stopPoolResourceReconciliation','stopPoolDiskPreparation','stopUserCleanupWorker','stopHostPublicIpSync','stopHostPublicIpv6Sync']
+  const admitted:string[]=[]
+  let releaseOther!:()=>void
+  const other=new Promise<void>(resolve=>{releaseOther=resolve})
+  const callbacks=stops.map((name,index)=>()=>{admitted.push(name);return index===0?Promise.reject(Error('controlled stop failure')):index===1?other:Promise.resolve()})
+  const createBackground=new Function('stopSystemMonitor','stopSessionCleanup','closeAllSessions',...stops,`let backgroundShutdown=null;${backgroundJs};return beginBackgroundShutdown`)
+  const backgroundRun=createBackground(()=>{},()=>{},()=>{},...callbacks)
+  let returned=false
+  const backgroundResult=backgroundRun().catch(()=>{returned=true})
+  await new Promise(resolve=>setTimeout(resolve,10))
+  assert.deepEqual(admitted,stops,'every scheduler admission stops immediately')
+  assert.equal(returned,false,'one failed stop cannot release the backend while another scheduler is still running')
+  releaseOther();await backgroundResult
+  assert.equal(returned,true)
+  console.log('PASS failed scheduler stop still drains other work before backend exit')
+  console.log('PASS real cron lifecycle: current and nested work drains, stopped schedules refuse new executions')
   console.log('PASS resource worker lifecycle: real Fastify waits for all drains, nested claim execution and failed work cleanup')
   console.log('PASS app worker lifecycle: hooks registered before ordinary/protected listen; real Fastify close awaits checkout and recovery cleanup')
 }

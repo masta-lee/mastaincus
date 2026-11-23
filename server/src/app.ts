@@ -15,6 +15,11 @@ import { stopBackupUploadWorker } from './workers/backupUploadWorker.js'
 import { stopHostNotificationEmailWorker } from './workers/hostNotificationEmailWorker.js'
 import { stopProxySiteOperationWorker } from './workers/proxySiteOperationWorker.js'
 import { stopSessionCleanup, closeAllSessions } from './lib/terminal-proxy.js'
+import { stopManagedSchedules } from './services/scheduler-lifecycle.js'
+import { stopBillingScheduler } from './services/billing-scheduler.js'
+import { stopMailExpiryScheduler } from './services/mail-expiry-scheduler.js'
+import { stopSystemMonitor } from './services/system-monitor.js'
+import { stopTicketAutoCloseScheduler } from './services/ticket-auto-close-scheduler.js'
 import { startHostOnboardingWorker, stopHostOnboardingWorker } from './workers/hostOnboardingWorker.js'
 import { startHostRepairWorker, stopHostRepairWorker } from './workers/hostRepairWorker.js'
 import { startSecurityHardeningWorker, stopSecurityHardeningWorker } from './workers/securityHardeningWorker.js'
@@ -527,6 +532,10 @@ fastify.get('/api/health', async () => {
 // API/agent/callback/WebSocket traffic until reconciliation is acknowledged.
 fastify.addHook('onRequest', async (request, reply) => {
   const path = request.url.split('?')[0]
+  if (shuttingDown && path.startsWith('/api/') && path !== '/api/health') {
+    reply.header('Retry-After', '5')
+    return reply.code(503).send({ code: 'PLATFORM_STOPPING', error: 'Platform maintenance is starting' })
+  }
   if (!recoveryHeld()) {
     if (!businessStartupReady && path.startsWith('/api/') && path !== '/api/health') {
       reply.header('Retry-After', '5')
@@ -543,11 +552,33 @@ fastify.addHook('onRequest', async (request, reply) => {
   return reply.code(503).send({ code: 'PLATFORM_RECOVERY_HELD', error: 'Platform recovery awaits administrator reconciliation' })
 })
 await fastify.register(adminAliyunOssRoutes, { prefix: '/api/admin/aliyun-oss' })
-fastify.addHook('onClose', async () => { stopPlatformBackupScheduler() })
+let backgroundShutdown: Promise<void> | null = null
+function beginBackgroundShutdown(): Promise<void> {
+  if (backgroundShutdown) return backgroundShutdown
+  stopSystemMonitor()
+  stopSessionCleanup()
+  closeAllSessions('Server shutdown')
+  backgroundShutdown = Promise.allSettled([stopManagedSchedules(), stopBillingScheduler(), stopMailExpiryScheduler(),
+    stopTicketAutoCloseScheduler(), stopPlatformBackupScheduler(), stopHostNotificationEmailWorker(), stopProxySiteOperationWorker(),
+    stopCheckoutWorker(), stopHostOnboardingWorker(), stopHostRepairWorker(), stopSecurityHardeningWorker(),
+    stopSystemImageCacheWorker(), stopPoolResourceReconciliation(), stopPoolDiskPreparation(), stopUserCleanupWorker(),
+    stopHostPublicIpSync(), stopHostPublicIpv6Sync()]).then(results => {
+      const failed = results.find(result => result.status === 'rejected')
+      if (failed?.status === 'rejected') throw failed.reason
+    })
+  // Stop every admission before waiting for any one long-running resource job.
+  void backgroundShutdown.catch(() => {})
+  return backgroundShutdown
+}
+fastify.addHook('preClose', async () => { void beginBackgroundShutdown() })
 fastify.addHook('onClose', async () => { stopRecoveryReviewWorker() })
 fastify.addHook('onClose', async () => { await stopCheckoutWorker() })
-fastify.addHook('preClose', async () => { await Promise.all([stopInstanceTaskWorker(), stopRestoreWorker(), stopBackupUploadWorker()]) })
-fastify.addHook('preClose', async () => { stopSessionCleanup(); closeAllSessions('Server shutdown'); stopHostNotificationEmailWorker(); await stopProxySiteOperationWorker() })
+fastify.addHook('preClose', async () => {
+  const results = await Promise.allSettled([stopInstanceTaskWorker(), stopRestoreWorker(), stopBackupUploadWorker()])
+  const failed = results.find(result => result.status === 'rejected')
+  if (failed?.status === 'rejected') throw failed.reason
+})
+fastify.addHook('preClose', async () => { await beginBackgroundShutdown() })
 
 // 注册 API 路由
 await fastify.register(authRoutes, { prefix: '/api/auth' })

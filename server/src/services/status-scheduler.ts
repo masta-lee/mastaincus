@@ -9,7 +9,7 @@
  * 5. 连接池复用：使用统一的 Incus 连接池
  */
 
-import { schedule } from 'node-cron'
+import { schedule, trackScheduledWork } from './scheduler-lifecycle.js'
 import pLimit from 'p-limit'
 import { prisma } from '../db/prisma.js'
 import { getIncusClient } from '../lib/incus/incus-pool.js'
@@ -391,7 +391,7 @@ export async function runStatusSyncJob(): Promise<void> {
 
     try {
         await withTimeout(
-            executeStatusSyncJob(),
+            trackScheduledWork(executeStatusSyncJob),
             JOB_TIMEOUT_MS,
             `[StatusSync] Job timeout after ${JOB_TIMEOUT_MS}ms`
         )
@@ -418,7 +418,7 @@ export function startStatusScheduler(): void {
 
     // 每 1 分钟检查一次（实际同步间隔由 getInstancesToSync 控制）
     schedule('*/1 * * * *', () => {
-        runStatusSyncJob().catch(console.error)
+        return runStatusSyncJob().catch(console.error)
     })
 
     console.log('[StatusSync] Scheduler started (check interval: 1 minute, running sync: 2 min, stopped sync: 10 min)')
