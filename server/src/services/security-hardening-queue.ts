@@ -18,7 +18,7 @@ import { inspectHostSecurity, safeCustomerRuntime, hardeningPreflightCheck } fro
 import { maintainAlpineCustomerSsh } from './alpine-ssh-maintenance.js'
 import { recoveryHeld } from './platform-backup-core.js'
 import { hardeningIdentityHash } from '../lib/hardening-identity.js'
-import { hostMaintenanceBlocked } from '../lib/host-maintenance-gate.js'
+import { hostMaintenanceBlocked, hostRebootMaintenanceBlocked } from '../lib/host-maintenance-gate.js'
 import { prepareAutomaticHostMaintenance, resumeAutomaticHostMaintenance } from './host-security-maintenance.js'
 import { onboardingOwnsHardening, ownsOnboardingHardeningLease } from '../lib/onboarding-hardening-owner.js'
 import { hardeningAcceptanceReadyForRetry } from '../lib/host-maintenance-plan.js'
@@ -362,7 +362,7 @@ export async function processSecurityHardeningQueue(deps = securityHardeningDepe
   // remains a blocker until the recovery path verifies current authority.
   const pendingMaintenance=await prisma.host.findMany({where:{securityHardening:{path:['maintenance'],not:Prisma.AnyNull}},
     select:{id:true,securityHardening:true,onboardingNode:{select:{id:true,status:true,step:true,deletedAt:true}}},orderBy:{id:'asc'}})
-  const active=pendingMaintenance.find(host=>hostMaintenanceBlocked(host.securityHardening))
+  const active=pendingMaintenance.find(host=>hostRebootMaintenanceBlocked(host.securityHardening))
   if(active) {
     // Enrollment owns its lease and due time. Calling the general resumer
     // without that lease used to reject authority and postpone it forever.
@@ -374,7 +374,7 @@ export async function processSecurityHardeningQueue(deps = securityHardeningDepe
   const completed=pendingMaintenance.find(host=>{
     if(onboardingOwnsHardening(host.onboardingNode))return false
     const state=currentState(host.securityHardening)
-    return state.status!=='verified'&&state.maintenance&&typeof state.maintenance==='object'&&!Array.isArray(state.maintenance)&&
+    return !hostMaintenanceBlocked(host.securityHardening)&&state.status!=='verified'&&state.maintenance&&typeof state.maintenance==='object'&&!Array.isArray(state.maintenance)&&
       (state.maintenance as {phase?:unknown}).phase==='verified'&&(!state.nextCheckAt||Date.parse(state.nextCheckAt)<=Date.now()||hardeningJournalReadyForRetry(state))
   })
   if(completed&&!deps.held()&&!stopped()) {
@@ -392,6 +392,9 @@ export async function processSecurityHardeningQueue(deps = securityHardeningDepe
     if (deps.held() || stopped()) return
     cursor = host.id
     const state = currentState(host.securityHardening)
+    // Compatibility has its own durable worker. It blocks this host only;
+    // a completed reboot journal must not starve all following inspections.
+    if(hostMaintenanceBlocked(host.securityHardening)&&!hostRebootMaintenanceBlocked(host.securityHardening))continue
     if(hostMaintenanceBlocked(host.securityHardening)){
       if(!state.nextCheckAt||Date.parse(state.nextCheckAt)<=Date.now())await resumeAutomaticHostMaintenance(host.id)
       continue

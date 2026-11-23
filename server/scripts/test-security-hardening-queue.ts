@@ -143,7 +143,24 @@ try {
   await processSecurityHardeningQueue(deps,()=>false,{resume:async id=>{resumed.push(id)}})
   assert.equal((await state()).status,'verified','completed recovery receives its full inspection before another host starts')
   assert.equal((await state()).maintenance.phase,'verified')
-  assert.equal(connections,beforePriority.connections+1)
+  const completedBeforeCompat=await state()
+  await prisma.host.update({where:{id:host.id},data:{securityHardening:{...completedBeforeCompat,incusCompat:{phase:'pending'}}}})
+  const beforeCompatResume=resumed.length
+  await processSecurityHardeningQueue(deps,()=>false,{resume:async id=>{resumed.push(id)}})
+  assert.equal(resumed.length,beforeCompatResume,'compatibility pending after a completed reboot must not repeatedly resume terminal maintenance')
+  assert.equal((await state()).incusCompat.phase,'pending','pending compatibility is preserved for its own worker')
+  await prisma.host.update({where:{id:host.id},data:{securityHardening:completedBeforeCompat}})
+  const compatBlocker=await prisma.host.create({data:{userId:admin.id,name:prefix+'-compat-blocker',url:host.url,
+    securityHardening:{...completedBeforeCompat,incusCompat:{phase:'prepared'}}}})
+  try{
+    await prisma.host.update({where:{id:host.id},data:{securityHardening:{...completedBeforeCompat,status:'retry',nextCheckAt:new Date(0).toISOString()}}})
+    const callsBeforeBlockedHost=hostCalls
+    await processSecurityHardeningQueue(deps,()=>false,{resume:async id=>{resumed.push(id)}})
+    assert.equal(hostCalls,callsBeforeBlockedHost+1,'another host compatibility fence cannot starve due full inspection')
+    assert.equal((await state()).status,'verified')
+    assert.equal(resumed.length,beforeCompatResume)
+  }finally{await prisma.host.delete({where:{id:compatBlocker.id}})}
+  assert.equal(connections,beforePriority.connections+2)
   assert.deepEqual(resumed,[host.id],'terminal proof is inspected rather than rebooted or resumed again')
   await prisma.host.update({where:{id:host.id},data:{securityHardening:beforeMaintenance}})
   const beforeResource = guestWrites

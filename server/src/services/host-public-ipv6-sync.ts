@@ -53,6 +53,10 @@ async function reconcileHost(hostId: number, force: boolean, deps: typeof public
     // never continue modifying a host after this transaction has expired.
     const signal = AbortSignal.timeout(90000)
     for (const instance of occupants) await advisoryTransactionLock(tx, INSTANCE_OPERATION_LOCK_NAMESPACE, instance.id)
+    // Agent observations can update instance rows without the lifecycle
+    // advisory lane. Take the same instance -> host row order before network
+    // work, so their final host-authority check cannot deadlock with delivery.
+    for (const instance of occupants) await tx.$queryRaw`SELECT id FROM instances WHERE id = ${instance.id} FOR UPDATE`
     await advisoryTransactionLockString(tx, HOST_PUBLIC_IP_SYNC_LOCK_NAMESPACE, 'public-ipv6-sync')
     const locked = await tx.$queryRaw<Array<{ id: number }>>`SELECT id FROM hosts WHERE id = ${hostId} FOR NO KEY UPDATE`
     if (!locked.length) throw new PublicIpv6SyncError('HOST_NOT_FOUND')

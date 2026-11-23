@@ -5,7 +5,7 @@ import { hardeningFailure, hardeningSchedule, hardeningReason, hardeningUpdateBu
 import { safeCustomerRuntime, validateHostSecurityRuntime, hardeningPreflightCheck } from '../src/services/host-security-inspection.js'
 import { readAlpineSshPreflight } from '../src/lib/alpine-ssh-preflight.js'
 import { hardeningPublicView } from '../src/lib/hardening-view.js'
-import { hostMaintenanceBlocked } from '../src/lib/host-maintenance-gate.js'
+import { hostMaintenanceBlocked, hostRebootMaintenanceBlocked } from '../src/lib/host-maintenance-gate.js'
 import { hardeningIdentityHash, hardeningReceiptMatches } from '../src/lib/hardening-identity.js'
 import { hardeningJournalReadyForRetry, SSH_JOURNAL_POLICY_REVISION } from '../src/lib/security-hardening.js'
 import { customerBootIdentity, customerBootRecoveryAction, nextMaintenanceAction, readHostMaintenanceIntent, automaticMaintenanceRecipeAllowed, hardeningAcceptanceReadyForRetry } from '../src/lib/host-maintenance-plan.js'
@@ -139,6 +139,8 @@ assert.equal(hardeningAcceptanceReadyForRetry({ ...acceptanceWait, maintenance: 
 const wire=maintenanceWireOperation({...intent,action:'reboot'},preflight.bootId,now+59000)
 assert.deepEqual(Object.keys(wire).sort(),['action','architecture','bootId','customers','expiresAt','identityHash','nodeId','prepareHash','recipe','requestId'])
 assert.equal(hostMaintenanceBlocked({maintenance:{...intent,phase:'verified',rebootIssued:true}}),false)
+assert.equal(hostRebootMaintenanceBlocked({maintenance:{...intent,phase:'verified',rebootIssued:true},incusCompat:{phase:'pending'}}),false)
+assert.equal(hostMaintenanceBlocked({maintenance:{...intent,phase:'verified',rebootIssued:true},incusCompat:{phase:'pending'}}),true,'compatibility still blocks this host but not unrelated inspections')
 assert.equal(hostMaintenanceBlocked({maintenance:{...intent,phase:'verified',rebootIssued:false}}),true)
 assert.equal(nextMaintenanceAction({...intent,rebootIssued:true,phase:'blocked'},{...proof,bootId:'new',remotePhase:'reboot-intent'},now+120001),'restore','late proven boot allows verification, never another reboot')
 for (const value of [null,'malformed',[],{instances:'private-token'},{instances:[null,4,{instanceId:'secret'}]},

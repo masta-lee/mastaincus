@@ -4,15 +4,17 @@ import { readHostMaintenanceIntent } from './host-maintenance-plan.js'
 
 const object = (value: unknown): Record<string, unknown> => value && typeof value === 'object' && !Array.isArray(value) ? value as Record<string, unknown> : {}
 /** A durable intent never expires into permission, including after recovery. */
-export function hostMaintenanceBlocked(value: unknown): boolean {
-  const compat=object(object(value).incusCompat)
-  if(Object.keys(compat).length&&compat.phase!=='verified')return true
+export function hostRebootMaintenanceBlocked(value: unknown): boolean {
   const maintenance = object(value).maintenance
   if (maintenance === undefined || maintenance === null) return false
   try {
     const intent = readHostMaintenanceIntent(maintenance)
     return !['verified', 'aborted'].includes(intent.phase)
   } catch { return true }
+}
+export function hostMaintenanceBlocked(value: unknown): boolean {
+  const compat=object(object(value).incusCompat)
+  return Object.keys(compat).length>0&&compat.phase!=='verified'||hostRebootMaintenanceBlocked(value)
 }
 export class HostMaintenanceError extends Error {
   readonly code = 'HOST_SECURITY_MAINTENANCE'

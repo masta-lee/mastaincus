@@ -65,6 +65,20 @@ try {
     image: 'images:alpine/3.21', cpu: 200, memory: 768, disk: 30720, ipv4: '10.10.1.2', dedicatedIpv4: true, dedicatedNetworkReady: true,
     billingPrice: 1, expiresAt: new Date('2030-01-01T00:00:00Z'), purchaseBatchId: orderId, autoRenew: false } })
   remotes = [{ name: instance.incusId, status: 'Running', project: 'default' }]
+  // Agent observations lock instance then host without the lifecycle lane.
+  // IPv6 must wait before its host lock to avoid a real cross-worker deadlock.
+  let observerReady!:()=>void,finishObservation!:()=>void
+  const observerLocked=new Promise<void>(resolve=>{observerReady=resolve})
+  const continueObserver=new Promise<void>(resolve=>{finishObservation=resolve})
+  const observation=prisma.$transaction(async tx=>{
+    await tx.$queryRaw`SELECT id FROM instances WHERE id=${instance.id} FOR UPDATE`
+    observerReady();await continueObserver
+    await tx.$queryRaw`SELECT id FROM hosts WHERE id=${host.id} FOR SHARE`
+  },{timeout:5000})
+  await observerLocked
+  const orderedSync=syncHostPublicIpv6(host.id,{},deps)
+  await new Promise(resolve=>setTimeout(resolve,100));finishObservation()
+  await observation;await orderedSync
   addresses = [a, b]
   assert.equal((await syncHostPublicIpv6(host.id, {}, deps)).status, 'synced')
   assert.deepEqual((await getPoolOrderResult(buyer.id, orderId))!.instances[0]!.publicIpv6Addresses, [a, b])

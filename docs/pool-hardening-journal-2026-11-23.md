@@ -21,3 +21,7 @@ Agent测试候选版为v1.0.17-security.1，使宿主能通过原版本比较/�
 热更新首次实测：source `fc353af0`本机231/231、同source主CI30/30、双原生/内存/SSH/Agent与完整预览`45131756357`（双首装root恢复／六原v1.8.14worker）全部通过；独立双包publisher/SHA和ARM15关键文件核过。2026-11-23约15:58北京时间执行授权热更新，精确Node22.23.5／PG16.16／libpq18.7安装加载通过，安全安装钩子因3个旧测试／恢复数据库仍归原runtime角色所有而拒绝。尚未创建迁移角色或改变业务DB，自动恢复原ced7代码、唯一后端健康，客户未停启。旧库保持；不能把回退称更新完成。
 
 新增源码精修：原`REASSIGN OWNED`具有共享DB／tablespace转交语义，不能为过检查删旧库或改变其它库owner。改为事务内精确转交public支持的表／序列／视图／函数／类型与schema，核当前业务DB不再残留runtime owner；其他库／tablespace保持。未支持本库对象原事务拒绝并回滚。准备真实PG重复／残留／失败事务验证和新完整候选验收后继续热更新。
+
+第二次source `f6fc3021`：本机231/231，主CI`45136874843`30/30及完整预览`45136888916`13success／Release预期skipped，全native/memory/SSH/Agent成功。新增保留旧DB实景的六旧升级及双首装/root恢复全部通过；独立dual包签名/SHA与ARM15文件核过。约16:45北京时间真实完整候选热更新成功，246迁移／384资金seal／530认证seal完整验签，角色低权限及私有迁移身份核过；其它DB归属、原12宿主身份及.env秘密保持，仅signed Agent目录更新。正常管理员口令登录、me/hosts/users/Agent manifest及双域页面/health均200，4客户原UUID/PID/config与Running保持。未正式发行。
+
+线上自然队列恢复9/12可售、12台均自动升级Agentv1.0.17-security.1。实际并发再发现两点并从源码修：兼容待核验被全局加固队列误当未完成重启，卡在已terminal的维护上；IPv6只拿instance advisory后锁host、Agent观测拿instance row后检查host，构成实际PG死锁。新queue区分重启维护与单宿主兼容fence，所有门禁保持／仅该host等待，后续due目标继续；IPv6先按instance→host拿row锁。真实PG1404加固队列（含他机compat阻塞不饿死）／IPv6 Agent并发回归全部0、对应guards/types/backendbuild过。准备同批精确3模块热补并刷新受信root兼容runtime，不能手改DB状态假装剩余3台通过。
