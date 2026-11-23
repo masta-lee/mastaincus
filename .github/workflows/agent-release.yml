@@ -44,6 +44,28 @@ env:
   GO_VERSION: '1.27.3'
 
 jobs:
+  legacy-repositories:
+    name: Legacy official pool repositories (${{ matrix.runner }})
+    strategy:
+      fail-fast: false
+      matrix:
+        runner: [ubuntu-24.04, ubuntu-24.04-arm]
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+      - uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff
+        with:
+          go-version: '1.27.3'
+          cache-dependency-path: agent/go.mod
+      - name: Compile production repository regressions
+        run: |
+          (cd agent && CGO_ENABLED=0 go test -c -o /tmp/incudal-provisioning-tests ./internal/provisioning)
+      - name: Retain original HTTP settings during actual signed HTTPS security update
+        run: |
+          docker run --rm -v /tmp/incudal-provisioning-tests:/test:ro -e INCUDAL_SYSINFO_COMPAT_TEST=disposable alpine:3.24 sh -ec 'apk add --no-cache openssl curl; mkdir -p /var/lib/incudal-agent; chmod 700 /var/lib/incudal-agent; /test -test.run "TestNativeSecurityPackageInventoryAndUpdate|TestSecurityRepositoriesRetainLegacySettingsWithIndependentHTTPS" -test.v'
   incus-compat:
     uses: ./.github/workflows/incus-sysinfo-compat.yml
   version:
