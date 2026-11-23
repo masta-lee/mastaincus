@@ -6,6 +6,12 @@ spec=importlib.util.spec_from_file_location('inventory',pathlib.Path(__file__).w
 module=importlib.util.module_from_spec(spec);spec.loader.exec_module(module)
 
 class Plans(unittest.TestCase):
+    def test_component_activation_failures_preserve_other_work_and_redact_details(self):
+        def failed(_):raise ValueError('SYSTEM_SECURITY_NGINX_ACTIVATION_PENDING')
+        self.assertEqual(module.service_activation_receipt(failed,{}),{'state':'pending','error':'SYSTEM_SECURITY_NGINX_ACTIVATION_PENDING'})
+        def secret(_):raise OSError('private root credential and url')
+        self.assertEqual(module.service_activation_receipt(secret,{}),{'state':'pending','error':'SYSTEM_SECURITY_SERVICE_ACTIVATION_PENDING'})
+        self.assertEqual(module.service_activation_receipt(lambda _: {'state':'activated','pid':12},{}),{'state':'activated','pid':12})
     def test_security_maintenance_durable_retry_deadlines(self):
         now=1795400000
         for value,delay in [({},6*3600),({'nginxActivation':{'state':'draining'}},300),({'patchState':'failed'},300),({'clockActivation':{'state':'pending'}},300)]:

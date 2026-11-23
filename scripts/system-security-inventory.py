@@ -241,6 +241,15 @@ def activate_managed_clock(before):
     if after is None or after['configurationHash']!=before['configurationHash']or after['helperHash']!=before['helperHash']or result.get('state')not in ['current','activated']:raise ValueError('SYSTEM_SECURITY_CLOCK_ACTIVATION_PENDING')
     return {'state':result['state'],'pid':after['pid'],'synchronized':result.get('synchronized')is True}
 
+def service_activation_receipt(operation,before):
+    try:return operation(before)
+    except (ValueError,OSError,subprocess.SubprocessError,json.JSONDecodeError)as error:
+        code=str(error)
+        if not re.fullmatch(r'SYSTEM_SECURITY_[A-Z_]{1,100}',code):code='SYSTEM_SECURITY_SERVICE_ACTIVATION_PENDING'
+        # A service failure cannot suppress activation of other components or
+        # overwrite an already completed signed package transaction as failed.
+        return {'state':'pending','error':code}
+
 def live_process_group(group,proc=pathlib.Path('/proc')):
     checked=0
     for path in proc.iterdir():
@@ -524,15 +533,15 @@ def apply_patches(automatic=False):
             name,version=package.split('=',1)
             if after['packages'].get(name)!=version:raise ValueError('SYSTEM_SECURITY_PATCH_NOT_CONFIRMED')
         if automatic and ssh_before is not None:
-            after['sshListenerActivation']=activate_ssh_listener(ssh_before)
+            after['sshListenerActivation']=service_activation_receipt(activate_ssh_listener,ssh_before)
             after['loadedCode']=replaced_host_mappings(all_host=True)
         elif ssh_error:after['sshListenerActivation']={'state':'pending','error':ssh_error}
         if automatic and nginx_before is not None:
-            after['nginxActivation']=activate_nginx_master(nginx_before)
+            after['nginxActivation']=service_activation_receipt(activate_nginx_master,nginx_before)
             after['loadedCode']=replaced_host_mappings(all_host=True)
         elif nginx_error:after['nginxActivation']={'state':'pending','error':nginx_error}
         if automatic and clock_before is not None:
-            after['clockActivation']=activate_managed_clock(clock_before)
+            after['clockActivation']=service_activation_receipt(activate_managed_clock,clock_before)
             after['loadedCode']=replaced_host_mappings(all_host=True)
         elif clock_error:after['clockActivation']={'state':'pending','error':clock_error}
         value=after;value['patchPlan']=changes;value['patchState']='installed-activation-required' if changes else 'current'
