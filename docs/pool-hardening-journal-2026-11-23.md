@@ -1,5 +1,11 @@
 # 12台宿主持久不可售修复与热更新测试
 
+2026-11-23约19:11owner后续截图78台暂不可售：新增问题未收敛，前轮验证结论需纠正。208台管理在线／原加固verified不等于真实可售；前轮快照仅`dedicatedHostReadyWhere`漏掉`hardeningReceiptMatches`的compat fence，因此“全池208可售”统计有误。真实19:18库存API约33～34台not-ready，prepared维护目标随五分钟重试轮换。根因实机#224/#221/#21使用官方HTTP APK源，而新安全安装只接受HTTPS，反复拒绝后重新申请维护导致库存波动。源码f084a9b4只接受同分支官方HTTP/HTTPS源，事务独立HTTPS文件/原APK签名且原管理员源与world保持，拒绝自定义/重复/空源；security.3候选及真实旧HTTP回归工作流45164799580正在验证。未标绿／改源绕过，暂不正式发行；最终必须核真实库存API＋完整receipt和持续自然维护周期。
+
+owner随后明确仅源码修完后热推送，不直接修改主控文件/配置/状态修问题。此轮无主控修复写入，宿主取证使用独立临时APK仓库下载索引／simulate后清理，不安装或改原源。#224真实同分支独立HTTPS索引获取/完整plan通过，原无待升级。security.3测试候选固定publisher双资产已构建，ARM旧HTTP→HTTPS完整Go更新/原source与world保持通过。AMD旧source回归因Ubuntu宿主工具前置测试阻断，新增独立双架构任务到现有agent工作流45166264584（源码ddb14d6e），不需正式发版新workflow；前一次新workflow仅分支无法dispatch404已替换。全量仍在途，签名候选部署和自然周期必须另核。
+
+独立旧官方HTTP任务45166264584双架构均success，生产Go package实际HTTPS事务／保原repository/world/拒绝跨分支等通过。f084签名候选双ELF/publisher/fullhash再次通过；源码ddb后仅test/workflow变更，Agent产品输入相同。下一步只投送经验证版本包，原系统自动升级跟进后以真实inventoryAPI（不是裸DB就绪）核整个自然周期。
+
 2026-11-23，北京时间。Owner先授权只读取证，随后明确授权本问题源码修复后，将此前已做安全修复同批热更新主控作为测试；不正式发版。
 
 主控实际v1.8.14／ced7c10cd17d、唯一后端健康。208台专属宿主中12台故障一致：#16、#21、#24、#26、#30～#36、#46。均管理在线、无客户实例、Agent工具/网络防护有效、AppArmor维护已完成，后续检查反复`HARDENING_JOURNAL_CONFLICT`。它们不是离线宿主。
