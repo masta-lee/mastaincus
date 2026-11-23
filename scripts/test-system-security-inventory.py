@@ -6,6 +6,21 @@ spec=importlib.util.spec_from_file_location('inventory',pathlib.Path(__file__).w
 module=importlib.util.module_from_spec(spec);spec.loader.exec_module(module)
 
 class Plans(unittest.TestCase):
+    def test_process_group_excludes_only_exited_states(self):
+        with tempfile.TemporaryDirectory()as folder:
+            root=pathlib.Path(folder);(root/'2').mkdir()
+            for state in ['Z','X','R','S']:
+                (root/'2/stat').write_text('2 (worker with spaces) '+state+' 1 100 100')
+                self.assertEqual(module.live_process_group(100,root),state not in ['Z','X'])
+
+    @unittest.skipIf(sys.platform=='win32','actual POSIX processes and groups')
+    def test_bounded_command_child_cleanup_and_output(self):
+        self.assertEqual(module.command(['/bin/sh','-c','printf valid'],3),'valid')
+        for code in [0,7]:
+            with self.assertRaisesRegex(ValueError,'SYSTEM_SECURITY_PACKAGE_'):
+                module.command(['/bin/sh','-c','sleep 30 & exit '+str(code)],3)
+        with self.assertRaisesRegex(ValueError,'SYSTEM_SECURITY_PACKAGE_'):
+            module.command(['/bin/sh','-c','sleep 30'],.2)
     def test_ssh_listener_activation_keeps_unmodified_services_and_rejects_conflicts(self):
         before={'pid':12,'start':'111','configHash':'original','unitHash':'unit','defaultsHash':'defaults','hostKeyHash':'keys'}
         current={'complete':True,'processes':[]}

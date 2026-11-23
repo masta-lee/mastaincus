@@ -79,6 +79,20 @@ def activate_ssh_listener(before):
     # this receipt attests to the listener for new logins, not all processes.
     return {'state':'activated','pid':after['pid'],'checkedAt':time.strftime('%Y-%m-%dT%H:%M:%SZ',time.gmtime())}
 
+def live_process_group(group,proc=pathlib.Path('/proc')):
+    checked=0
+    for path in proc.iterdir():
+        if not path.name.isdigit():continue
+        checked+=1
+        if checked>65536:raise ValueError('SYSTEM_SECURITY_PROCESS_BUDGET_EXCEEDED')
+        try:raw=(path/'stat').read_text()
+        except FileNotFoundError:continue
+        if len(raw)>8192:raise ValueError('SYSTEM_SECURITY_PROCESS_BUDGET_EXCEEDED')
+        at=raw.rfind(') ');fields=raw[at+2:].split()
+        if at<0 or len(fields)<3:raise ValueError('SYSTEM_SECURITY_PROCESS_QUERY_FAILED')
+        if int(fields[2])==group and fields[0]not in ['Z','X']:return True
+    return False
+
 def command(args,timeout=90):
     # Keep the complete apt/dpkg process group under the deadline. A surviving
     # package hook must not outlive the temporary service policy or task lock.
@@ -100,13 +114,10 @@ def command(args,timeout=90):
             try:os.killpg(process.pid,signal.SIGKILL)
             except ProcessLookupError:pass
             raise ValueError('SYSTEM_SECURITY_PACKAGE_QUERY_FAILED')
-        try:
-            os.killpg(process.pid,0)
-        except ProcessLookupError:pass
-        else:
+        if live_process_group(process.pid):
             os.killpg(process.pid,signal.SIGKILL)
             raise ValueError('SYSTEM_SECURITY_PACKAGE_CHILD_PENDING')
-        if os.fstat(out.fileno()).st_size>2*1024*1024:raise ValueError('SYSTEM_SECURITY_PACKAGE_QUERY_FAILED')
+        if os.fstat(out.fileno()).st_size+os.fstat(error.fileno()).st_size>2*1024*1024:raise ValueError('SYSTEM_SECURITY_PACKAGE_QUERY_FAILED')
         out.seek(0);return out.read(2*1024*1024).decode().strip()
 
 HOST_SERVICES={'incusd','lxcfs','dnsmasq','sshd','nginx','postgres','systemd','systemd-resolve','systemd-timesyn','chronyd','node'}
