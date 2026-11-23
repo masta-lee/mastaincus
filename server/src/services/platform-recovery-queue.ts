@@ -13,6 +13,7 @@ import { dispatchRecoveryMapping } from './platform-recovery-mapping-intent.js'
 import { reconcileIntactLegacyOrders } from './platform-recovery-legacy-order.js'
 import { reconcileIntactCheckoutOrders } from './platform-recovery-orders.js'
 import { advanceAutomaticRestore } from './platform-recovery-start.js'
+import { WorkerActivity } from '../workers/worker-activity.js'
 
 export async function claimRecoveryHost(batchId: string, hostId?: number) {
   const token = randomUUID()
@@ -75,10 +76,13 @@ export async function runRecoveryHostCheck(hostId?: number, preparedBatch?: Awai
   return result
 }
 let timer: ReturnType<typeof setInterval> | undefined, running = false, nextResumeCheck=0, nextTickAt=0, failures=0
+const activity = new WorkerActivity()
+let stopped = true
 export function startRecoveryReviewWorker() {
   if (timer) return
+  stopped = false
   const tick = async () => {
-    if (running || Date.now()<nextTickAt || !recoveryHeld()) return
+    if (stopped || running || Date.now()<nextTickAt || !recoveryHeld()) return
     running = true
     try {
       if (await activeBackupTask()) return
@@ -108,6 +112,6 @@ export function startRecoveryReviewWorker() {
     }
     finally { running = false }
   }
-  timer = setInterval(() => { void tick() }, 1000); timer.unref(); void tick()
+  timer = setInterval(() => { void activity.run(tick) }, 1000); timer.unref(); void activity.run(tick)
 }
-export function stopRecoveryReviewWorker() { if (timer) clearInterval(timer); timer = undefined }
+export async function stopRecoveryReviewWorker() { stopped = true; if (timer) clearInterval(timer); timer = undefined; await activity.drain() }

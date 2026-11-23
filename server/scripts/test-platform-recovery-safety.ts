@@ -449,7 +449,8 @@ const queueStart=queueSource.indexOf('let timer: ReturnType<typeof setInterval>'
 const compiledQueue=ts.transpileModule(queueSource.slice(queueStart).replace(/export /g,'')+'\nreturn {startRecoveryReviewWorker,stopRecoveryReviewWorker}',
   {compilerOptions:{target:ts.ScriptTarget.ES2022,module:ts.ModuleKind.None}}).outputText
 let queueNow=0,seedCount=0,queueFailures=true,queueHeld=true,queueActive=false,tick:(()=>void)|undefined,autoCalls=0
-const queueBindings={Date:{now:()=>queueNow},recoveryHeld:()=>queueHeld,activeBackupTask:async()=>queueActive?{}:null,
+const {WorkerActivity}=await import('../src/workers/worker-activity.js')
+const queueBindings={WorkerActivity,Date:{now:()=>queueNow},recoveryHeld:()=>queueHeld,activeBackupTask:async()=>queueActive?{}:null,
   advanceAutomaticRestore:async()=>{},
   dispatchRecoveryHelper:async()=>{},
   dispatchRecoveryMapping:async()=>{},
@@ -467,5 +468,17 @@ queueFailures=false;queueNow=44999;tick!();await drain();assert.equal(seedCount,
 queueNow=45000;tick!();await drain();assert.equal(seedCount,3);assert.equal(autoCalls,1)
 queueActive=true;queueNow+=1000;tick!();await drain();assert.equal(seedCount,3,'active root task owns recovery')
 queueActive=false;queueHeld=false;queueNow+=1000;tick!();await drain();assert.equal(seedCount,3,'no recovery work outside hold')
-timerQueue.stopRecoveryReviewWorker();assert.equal(tick,undefined)
+await timerQueue.stopRecoveryReviewWorker();assert.equal(tick,undefined)
+queueHeld=true;queueNow=100000
+let releaseQueue!:()=>void,enteredQueue!:()=>void
+const pendingQueue=new Promise<void>(resolve=>{releaseQueue=resolve})
+const entered=new Promise<void>(resolve=>{enteredQueue=resolve})
+const originalSeed=queueBindings.seedRecoveryHosts
+const waitBindings={...queueBindings,seedRecoveryHosts:async()=>{enteredQueue();await pendingQueue;return originalSeed()}}
+const waitingQueue=new Function(...Object.keys(waitBindings),compiledQueue)(...Object.values(waitBindings))
+waitingQueue.startRecoveryReviewWorker();await entered
+let queueStopped=false
+const stoppingQueue=waitingQueue.stopRecoveryReviewWorker().then(()=>{queueStopped=true})
+await drain();assert.equal(queueStopped,false,'recovery stop waits for the real in-flight receipt work')
+releaseQueue();await stoppingQueue
 console.log('PASS recovery queue timer: durable backoff, resumed observation, active-task exclusion and stopped timer')

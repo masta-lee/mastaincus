@@ -164,7 +164,7 @@ try{
     },options)) as typeof prisma.$transaction
     startTicketAutoCloseScheduler()
     await Promise.race([finished,delay(8000).then(()=>{throw Error('scheduler did not finish partial batch')})])
-    stopTicketAutoCloseScheduler();globalThis.setInterval=originalInterval;console.log=originalConsole
+    await stopTicketAutoCloseScheduler();globalThis.setInterval=originalInterval;console.log=originalConsole
     prisma.$transaction=originalTransaction
     const messages=await sent(),logs=await logged()
     assert.equal(messages.length,2);assert.equal(logs.length,2)
@@ -186,7 +186,7 @@ try{
     assert.equal(await prisma.ticket.count({where:{id:{in:scheduled.map(item=>item.id)},status:'resolved'}}),3)
     console.log('PASS all-failed scheduler cycle retains every ticket and writes no success inbox/audit')
   }finally{
-    stopTicketAutoCloseScheduler();globalThis.setInterval=originalInterval;console.log=originalConsole
+    await stopTicketAutoCloseScheduler();globalThis.setInterval=originalInterval;console.log=originalConsole
     prisma.$transaction=originalTransaction;prisma.ticket.findMany=originalFindMany
     invalidateCachedConfig('ticket_auto_close_enabled');invalidateCachedConfig('ticket_auto_close_hours')
     await prisma.ticket.deleteMany({where:{id:{in:scheduled.map(item=>item.id)}}})

@@ -562,7 +562,7 @@ function beginBackgroundShutdown(): Promise<void> {
     stopTicketAutoCloseScheduler(), stopPlatformBackupScheduler(), stopHostNotificationEmailWorker(), stopProxySiteOperationWorker(),
     stopCheckoutWorker(), stopHostOnboardingWorker(), stopHostRepairWorker(), stopSecurityHardeningWorker(),
     stopSystemImageCacheWorker(), stopPoolResourceReconciliation(), stopPoolDiskPreparation(), stopUserCleanupWorker(),
-    stopHostPublicIpSync(), stopHostPublicIpv6Sync()]).then(results => {
+    stopHostPublicIpSync(), stopHostPublicIpv6Sync(), stopRecoveryReviewWorker(), stopHostOfflineAlertWorker()]).then(results => {
       const failed = results.find(result => result.status === 'rejected')
       if (failed?.status === 'rejected') throw failed.reason
     })
@@ -571,7 +571,7 @@ function beginBackgroundShutdown(): Promise<void> {
   return backgroundShutdown
 }
 fastify.addHook('preClose', async () => { void beginBackgroundShutdown() })
-fastify.addHook('onClose', async () => { stopRecoveryReviewWorker() })
+fastify.addHook('onClose', async () => { await stopRecoveryReviewWorker() })
 fastify.addHook('onClose', async () => { await stopCheckoutWorker() })
 fastify.addHook('preClose', async () => {
   const results = await Promise.allSettled([stopInstanceTaskWorker(), stopRestoreWorker(), stopBackupUploadWorker()])
@@ -598,7 +598,7 @@ await fastify.register(checkoutRoutes)
 fastify.addHook('onClose', async () => { await stopHostOnboardingWorker() })
 fastify.addHook('onClose', stopHostRepairWorker)
 fastify.addHook('onClose', stopSecurityHardeningWorker)
-fastify.addHook('onClose', async () => { stopHostOfflineAlertWorker() })
+fastify.addHook('onClose', async () => { await stopHostOfflineAlertWorker() })
 fastify.addHook('onClose', stopSystemImageCacheWorker)
 fastify.addHook('onClose', stopPoolResourceReconciliation)
 fastify.addHook('onClose', stopPoolDiskPreparation)
@@ -858,7 +858,7 @@ const start = async (): Promise<void> => {
       // Keep every business initializer stopped until it durably removes hold.
       while (!shuttingDown && recoveryHeld()) await new Promise(resolve => setTimeout(resolve, 500))
       if (shuttingDown) return
-      stopRecoveryReviewWorker()
+      await stopRecoveryReviewWorker()
     }
 
     // 初始化 Prisma 数据库

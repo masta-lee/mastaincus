@@ -11,6 +11,7 @@
 
 import { prisma } from '../db/prisma.js'
 import { notifyAdminHostOffline, notifyAdminHostRecovered } from '../lib/admin-alerts.js'
+import { WorkerActivity } from './worker-activity.js'
 
 const HOST_OFFLINE_ALERT_AFTER_MS = 3 * 60 * 1000
 const HOST_RECOVERY_FRESH_MS = 90 * 1000
@@ -19,6 +20,7 @@ const HOST_OFFLINE_SCAN_INTERVAL_MS = 60 * 1000
 let timer: ReturnType<typeof setInterval> | undefined
 let ticking = false
 let stopped = true
+const activity = new WorkerActivity()
 
 function ownerLabelOf(owner: { username: string; role: string } | null | undefined): string {
   if (!owner) return '未知归属'
@@ -54,6 +56,7 @@ async function scanOfflineAgents(): Promise<void> {
   })
 
   for (const agent of staleAgents) {
+    if (stopped) return
     const claimed = await prisma.hostAgent.updateMany({
       where: {
         id: agent.id,
@@ -69,12 +72,12 @@ async function scanOfflineAgents(): Promise<void> {
 
     const instanceCount = await countHostInstances(agent.hostId)
     console.log(`[HostOfflineAlert] 节点 ${agent.host.name} 离线（最后心跳 ${agent.lastSeenAt?.toISOString() ?? 'unknown'}）`)
-    void notifyAdminHostOffline({
+    void activity.run(() => notifyAdminHostOffline({
       hostName: agent.host.name,
       ownerLabel: ownerLabelOf(agent.host.user),
       lastSeenAt: agent.lastSeenAt,
       instanceCount
-    }).catch(err => console.warn('[HostOfflineAlert] 离线告警发送失败:', err))
+    })).catch(err => console.warn('[HostOfflineAlert] 离线告警发送失败:', err))
   }
 }
 
@@ -98,6 +101,7 @@ async function scanRecoveredAgents(): Promise<void> {
   })
 
   for (const agent of recoveredAgents) {
+    if (stopped) return
     const downSince = agent.adminOfflineAlertedAt
     const claimed = await prisma.hostAgent.updateMany({
       where: { id: agent.id, adminOfflineAlertedAt: { not: null } },
@@ -107,12 +111,12 @@ async function scanRecoveredAgents(): Promise<void> {
 
     const instanceCount = await countHostInstances(agent.hostId)
     console.log(`[HostOfflineAlert] 节点 ${agent.host.name} 心跳恢复`)
-    void notifyAdminHostRecovered({
+    void activity.run(() => notifyAdminHostRecovered({
       hostName: agent.host.name,
       ownerLabel: ownerLabelOf(agent.host.user),
       downSince,
       instanceCount
-    }).catch(err => console.warn('[HostOfflineAlert] 恢复通知发送失败:', err))
+    })).catch(err => console.warn('[HostOfflineAlert] 恢复通知发送失败:', err))
   }
 }
 
@@ -136,15 +140,16 @@ async function tick(): Promise<void> {
 export function startHostOfflineAlertWorker(): void {
   if (!stopped) return
   stopped = false
-  timer = setInterval(() => { void tick() }, HOST_OFFLINE_SCAN_INTERVAL_MS)
-  void tick()
+  timer = setInterval(() => { void activity.run(tick) }, HOST_OFFLINE_SCAN_INTERVAL_MS)
+  void activity.run(tick)
   console.log('[HostOfflineAlert] Worker started (scan every 60s, offline after 3min without heartbeat)')
 }
 
-export function stopHostOfflineAlertWorker(): void {
+export async function stopHostOfflineAlertWorker(): Promise<void> {
   stopped = true
   if (timer) {
     clearInterval(timer)
     timer = undefined
   }
+  await activity.drain()
 }

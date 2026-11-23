@@ -99,7 +99,7 @@ export function startTicketAutoCloseScheduler(): void {
   void activity.run(processTicketAutoClose)
 
   // 定期执行
-  schedulerInterval = setInterval(() => { void activity.run(processTicketAutoClose) }, CHECK_INTERVAL_MS)
+  schedulerInterval = setInterval(() => activity.run(processTicketAutoClose), CHECK_INTERVAL_MS)
 
   console.log('🎫 工单自动关闭调度器已启动（超时可配置，每小时检查）')
 }

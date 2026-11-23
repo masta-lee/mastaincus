@@ -107,7 +107,7 @@ export async function verifyAppWorkerLifecycle(source: string) {
   const background=file.statements.find(node=>ts.isFunctionDeclaration(node)&&node.name?.text==='beginBackgroundShutdown')
   assert.ok(background)
   const backgroundJs=ts.transpileModule(background.getText(file),{compilerOptions:{target:ts.ScriptTarget.ES2022}}).outputText
-  const stops=['stopManagedSchedules','stopBillingScheduler','stopMailExpiryScheduler','stopTicketAutoCloseScheduler','stopPlatformBackupScheduler','stopHostNotificationEmailWorker','stopProxySiteOperationWorker','stopCheckoutWorker','stopHostOnboardingWorker','stopHostRepairWorker','stopSecurityHardeningWorker','stopSystemImageCacheWorker','stopPoolResourceReconciliation','stopPoolDiskPreparation','stopUserCleanupWorker','stopHostPublicIpSync','stopHostPublicIpv6Sync']
+  const stops=['stopManagedSchedules','stopBillingScheduler','stopMailExpiryScheduler','stopTicketAutoCloseScheduler','stopPlatformBackupScheduler','stopHostNotificationEmailWorker','stopProxySiteOperationWorker','stopCheckoutWorker','stopHostOnboardingWorker','stopHostRepairWorker','stopSecurityHardeningWorker','stopSystemImageCacheWorker','stopPoolResourceReconciliation','stopPoolDiskPreparation','stopUserCleanupWorker','stopHostPublicIpSync','stopHostPublicIpv6Sync','stopRecoveryReviewWorker','stopHostOfflineAlertWorker']
   const admitted:string[]=[]
   let releaseOther!:()=>void
   const other=new Promise<void>(resolve=>{releaseOther=resolve})
