@@ -8,9 +8,11 @@ export interface ReleaseMigration { name: string; checksum: string; acceptedChec
 const digest = (value: string | Buffer) => createHash('sha256').update(value).digest('hex')
 
 export function assertBackupVersion(source: string, target: string): void {
-  // Disposable release-preview drills have a fixed commit identity. They may
-  // restore only their own preview; never compare previews as stable versions.
+  // Candidates may restore only the exact same version. Never compare two
+  // candidates, or a candidate and stable release, by their numeric prefix.
   if (source === target && /^preview-[a-f0-9]{7,40}$/.test(source)) return
+  const candidate = /^v?(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)-[0-9A-Za-z]+(?:[.-][0-9A-Za-z]+)*$/.exec(source)
+  if (source === target && candidate && candidate.slice(1).map(Number).every(Number.isSafeInteger)) return
   const parse = (value: string) => {
     const match = /^v?(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)$/.exec(value)
     ensure(match, 'OSS_APP_VERSION_UNSUPPORTED', 409)

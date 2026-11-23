@@ -10,6 +10,7 @@ import { Readable } from 'node:stream'
 import { execFile } from 'node:child_process'
 import { promisify } from 'node:util'
 import { resolve } from 'node:path'
+import { verifyPanelDigest } from './panel-package-signature.mjs'
 
 assert.equal(process.env.GITHUB_ACTIONS, 'true')
 assert.equal(process.env.RUNNER_ENVIRONMENT, 'github-hosted')
@@ -43,8 +44,15 @@ if (mode === 'migrate') {
     const admin = (await client.query("SELECT id FROM users WHERE role='admin' ORDER BY id LIMIT 1")).rows[0]
     assert.ok(admin)
     const { stdout: packageText } = await exec('tar', ['-xOf', archive, './server/package.json'])
-    const target = 'v' + JSON.parse(packageText).version
-    assert.match(target, /^v\d+\.\d+\.\d+$/)
+    const applicationVersion = JSON.parse(packageText).version
+    const { stdout: metadataText } = await exec('tar', ['-xOf', archive, './version.json'])
+    const candidateVersion = JSON.parse(metadataText).version
+    assert.ok(verifyPanelDigest(candidateVersion, process.arch === 'arm64' ? 'arm64' : 'amd64',
+      hash(await readFile(archive)), (await readFile(archive + '.sig', 'utf8')).trim()), 'exact candidate publisher/version must verify before the old worker runs')
+    // Unpublished semver candidates must exercise their actual signed target.
+    // Plain previews retain the stable target supported by the published old worker.
+    const target = /^v\d+\.\d+\.\d+(?:[-+][0-9A-Za-z.-]+)?$/.test(candidateVersion) ? candidateVersion : 'v' + applicationVersion
+    assert.match(target, /^v\d+\.\d+\.\d+(?:[-+][0-9A-Za-z.-]+)?$/)
     const task = (await client.query("INSERT INTO system_update_tasks(target_version,status,started_by_user_id,updated_at) VALUES($1,'pending',$2,NOW()) RETURNING id", [target, admin.id])).rows[0]
     const original = {}
     for (const file of identities) original[file] = hash(await readFile(file))
@@ -57,7 +65,7 @@ if (mode === 'migrate') {
     }
     const applied = (await client.query("SELECT count(*)::int AS n FROM _prisma_migrations WHERE migration_name='20261111170000_instance_renewal_price' AND finished_at IS NOT NULL AND rolled_back_at IS NULL")).rows[0].n
     assert.equal(applied, 1)
-    await writeFile(stateFile, JSON.stringify({ taskId: task.id, target, baseline, original, atomic, oldApp: app, oldComponents: enrollment.components }), { mode: 0o600 })
+    await writeFile(stateFile, JSON.stringify({ taskId: task.id, target, applicationVersion, candidateVersion, baseline, original, atomic, oldApp: app, oldComponents: enrollment.components }), { mode: 0o600 })
     console.log(`PASS legacy baseline: genuine ${baseline} installed, original 21-file components and controller/network identity recorded`)
   } finally { await client.end() }
 } else if (mode === 'worker') {
@@ -110,15 +118,16 @@ if (mode === 'migrate') {
   try {
     const task = (await client.query('SELECT status,backup_path FROM system_update_tasks WHERE id=$1', [state.taskId])).rows[0]
     assert.equal(task.status, 'success', 'the actual old online-update worker must finish without rollback')
+    assert.equal(JSON.parse(await readFile(app + '/version.json')).version, state.candidateVersion)
     assert.equal(atomic, state.atomic)
     if (atomic) { assert.equal(task.backup_path, state.oldApp); assert.notEqual(app, state.oldApp) }
     for (const file of identities) assert.equal(hash(await readFile(file)), state.original[file], 'controller/network/environment identity preserved: ' + file)
     assert.equal((await client.query("SELECT count(*)::int AS n FROM _prisma_migrations WHERE migration_name='20261111170000_instance_renewal_price' AND finished_at IS NOT NULL AND rolled_back_at IS NULL")).rows[0].n, 1)
     const version = JSON.parse(await readFile(app + '/server/package.json'))
-    assert.equal(version.version, state.target.slice(1))
+    assert.equal(version.version, state.applicationVersion)
     const enrollment = JSON.parse(await readFile('/var/lib/incudal-gateway-controller/enrollment.json'))
     for (const component of Object.values(enrollment.components)) {
-      assert.equal(component.version, state.target.slice(1))
+      assert.equal(component.version, state.applicationVersion)
       assert.ok((await readFile(component.directory + '/scripts/ensure-time-sync.py')).length > 0)
     }
     assert.equal(hash(await readFile(app + '/scripts/ensure-time-sync.py')), hash(await readFile('/usr/local/libexec/incudal/ensure-time-sync.py')))

@@ -185,6 +185,10 @@ fi
 )
 stage=post-upgrade-verification
 node "$repo/scripts/smoke-legacy-online-upgrade.mjs" after "$candidate"
+if tar -xOf "$candidate" ./version.json | python3 -c 'import json,sys,re; sys.exit(0 if re.fullmatch(r"v1\.8\.14-test\.[a-f0-9]{7}",json.load(sys.stdin)["version"]) else 1)'; then
+  candidate_version=$(tar -xOf "$candidate" ./version.json | python3 -c 'import json,sys; print(json.load(sys.stdin)["version"])')
+  INCUDAL_OWNER_CANDIDATE_DEPLOY=authorized-test node "$repo/scripts/apply-verified-owner-candidate.mjs" "$candidate" "$candidate_version" --preflight
+fi
 test "$(ss -ltnp 'sport = :3001' | tail -n +2 | wc -l)" = 1
 test "$(runuser -u postgres -- psql -X -At -d postgres -c "SELECT datdba=(SELECT oid FROM pg_roles WHERE rolname='incudal') FROM pg_database WHERE datname='incudal_retained_upgrade_test'")" = t
 test "$(runuser -u postgres -- psql -X -At -d incudal_retained_upgrade_test -c 'SELECT value FROM preserved WHERE id=1')" = original

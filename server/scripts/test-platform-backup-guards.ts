@@ -119,6 +119,14 @@ try {
   assertBackupVersion('1.6.8', '1.7.1')
   assertBackupVersion('v1.7.1', '1.7.1')
   assertBackupVersion('preview-abcdef1', 'preview-abcdef1')
+  assertBackupVersion('v1.8.14-test.abcdef1', 'v1.8.14-test.abcdef1')
+  for (const target of ['v1.8.14-test.abcdef2', 'v1.8.14', 'v1.8.15-test.abcdef1']) {
+    assert.throws(() => assertBackupVersion('v1.8.14-test.abcdef1', target), /OSS_APP_VERSION_UNSUPPORTED/)
+  }
+  assert.throws(() => assertBackupVersion('v1.8.14', 'v1.8.14-test.abcdef1'), /OSS_APP_VERSION_UNSUPPORTED/)
+  for (const invalid of ['v1.9007199254740993.0-test.abcdef1', 'v01.8.14-test.abcdef1', 'v1.8.14-test.']) {
+    assert.throws(() => assertBackupVersion(invalid, invalid), /OSS_APP_VERSION_UNSUPPORTED/)
+  }
   assert.throws(() => assertBackupVersion('preview-abcdef1', 'preview-abcdef2'), /OSS_APP_VERSION_UNSUPPORTED/)
   assert.throws(() => assertBackupVersion('1.7.2', '1.7.1'), /OSS_BACKUP_VERSION_NEWER/)
   for (const source of ['2.0.0', '1.7.1-rc.1', 'unknown', '1.9007199254740993.0']) assert.throws(() => assertBackupVersion(source, '1.7.1'), /OSS_APP_VERSION_UNSUPPORTED/)

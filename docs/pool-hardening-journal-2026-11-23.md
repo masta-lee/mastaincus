@@ -20,6 +20,8 @@ security.4/source e470547b9107400575bd0b5a5317270dbd09e5d3：完整231/231、Go�
 
 受信候选面板部署：仓库新增`apply-verified-owner-candidate.mjs`，先独立publisher/完整SHA/版本/架构验签，再仅提供未公开候选Release HTTP输入，调用当前安装的原OTA worker；备份、迁移、DB/支付就绪、单后端启动、失败回退全部原路径，不手改线上模块/.env/状态。候选`v1.8.14-test.9995256`无tag工作流45177810363真实双包与旧升级验收进行中；不正式Release。
 
+21:15接续：完整231/231自然exit0（1652）；真实库存20:58为204available/4assigned/0unavailable，21:02为203/4/1，#130原receipt到期；所以不能宣称彻底稳定。候选45177810363双架构首装均恢复preview失败OSS_APP_VERSION_UNSUPPORTED，完整job137709176945/137709176868日志1670/1673已读取。失败发生在同一候选版本的备份预览，不是数据库或seal损坏。源码仅允许相同有效候选版本恢复，数字越界/不同候选/候选和正式互转仍拒绝，保迁移/资金/原身份核验。旧worker演练另改读取实际version.json签名target，应用与组件版本单独核；此前按package.json稳定版target通过不能证明测试版真路径。部署工具新增sealed当前源码/字面link核验、在途恢复上传/只读preflight，后续六原worker演练将实际运行此入口preflight。最终专项1672/types/backendbuild全部通过；新完整signed测试包及真实原worker热更新仍待，未直接改主控或客户。
+
 2026-11-23，北京时间。Owner先授权只读取证，随后明确授权本问题源码修复后，将此前已做安全修复同批热更新主控作为测试；不正式发版。
 
 主控实际v1.8.14／ced7c10cd17d、唯一后端健康。208台专属宿主中12台故障一致：#16、#21、#24、#26、#30～#36、#46。均管理在线、无客户实例、Agent工具/网络防护有效、AppArmor维护已完成，后续检查反复`HARDENING_JOURNAL_CONFLICT`。它们不是离线宿主。
