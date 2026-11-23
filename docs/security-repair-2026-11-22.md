@@ -4,6 +4,10 @@
 
 ## 续接实施状态（2026-11-22，尚未完成）
 
+后续工具约束精修：真实917发现旧首次tools `apk add name=version`不仅锁工具，还把所有solver依赖固定写入world，阻断后续安全revision。改仅为缺失工具以包名添加、已存在工具用原版本fix；一次root私密签名index、两完整plan＋前后完整installedmap绑定，不允许首次安装夹带升级已有runtime；管理员world原constraints逐项保持，只添加实际请求的裸包名，不固定依赖。APK3新old→new计划此前legacyregex漏读，补准确解析／拒未知、重复、降级、其它runtime，保持签名与不删包。真实Alpine完整首次安装925／70.30秒、最终source缺文件fix928／75.12秒自然0，world只20条必要裸包名、aa-exec丢失自修及幂等／原world保持；newunit928、双compile-vet918/920/927/929、全Agent929、securityguard921通过。920仅miniroot无/dev/null、921无/proc导致LVMprobe失败，补真实隔离/dev/proc/sys原检查925/928通过，失败日志保留。本阶段准备提交，旧固定world无可靠原所有权不能擅自删除管理员约束，通用历史自迁移仍待。
+
+前f2aed14af0791e1207ac2b356c59e1aca7481021已推，native`45086894967`双build＋12runtime全14success（新增双LXCFS实证）；Agent`45086894972`全6、SSH`45086894955`全9均success，CI`45086895244`24success／余6在途零failure必须终态，memory`45086895251`／build`45086895246`状态继续查。原64efCI因本PR新source自动cancel，不算30success；原4d30/30和3a第十三13success保持精确source。当前E03/E04服务DNS／libc/kernel自动闭环、最终同source完整包与真实OSS/A整机失联仍未完成；暂不正式Release/生产。
+
 2026-11-23续接：第十三无tag预览`45082866944`／source`3a257527c64ae35fc3c7d19fe5e40b879edcbd6c`全终态13success／Release预期skipped，双完整包、双首装完整备份／独立B恢复与六原v1.8.14worker通过；真实OSStransport／A整机失联不包含在内。旧4dCI`45081437338`已30/30success；HEAD64efCI`45083413884`当前25success／余5在途／零failure，Agent`45083413963`、memory`45083413912`、SSH`45083413956`、build`45083413874`、native`45083413860`均全success。最新新增LXCFS源码尚不由这些旧source证明。
 
 本阶段新增Alpine LXCFS空闲维护：官方musl不支持模块热卸载，不能重启带客户的FUSE服务。保持live leaf更新清单不含LXCFS；原主控持久fence＋当前无checkout/任务＋Agent全项目空实例／operations核验，在同root维护锁下签名同branch两次模拟、完整包清单／world核验，空闲才更新LXCFS／OpenRC／FUSE库并确认真实进程及已加载代码。客户删除后的reactivate同步清空旧fence实例集合，防永久沿用旧客机登记。失败不改客户、不故障隔离或永久占售，五分钟续接；六小时重新核更新。补丁状态与可售分离，原Incus身份／hash／回退门禁不放宽。

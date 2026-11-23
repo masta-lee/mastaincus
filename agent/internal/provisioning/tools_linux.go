@@ -200,7 +200,7 @@ var aptRemove = regexp.MustCompile(`(?m)^Remv `)
 var aptVersion = regexp.MustCompile(`(?m)^Inst ([a-zA-Z0-9+_.:-]+)(?: \[[^\]]+\])? \(([0-9][a-zA-Z0-9+_.:~-]*) `)
 
 func safePlan(output string, alpine bool) error {
-	if strings.Contains(output, "Purging ") || strings.Contains(output, "Removing ") || aptRemove.MatchString(output) {
+	if strings.Contains(output, "Purging ") || strings.Contains(output, "Removing ") || strings.Contains(output, "Downgrading ") || strings.Contains(output, "UNTRUSTED") || aptRemove.MatchString(output) {
 		return fmt.Errorf("package removal refused")
 	}
 	allowed := map[string]bool{"apparmor": true, "apparmor-utils": true, "libapparmor": true, "py3-apparmor": true, "py3-libapparmor": true, "perl": true, "tar": true, "gzip": true, "xz": true, "xz-utils": true, "squashfs-tools": true, "rsync": true, "lxcfs": true, "lxcfs-openrc": true, "util-linux": true, "util-linux-misc": true}
@@ -208,6 +208,14 @@ func safePlan(output string, alpine bool) error {
 		allowed[name] = true
 	}
 	if alpine {
+		for _, m := range securityPackageVersionChange.FindAllStringSubmatch(output, -1) {
+			if !allowed[m[1]] {
+				return fmt.Errorf("unrelated installed package %s change refused", m[1])
+			}
+		}
+		if strings.Count(output, "Upgrading ") != len(securityPackageVersionChange.FindAllStringSubmatch(output, -1))+len(regexp.MustCompile(`(?m)Upgrading [a-zA-Z0-9+_.-]+ \([0-9][a-zA-Z0-9+_.~-]*\)`).FindAllString(output, -1)) {
+			return fmt.Errorf("tool package upgrade plan invalid")
+		}
 		for _, m := range apkChange.FindAllStringSubmatch(output, -1) {
 			if m[1] != "Installing" && !allowed[m[2]] {
 				return fmt.Errorf("unrelated installed package %s change refused", m[2])
@@ -244,42 +252,7 @@ func repair(ctx context.Context) error {
 	}
 	alpine := strings.Contains(release, "ID=alpine") || strings.Contains(release, "ID=\"alpine\"")
 	if alpine {
-		// Use the configured signed stable branch. Never rewrite repositories or trust.
-		out, e := run(ctx, "apk", append([]string{"--simulate", "--no-cache", "--wait", "5", "add"}, packages...)...)
-		if e != nil {
-			return e
-		}
-		if e = safePlan(string(out), true); e != nil {
-			return e
-		}
-		pinned := []string{}
-		for _, change := range apkChange.FindAllStringSubmatch(string(out), -1) {
-			pinned = append(pinned, change[2]+"="+change[3])
-		}
-		// If files drifted while packages remain installed, fix those exact
-		// installed packages. Ordinary add would otherwise never repair them.
-		if len(pinned) == 0 {
-			out, e = run(ctx, "apk", append([]string{"--simulate", "--no-cache", "--wait", "5", "fix"}, packages...)...)
-			if e != nil {
-				return e
-			}
-			if e = safePlan(string(out), true); e != nil {
-				return e
-			}
-			for _, change := range apkChange.FindAllStringSubmatch(string(out), -1) {
-				pinned = append(pinned, change[2]+"="+change[3])
-			}
-			if len(pinned) == 0 {
-				return fmt.Errorf("tool repair plan unavailable")
-			}
-			// apk fix selects installed package names, not name=version atoms.
-			// The simulated plan forbids unrelated changes; fix preserves the
-			// installed version rather than upgrading the distribution.
-			_, e = run(ctx, "apk", append([]string{"--no-cache", "--wait", "5", "fix"}, packages...)...)
-		} else {
-			_, e = run(ctx, "apk", append([]string{"--no-cache", "--wait", "5", "add"}, pinned...)...)
-		}
-		if e != nil {
+		if e = repairAlpineTools(ctx, packages); e != nil {
 			return e
 		}
 	} else {
