@@ -264,8 +264,12 @@ def live_process_group(group,proc=pathlib.Path('/proc')):
         if not path.name.isdigit():continue
         checked+=1
         if checked>65536:raise ValueError('SYSTEM_SECURITY_PROCESS_BUDGET_EXCEEDED')
+        if proc==pathlib.Path('/proc'):
+            try:actual_group=os.getpgid(int(path.name))
+            except ProcessLookupError:continue
+            if actual_group!=group:continue
         try:raw=(path/'stat').read_text()
-        except FileNotFoundError:continue
+        except (FileNotFoundError,ProcessLookupError):continue
         if len(raw)>8192:raise ValueError('SYSTEM_SECURITY_PROCESS_BUDGET_EXCEEDED')
         at=raw.rfind(') ');fields=raw[at+2:].split()
         if at<0 or len(fields)<3:raise ValueError('SYSTEM_SECURITY_PROCESS_QUERY_FAILED')

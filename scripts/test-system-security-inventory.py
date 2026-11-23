@@ -6,6 +6,13 @@ spec=importlib.util.spec_from_file_location('inventory',pathlib.Path(__file__).w
 module=importlib.util.module_from_spec(spec);spec.loader.exec_module(module)
 
 class Plans(unittest.TestCase):
+    @unittest.skipIf(sys.platform=='win32','actual POSIX process exits')
+    def test_process_group_native_exit_churn_is_not_an_error(self):
+        import subprocess
+        for _ in range(75):
+            process=subprocess.Popen(['/bin/true'])
+            try:self.assertFalse(module.live_process_group(-1))
+            finally:process.wait(timeout=5)
     def test_component_activation_failures_preserve_other_work_and_redact_details(self):
         def failed(_):raise ValueError('SYSTEM_SECURITY_NGINX_ACTIVATION_PENDING')
         self.assertEqual(module.service_activation_receipt(failed,{}),{'state':'pending','error':'SYSTEM_SECURITY_NGINX_ACTIVATION_PENDING'})
