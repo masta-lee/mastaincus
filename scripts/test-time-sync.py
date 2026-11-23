@@ -22,6 +22,18 @@ spec.loader.exec_module(m)
 
 
 class ClockTests(unittest.TestCase):
+    def test_security_activation_checks_current_loaded_daemon_and_preserves_policy(self):
+        unit=Mock();unit.read_bytes.return_value=b'fixed-unit'
+        before=(12,'/usr/sbin/chronyd',False)
+        with patch.object(m,'managed_clock_patch_process',return_value=(before,unit)),patch.object(m,'command')as command:
+            self.assertEqual(m.activate_managed_clock_patch('systemd'),{'state':'current','pid':12});command.assert_not_called()
+        config=Mock();config.read_bytes.return_value=b'fixed-policy'
+        for next_pid,pending in [(12,False),(13,True)]:
+            with patch.object(m,'CONFIG',config),patch.object(m,'trusted_clock_binary'),patch.object(m,'managed_clock_patch_process',side_effect=[((12,'/usr/sbin/chronyd',True),unit),((next_pid,'/usr/sbin/chronyd',pending),unit)]),patch.object(m,'active',return_value=True),patch.object(m,'command')as command,self.assertRaisesRegex(ValueError,'ACTIVATION_PENDING'):
+                m.activate_managed_clock_patch('systemd')
+            command.assert_called_once_with(['systemctl','restart','incudal-clock'],timeout=60)
+        with patch.object(m,'CONFIG',config),patch.object(m,'trusted_clock_binary'),patch.object(m,'managed_clock_patch_process',side_effect=[((12,'/usr/sbin/chronyd',True),unit),((13,'/usr/sbin/chronyd',False),unit)]),patch.object(m,'active',return_value=True),patch.object(m,'synchronized',return_value=False),patch.object(m,'command'):
+            self.assertEqual(m.activate_managed_clock_patch('systemd'),{'state':'activated','synchronized':False})
     def setUp(self):
         tmp = tempfile.TemporaryDirectory(prefix='incudal-clock-test-')
         self.addCleanup(tmp.cleanup)

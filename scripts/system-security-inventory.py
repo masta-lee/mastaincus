@@ -216,6 +216,30 @@ def activate_nginx_master(before):
     if new['configurationHash']!=before['configurationHash']or new['unitHash']!=before['unitHash']or not set(before['sockets'])<=set(new['sockets']):raise ValueError('SYSTEM_SECURITY_NGINX_CONFIG_CHANGED')
     return finish_nginx_activation(before,new)
 
+def managed_clock_security_proof():
+    helper=pathlib.Path('/usr/local/libexec/incudal/ensure-time-sync.py')
+    config=pathlib.Path('/etc/chrony/incudal-clock.conf');unit=pathlib.Path('/etc/systemd/system/incudal-clock.service')
+    if not helper.exists()or not config.exists()or not unit.exists():return None
+    for path in [helper,config,unit]:
+        info=path.lstat()
+        if not stat.S_ISREG(info.st_mode)or info.st_uid!=0 or info.st_nlink!=1 or info.st_mode&0o022 or info.st_size>262144:raise ValueError('SYSTEM_SECURITY_CLOCK_SERVICE_UNREVIEWED')
+    text=config.read_text()
+    if '# payincus-time-sync-v1'not in text.splitlines()or re.search(r'(?m)^\s*(?:makestep|initstepslew)\b',text)or '# payincus-time-sync-v1'not in unit.read_text().splitlines():raise ValueError('SYSTEM_SECURITY_CLOCK_SERVICE_UNREVIEWED')
+    value=dict(line.split('=',1)for line in command(['systemctl','show','incudal-clock.service','--property=MainPID,ActiveState'],20).splitlines()if '='in line)
+    if value.get('ActiveState')!='active'or int(value.get('MainPID','0'))<2:return None
+    pid=int(value['MainPID']);process=pathlib.Path('/proc',str(pid))
+    if (process/'ns/pid').readlink()!=pathlib.Path('/proc/1/ns/pid').readlink()or str((process/'exe').readlink()).removesuffix(' (deleted)')not in ['/usr/sbin/chronyd','/sbin/chronyd']:raise ValueError('SYSTEM_SECURITY_CLOCK_PROCESS_CHANGED')
+    return {'pid':pid,'configurationHash':hashlib.sha256(config.read_bytes()+unit.read_bytes()).hexdigest(),'helperHash':hashlib.sha256(helper.read_bytes()).hexdigest()}
+
+def activate_managed_clock(before):
+    if before is None:return None
+    if managed_clock_security_proof()!=before:raise ValueError('SYSTEM_SECURITY_CLOCK_PROCESS_CHANGED')
+    helper=pathlib.Path('/usr/local/libexec/incudal/ensure-time-sync.py')
+    result=json.loads(command(['/usr/bin/python3','-I','-B',str(helper),'--activate-security'],90))
+    after=managed_clock_security_proof()
+    if after is None or after['configurationHash']!=before['configurationHash']or after['helperHash']!=before['helperHash']or result.get('state')not in ['current','activated']:raise ValueError('SYSTEM_SECURITY_CLOCK_ACTIVATION_PENDING')
+    return {'state':result['state'],'pid':after['pid'],'synchronized':result.get('synchronized')is True}
+
 def live_process_group(group,proc=pathlib.Path('/proc')):
     checked=0
     for path in proc.iterdir():
@@ -459,6 +483,11 @@ def apply_patches(automatic=False):
             try:nginx_before=nginx_master_proof()
             except (ValueError,OSError):nginx_error='SYSTEM_SECURITY_NGINX_SERVICE_UNREVIEWED'
             if nginx_before is not None and not pathlib.Path('/run/nginx.pid.oldbin').exists():allowed|={'nginx','nginx-common'}
+        clock_before=None;clock_error=None
+        if automatic and 'chrony'in value['packages']:
+            try:clock_before=managed_clock_security_proof()
+            except (ValueError,OSError):clock_error='SYSTEM_SECURITY_CLOCK_SERVICE_UNREVIEWED'
+            if clock_before is not None:allowed.add('chrony')
         clean_service_policy()
         command(['apt-get','-o','Acquire::AllowInsecureRepositories=false','-o','Acquire::AllowDowngradeToInsecureRepositories=false','-o','Acquire::AllowWeakRepositories=false','update'],180)
         names=sorted(set(value['packages'])&allowed)
@@ -492,6 +521,10 @@ def apply_patches(automatic=False):
             after['nginxActivation']=activate_nginx_master(nginx_before)
             after['loadedCode']=replaced_host_mappings(all_host=True)
         elif nginx_error:after['nginxActivation']={'state':'pending','error':nginx_error}
+        if automatic and clock_before is not None:
+            after['clockActivation']=activate_managed_clock(clock_before)
+            after['loadedCode']=replaced_host_mappings(all_host=True)
+        elif clock_error:after['clockActivation']={'state':'pending','error':clock_error}
         value=after;value['patchPlan']=changes;value['patchState']='installed-activation-required' if changes else 'current';persist(value,verify_activation=True)
         return value
     except Exception:

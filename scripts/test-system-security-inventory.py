@@ -6,6 +6,14 @@ spec=importlib.util.spec_from_file_location('inventory',pathlib.Path(__file__).w
 module=importlib.util.module_from_spec(spec);spec.loader.exec_module(module)
 
 class Plans(unittest.TestCase):
+    def test_managed_clock_security_activation_rejects_changed_configuration(self):
+        before={'pid':12,'configurationHash':'config','helperHash':'helper'}
+        for changed in [None,{**before,'pid':13},{**before,'configurationHash':'changed'}]:
+            with patch.object(module,'managed_clock_security_proof',return_value=changed),patch.object(module,'command')as command,self.assertRaises(ValueError):
+                module.activate_managed_clock(before)
+            command.assert_not_called()
+        with patch.object(module,'managed_clock_security_proof',side_effect=[before,{**before,'pid':13}]),patch.object(module,'command',return_value='{"state":"activated","synchronized":false}'):
+            self.assertEqual(module.activate_managed_clock(before),{'state':'activated','pid':13,'synchronized':False})
     @unittest.skipIf(sys.platform=='win32','native socket symlinks')
     def test_nginx_socket_proof_excludes_worker_ipc(self):
         with tempfile.TemporaryDirectory()as folder:

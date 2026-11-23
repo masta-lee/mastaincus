@@ -20,6 +20,8 @@ import subprocess
 import sys
 import tempfile
 import time
+import re
+import hashlib
 
 ROOT = Path('/var/lib/incudal-time-sync')
 HELPER = Path('/usr/local/libexec/incudal/ensure-time-sync.py')
@@ -228,6 +230,50 @@ def clear_own_package_policy():
         trusted(POLICY)
         if POLICY.read_text() == own_policy: POLICY.unlink()
 
+def managed_clock_patch_process(init):
+    # Only our exact slew-only daemon may be restarted to load a signed patch.
+    # Administrator clock services are never overwritten or switched here.
+    trusted(CONFIG)
+    configuration=CONFIG.read_text()
+    if MARK not in configuration.splitlines()or re.search(r'(?m)^\s*(?:makestep|initstepslew)\b',configuration):raise ValueError('TIME_SYNC_CONFIGURATION_CONFLICT')
+    unit=Path('/etc/systemd/system/incudal-clock.service'if init=='systemd'else'/etc/init.d/incudal-clock')
+    trusted(unit)
+    if MARK not in unit.read_text().splitlines():raise ValueError('TIME_SYNC_CONFIGURATION_CONFLICT')
+    if any(active(init,s)for s in services(init)if s!='incudal-clock'):raise ValueError('TIME_SYNC_MULTIPLE_SERVICES')
+    proof=[];host=Path('/proc/1/ns/pid').readlink();deadline=time.monotonic()+5;checked=0
+    for process in Path('/proc').iterdir():
+        if not process.name.isdigit():continue
+        checked+=1
+        if checked>4096 or time.monotonic()>deadline:raise ValueError('TIME_SYNC_PROCESS_BUDGET_EXCEEDED')
+        try:
+            if (process/'ns/pid').readlink()!=host or (process/'comm').read_text().strip()!='chronyd':continue
+            args=(process/'cmdline').read_bytes().split(b'\0')
+            if len(args)<4 or args[1:4]!=[b'-d',b'-f',os.fsencode(str(CONFIG))]or any(arg for arg in args[4:]):raise ValueError('TIME_SYNC_SERVICE_CHANGED')
+            path=str((process/'exe').readlink());binary=path.removesuffix(' (deleted)')
+            if binary not in ['/usr/sbin/chronyd','/sbin/chronyd']:raise ValueError('TIME_SYNC_SERVICE_CHANGED')
+            with (process/'maps').open()as source:maps=source.read(1024*1024+1)
+            if len(maps)>1024*1024:raise ValueError('TIME_SYNC_PROCESS_BUDGET_EXCEEDED')
+            pending=path.endswith(' (deleted)')or any(line.endswith(' (deleted)')and 'x'in line.split()[1]and not line.split()[-2].startswith(('/dev/','/memfd:','/SYSV'))for line in maps.splitlines()if len(line.split())>=6)
+            proof.append((int(process.name),binary,pending))
+        except FileNotFoundError:continue
+    if len(proof)!=1:raise ValueError('TIME_SYNC_SERVICE_CHANGED')
+    return proof[0],unit
+
+def trusted_clock_binary(binary):
+    executable=Path(binary);trusted(executable.parent,True);info=executable.lstat()
+    if not stat.S_ISREG(info.st_mode)or info.st_uid!=0 or info.st_nlink!=1 or info.st_mode&0o022 or not info.st_mode&0o111 or info.st_size>16*1024*1024:raise ValueError('TIME_SYNC_UNTRUSTED_PATH')
+
+def activate_managed_clock_patch(init):
+    (pid,binary,pending),unit=managed_clock_patch_process(init)
+    if not pending:return {'state':'current','pid':pid}
+    trusted_clock_binary(binary)
+    expected=hashlib.sha256(CONFIG.read_bytes()+unit.read_bytes()).hexdigest()
+    command(['systemctl','restart','incudal-clock']if init=='systemd'else['rc-service','incudal-clock','restart'],timeout=60)
+    if hashlib.sha256(CONFIG.read_bytes()+unit.read_bytes()).hexdigest()!=expected or not active(init,'incudal-clock'):raise ValueError('TIME_SYNC_CONFIGURATION_CONFLICT')
+    (next_pid,_,still_pending),_=managed_clock_patch_process(init)
+    if next_pid==pid or still_pending:raise ValueError('TIME_SYNC_SECURITY_ACTIVATION_PENDING')
+    return {'state':'activated','synchronized':synchronized(init,'incudal-clock')}
+
 
 def install_chrony(init):
     clear_own_package_policy()
@@ -359,7 +405,7 @@ def install(init):
 
 
 def main():
-    if os.geteuid()!=0 or sys.argv[1:] not in [[],['--install'],['--status']]:
+    if os.geteuid()!=0 or sys.argv[1:] not in [[],['--install'],['--status'],['--activate-security']]:
         raise ValueError('TIME_SYNC_ARGUMENT_INVALID')
     if sys.argv[1:]==['--status']:
         p=ROOT/'status.json';trusted(p);print(p.read_text());return
@@ -379,7 +425,7 @@ def main():
             return 0
         try:
             init=manager()
-            result=install(init) if installing else reconcile(init)
+            result=install(init) if installing else activate_managed_clock_patch(init)if sys.argv[1:]==['--activate-security']else reconcile(init)
         except (ValueError,KeyError,subprocess.SubprocessError,OSError) as e:
             code=str(e) if isinstance(e,ValueError) and str(e).startswith('TIME_SYNC_') else 'TIME_SYNC_RETRY_PENDING'
             result={'state':'installation-failed' if installing else 'pending','synchronized':False,'error':code}
@@ -387,7 +433,7 @@ def main():
         # An asynchronous reinstall must not replace a useful previous result.
         if result['state']!='scheduled': write(ROOT/'status.json',json.dumps(result,separators=(',',':')).encode())
         print(json.dumps(result))
-        return 1 if result['state']=='installation-failed' else 0
+        return 1 if result['state']=='installation-failed'or sys.argv[1:]==['--activate-security']and result.get('error') else 0
     finally:os.close(fd)
 
 
