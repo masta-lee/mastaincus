@@ -13,7 +13,7 @@ import { managedCleanupEndpointHash } from '../lib/managed-cleanup-identity.js'
 import { SECURITY_HARDENING_ENABLED_KEY, SECURITY_HARDENING_REVISION, hardeningFailure, hardeningReason,
   hardeningSchedule, hardeningUpdateBudget, hardeningDiagnostic, hardeningPhaseLabel, hardeningNeedsReadOnlyRecovery,
   type HardeningCheck, type HardeningState } from '../lib/security-hardening.js'
-import { hardeningJournalReadyForRetry, SSH_JOURNAL_POLICY_REVISION } from '../lib/security-hardening.js'
+import { hardeningJournalReadyForRetry, SSH_JOURNAL_POLICY_REVISION, hardeningReceiptRenewalDue } from '../lib/security-hardening.js'
 import { inspectHostSecurity, safeCustomerRuntime, hardeningPreflightCheck } from './host-security-inspection.js'
 import { maintainAlpineCustomerSsh } from './alpine-ssh-maintenance.js'
 import { recoveryHeld } from './platform-backup-core.js'
@@ -79,8 +79,9 @@ export async function hardenExistingHost(hostId: number, deps = securityHardenin
     if (enrollment ? !ownsOnboardingHardeningLease(host.onboardingNode, enrollment) : onboardingOwnsHardening(host.onboardingNode)) return null
     const previous = currentState(host.securityHardening)
     if(previous.incusCompat && (previous.incusCompat as {phase?:string}).phase!=='verified')return null
+    const renewal = !enrollment && hardeningReceiptRenewalDue(previous) && previous.identityHash === identity(host) && !hostMaintenanceBlocked(host.securityHardening)
     if (previous.revision === SECURITY_HARDENING_REVISION && previous.nextCheckAt && Date.parse(previous.nextCheckAt) > Date.now() &&
-        !hardeningAcceptanceReadyForRetry(previous) && !hardeningJournalReadyForRetry(previous)) return null
+        !hardeningAcceptanceReadyForRetry(previous) && !hardeningJournalReadyForRetry(previous) && !renewal) return null
     // Paid pool delivery already owns this host. A periodic inspection cannot
     // overwrite its admission receipt and then wait for that same delivery.
     // Keep the due time unchanged: after delivery/cleanup the next scan resumes.
@@ -93,19 +94,20 @@ export async function hardenExistingHost(hostId: number, deps = securityHardenin
       attempts: Math.min(sameRevision && previous.status === 'retry' && Number.isSafeInteger(previous.attempts) ? Math.max(previous.attempts!, 0) + 1 : 1, 1000000),
       // Revision changes cannot silently renew an exhausted write budget.
       updateAttempts: hardeningUpdateBudget(previous), phase: 'authority',
-      checkedAt: new Date().toISOString(), nextCheckAt: new Date(Date.now() + 600000).toISOString(), leaseToken,
+      checkedAt: new Date().toISOString(), nextCheckAt: new Date(Date.now() + 600000).toISOString(), leaseToken, leaseUntil: new Date(Date.now() + 600000).toISOString(),
       identityHash: identity(host) }
     state.journalPolicyRevision = SSH_JOURNAL_POLICY_REVISION
     if (previous.maintenance !== undefined) state.maintenance = previous.maintenance
     if (previous.incusCompat !== undefined) state.incusCompat = previous.incusCompat
     state.remoteRequestId = typeof previous.remoteRequestId === 'string' && /^[a-f0-9-]{36}$/.test(previous.remoteRequestId)
       ? previous.remoteRequestId : randomUUID()
-    await tx.host.update({ where: { id: hostId }, data: { securityHardening: stateJson(state) } })
-    return { host, state, previous }
+    const published = renewal ? { ...previous, leaseToken, leaseUntil: state.leaseUntil } as HardeningState : state
+    await tx.host.update({ where: { id: hostId }, data: { securityHardening: stateJson(published) } })
+    return { host, state, previous, renewal }
   }, { maxWait: 3000, timeout: 8000 })
   if (!claim) return
-  const { host: original, state, previous } = claim
-  const inspectOnly = hardeningNeedsReadOnlyRecovery(previous) || state.updateAttempts! >= 6
+  const { host: original, state, previous, renewal } = claim
+  const inspectOnly = renewal || hardeningNeedsReadOnlyRecovery(previous) || state.updateAttempts! >= 6
   const leaseToken = state.leaseToken
   let actorId: number | null = original.onboardingNode?.batch.createdById ?? null
   let failedUpdate = false
@@ -210,7 +212,10 @@ export async function hardenExistingHost(hostId: number, deps = securityHardenin
       state.phase = 'customer-ssh'
       // Commit the probe receipt and next phase with the original lease before
       // entering customer maintenance. A backend crash preserves this progress.
-      await tx.host.update({ where: { id: hostId }, data: { securityHardening: stateJson(state) } })
+      const safeRenewal = renewal && Object.values(hostChecks).every(check => ['verified', 'not-applicable'].includes(check.status)) &&
+        checks.every(check => check.isolation.status === 'verified')
+      await tx.host.update({ where: { id: hostId }, data: { securityHardening: stateJson(safeRenewal ?
+        { ...previous, leaseToken: state.leaseToken, leaseUntil: state.leaseUntil } as HardeningState : state) } })
       return { host: hostChecks, checks, instances }
     }, { maxWait: 5000, timeout: 180000 })
     state.host = inspection.host
@@ -261,6 +266,7 @@ export async function hardenExistingHost(hostId: number, deps = securityHardenin
   }
   if (state.status === 'verified') state.phase = 'finished'
   delete state.leaseToken
+  delete state.leaseUntil
   await prisma.$transaction(async tx => {
     await tx.$executeRaw`SET LOCAL lock_timeout = '2s'`
     let receiptBusy = false
@@ -399,7 +405,7 @@ export async function processSecurityHardeningQueue(deps = securityHardeningDepe
       if(!state.nextCheckAt||Date.parse(state.nextCheckAt)<=Date.now())await resumeAutomaticHostMaintenance(host.id)
       continue
     }
-    if (state.revision !== SECURITY_HARDENING_REVISION || !state.nextCheckAt || Date.parse(state.nextCheckAt) <= Date.now() || hardeningAcceptanceReadyForRetry(state) || hardeningJournalReadyForRetry(state)) {
+    if (state.revision !== SECURITY_HARDENING_REVISION || !state.nextCheckAt || Date.parse(state.nextCheckAt) <= Date.now() || hardeningAcceptanceReadyForRetry(state) || hardeningJournalReadyForRetry(state) || hardeningReceiptRenewalDue(state)) {
       await hardenExistingHost(host.id, deps)
       if(deps===securityHardeningDependencies)await prepareAutomaticHostMaintenance(host.id)
       return

@@ -14,6 +14,10 @@ owner随后明确仅源码修完后热推送，不直接修改主控文件/配�
 
 下一周期仍有少量旧宿主retry：#28/#34真实独立HTTPS完整plan有libcrypto3/libssl3/gzip/rsync/rsync-openrc/openssl6项升级；新清单漏已安装rsync-openrc配套，严格plan正确拒绝第5项导致整笔失败。原生只读生产Go诊断确认DNS/FUSE/Incus/empty-authority/source均通过，无旧code映射，问题来自package计划。加入已安装same-series rsync-openrc，仍拒绝新增/major/无关kernel变更，完整expected inventory保持。security.4候选双原生旧HTTP＋rsync配套回归及signed更新后再观察两周期，不能将首轮短暂0故障称稳定完成。
 
+security.4/source e470547b9107400575bd0b5a5317270dbd09e5d3：完整231/231、Go全套、实际双架构宿主工具/网络保护/旧HTTP配套回归及签名工作流45171718832全部success。完整预览45171995985双首装/root恢复及六v1.8.14原worker全部success。仓库验证过的版本包部署入口原子投送.4（不写主控源码、配置或DB），原主控PID3210150/NRestarts0/.env保持，旧包保留；实际API由缓存自然转.4，208自动接收。Owner20:28截图80不可售处于本次更新首次repair/receipt进行中；20:30全部verified，20:31～20:32少量待刷新接续，不能提前称稳定。20:33真实库存APIavailable204/assigned4/unavailable0，完整receipt208/208、no pending lease/compat。继续至少两轮自然五分钟周期，保存实际库存/API/旧28host软件版本和原客户资金证据后才能结束。
+
+观察20:33～20:39暂无包更新retry/compat反复，但常规到期加固检查#208短暂status retry/authority：原queue到期先撤下receipt再检查，本库其他健康宿主随24h轮询也可能闪动。新增源码提前6h只读续验，保旧verified/finished/原checkedAt及原expiry，仅登记独立leaseUntil；同host再次调用不能重复认领，原receipt过期仍严格失效，发现隔离故障立即撤回。fullhost+customer检查成功才写新expiry。真实PG1651证实提前复核中原receipt/expiry不变、无host/customer补丁写入、并发lease去重、unsafe立即撤回及完整原钱/客户保持；guards/types/build过。必须完整签名包以原worker部署，不直接主控改文件，后续自然周期继续核。
+
 2026-11-23，北京时间。Owner先授权只读取证，随后明确授权本问题源码修复后，将此前已做安全修复同批热更新主控作为测试；不正式发版。
 
 主控实际v1.8.14／ced7c10cd17d、唯一后端健康。208台专属宿主中12台故障一致：#16、#21、#24、#26、#30～#36、#46。均管理在线、无客户实例、Agent工具/网络防护有效、AppArmor维护已完成，后续检查反复`HARDENING_JOURNAL_CONFLICT`。它们不是离线宿主。

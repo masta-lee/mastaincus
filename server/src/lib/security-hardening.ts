@@ -15,10 +15,20 @@ export type HardeningState = {
   maintenance?: unknown
   phase?: HardeningPhase; diagnostic?: HardeningDiagnostic
   leaseToken?: string; host?: { apparmor: HardeningCheck; ssh: HardeningCheck; preflight?: HardeningCheck }
+  leaseUntil?: string
   environment?: import('../services/host-security-inspection.js').HostHardeningPreflight
   instances?: Array<{ instanceId: number; isolation: HardeningCheck; ssh: HardeningCheck }>
   error?: string
   journalPolicyRevision?: string
+}
+// Refresh a healthy receipt ahead of expiry without manufacturing new trust.
+// The old expiry remains effective until the full read-only pass succeeds.
+export function hardeningReceiptRenewalDue(value: Partial<HardeningState>, now = Date.now()): boolean {
+  const expires = Date.parse(value.nextCheckAt || '')
+  const lease = Date.parse(value.leaseUntil || '')
+  return value.revision === SECURITY_HARDENING_REVISION && value.status === 'verified' && value.phase === 'finished' &&
+    Number.isFinite(expires) && expires > now && expires - now <= 6 * 3600000 &&
+    (!value.leaseToken || Number.isFinite(lease) && lease <= now)
 }
 /** Recheck the old completed-journal comparison once after its repair ships.
  * This only bypasses scheduling; remote identity and file checks still decide. */

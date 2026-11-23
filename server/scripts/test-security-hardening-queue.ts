@@ -97,6 +97,30 @@ try {
   await due(); failCustomer = false; await hardenExistingHost(host.id, deps)
   assert.equal((await state()).status, 'verified'); assert.ok(!(await state()).leaseToken)
   assert.equal((await state()).phase,'finished'); assert.equal((await state()).environment.architecture,'aarch64')
+  const renewalBefore=await state(),renewalExpiry=new Date(Date.now()+3600000).toISOString()
+  await prisma.host.update({where:{id:host.id},data:{securityHardening:{...renewalBefore,nextCheckAt:renewalExpiry}}})
+  const renewalWrites=guestWrites
+  const renewalEntered=new Promise<void>(resolve=>{hostEntered=resolve})
+  const renewing=hardenExistingHost(host.id,deps);await renewalEntered
+  let duplicateRenewal:Promise<void>|undefined
+  try {
+    const during=await state()
+    assert.equal(during.status,'verified','a fresh successful receipt stays verified during its early read-only renewal')
+    assert.equal(during.phase,'finished')
+    assert.equal(during.checkedAt,renewalBefore.checkedAt)
+    assert.equal(during.nextCheckAt,renewalExpiry,'claim cannot extend an old receipt expiry')
+    assert.ok(during.leaseToken&&during.leaseUntil,'independent finite lease prevents overlapping renewal')
+    assert.equal(allowHostUpdate,false,'early renewal never writes host SSH or restarts services')
+    duplicateRenewal=hardenExistingHost(host.id,deps)
+  }finally{releaseHost!();await Promise.all([renewing,duplicateRenewal])}
+  assert.equal((await state()).status,'verified');assert.ok(!(await state()).leaseToken)
+  assert.equal(guestWrites,renewalWrites,'full customer renewal is inspection-only')
+  assert.ok(Date.parse((await state()).nextCheckAt)>Date.parse(renewalExpiry),'only a complete successful pass renews expiry')
+  await prisma.host.update({where:{id:host.id},data:{securityHardening:{...await state(),nextCheckAt:new Date(Date.now()+3600000).toISOString()}}})
+  unsafe=true
+  await hardenExistingHost(host.id,deps);unsafe=false
+  assert.notEqual((await state()).status,'verified','a discovered isolation failure revokes even an unexpired prior receipt')
+  await due();await hardenExistingHost(host.id,deps)
   const order = await prisma.poolOrder.create({ data: { id: randomUUID(), userId: buyer.id, requestHash: prefix, totalCents: 900 } })
   const admission = { ...await state(), nextCheckAt: new Date(0).toISOString() }
   await prisma.host.update({ where: { id: host.id }, data: { securityHardening: admission } })

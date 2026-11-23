@@ -7,7 +7,7 @@ import { readAlpineSshPreflight } from '../src/lib/alpine-ssh-preflight.js'
 import { hardeningPublicView } from '../src/lib/hardening-view.js'
 import { hostMaintenanceBlocked, hostRebootMaintenanceBlocked } from '../src/lib/host-maintenance-gate.js'
 import { hardeningIdentityHash, hardeningReceiptMatches } from '../src/lib/hardening-identity.js'
-import { hardeningJournalReadyForRetry, SSH_JOURNAL_POLICY_REVISION } from '../src/lib/security-hardening.js'
+import { hardeningJournalReadyForRetry, SSH_JOURNAL_POLICY_REVISION, hardeningReceiptRenewalDue, SECURITY_HARDENING_REVISION } from '../src/lib/security-hardening.js'
 import { customerBootIdentity, customerBootRecoveryAction, nextMaintenanceAction, readHostMaintenanceIntent, automaticMaintenanceRecipeAllowed, hardeningAcceptanceReadyForRetry } from '../src/lib/host-maintenance-plan.js'
 import { maintenanceWireOperation, maintenanceWireExpiry } from '../src/services/host-maintenance-channel.js'
 const check = { instanceId: 1, pid: 100, uidMap: '0 1000000 1000000000', gidMap: '0 1000000 1000000000', seccomp: 2, apparmor: 'incus-fixture (enforce)' }
@@ -29,6 +29,13 @@ for (const value of [{ ...report, apparmor: 'true' }, { ...report, guests: [] },
   assert.throws(() => validateHostSecurityRuntime(value, [{ instanceId: 1, pid: 100 }]), /UNSUPPORTED/)
 }
 const now = 1000000
+const renewalReceipt={revision:SECURITY_HARDENING_REVISION,status:'verified' as const,phase:'finished' as const,nextCheckAt:new Date(now+3600000).toISOString()}
+assert.equal(hardeningReceiptRenewalDue(renewalReceipt,now),true)
+assert.equal(hardeningReceiptRenewalDue({...renewalReceipt,nextCheckAt:new Date(now+7*3600000).toISOString()},now),false)
+assert.equal(hardeningReceiptRenewalDue({...renewalReceipt,nextCheckAt:new Date(now).toISOString()},now),false,'expired receipt cannot remain trusted during renewal')
+assert.equal(hardeningReceiptRenewalDue({...renewalReceipt,leaseToken:'existing',leaseUntil:new Date(now+1000).toISOString()},now),false)
+assert.equal(hardeningReceiptRenewalDue({...renewalReceipt,leaseToken:'existing',leaseUntil:new Date(now-1).toISOString()},now),true)
+assert.equal(hardeningReceiptRenewalDue({...renewalReceipt,status:'retry'},now),false)
 assert.equal(hardeningJournalReadyForRetry({status:'needs-maintenance',error:'HARDENING_JOURNAL_CONFLICT'}),true)
 assert.equal(hardeningJournalReadyForRetry({status:'needs-maintenance',error:'HARDENING_JOURNAL_CONFLICT',journalPolicyRevision:SSH_JOURNAL_POLICY_REVISION}),false)
 assert.equal(hardeningJournalReadyForRetry({status:'needs-maintenance',error:'HARDENING_IDENTITY_CHANGED'}),false)
