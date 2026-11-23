@@ -88,6 +88,23 @@ func TestSecurityPackageCompleteInventoryAndPinnedInstall(t *testing.T) {
 	}
 }
 
+func TestNativeAlpinePackageInventorySeparatesIndexDiagnostics(t *testing.T) {
+	if os.Getenv("INCUDAL_PROVISIONING_NATIVE_TEST") != "disposable" {
+		t.Skip("native Alpine package manager")
+	}
+	if _, err := os.Stat("/etc/alpine-release"); err != nil {
+		t.Skip("Alpine APK inventory only")
+	}
+	output, err := run(context.Background(), "apk", "info", "-v")
+	if err != nil {
+		t.Fatal(err)
+	}
+	packages, err := securityInstalledPackages(string(output))
+	if err != nil || len(packages) == 0 || packages["apk-tools"] == "" {
+		t.Fatal("real installed database must remain valid even without cached repository indexes", err)
+	}
+}
+
 func TestSecurityPackagePlanRejectsUnrelatedRemovalAndMajorChange(t *testing.T) {
 	for _, pair := range [][3]string{{"ca-certificates", "20261020-r0", "20261120-r0"}, {"libintl", "1-r0", "1-r1"}} {
 		if !securitySameSeries(pair[0], pair[1], pair[2]) {

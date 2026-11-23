@@ -75,7 +75,7 @@ func runWithFiles(ctx context.Context, name string, files []*os.File, args ...st
 	var diagnostics limitedBuffer
 	c.Stdout = &out
 	c.Stderr = &out
-	if name == "incus" {
+	if name == "incus" || name == "apk" && len(args) > 0 && args[0] == "info" {
 		c.Stderr = &diagnostics
 	}
 	if e = c.Start(); e != nil {

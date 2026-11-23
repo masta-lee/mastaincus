@@ -4,6 +4,8 @@
 
 ## 续接实施状态（2026-11-22，尚未完成）
 
+新CI失败先修：cb22 Agent45090839878双customerjob137419796369/6704失败，完整failedlog984已读，Alpine3.22首次repair的installedinventory拒绝；当前ecdAgent45092042350对应137423557564/7697同失败在途（run未完不能读全log，保APIjob/旧完整根因）。实际官方3.22.8minirootSHA核986确认APK2`info -v` stdout全合法installed数据库，stderr是未有cacheindex两条warning；执行器原把两路拼在一起导致严格解析误拒。仅APK info分离stderr至原有有界diagnostics，事务plan仍合并两路、原精确清单/签名不放宽；CI显式加freshcacheinventory对照。真实Alpine3.22原fresh安装＋aa-exec丢失fix＋idempotency＋完整清单／world保持989自然0／169.93秒（原3min期限未变），全Agent989、双compile/vet988/989、security996全0；源3.24已有925/928保先前实现、3.22与3.23／Debian双archnewCI待。ecd其它native45092042420在途当前双buildsuccess/0fail，后续继续查，正式发版/生产/E03E04剩基础库和内核/最终source完整包/真实OSS仍未完成。
+
 AppArmor接入维护同类world锁版本遗漏已修：只安装实际缺失的已审AppArmor包名、完整持久依赖plan／原installedbaseline二次签名simulate＋安装后全清单与管理员world保持，不把solver依赖或新工具永久锁在本次revision。root私密cache沿原分阶段请求复用，查源／simulate分预算、安装前原expiry重新核，不扩大单请求60秒／原签名权限；完成自动定向清cache，异常symlink不删除。Windows98220项（1rootskip）及真实Linux98320项全0，实际Alpine签名install／原全45包／rulecompile／phaseverified及重复通过976／105.86秒多请求总流程，world13条皆原／必要裸包名；原974同请求刷新+5secsimulate超时，改先阶段cache复用后通过，原971低disk、972fixture目录、973缺boot各保日志。缓存实际清981及root清理/异常symlink983验收，不拿临时disk/mode操作代产品通过。最新sourcecb22主CI45090839842当前24success/6在途零fail，native45090840098已14/14success，后续同source必须继续终态。系统libc／chrony／kernel激活与旧固定world迁移仍未完成，正式Release/生产/真实OSS保持暂停或独立未验。
 
 系统巡查补实际缺项：Alpine原ALPINE漏musl／chrony／CA/FUSE／LVM/device-mapper实际动态库及网络工具，Debian漏libc6/libc-bin和实际FUSE/iptables/libcurl协议库，已按发行版包名补齐、不查询客机。定时inventory与显式apply仍严格分开，不能称这些库已自动激活。14planner本机963及Linuxroot964全0（本机4root/proc项由原Linux补齐）；实际Ubuntu965自然0，50package中libc6/libc-bin2.39-0ubuntu8.12、fuse3.14.0-5build1准确入账，loadedcode检查complete，没装chrony保持None不捏造。此次仅清单，系统service/kernel完整自动patch及激活、历史world归属安全迁移仍待继续。
