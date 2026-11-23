@@ -37,3 +37,5 @@ Agent测试候选版为v1.0.17-security.1，使宿主能通过原版本比较/�
 security.2/source5d04cf8d：Go全套、signed Agent工作流45146231875双原生与签名双资产success/正式Release skipped；完整预览45146243719双首装root恢复／六旧升级全部success。实际主控候选目录更新后208/208自动升级.2，4客户宿主17:35～17:38多轮连续compat verified／fence verified，12目标继续全部可售。最后109全量231/231过，5d最新CI仅Ubuntu24AMD64首次初始化等待240秒到期失败，其余实机影像通过／六browser仍在途，不能把CI写全绿。
 
 Ubuntu失败完整日志显示cloud-init仍running／无failure marker，首启动软件源更新到SSH依赖安装消耗既定4分钟；原程序初始化成功门槛正确、窗口过短。源码精修改首次新盘等待10分钟仍必须真实ready marker，取消/过期守卫保持，不在现有客户磁盘重跑初始化；相关守卫/type/build后重验原Ubuntu活体job，不将单次网络慢等同已有客户失败。
+
+af1252d9第二次UbuntuAMD64仍在10分钟期限失败，完整job137607151031日志明确cloud-init已成功装openssh，required-init又从stage1启动重复apt-get update并卡住。此前仅延时不能解决根因，主控未应用该未过初始化改动。新增generator先用dpkg installed状态核4项必需包，已完整安装直接进入原SSH配置；缺包才走timeout120/180秒更新/安装，bootcmd写20秒网络/重试2/锁60策略并限制早期update。生成真实Ubuntu脚本/YAML与Linuxshell检查、对应守卫通过后再原实景复验。12机器池与security.2已部署结果继续保持，正式发行未执行。

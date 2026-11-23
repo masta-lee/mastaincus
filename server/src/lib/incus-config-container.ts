@@ -273,8 +273,12 @@ function getSetupCommands(osInfo: OsInfo): string[] {
   else {
     switch (osInfo.packageManager) {
       case 'apt':
-        cmds.push(wrapWithNetworkRetry('DEBIAN_FRONTEND=noninteractive apt-get update'))
-        cmds.push(wrapWithNetworkRetry('DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends openssh-server sed grep iproute2'))
+        // cloud-init already installed these packages. Do not start a second
+        // mirror/index pass on every new disk after that successful install.
+        cmds.push("if [ \"$(dpkg-query -W -f='${Status}\\n' openssh-server sed grep iproute2 2>/dev/null | grep -c '^install ok installed$')\" != 4 ]; then")
+        cmds.push(wrapWithNetworkRetry('DEBIAN_FRONTEND=noninteractive timeout 120 apt-get update'))
+        cmds.push(wrapWithNetworkRetry('DEBIAN_FRONTEND=noninteractive timeout 180 apt-get install -y --no-install-recommends openssh-server sed grep iproute2'))
+        cmds.push('fi')
         break
       case 'dnf':
         cmds.push(wrapWithNetworkRetry(rhelPackageInstallCommand('dnf', ['openssh-server', 'openssh-clients', 'sed', 'grep', 'iproute'])))
@@ -434,7 +438,8 @@ function getBootcmd(osInfo: OsInfo): string[] {
   } else {
     switch (osInfo.packageManager) {
       case 'apt':
-        cmds.push('cloud-init-per once apt_update_early apt-get update || true')
+        cmds.push(`mkdir -p /etc/apt/apt.conf.d; printf '%s\\n' 'Acquire::Retries "2";' 'Acquire::http::Timeout "20";' 'Acquire::https::Timeout "20";' 'DPkg::Lock::Timeout "60";' > /etc/apt/apt.conf.d/99-incudal-initialization`)
+        cmds.push('cloud-init-per once apt_update_early timeout 120 apt-get update || true')
         break
       case 'dnf':
         cmds.push('cloud-init-per once dnf_makecache dnf makecache || true')
