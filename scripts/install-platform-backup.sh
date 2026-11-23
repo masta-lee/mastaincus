@@ -78,6 +78,7 @@ work_dir=/opt/incudal
 [[ ! -L /opt/incudal/current ]] || work_dir=/opt/incudal/current
 cat > /etc/systemd/system/incudal-backend.service.d/platform-backup.conf <<EOF
 [Service]
+TimeoutStopSec=35min
 ReadWritePaths=/var/lib/incudal-backup/inbox
 ReadWritePaths=/var/lib/incudal-images
 ReadWritePaths=/var/lib/incudal-finance
@@ -142,9 +143,11 @@ PY
     install -d -m 0755 "/etc/systemd/system/$unit.d"
     cat > "/etc/systemd/system/$unit.d/zz-database-security.conf" <<EOF
 [Service]
+TimeoutStartSec=120min
 ExecStart=
 ExecStart=/usr/local/libexec/incudal/database-secure-task $operation %i
 EOF
+    if [[ "$operation" == rollback ]]; then sed -i 's/^TimeoutStartSec=120min$/TimeoutStartSec=60min/' "/etc/systemd/system/$unit.d/zz-database-security.conf"; fi
     chmod 0644 "/etc/systemd/system/$unit.d/zz-database-security.conf"
   done
   # Preserve the rollback runtime and shim before revoking legacy DDL authority.
@@ -155,6 +158,7 @@ EOF
   # The fixed root helper resolves current on each invocation and remains trusted.
   cat > /etc/systemd/system/incudal-backend.service.d/zz-database-security.conf <<'EOF'
 [Service]
+TimeoutStopSec=35min
 ExecStartPre=
 ExecStartPre=+/usr/bin/python3 -I -B /usr/local/libexec/incudal/harden-database.py
 ExecStartPre=+/usr/local/libexec/incudal/incudal-online-task recovery-startup

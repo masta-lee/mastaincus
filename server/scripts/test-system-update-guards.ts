@@ -71,6 +71,10 @@ assert.ok(managementScript.includes('exec /usr/bin/systemctl start incudal-backe
 assert.ok(onlineTaskHelper.includes('--sync-runtime "$app_dir"') && onlineTaskHelper.includes('gateway-controller-tools'),
   'old OTA workers must reconcile signed enrollment after switching the current runtime, including rollback')
 const backupInstaller = read('scripts/install-platform-backup.sh')
+for(const service of[backendService,installPanel,atomicMigrationScript,backupInstaller])assert.ok(service.includes('TimeoutStopSec=35min'),'every install and old-worker hook preserves accepted 30-minute work during service drain')
+for(const worker of[runTask,rollbackTask])assert.ok(!worker.includes("['stop', serviceName], { timeoutMs: 120000 }")&&!worker.includes("['restart', serviceName], { timeoutMs: 120000 }")&&worker.includes('timeoutMs: 36 * 60 * 1000'),'updater command deadlines cannot kill the service manager before its drain budget')
+assert.ok(updateService.includes('TimeoutStartSec=120min')&&rollbackService.includes('TimeoutStartSec=60min'),'root task lifetimes include current work draining and actual rollback')
+assert.ok(backupInstaller.includes('TimeoutStartSec=120min')&&backupInstaller.includes('TimeoutStartSec=60min'),'existing root task units receive the expanded budget through the old-worker installation hook')
 assert.ok(backupInstaller.indexOf('controller_tools=') < backupInstaller.indexOf('install -o root -g root -m 0755 "$root/deploy/incudal-online-task.sh.example"'),
   'preserved compatibility tools must be installed before the launcher starts calling them')
 for (const worker of [runTask, rollbackTask]) {

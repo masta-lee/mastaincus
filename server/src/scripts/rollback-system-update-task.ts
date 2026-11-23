@@ -151,7 +151,7 @@ async function main(): Promise<void> {
         await log(`Preserving current release before rollback: ${rollbackBackup}`)
         await backupSystemUpdateApplication(currentTarget, rollbackBackup)
       }
-      await run('systemctl', ['stop', serviceName], { timeoutMs: 120000 })
+      await run('systemctl', ['stop', serviceName], { timeoutMs: 36 * 60 * 1000 })
       await switchCurrentRelease(backupPath)
     } else {
       // 原子发布布局的备份位于 installDir/releases 内。若当前布局已不是原子软链，
@@ -163,7 +163,7 @@ async function main(): Promise<void> {
       await log(`Preserving current install before rollback: ${rollbackBackup}`)
       if (existsSync(installDir)) {
         await backupSystemUpdateApplication(installDir, rollbackBackup)
-        await run('systemctl', ['stop', serviceName], { timeoutMs: 120000 })
+        await run('systemctl', ['stop', serviceName], { timeoutMs: 36 * 60 * 1000 })
         for (const entry of await readdir(installDir)) {
           if (['.npm', '.cache', 'update-logs'].includes(entry)) continue
           await rm(join(installDir, entry), { recursive: true, force: true })
@@ -179,7 +179,7 @@ async function main(): Promise<void> {
     if (process.platform === 'linux' && existsSync(gatewayRefresh)) {
       await run('bash', [gatewayRefresh], { timeoutMs: 30000 })
     }
-    await run('systemctl', ['restart', serviceName], { timeoutMs: 120000 })
+    await run('systemctl', ['restart', serviceName], { timeoutMs: 36 * 60 * 1000 })
     await waitForBackendHealth()
     await run('bash', ['scripts/verify-split-host.sh'], {
       timeoutMs: 180000,

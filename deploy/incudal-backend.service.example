@@ -23,7 +23,8 @@ Restart=on-failure
 RestartSec=10
 KillMode=mixed
 KillSignal=SIGTERM
-TimeoutStopSec=30
+# Longest accepted instance/restore/upload work is 30 minutes; let it commit.
+TimeoutStopSec=35min
 LimitNOFILE=65536
 
 # Online updates start root-owned systemd oneshot units through a restricted

@@ -15,7 +15,8 @@ import { stopBackupUploadWorker } from './workers/backupUploadWorker.js'
 import { stopHostNotificationEmailWorker } from './workers/hostNotificationEmailWorker.js'
 import { stopProxySiteOperationWorker } from './workers/proxySiteOperationWorker.js'
 import { stopSessionCleanup, closeAllSessions } from './lib/terminal-proxy.js'
-import { stopManagedSchedules } from './services/scheduler-lifecycle.js'
+import { stopManagedSchedules, scheduleInterval, trackScheduledWork } from './services/scheduler-lifecycle.js'
+import { closeApplicationHttp } from './lib/http-shutdown.js'
 import { stopBillingScheduler } from './services/billing-scheduler.js'
 import { stopMailExpiryScheduler } from './services/mail-expiry-scheduler.js'
 import { stopSystemMonitor } from './services/system-monitor.js'
@@ -167,7 +168,7 @@ const fastify = Fastify({
   // 服务器超时设置（默认为120秒，以支持长时间运行的操作）
   requestTimeout: 125000, // 125秒，比操作超时稍长
   keepAliveTimeout: 125000, // 125秒，保持连接时间
-  forceCloseConnections: false
+  forceCloseConnections: 'idle'
 })
 
 // 自定义 schema 验证错误处理，返回友好的错误信息
@@ -820,7 +821,7 @@ function gracefulShutdown(signal: string): Promise<void> {
       // Protected startup exits its wait as soon as shuttingDown is set. Any
       // current initializer must finish before its DB connection is closed.
       await startupPromise?.catch(() => {})
-      await fastify.close()
+      await closeApplicationHttp(fastify)
       await closePrismaDatabase()
       process.exit(0)
     } catch (error) {
@@ -980,9 +981,9 @@ const start = async (): Promise<void> => {
     if (staleTransfers > 0) {
         console.log(`🔄 清理了 ${staleTransfers} 个卡住的转移请求`)
     }
-    void resumeTransferCleanups().catch(err => console.error('转移自动续接失败:', err))
+    void trackScheduledWork(resumeTransferCleanups).catch(err => console.error('转移自动续接失败:', err))
     // 定期检查超时的 processing 状态（每5分钟）
-    setInterval(async () => {
+    scheduleInterval(async () => {
         try {
             const count = await cleanupTimeoutTransfers()
             await resumeTransferCleanups()
@@ -1020,8 +1021,7 @@ const start = async (): Promise<void> => {
       } catch (error) { console.error('[CreateTimeout] Scan failed', error) }
       finally { createCleanupRunning = false }
     }
-    setInterval(runCreateTimeoutCleanup, 2 * 60 * 1000)
-    void runCreateTimeoutCleanup()
+    scheduleInterval(runCreateTimeoutCleanup, 2 * 60 * 1000, true)
     console.log('⏱️ 创建超时清理任务已启动（10分钟超时）')
 
     // 启动实例任务清理定时任务（清理7天前的已完成任务）
@@ -1037,9 +1037,7 @@ const start = async (): Promise<void> => {
       }
     }
     // 每天执行一次清理
-    setInterval(runInstanceTaskCleanup, 24 * 60 * 60 * 1000)
-    // 启动时也执行一次
-    runInstanceTaskCleanup()
+    scheduleInterval(runInstanceTaskCleanup, 24 * 60 * 60 * 1000, true)
 
     // 启动站内信清理定时任务（30 天前的消息）
     const { cleanupOldMessages } = await import('./db/inbox.js')
@@ -1054,9 +1052,7 @@ const start = async (): Promise<void> => {
       }
     }
     // 每天24小时执行一次清理
-    setInterval(runInboxCleanup, 24 * 60 * 60 * 1000)
-    // 启动时也执行一次
-    runInboxCleanup()
+    scheduleInterval(runInboxCleanup, 24 * 60 * 60 * 1000, true)
 
     // 启动系统健康监控
     const { startSystemMonitor } = await import('./services/system-monitor.js')

@@ -1,5 +1,7 @@
 # 安全修复阶段收尾与未完成清单
 
+2026-11-24恢复：owner要求继续安全剩余部分，阶段暂停已解除。后台退出/长任务真实systemd正常排空修复正在最终全量，源码及当前证据见security-repair台账最新段落；本轮未生产部署或正式发行。剩余NodePG自动patchactivation、libc/musl/kernel、旧world/真实OSS等继续，篡改key由密码登录后出现的线索另记，不称事件完全排除。前轮最后b64CI45208991024和memory45208991236已success，其它同source均success。
+
 2026-11-23约22:47最新：机器池问题改用原worker完整signed测试版，主控任务59/60成功，目前v1.8.14-test.994fff2（完整994源码）而非此前mixed热补；Agentsecurity.4/e470全208。原worker部署检查拦下双端首页外部脚本异常，owner确认未知rootkey/IP，精确撤钥/断会话及从原signed包可信恢复两页已按单独授权完成，证据私密保存，原钱/客户/身份保持；细节见controller-static-tampering报告。不能称整机完全清理或秘密无外传。真实stop仍两次30s超时SIGKILL，§未完成1依旧，不以任务success代优雅退出通过。签名包源码994全231/双首装rootrestore六worker过，helper后续1f24同CI45196816578在途，不正式发行；自然两轮稳定验收继续。
 
 23:45补记：Cloudflare瞬时心跳重置导致的90s未就绪另修Agent bounded short retry，signedsecurity.5/fa8/45202834465全success并208全自动接收；fa8CI45202850652 30/30及native/memory/SSH/Agent等全部success。机器池23:35～45实际204可售/4分配/0不可售、receipt208、23:40/45自然巡检全success，客户钱/pins保持。原安全余项和静态篡改最初入口/秘密外传调查仍独立未完成；不以本次机器池修复称全安全或灾备完成。

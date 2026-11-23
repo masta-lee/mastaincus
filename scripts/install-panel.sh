@@ -1201,7 +1201,7 @@ ExecStart=/usr/bin/node ${app_dir}/server/dist/app.js
 # 优雅关闭
 KillMode=mixed
 KillSignal=SIGTERM
-TimeoutStopSec=30
+TimeoutStopSec=35min
 
 # 自动重启
 Restart=on-failure
@@ -1288,7 +1288,7 @@ EnvironmentFile=${ENV_FILE}
 Environment=HOME=/var/cache/incudal-ota
 Environment=PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
 ExecStart=/usr/local/libexec/incudal/incudal-online-task update %i
-TimeoutStartSec=1800
+TimeoutStartSec=120min
 StandardOutput=journal
 StandardError=journal
 SyslogIdentifier=incudal-online-update
@@ -1310,7 +1310,7 @@ EnvironmentFile=${ENV_FILE}
 Environment=HOME=/var/cache/incudal-ota
 Environment=PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
 ExecStart=/usr/local/libexec/incudal/incudal-online-task rollback %i
-TimeoutStartSec=900
+TimeoutStartSec=60min
 StandardOutput=journal
 StandardError=journal
 SyslogIdentifier=incudal-online-rollback

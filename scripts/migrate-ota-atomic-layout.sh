@@ -83,7 +83,7 @@ Restart=on-failure
 RestartSec=10
 KillMode=mixed
 KillSignal=SIGTERM
-TimeoutStopSec=30
+TimeoutStopSec=35min
 LimitNOFILE=65536
 
 NoNewPrivileges=false
@@ -116,7 +116,7 @@ EnvironmentFile=${env_file}
 Environment=HOME=/var/cache/incudal-ota
 Environment=PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
 ExecStart=/usr/local/libexec/incudal/incudal-online-task update %i
-TimeoutStartSec=1800
+TimeoutStartSec=120min
 StandardOutput=journal
 StandardError=journal
 SyslogIdentifier=incudal-online-update
@@ -138,7 +138,7 @@ EnvironmentFile=${env_file}
 Environment=HOME=/var/cache/incudal-ota
 Environment=PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
 ExecStart=/usr/local/libexec/incudal/incudal-online-task rollback %i
-TimeoutStartSec=900
+TimeoutStartSec=60min
 StandardOutput=journal
 StandardError=journal
 SyslogIdentifier=incudal-online-rollback

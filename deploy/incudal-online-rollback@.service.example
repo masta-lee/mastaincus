@@ -13,7 +13,7 @@ EnvironmentFile=/opt/incudal/.env
 Environment=HOME=/var/cache/incudal-ota
 Environment=PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
 ExecStart=/usr/local/libexec/incudal/incudal-online-task rollback %i
-TimeoutStartSec=900
+TimeoutStartSec=60min
 StandardOutput=journal
 StandardError=journal
 SyslogIdentifier=incudal-online-rollback

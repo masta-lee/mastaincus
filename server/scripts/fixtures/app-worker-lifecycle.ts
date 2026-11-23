@@ -1,6 +1,8 @@
 import assert from 'node:assert/strict'
 import Fastify from 'fastify'
 import ts from 'typescript'
+import http from 'node:http'
+import { closeApplicationHttp } from '../../src/lib/http-shutdown.js'
 import { WorkerActivity } from '../../src/workers/worker-activity.js'
 
 export async function verifyAppWorkerLifecycle(source: string) {
@@ -75,8 +77,8 @@ export async function verifyAppWorkerLifecycle(source: string) {
   const steps:string[]=[]
   const shutdownProcess={exit:()=>{steps.push('exit')}}
   const shutdownFastify={close:async()=>{steps.push('fastify')},log:{error:()=>{}}}
-  const createShutdown=new Function('fastify','closePrismaDatabase','process','console','starting',`let startupPromise=starting,shutdownPromise=null,shuttingDown=false,businessStartupReady=true;${javascript};return {run:gracefulShutdown,state:()=>({shuttingDown,businessStartupReady})}`)
-  const shutdownHarness=createShutdown(shutdownFastify,async()=>{steps.push('database')},shutdownProcess,{log:()=>{}},starting)
+  const createShutdown=new Function('fastify','closePrismaDatabase','process','console','starting','closeApplicationHttp',`let startupPromise=starting,shutdownPromise=null,shuttingDown=false,businessStartupReady=true;${javascript};return {run:gracefulShutdown,state:()=>({shuttingDown,businessStartupReady})}`)
+  const shutdownHarness=createShutdown(shutdownFastify,async()=>{steps.push('database')},shutdownProcess,{log:()=>{}},starting,async(server:{close:()=>Promise<void>})=>server.close())
   const first=shutdownHarness.run('SIGTERM'),second=shutdownHarness.run('SIGINT')
   assert.equal(first,second,'two signals cannot race database/worker close')
   assert.deepEqual(shutdownHarness.state(),{shuttingDown:true,businessStartupReady:false})
@@ -85,6 +87,28 @@ export async function verifyAppWorkerLifecycle(source: string) {
   assert.deepEqual(steps,['fastify','database','exit'])
   console.log('PASS protected startup shutdown: signals registered early, startup drain precedes database close, repeated signals share one close')
   const managed=await import('../../src/services/scheduler-lifecycle.js')
+  assert.ok(source.includes("forceCloseConnections: 'idle'"),'idle keepalive sockets must not hold shutdown, active responses still finish')
+  assert.ok(!source.includes('setInterval('),'startup cleanup timers must use managed admission and drain')
+  const httpServer=Fastify({forceCloseConnections:'idle'})
+  let releaseResponse!:()=>void,responseStarted!:()=>void
+  const responseGate=new Promise<void>(resolve=>{releaseResponse=resolve}),responseEntered=new Promise<void>(resolve=>{responseStarted=resolve})
+  httpServer.get('/active',async()=>{responseStarted();await responseGate;return {completed:true}})
+  httpServer.get('/idle',async()=>({ok:true}))
+  await httpServer.listen({host:'127.0.0.1',port:0})
+  const address=httpServer.server.address();assert.ok(address&&typeof address==='object')
+  const idleAgent=new http.Agent({keepAlive:true}),activeAgent=new http.Agent({keepAlive:true})
+  const get=(path:string,agent:http.Agent)=>new Promise<string>((resolve,reject)=>{http.get({host:'127.0.0.1',port:address.port,path,agent},response=>{let body='';response.on('data',data=>body+=data);response.on('end',()=>resolve(body))}).on('error',reject)})
+  await get('/idle',idleAgent)
+  const activeResponse=get('/active',activeAgent);await responseEntered
+  let httpClosed=false;const httpClose=closeApplicationHttp(httpServer).then(()=>{httpClosed=true})
+  await new Promise(resolve=>setTimeout(resolve,10));assert.equal(httpClosed,false,'a real in-flight response is not destroyed')
+  releaseResponse();assert.deepEqual(JSON.parse(await activeResponse),{completed:true});await httpClose
+  idleAgent.destroy();activeAgent.destroy()
+  let releaseInterval!:()=>void,intervalStarted!:()=>void
+  const intervalGate=new Promise<void>(resolve=>{releaseInterval=resolve}),intervalEntered=new Promise<void>(resolve=>{intervalStarted=resolve})
+  let intervalCalls=0
+  managed.scheduleInterval(async()=>{intervalCalls++;intervalStarted();await intervalGate},60000,true)
+  await intervalEntered
   let releaseSchedule!:()=>void,releaseNested!:()=>void
   const gate=new Promise<void>(resolve=>{releaseSchedule=resolve})
   const nestedGate=new Promise<void>(resolve=>{releaseNested=resolve})
@@ -100,7 +124,11 @@ export async function verifyAppWorkerLifecycle(source: string) {
   releaseSchedule();await execution
   await new Promise(resolve=>setTimeout(resolve,10))
   assert.equal(schedulesStopped,false,'late nested scheduler work remains part of shutdown')
-  releaseNested();await stop
+  releaseNested();await new Promise(resolve=>setTimeout(resolve,10))
+  assert.equal(schedulesStopped,false,'current timer work is part of the same shutdown drain')
+  releaseInterval();await stop
+  managed.scheduleInterval(async()=>{intervalCalls++},1,true)
+  await new Promise(resolve=>setTimeout(resolve,10));assert.equal(intervalCalls,1,'stopped timers cannot accept new callbacks')
   await task.execute()
   assert.equal(runs,1,'stopped schedule cannot begin new work even when manually executed')
   await task.destroy()

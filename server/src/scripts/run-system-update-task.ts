@@ -519,7 +519,7 @@ async function applyArtifactAtomic(stagingDir: string, timestamp: string): Promi
   await updateTask({ backupPath: currentTarget })
   await writeVersionFile(releaseDir)
   await chownInstallDir()
-  await run('systemctl', ['stop', serviceName], { timeoutMs: 120000 })
+  await run('systemctl', ['stop', serviceName], { timeoutMs: 36 * 60 * 1000 })
   await switchCurrentRelease(releaseDir)
   return currentTarget
 }
@@ -531,7 +531,7 @@ async function applyArtifactLegacy(stagingDir: string, backupDir: string): Promi
 
   // A live backend can lazy-load files while the legacy tree is replaced.
   // Stop only the panel; host agents and customer instances keep running.
-  await run('systemctl', ['stop', serviceName], { timeoutMs: 120000 })
+  await run('systemctl', ['stop', serviceName], { timeoutMs: 36 * 60 * 1000 })
   await clearInstallDirForArtifact()
   await cp(stagingDir, installDir, { recursive: true, preserveTimestamps: true, verbatimSymlinks: true })
   await restoreRuntimeAssets(backupDir)
@@ -566,7 +566,7 @@ async function applyGitUpdate(backupDir: string): Promise<string> {
   await backupSystemUpdateApplication(installDir, backupDir)
   await updateTask({ backupPath: backupDir })
 
-  await run('systemctl', ['stop', serviceName], { timeoutMs: 120000 })
+  await run('systemctl', ['stop', serviceName], { timeoutMs: 36 * 60 * 1000 })
   await run('git', ['checkout', '--force', targetVersion], { timeoutMs: 120000 })
   await run('git', ['clean', '-fdx', '-e', '.env', '-e', '.gitconfig', '-e', 'server/certs', '-e', 'agent-release', '-e', '.npm', '-e', '.cache', '-e', 'update-logs'], { timeoutMs: 120000 })
   await restoreRuntimeAssets(backupDir)
@@ -598,7 +598,7 @@ async function refreshLocalOnboardingGateway(): Promise<void> {
 async function verifyUpdatedRuntime(isArtifactMode: boolean): Promise<void> {
   await chownInstallDir()
   await refreshLocalOnboardingGateway()
-  await run('systemctl', ['restart', serviceName], { timeoutMs: 120000 })
+  await run('systemctl', ['restart', serviceName], { timeoutMs: 36 * 60 * 1000 })
   await waitForBackendHealth()
   await run('bash', ['scripts/verify-split-host.sh'], {
     timeoutMs: 180000,
@@ -653,11 +653,11 @@ async function autoRollbackFromBackup(backupDir: string, timestamp: string): Pro
       await backupSystemUpdateApplication(failedTarget, failedInstallBackup)
     }
     await log(`Auto rollback switching current release back to: ${backupDir}`)
-    await run('systemctl', ['stop', serviceName], { timeoutMs: 120000 })
+    await run('systemctl', ['stop', serviceName], { timeoutMs: 36 * 60 * 1000 })
     await switchCurrentRelease(backupDir)
     await chownInstallDir()
     await refreshLocalOnboardingGateway()
-    await run('systemctl', ['restart', serviceName], { timeoutMs: 120000 })
+    await run('systemctl', ['restart', serviceName], { timeoutMs: 36 * 60 * 1000 })
     await waitForBackendHealth()
     await run('bash', ['scripts/verify-split-host.sh'], {
       timeoutMs: 180000,
@@ -679,7 +679,7 @@ async function autoRollbackFromBackup(backupDir: string, timestamp: string): Pro
     await backupSystemUpdateApplication(installDir, failedInstallBackup)
   }
 
-  await run('systemctl', ['stop', serviceName], { timeoutMs: 120000 })
+  await run('systemctl', ['stop', serviceName], { timeoutMs: 36 * 60 * 1000 })
   await clearInstallDirPreserving(['update-logs', '.npm', '.cache'])
   await restoreSystemUpdateApplication(backupDir, installDir)
   await mkdir(join(installDir, '.npm'), { recursive: true })
@@ -687,7 +687,7 @@ async function autoRollbackFromBackup(backupDir: string, timestamp: string): Pro
   await mkdir(join(installDir, 'server/certs'), { recursive: true })
   await chownInstallDir()
   await refreshLocalOnboardingGateway()
-  await run('systemctl', ['restart', serviceName], { timeoutMs: 120000 })
+  await run('systemctl', ['restart', serviceName], { timeoutMs: 36 * 60 * 1000 })
   await waitForBackendHealth()
   await run('bash', ['scripts/verify-split-host.sh'], {
     timeoutMs: 180000,

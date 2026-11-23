@@ -4,6 +4,10 @@
 
 ## 续接实施状态（2026-11-22，尚未完成）
 
+2026-11-24 owner明确继续剩余安全修复，恢复源码与隔离验证授权，原阶段暂停为历史。先处理两次生产30秒停止强杀：四个app cleanup interval未被managed stop跟踪，真实HTTP活请求在close期间完成后又留idle keepalive；新增同一activity timer admission/drain及只清idle连接，活响应继续返回。所有安装/原workerhook/atomic模板backend35min排空，update命令36min/rootupdate120min/rootrollback60min同步，涵盖现有30min资源任务。对应types/build/backup及OTA守卫通过，原生Linuxsystemd独立服务31秒完整请求正常返回/exit0/无SIGKILL，旧fixture再现125secidle等待保日志。本轮尚未应用生产，双完整包/原worker升级回退和实际停止验证后另记。篡改只读追溯发现11月20日15:35同来源先root password登录、15:48改公钥登录，云init未包含该key，具体add命令/秘密外传未证明，仍独立事件调查。
+
+本阶段最终full1832本机231/231自然exit0/14m3；后续旧rollbackhook补35min保持及rootupdate/rollback预算专项1835通过，不重复无变化全量。真实systemd1831>31sec原活请求完整结束且无强杀；独立service清理，本轮没有停止生产backend或客户。准备same-source双包首装/旧worker正常与迁移留库/后半失败回退继续，源代码阶段保存不代完整自动patch/所有安全完成。
+
 **2026-11-23 owner已调整优先级：本安全阶段收尾，转处理更重要任务。** 最后产品/测试`1c2929811133f536864246ff31e1816a7c4e2370`已推，代码工作区无未提交产品改动。完整已做、未完成、验证边界、待查CI与下一次接手顺序统一见[阶段收尾](security-handoff-2026-11-23.md)。旧下文“在途／未提交／未通过”是对应轮历史；不以最后专项通过覆盖最终全量和最新完整包缺口。未正式Release/tag/main/生产，整体安全修复与真实OSS/A失联目标未完成。按owner本轮指令停止展开新的安全实现。
 
 2026-11-23防火墙最终复验：原CI137518861981邻居INCOMPLETE发生过滤前，probe仅固定自建namespace地址/MAC的ARP/NDP邻居，不改生产rules；全部独立socket验证最多4并行、原每packet .7s/原总60s保持，保baseline/TAP/tcp/udp/hostOUTPUT/管理及interbridge豁免/规则移除/ingress共存全部断言。实际Linux1245整套PASS56.02s、双archcompile-vet1245/WindowsAgent全套与alerts1245过。旧1233缺iptables、1235隔离Alpine缺tool、1237独立提取缺alternatives链接、1241上传mode、1239/1242/1244串行总60s超时保日志；未对主控安装系统包，独立/root/security-nettools1237仅本测试使用。final13/source8d7已自然230/231唯一alerts同步stop字符串断言过时，1238改异步stop+真实activitydrain后通过，不将原failed轮写绿。e248359e017b018491d787883d9ae6953187908a已推，主45124125934当前24success/6poolbrowser在途无fail，native45124125958全14success，最终source全量/包及NodePG/libc/kernel/world完整自动activation、真实OSS仍未完。暂不正式发行/生产。
