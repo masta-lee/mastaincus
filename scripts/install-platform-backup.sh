@@ -32,8 +32,8 @@ EOF
 Description=Refresh PayIncus security component inventory
 [Timer]
 OnBootSec=3min
-OnUnitInactiveSec=6h
-RandomizedDelaySec=30min
+OnUnitInactiveSec=5min
+RandomizedDelaySec=30s
 [Install]
 WantedBy=timers.target
 EOF

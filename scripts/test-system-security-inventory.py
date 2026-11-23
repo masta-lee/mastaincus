@@ -6,6 +6,14 @@ spec=importlib.util.spec_from_file_location('inventory',pathlib.Path(__file__).w
 module=importlib.util.module_from_spec(spec);spec.loader.exec_module(module)
 
 class Plans(unittest.TestCase):
+    def test_security_maintenance_durable_retry_deadlines(self):
+        now=1795400000
+        for value,delay in [({},6*3600),({'nginxActivation':{'state':'draining'}},300),({'patchState':'failed'},300),({'clockActivation':{'state':'pending'}},300)]:
+            updated=module.defer_security_check(value,now)
+            self.assertFalse(module.security_patch_check_due(updated,now+delay-1))
+            self.assertTrue(module.security_patch_check_due(updated,now+delay))
+        for timestamp in ['invalid','2026-99-99T99:99:99Z','2999-01-01T00:00:00Z']:
+            with self.assertRaises(ValueError):module.security_patch_check_due({'nextPatchCheckAt':timestamp},now)
     def test_managed_clock_security_activation_rejects_changed_configuration(self):
         before={'pid':12,'configurationHash':'config','helperHash':'helper'}
         for changed in [None,{**before,'pid':13},{**before,'configurationHash':'changed'}]:

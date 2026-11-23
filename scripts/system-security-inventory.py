@@ -2,6 +2,7 @@
 """Bounded package/runtime security receipt. Never changes a major or reboots."""
 import json,os,pathlib,subprocess,sys,time,tempfile,re,fcntl,signal,uuid,stat
 import hashlib
+import calendar
 
 ALPINE=['openssl','libssl3','libcrypto3','curl','libcurl','openssh','openssh-server','openssh-client-default','dnsmasq','lxc','lxc-libs','lxcfs','lxcfs-openrc','lvm2','device-mapper','btrfs-progs','wireguard-tools','qemu-system-x86_64','qemu-system-aarch64','sqlite-libs','libseccomp','libcap2','acl-libs','libattr','libuv','lz4-libs','zstd-libs','xz-libs','libintl','libgcc','dbus-libs','eudev-libs','raft-cowsql','cowsql']
 DEBIAN=['openssl','libssl3','libssl3t64','curl','libcurl4','libcurl4t64','openssh-server','openssh-client','dnsmasq','lxc','liblxc1','liblxc-common','lxcfs','lvm2','libdevmapper1.02.1','libdevmapper-event1.02.1','btrfs-progs','wireguard-tools','nginx','nginx-common','nodejs','qemu-system-x86','qemu-system-arm','qemu-system-common','qemu-utils','systemd','systemd-dev','systemd-sysv','systemd-timesyncd','systemd-resolved','libsystemd0','libsystemd-shared','libpam-systemd','udev','libudev1','chrony','nftables','ca-certificates','libsqlite3-0','libseccomp2','libcap2','libacl1','libattr1','libuv1','libuv1t64','liblz4-1','libzstd1','liblzma5','libdbus-1-3','libgcc-s1']
@@ -470,6 +471,15 @@ def apply_patches(automatic=False):
             if automatic:return None
             raise
         if pathlib.Path('/var/lib/incudal-backup/recovery-hold.json').exists():raise ValueError('SYSTEM_SECURITY_RECOVERY_HELD')
+        status=lock/'status.json'
+        if automatic and status.exists():
+            info=status.lstat()
+            if not stat.S_ISREG(info.st_mode)or info.st_uid!=0 or info.st_nlink!=1 or info.st_mode&0o077 or info.st_size>128*1024:raise ValueError('SYSTEM_SECURITY_UNTRUSTED_PATH')
+            previous=json.loads(status.read_text())
+            if not security_patch_check_due(previous):
+                # The five-minute timer observes a durable deadline instead of
+                # hitting all package repositories on every tick.
+                return None
         # Recheck installed versions after owning the maintenance lane. A
         # concurrent authorized updater may have completed since discovery.
         value=inventory()
@@ -525,10 +535,14 @@ def apply_patches(automatic=False):
             after['clockActivation']=activate_managed_clock(clock_before)
             after['loadedCode']=replaced_host_mappings(all_host=True)
         elif clock_error:after['clockActivation']={'state':'pending','error':clock_error}
-        value=after;value['patchPlan']=changes;value['patchState']='installed-activation-required' if changes else 'current';persist(value,verify_activation=True)
+        value=after;value['patchPlan']=changes;value['patchState']='installed-activation-required' if changes else 'current'
+        if automatic:defer_security_check(value)
+        persist(value,verify_activation=True)
         return value
     except Exception:
-        value['patchState']='failed';value['error']='SYSTEM_SECURITY_PATCH_NOT_CONFIRMED';persist(value)
+        value['patchState']='failed';value['error']='SYSTEM_SECURITY_PATCH_NOT_CONFIRMED'
+        if automatic:defer_security_check(value)
+        persist(value)
         raise
     finally:os.close(fd)
 
@@ -539,6 +553,24 @@ def maintain_system_packages():
     if pathlib.Path('/var/lib/incudal-backup/recovery-hold.json').exists():return
     value=apply_patches(automatic=True)
     if value is not None:print(json.dumps(value,separators=(',',':')))
+
+def maintenance_needs_prompt_retry(value):
+    return value.get('patchState')in ['prepared','failed']or value.get('activationRequired')or any(isinstance(value.get(key),dict)and value[key].get('state')in ['draining','pending']for key in ['nginxActivation','sshListenerActivation','clockActivation'])
+
+def defer_security_check(value,now=None):
+    now=time.time()if now is None else now
+    value['nextPatchCheckAt']=time.strftime('%Y-%m-%dT%H:%M:%SZ',time.gmtime(now+(300 if maintenance_needs_prompt_retry(value)else 6*3600)))
+    return value
+
+def security_patch_check_due(value,now=None):
+    timestamp=value.get('nextPatchCheckAt')
+    if timestamp is None:return True
+    if not isinstance(timestamp,str)or not re.fullmatch(r'[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z',timestamp):raise ValueError('SYSTEM_SECURITY_RECEIPT_INVALID')
+    try:deadline=calendar.timegm(time.strptime(timestamp,'%Y-%m-%dT%H:%M:%SZ'))
+    except ValueError:raise ValueError('SYSTEM_SECURITY_RECEIPT_INVALID')
+    current=time.time()if now is None else now
+    if deadline>current+6*3600+60:raise ValueError('SYSTEM_SECURITY_RECEIPT_INVALID')
+    return current>=deadline
 
 def preserve_activation(value,previous):
     # Refreshing package inventory is not proof that daemons have reloaded the
@@ -621,7 +653,8 @@ def persist(value,verify_activation=False):
             elif pending:
                 value['activationRequired']=pending
                 value['patchState']='installed-activation-required'
-        elif value.get('patchState') is None and previous.get('patchState')=='activated' and not value.get('activationRequired') and value.get('activationReceipt'):
+        if 'nextPatchCheckAt'in value and maintenance_needs_prompt_retry(value):defer_security_check(value)
+        if not verify_activation and value.get('patchState') is None and previous.get('patchState')=='activated' and not value.get('activationRequired') and value.get('activationReceipt'):
             value['patchState']='activated'
         fd,name=tempfile.mkstemp(dir=root,prefix='.receipt-')
         try:
