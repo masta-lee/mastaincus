@@ -65,16 +65,25 @@ export async function incusCompatibilityPermit(agent:HostAgentRecord) {
    // authenticated Agent validates the saved daemon/guest journal locally;
    // keep the durable host fence until its verified receipt and remote check.
    const current=[]
-   for(const row of occupants){const previous=fence.instances.find(i=>i.id===row.id&&i.name===row.incusId),identity=await registeredGuestIdentity(tx,row,host),state=row.status==='running'?'Running':'Stopped';if(!previous||identity.uuid!==previous.uuid||!(state===previous.state||previous.state==='Running'&&state==='Stopped'))return null;current.push({...previous,state})}
-   if(reactivate)await tx.host.update({where:{id:host.id},data:{securityHardening:{...state,incusCompat:{...fence,phase:'prepared',instances:current}} as Prisma.InputJsonValue}})
-   return {requestId:fence.requestId,hostIdentity:fence.hostIdentity,guests:current.map(i=>({name:i.name,uuid:i.uuid,state:i.state})),expiresAt:new Date(Date.now()+240000).toISOString()}
+   let priorGuestsMatch=true
+   for(const row of occupants){const previous=fence.instances.find(i=>i.id===row.id&&i.name===row.incusId),identity=await registeredGuestIdentity(tx,row,host),state=row.status==='running'?'Running':'Stopped';if(!previous||identity.uuid!==previous.uuid||!(state===previous.state||previous.state==='Running'&&state==='Stopped')){priorGuestsMatch=false;break}current.push({...previous,state})}
+   if(priorGuestsMatch){
+    if(reactivate)await tx.host.update({where:{id:host.id},data:{securityHardening:{...state,incusCompat:{...fence,phase:'prepared',instances:current}} as Prisma.InputJsonValue}})
+    return {requestId:fence.requestId,hostIdentity:fence.hostIdentity,guests:current.map(i=>({name:i.name,uuid:i.uuid,state:i.state})),expiresAt:new Date(Date.now()+240000).toISOString()}
+   }
+   // A completed fence can outlive deletion, resale or a legitimate rebuild.
+   // Establish the new current baseline through the original pinned API below;
+   // an interrupted prepared fence never accepts new customer authority.
+   if(!reactivate)return null
   }
   const client=await connect()
   const instances=[]
   for(const row of occupants){const identity=await registeredGuestIdentity(tx,row,host);if(!identity.uuid)return null;const remote=await client.request<{config?:Record<string,string>;status?:string}>('GET',`/1.0/instances/${encodeURIComponent(row.incusId)}`,null,5000);if(remote.config?.['volatile.uuid']!==identity.uuid||remote.status!==(row.status==='running'?'Running':'Stopped'))return null;instances.push({id:row.id,name:row.incusId,uuid:identity.uuid,state:remote.status})}
   if(fence.version===1){
    if(fence.hostIdentity!==transferHostIdentity(host))return null
-   if(fence.phase==='verified'&&fence.binaryHash!==report.compatHash&&report.incusCompat==='needed'&&report.compatRequest===fence.requestId&&!hostMaintenanceBlocked(state)){
+   if(fence.phase==='verified'&&report.incusCompat==='needed'&&report.compatRequest===fence.requestId&&!hostMaintenanceBlocked(state)){
+    const ops=await client.request<Record<string,unknown[]>>('GET','/1.0/operations?recursion=1',null,5000)
+    if(!ops||!Object.values(ops).every(Array.isArray)||Object.values(ops).flat().some(op=>!op||typeof op!=='object'||!['Success','Failure','Cancelled'].includes(String((op as {status?:string}).status))))return null
     const next:Fence={...fence,phase:'prepared',binaryHash:report.compatHash,instances}
     await tx.host.update({where:{id:host.id},data:{securityHardening:{...state,incusCompat:next} as Prisma.InputJsonValue}})
     return {requestId:next.requestId,hostIdentity:next.hostIdentity,guests:next.instances.map(i=>({name:i.name,uuid:i.uuid,state:i.state})),expiresAt:new Date(Date.now()+240000).toISOString()}

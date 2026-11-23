@@ -218,7 +218,18 @@ try {
       assert.deepEqual(emptyPermit?.guests,[])
       assert.deepEqual(((await prisma.host.findUniqueOrThrow({where:{id:host.id}})).securityHardening as any).incusCompat.instances,[],
         'durable empty-host fence no longer inherits a deleted customer')
+      await incusCompatibilityPermit({...rawAgent,lastReport:{hostProvisioningStatus:{incusCompat:'verified',compatHash:nextHash,compatRequest:permit.requestId}}})
       await prisma.instance.update({where:{id:instance.id},data:{status:'stopped'}})
+      const beforeResaleReads=calls.length
+      const resalePermit=await incusCompatibilityPermit({...rawAgent,lastReport:{hostProvisioningStatus:{incusCompat:'needed',compatHash:nextHash,compatRequest:permit.requestId}}})
+      assert.equal(resalePermit?.requestId,permit.requestId,'completed empty fence accepts a fresh currently registered customer only after remote verification')
+      assert.deepEqual(resalePermit?.guests,[{name:originalName,uuid,state:'Stopped'}])
+      assert.ok(calls.length>beforeResaleReads,'new resale customer cannot use the old no-API recovery shortcut')
+      const lostResaleReads=calls.length
+      const resaleRetry=await incusCompatibilityPermit({...rawAgent,lastReport:{hostProvisioningStatus:{incusCompat:'pending',compatHash:nextHash,compatRequest:permit.requestId}}})
+      assert.deepEqual(resaleRetry?.guests,resalePermit.guests)
+      assert.equal(calls.length,lostResaleReads,'newly verified resale baseline resumes its interrupted original permit without unavailable API dependency')
+      await incusCompatibilityPermit({...rawAgent,lastReport:{hostProvisioningStatus:{incusCompat:'verified',compatHash:nextHash,compatRequest:permit.requestId}}})
       await prisma.hostAgent.delete({where:{id:rawAgent.id}})
       await prisma.host.update({where:{id:host.id},data:{singleTenant:cleanHost.singleTenant,securityHardening:cleanHost.securityHardening===null?Prisma.DbNull:cleanHost.securityHardening}})
       const savedHost = await prisma.host.findUniqueOrThrow({ where: { id: host.id } })
