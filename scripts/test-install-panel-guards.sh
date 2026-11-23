@@ -6,6 +6,28 @@ REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 source "$REPO_ROOT/scripts/install-panel.sh"
 
 WORK_DIR="$(mktemp -d)"
+if declare -f start_service | grep -q 'journalctl'; then
+    echo 'startup diagnostics cannot publish raw secret-bearing journal output' >&2; exit 1
+fi
+declare -f start_service > "$WORK_DIR/start-service.sh"
+bash -s -- "$WORK_DIR" <<'STARTUP_DIAGNOSTIC_GUARD'
+    source "$1/start-service.sh"
+    SERVICE_NAME=incudal-backend
+    step() { :; }; log() { :; }; error() { :; }; sleep() { :; }
+    systemctl() {
+        case "$1" in
+            start) return 0 ;;
+            is-active) return 1 ;;
+            show) printf '%s\n' 'ActiveState=failed' 'Result=exit-code' 'ExecMainStatus=1' 'SubState=guard-secret-value' 'Unexpected=guard-secret' ;;
+        esac
+    }
+    journalctl() { printf 'guard-secret'; }
+    if (start_service) > "$1/startup-output"; then exit 1; fi
+    grep -Fxq 'ActiveState=failed' "$1/startup-output"
+    grep -Fxq 'Result=exit-code' "$1/startup-output"
+    ! grep -Fq 'Unexpected=' "$1/startup-output"
+    ! grep -Fq 'guard-secret' "$1/startup-output"
+STARTUP_DIAGNOSTIC_GUARD
 HTTP_FIXTURE_PID=""
 trap '[[ -z "$HTTP_FIXTURE_PID" ]] || kill "$HTTP_FIXTURE_PID" 2>/dev/null || true; rm -rf "$WORK_DIR"' EXIT
 

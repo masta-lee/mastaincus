@@ -1933,8 +1933,19 @@ start_service() {
     if systemctl is-active --quiet "$SERVICE_NAME"; then
         log "PayIncus 服务启动成功！"
     else
-        error "服务启动失败，查看日志："
-        journalctl -u "$SERVICE_NAME" --no-pager -n 20
+        error "服务启动失败，详细日志保留在本机，请在可信 root 会话中查看。"
+        local status_summary
+        status_summary=$(systemctl show "$SERVICE_NAME" --property=ActiveState,SubState,Result,ExecMainStatus --no-pager 2>/dev/null || true)
+        printf '%s\n' "$status_summary" | while IFS= read -r status_line; do
+            case "$status_line" in
+                ActiveState=active|ActiveState=inactive|ActiveState=failed|ActiveState=activating|ActiveState=deactivating|\
+                SubState=running|SubState=dead|SubState=failed|SubState=start|SubState=start-pre|SubState=start-post|SubState=auto-restart|\
+                Result=success|Result=exit-code|Result=signal|Result=core-dump|Result=timeout|Result=resources|Result=oom-kill|Result=start-limit-hit)
+                    printf '%s\n' "$status_line" ;;
+                ExecMainStatus=*)
+                    [[ "$status_line" =~ ^ExecMainStatus=[0-9]{1,3}$ ]] && printf '%s\n' "$status_line" || true ;;
+            esac
+        done
         exit 1
     fi
 }

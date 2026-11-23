@@ -4,6 +4,8 @@
 
 ## 续接实施状态（2026-11-22，尚未完成）
 
+2026-11-24最新阶段验证：353b32d421c8186a72ae80bf45d35f264cec88d1完整预览45265057044已终态success：双架构真实首装/root备份恢复、31秒排空+95秒prestart、六原v1.8.14worker升级/迁移留库/故障回退再升全部过，Release预期skipped；主CI45264952054仍在途须终态。本机完整231项2188自然exit0、231/231、17m52；后续只改安装失败诊断有对应专项。S10生产只读目录ACL2194：更新logs0700incudal、备份private0700root、DB凭据0700root、finance0700incudal，nginx/PG文件无world读，不等于所有旁路已排除。安装失败start_service仍直接journalcat，新改固定Active/Sub/Result/退出码白名单，不直接输出rawjournal或未知value；完整bashinstaller2197及真实Linux摘要对照2200通过，security2199通过。旧APK真实原pin抽样2193三宿主各有AppArmor及LVM/LXCFS等exactworld，AppArmor有原dependencyPlan而工具维修无beforeworld回执，不能只按同version移除可能由admin设置的约束；持续归属迁移工作未完成，不写全修。本轮没有生产写入/正式发行。
+
 最新自动维护冻结实现：签名封存巡查在所有动作前、root维护锁协调恢复/OTA；Node/PG仅原单后端+本地独占cluster+无复制/其它DB+可信systemd完整策略/进程namespaceUID准入。下载精确认证包先于停服务，原配置/进程/完整installed集合在backup及financial/auth核验后再复核；两份dump、stop确认、PG停止确认后no-download原精确包安装、持久阶段/半包reinstall和configure、原环境/代码/unit/include/实际setting/exe恢复核验、业务startupready且无hold后才activated。成功记录留对应backup，保最近七份及30日、未知/未完成材料不扫，恢复成功直接持久回执后退出本轮避免再叠新包。Node2130/PG2162/2165真实升级恢复与重复、半解包2168、Python37最新2186/rootlinux全0、security2185过；最终same-source自动timer/双arch实际更新及完整包仍待，不称全部安全完成。新增startup预算b862已推/预览45262379304在途，继续终态。
 
 2026-11-24继续执行E03/E04：实际Node24.22.2→24.22.3＋zstd及PG16.15→16.16/客户端精确APT计划、原后端排空、两份原生dump、新exeinode/PG设置和全部include/原env+unit+finance/auth/seals核验与重复续接均通过（Node2130、PG2162/2165）；慢启动首轮失败未抹除。真实zstd半解包dpkg状态自动配置至原精确计划、无额外安装/服务重启、原基线保持2168通过，Linux34最新2169全过。原TCG CPUmax候选Node产生JIT不可执行匿名地址SIGSEGV（2036/2051/2054）；jitless禁Wasm不支持，noopt及CPUqemu64保持原配置业务就绪2082/2098通过，仅隔离诊断，不进入产品或称所有真机兼容。调试依赖/原备份/崩溃材料在专用副本保存，生产未触碰。

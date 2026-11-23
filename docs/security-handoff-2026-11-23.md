@@ -1,5 +1,7 @@
 # 安全修复阶段收尾与未完成清单
 
+2026-11-24当前进度：源码353b32d421c8186a72ae80bf45d35f264cec88d1完整预览45265057044已全部success（Release预期skipped），双架构首装/root恢复/六旧worker/31秒stop与95秒startup通过；原b862预览45262379304也success。完整本机231项2188自然231/231/17m52；最新主CI45264952054仍在途，须继续核。安装失败rawjournal新遗漏已源码精修，bashguards2197/真实Linux固定摘要2200/security2199通过；旧APK真实pin2193仅仅读三宿主确认归属缺口，仍未迁移，不修改生产。下一步独立下载最新353实际双包签名/SHA/runtime、CI终态、自动timer入口与旧APK归属迁移，基础库/内核/真实OSS缺口保持；持续任务不因保存停止。
+
 2026-11-24最新：持续执行本清单。已推启动预算修复b8623a06，后端startup10min/restart46min与原stop35min/command36min全部首装/atomic/旧workerhook对齐；原生95秒prestart+31秒活HTTP排空2164通过、types/build/OTA2171/security2185通过。无tag完整预览45262379304及主CI45262347944仍在途，不能计全部通过。主控本轮未更新、未正式发行，root密码仍由owner自行换。
 
 Node/PG自动维护实现本轮已完成代码及本机原生阶段验证：真实Node24.22.2→24.22.3、PG16.15→16.16与客户端，两份dump、原进程正常排空、新exeinode/PG配置及全部include/env/unit/financial+authentication基线、恢复续接与重复不再停启2130/2162/2165通过；真实半unpacked补偿2168通过，最新冻结Python37项2186全部通过（Windows2185仅11Linuxskip），下载前置与失败不停止后端、half-installed必须精确reinstall、完整startup policy复核、completed回执及七份/30天证据保留均已补。最终自动执行器同source双包、实际无人值守timer/旧worker部署及全量仍待，不将本机成功称全池生产已激活。此前CPUmax TCG动态代码地址SIGSEGV2051/2054、jitless不支持PrismaWasm、noopt及qemu64原优化启动对照2098通过保日志；产品不带诊断参数。
