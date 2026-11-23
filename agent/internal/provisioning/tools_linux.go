@@ -11,6 +11,7 @@ import (
 	"path/filepath"
 	"reflect"
 	"regexp"
+	"strconv"
 	"strings"
 	"syscall"
 	"time"
@@ -102,14 +103,15 @@ func waitHostCommand(ctx context.Context, c *exec.Cmd) error {
 	go func() { done <- c.Wait() }()
 	select {
 	case err := <-done:
-		groupErr := syscall.Kill(-c.Process.Pid, 0)
-		if groupErr == nil {
+		live, groupErr := liveHostCommandGroup(ctx, "/proc", c.Process.Pid)
+		if groupErr != nil {
+			return groupErr
+		}
+		if live {
 			_ = syscall.Kill(-c.Process.Pid, syscall.SIGKILL)
 			if err == nil || errors.Is(err, exec.ErrWaitDelay) {
 				return fmt.Errorf("host command child process remained in original group")
 			}
-		} else if groupErr != syscall.ESRCH {
-			return fmt.Errorf("host command child process group unavailable")
 		}
 		if errors.Is(err, exec.ErrWaitDelay) {
 			return nil // original command exited successfully; later state is verified
@@ -121,6 +123,46 @@ func waitHostCommand(ctx context.Context, c *exec.Cmd) error {
 		<-done
 		return ctx.Err()
 	}
+}
+
+func liveHostCommandGroup(ctx context.Context, proc string, group int) (bool, error) {
+	entries, err := os.ReadDir(proc)
+	if err != nil || len(entries) > 65536 {
+		return false, fmt.Errorf("host command process inventory unavailable")
+	}
+	for _, entry := range entries {
+		if _, err := strconv.Atoi(entry.Name()); err != nil {
+			continue
+		}
+		if ctx.Err() != nil {
+			return false, ctx.Err()
+		}
+		data, err := os.ReadFile(filepath.Join(proc, entry.Name(), "stat"))
+		if os.IsNotExist(err) {
+			continue
+		}
+		if err != nil || len(data) > 8192 {
+			return false, fmt.Errorf("host command process status unavailable")
+		}
+		end := strings.LastIndex(string(data), ") ")
+		if end < 0 {
+			return false, fmt.Errorf("host command process status invalid")
+		}
+		fields := strings.Fields(string(data[end+2:]))
+		if len(fields) < 3 {
+			return false, fmt.Errorf("host command process status invalid")
+		}
+		pgid, err := strconv.Atoi(fields[2])
+		if err != nil {
+			return false, fmt.Errorf("host command process group invalid")
+		}
+		// kill(-pgid,0) includes already-exited zombies retained by Docker
+		// PID 1. They run no code, hold no locks or pipes and need no kill.
+		if pgid == group && fields[0] != "Z" && fields[0] != "X" {
+			return true, nil
+		}
+	}
+	return false, nil
 }
 
 type limitedBuffer struct {

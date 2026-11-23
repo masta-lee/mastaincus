@@ -64,6 +64,19 @@ func TestResourceMountHelperRejectsUntrustedArguments(t *testing.T) {
 	}
 }
 
+func TestHostCommandGroupIgnoresOnlyExitedZombies(t *testing.T) {
+	root := t.TempDir()
+	os.Mkdir(filepath.Join(root, "2"), 0700)
+	path := filepath.Join(root, "2/stat")
+	for _, state := range []string{"Z", "X", "S", "R"} {
+		os.WriteFile(path, []byte("2 (test parent with spaces) "+state+" 1 100 100"), 0600)
+		live, err := liveHostCommandGroup(context.Background(), root, 100)
+		if err != nil || live != (state != "Z" && state != "X") {
+			t.Fatal("exited/live group misclassified", state, live, err)
+		}
+	}
+}
+
 func TestBoundedCommandOutputNeverSilentlyTruncatesJSON(t *testing.T) {
 	var out limitedBuffer
 	data := make([]byte, 300000)
