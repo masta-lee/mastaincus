@@ -1,6 +1,26 @@
 #!/usr/bin/env python3
 """Local root database role separation; never handles remote PostgreSQL."""
-import os,pathlib,re,secrets,subprocess,urllib.parse,fcntl,hashlib,hmac,base64,tempfile
+import os,pathlib,re,secrets,subprocess,urllib.parse,fcntl,hashlib,hmac,base64,tempfile,stat
+
+def write_local_listening_policy(config_path):
+    include=config_path.parent/'conf.d'
+    if not include.exists():include.mkdir(mode=0o755);include.chmod(0o755)
+    info=include.lstat()
+    if not stat.S_ISDIR(info.st_mode)or info.st_uid not in [0,config_path.stat().st_uid]or info.st_mode&0o022 or info.st_mode&0o005!=0o005:raise ValueError('Untrusted PostgreSQL include directory')
+    conf=include/'incudal-local-only.conf';text=b"listen_addresses = 'localhost'\n"
+    if conf.exists()or conf.is_symlink():
+        info=conf.lstat()
+        if not stat.S_ISREG(info.st_mode)or info.st_uid!=0 or info.st_nlink!=1 or info.st_mode&0o022 or conf.read_bytes()!=text:raise ValueError('Untrusted PostgreSQL include file')
+    fd,name=tempfile.mkstemp(prefix='.incudal-local-only-',dir=include)
+    try:
+        with os.fdopen(fd,'wb')as out:
+            os.fchown(out.fileno(),0,0);os.fchmod(out.fileno(),0o644)
+            out.write(text);out.flush();os.fsync(out.fileno())
+        os.replace(name,conf)
+    finally:
+        if os.path.exists(name):os.unlink(name)
+    if not re.search(r"^\s*include_dir\s*=\s*'conf.d'",config_path.read_text(),re.M):
+        with config_path.open('a')as out:out.write("\ninclude_dir = 'conf.d'\n");out.flush();os.fsync(out.fileno())
 
 def run(sql):
     return subprocess.check_output(['runuser','-u','postgres','--','psql','-X','-v','ON_ERROR_STOP=1','-At','-d','postgres'],input=sql.encode(),stderr=subprocess.PIPE).decode().strip()
@@ -146,14 +166,7 @@ if config_path.is_symlink() or not config_path.is_file():raise SystemExit('Untru
 # changing other applications' listeners. Tighten listen_addresses on the next
 # scheduled service restart only when this cluster has no other user databases.
 if not run("SELECT datname FROM pg_database WHERE NOT datistemplate AND datname NOT IN ('postgres','incudal')"):
-    include=config_path.parent/'conf.d'
-    if include.is_symlink():raise SystemExit('Untrusted PostgreSQL include directory')
-    include.mkdir(exist_ok=True)
-    conf=include/'incudal-local-only.conf'
-    if conf.is_symlink():raise SystemExit('Untrusted PostgreSQL include file')
-    conf.write_text("listen_addresses = 'localhost'\n")
-    if not re.search(r"^\s*include_dir\s*=\s*'conf.d'",config_path.read_text(),re.M):
-        with config_path.open('a')as out:out.write("\ninclude_dir = 'conf.d'\n")
+    write_local_listening_policy(config_path)
 hba=pathlib.Path(run("SELECT setting FROM pg_settings WHERE name='hba_file'"))
 if hba.is_symlink() or not hba.is_file():raise SystemExit('Untrusted PostgreSQL authentication configuration')
 marker='# PayIncus database local-only authentication v1'
