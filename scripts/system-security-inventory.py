@@ -501,6 +501,9 @@ def apply_patches(automatic=False):
             if automatic:return None
             raise
         if pathlib.Path('/var/lib/incudal-backup/recovery-hold.json').exists():raise ValueError('SYSTEM_SECURITY_RECOVERY_HELD')
+        # Routine checks must catch code tampering before any repository or
+        # service mutation. Never reseal or stop customer instances here.
+        if automatic:verify_runtime_integrity()
         status=lock/'status.json'
         if automatic and status.exists():
             info=status.lstat()
@@ -586,6 +589,45 @@ def maintain_system_packages():
 
 def maintenance_needs_prompt_retry(value):
     return value.get('patchState')in ['prepared','failed']or value.get('activationRequired')or any(isinstance(value.get(key),dict)and value[key].get('state')in ['draining','pending']for key in ['nginxActivation','sshListenerActivation','clockActivation'])
+
+def verify_runtime_integrity():
+    helper=pathlib.Path('/usr/local/libexec/incudal/incudal-online-task')
+    info=helper.lstat()
+    if not stat.S_ISREG(info.st_mode)or info.st_uid!=0 or info.st_nlink!=1 or info.st_mode&0o022:raise ValueError('SYSTEM_SECURITY_RUNTIME_HELPER_UNTRUSTED')
+    verified=False
+    try:
+        verified=command([str(helper),'verify-runtime'],90)=='INCUDAL_SEALED_RUNTIME_VERIFIED'
+    except (ValueError,OSError):pass
+    record_runtime_integrity(verified)
+    if not verified:raise ValueError('SYSTEM_SECURITY_RUNTIME_INTEGRITY_MISMATCH')
+
+def record_runtime_integrity(verified,root=pathlib.Path('/var/lib/incudal-system-security')):
+    root.mkdir(mode=0o700,exist_ok=True)
+    info=root.lstat()
+    if not stat.S_ISDIR(info.st_mode)or info.st_uid!=0 or info.st_mode&0o077:raise ValueError('SYSTEM_SECURITY_UNTRUSTED_PATH')
+    path=root/'runtime-integrity.json';previous={}
+    if path.exists()or path.is_symlink():
+        info=path.lstat()
+        if not stat.S_ISREG(info.st_mode)or info.st_uid!=0 or info.st_nlink!=1 or info.st_mode&0o077 or info.st_size>8192:raise ValueError('SYSTEM_SECURITY_UNTRUSTED_PATH')
+        previous=json.loads(path.read_text())
+        if not isinstance(previous,dict)or previous.get('version')!=1:raise ValueError('SYSTEM_SECURITY_RECEIPT_INVALID')
+        for key in ['firstFailureAt','lastFailureAt']:
+            if key in previous and (not isinstance(previous[key],str)or not re.fullmatch(r'[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z',previous[key])):raise ValueError('SYSTEM_SECURITY_RECEIPT_INVALID')
+        if bool(previous.get('firstFailureAt'))!=bool(previous.get('lastFailureAt')):raise ValueError('SYSTEM_SECURITY_RECEIPT_INVALID')
+    now=time.strftime('%Y-%m-%dT%H:%M:%SZ',time.gmtime())
+    value={'version':1,'checkedAt':now,'state':'verified'if verified else'failed'}
+    if previous.get('firstFailureAt'):value['firstFailureAt']=previous['firstFailureAt'];value['lastFailureAt']=previous['lastFailureAt']
+    if not verified:value.update(firstFailureAt=value.get('firstFailureAt',now),lastFailureAt=now,error='SYSTEM_SECURITY_RUNTIME_INTEGRITY_MISMATCH')
+    fd,name=tempfile.mkstemp(prefix='.runtime-integrity-',dir=root)
+    try:
+        with os.fdopen(fd,'w')as out:out.write(json.dumps(value,separators=(',',':')));out.flush();os.fsync(out.fileno())
+        os.replace(name,path)
+        directory=os.open(root,os.O_RDONLY|os.O_DIRECTORY|os.O_NOFOLLOW)
+        try:os.fsync(directory)
+        finally:os.close(directory)
+    finally:
+        if os.path.exists(name):os.unlink(name)
+    return value
 
 def defer_security_check(value,now=None):
     now=time.time()if now is None else now

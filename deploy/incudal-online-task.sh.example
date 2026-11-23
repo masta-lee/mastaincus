@@ -266,6 +266,12 @@ run_task() {
 }
 
 case "${1:-}" in
+  verify-runtime)
+    [[ "$#" -eq 1 && "$EUID" -eq 0 ]] || fail "runtime verification requires root and no arguments"
+    verify_manifest
+    verify_git_control
+    printf 'INCUDAL_SEALED_RUNTIME_VERIFIED\n'
+    ;;
   recovery-supervisor)
     [[ "$#" -eq 1 && "$EUID" -eq 0 ]] || fail "recovery supervisor requires root and no arguments"
     [[ -e /var/lib/incudal-backup/recovery-hold.json || -e /var/lib/incudal-backup/recovery-activation.json || -e /var/lib/incudal-backup/recovery-mapping.json || -e /var/lib/incudal-backup/recovery-supervisor.json ]] || exit 0

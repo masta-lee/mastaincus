@@ -6,6 +6,47 @@ spec=importlib.util.spec_from_file_location('inventory',pathlib.Path(__file__).w
 module=importlib.util.module_from_spec(spec);spec.loader.exec_module(module)
 
 class Plans(unittest.TestCase):
+    @unittest.skipUnless(hasattr(os,'geteuid')and os.geteuid()==0,'real root file hashes and symlinks required')
+    def test_original_sealed_file_checker_rejects_tampered_added_and_changed_links(self):
+        import subprocess,hashlib
+        source=pathlib.Path(__file__).resolve().parent.parent/'deploy/incudal-online-task.sh.example'
+        if not source.exists():source=pathlib.Path(__file__).with_name('incudal-online-task.sh.example')
+        text=source.read_text()
+        functions=[]
+        for name,next_name in [('manifest_path','static_files'),('static_files','static_links'),('static_links','link_entries'),('link_entries','apply_secure_ownership'),('verify_manifest','seal_release')]:
+            start=text.index(name+'() {');end=text.index(next_name+'() {',start);functions.append(text[start:end])
+        with tempfile.TemporaryDirectory()as directory:
+            root=pathlib.Path(directory);app=root/'app';app.mkdir();(app/'index.html').write_text('original');(app/'link').symlink_to('index.html')
+            manifest=root/(hashlib.sha256(str(app).encode()).hexdigest()+'.sha256');manifest.write_text(hashlib.sha256(b'original').hexdigest()+'  ./index.html\n')
+            (root/(manifest.name+'.links')).write_text('./link -> index.html\n')
+            script='set -Eeuo pipefail\nMANIFEST_DIR='+str(root)+'\nresolve_app_dir(){ printf "%s\\n" '+str(app)+'; }\nfail(){ exit 1; }\n'+''.join(functions)+'\nverify_manifest\n'
+            def check():return subprocess.run(['/bin/bash','-c',script],cwd=app,stdout=subprocess.PIPE,stderr=subprocess.PIPE).returncode
+            self.assertEqual(check(),0)
+            (app/'index.html').write_text('injected');self.assertNotEqual(check(),0);(app/'index.html').write_text('original')
+            (app/'extra.js').write_text('unknown');self.assertNotEqual(check(),0);(app/'extra.js').unlink()
+            (app/'link').unlink();(app/'link').symlink_to('/etc/passwd');self.assertNotEqual(check(),0)
+    def test_runtime_check_failure_blocks_maintenance_and_never_reseals(self):
+        with patch.object(module.pathlib,'Path')as path,patch.object(module,'command',return_value='INCUDAL_SEALED_RUNTIME_VERIFIED')as command,patch.object(module,'record_runtime_integrity')as receipt:
+            path.return_value.lstat.return_value=types.SimpleNamespace(st_mode=0o100755,st_uid=0,st_nlink=1)
+            module.verify_runtime_integrity();receipt.assert_called_once_with(True)
+            self.assertEqual(command.call_args.args[0][1:],[ 'verify-runtime'])
+            self.assertNotIn('seal',str(command.call_args.args))
+        with patch.object(module.pathlib,'Path')as path,patch.object(module,'command',side_effect=ValueError('private changed path')),patch.object(module,'record_runtime_integrity')as receipt,self.assertRaisesRegex(ValueError,'RUNTIME_INTEGRITY_MISMATCH'):
+            path.return_value.lstat.return_value=types.SimpleNamespace(st_mode=0o100755,st_uid=0,st_nlink=1)
+            module.verify_runtime_integrity()
+        receipt.assert_called_once_with(False)
+        source=pathlib.Path(module.__file__).read_text()
+        transaction=source[source.index('def apply_patches'):source.index('def maintain_system_packages')]
+        self.assertLess(transaction.index('verify_runtime_integrity()'),transaction.index("value=inventory()"))
+        self.assertLess(transaction.index('verify_runtime_integrity()'),transaction.index("command(['apt-get'"))
+    @unittest.skipUnless(hasattr(os,'geteuid')and os.geteuid()==0,'real root receipt permissions required')
+    def test_runtime_tamper_evidence_survives_later_verified_check(self):
+        with tempfile.TemporaryDirectory()as directory:
+            root=pathlib.Path(directory);root.chmod(0o700)
+            first=module.record_runtime_integrity(False,root)
+            after=module.record_runtime_integrity(True,root)
+            self.assertEqual(after['firstFailureAt'],first['firstFailureAt']);self.assertEqual(after['lastFailureAt'],first['lastFailureAt'])
+            self.assertEqual(after['state'],'verified');self.assertEqual((root/'runtime-integrity.json').stat().st_mode&0o777,0o600)
     def test_reviewed_debian_inventory_rejects_ambiguous_architectures(self):
         self.assertEqual(module.reviewed_debian_inventory({'libpq5:amd64':'17.12-1','postgresql-client-16:amd64':'16.16-1','unrelated:all':'1.0'},{'libpq5','postgresql-client-16'}),{'libpq5':'17.12-1','postgresql-client-16':'16.16-1'})
         with self.assertRaisesRegex(ValueError,'MULTIARCH_REVIEW_REQUIRED'):
