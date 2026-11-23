@@ -81,7 +81,11 @@ func runWithFiles(ctx context.Context, name string, files []*os.File, args ...st
 	if name == "incus" || name == "apk" && len(args) > 0 && args[0] == "info" {
 		c.Stderr = &diagnostics
 	}
-	e = waitHostCommand(ctx, c)
+	if name == "rc-service" && len(args) == 2 && args[0] == "incudal-clock" && (args[1] == "restart" || args[1] == "start") {
+		e = waitHostCommandWithService(ctx, c, verifiedManagedClockGroup)
+	} else {
+		e = waitHostCommand(ctx, c)
+	}
 	if out.overflow || diagnostics.overflow {
 		return nil, fmt.Errorf("host command output exceeded limit")
 	}
@@ -92,6 +96,10 @@ func runWithFiles(ctx context.Context, name string, files []*os.File, args ...st
 }
 
 func waitHostCommand(ctx context.Context, c *exec.Cmd) error {
+	return waitHostCommandWithService(ctx, c, nil)
+}
+
+func waitHostCommandWithService(ctx context.Context, c *exec.Cmd, verify func(context.Context, int) bool) error {
 	// OpenRC legitimately forks a service into its own session. Close inherited
 	// output pipes after the command exits instead of waiting forever for that
 	// daemon; never kill the newly started service's separate process group.
@@ -108,6 +116,12 @@ func waitHostCommand(ctx context.Context, c *exec.Cmd) error {
 			return groupErr
 		}
 		if live {
+			if (err == nil || errors.Is(err, exec.ErrWaitDelay)) && verify != nil && verify(ctx, c.Process.Pid) {
+				return nil
+			}
+			if verify != nil {
+				return fmt.Errorf("host service process verification pending")
+			}
 			_ = syscall.Kill(-c.Process.Pid, syscall.SIGKILL)
 			if err == nil || errors.Is(err, exec.ErrWaitDelay) {
 				return fmt.Errorf("host command child process remained in original group")

@@ -124,6 +124,12 @@ func repairEmptyHostServiceSecurity(ctx context.Context, permit *CompatPermit) e
 	if err != nil {
 		return err
 	}
+	clock, done := context.WithTimeout(ctx, 60*time.Second)
+	err = repairHostClockSecurity(clock, permit)
+	done()
+	if err != nil {
+		return err
+	}
 	ctx, cancel := context.WithTimeout(ctx, 60*time.Second)
 	defer cancel()
 	old, err := managedDNSActivationPending(ctx, "/var/lib/incus/networks", "/proc")

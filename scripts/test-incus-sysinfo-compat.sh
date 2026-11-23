@@ -46,6 +46,14 @@ if test "${INCUDAL_COMPAT_RELOAD_SCENARIO:-}" = empty-pool; then
   /out/provisioning-test -test.run '^TestNativeLxcfsEmptyHostSecurityActivation$' -test.v
   incus network create security-dns0 ipv4.address=10.249.231.1/24 ipv4.nat=true ipv6.address=none
   /out/provisioning-test -test.run '^TestNativeManagedDNSPatchActivation$' -test.v
+  apk add --no-cache chrony
+  mkdir -p /etc/chrony /var/lib/chrony/incudal-clock
+  chown chrony:chrony /var/lib/chrony/incudal-clock
+  printf '# payincus-time-sync-v1\npool pool.ntp.org iburst maxsources 4\ndriftfile /var/lib/chrony/incudal-clock/chrony.drift\nrtcsync\nmaxslewrate 10000\ncmdport 0\n' > /etc/chrony/incudal-clock.conf
+  printf '#!/sbin/openrc-run\n# payincus-time-sync-v1\ncommand="/usr/sbin/chronyd"\ncommand_args="-d -f /etc/chrony/incudal-clock.conf"\nsupervisor="supervise-daemon"\nrespawn_delay=10\nrespawn_max=0\noutput_log="/dev/null"\nerror_log="/dev/null"\nstart_pre() { checkpath --directory --mode 0750 --owner chrony:chrony /run/chrony; }\ndepend() { after net; }\n' > /etc/init.d/incudal-clock
+  chmod 755 /etc/init.d/incudal-clock
+  rc-service incudal-clock start
+    /out/provisioning-test -test.run '^(TestNativeManagedHostClockSecurityActivation|TestNativeManagedHostClockStoppedRecovery|TestManagedClockFileRejectsUntrustedInputs)$' -test.v
   /out/provisioning-test -test.run '^(TestCompatibilityStreamRejectsCorruption|TestCompatibilityFileHashAndRollbackCopy)$' -test.v
   INCUDAL_MEMORY_RUNTIME_TEST=1 /out/memory-budget-test -test.run '^TestNativeAgentBudgetRuntime$' -test.v
   for mode in legacy stream; do

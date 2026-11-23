@@ -161,6 +161,9 @@ const bootInstall = dedicatedIpv6InstallScript('fd42::1', ['fd42::2'])
 const unitPayloads = [...bootInstall.matchAll(/printf '%s' '([A-Za-z0-9+/=]+)'/g)].map(match => Buffer.from(match[1], 'base64').toString())
 assert.ok(unitPayloads.some(unit => unit.includes('After=network-online.target cloud-final.service') && unit.includes('WantedBy=cloud-init.target')),
   'cloud-final may run after multi-user, so the dependent IPv6 unit belongs to cloud-init.target')
+const finalUnitPhase=bootInstall.slice(bootInstall.lastIndexOf('if [ -d /run/systemd/system ]; then'))
+assert.ok(finalUnitPhase.includes('old_link=/etc/systemd/system/multi-user.target.wants/payincus-ipv6.service')&&finalUnitPhase.indexOf('then rm "$old_link"; fi')<finalUnitPhase.indexOf('systemctl enable payincus-ipv6.service'),
+  'the final unit publication retires the old target even if cloud-init finished between earlier checks')
 assert.ok(bootInstall.indexOf('systemctl start --no-block cloud-final.service') < bootInstall.indexOf('then exit 75; fi'),
   'repair the old ordering cycle before waiting for the missing cloud-init completion marker')
 assert.match(bootInstall, /cmp -s - \/etc\/systemd\/system\/payincus-ipv6.service/)

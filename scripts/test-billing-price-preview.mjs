@@ -113,8 +113,15 @@ try {
     await accept(aba, response())
     assert.equal(await read(prefix + 'Preview'), null, 'changing away and back still invalidates the first request')
     for (const price of [-1, 100001, null, 'bad']) {
-      const before = await count(`${kind}-preview`)
-      await run(({ prefix, price, submit }) => { const v = window.billingHarness.view(); v[prefix + 'Form'].newPrice = price; void v[submit]() }, { prefix, price, submit })
+      // Capture admission and invalidate the draft in the same browser task.
+      // A previous valid debounce can fire between two separate CDP calls.
+      const before = await run(({ kind, prefix, price, submit }) => {
+        const h = window.billingHarness, v = h.view()
+        const admitted = h.pending.filter(item => item.kind === `${kind}-preview`).length
+        v[prefix + 'Form'].newPrice = price
+        void v[submit]()
+        return admitted
+      }, { kind, prefix, price, submit })
       await sleep(180)
       assert.equal(await count(`${kind}-preview`), before, 'invalid price never reaches the preview API')
       assert.equal(await read(readyKey), false)

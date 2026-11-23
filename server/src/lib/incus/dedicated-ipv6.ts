@@ -182,6 +182,10 @@ ${writeGuestFile('/etc/sysctl.d/99-payincus-ipv6.conf', 'net.ipv6.conf.eth0.disa
 if [ -d /run/systemd/system ]; then
   if systemctl cat cloud-final.service >/dev/null 2>&1; then
     ${writeGuestFile('/etc/systemd/system/payincus-ipv6.service', systemdUnit)}
+    # Always retire our exact old target link after publishing the new unit.
+    # boot-finished can appear between the early repair and this final phase.
+    old_link=/etc/systemd/system/multi-user.target.wants/payincus-ipv6.service
+    if [ -L "$old_link" ] && [ "$(readlink -f "$old_link")" = /etc/systemd/system/payincus-ipv6.service ]; then rm "$old_link"; fi
   else
     ${writeGuestFile('/etc/systemd/system/payincus-ipv6.service', standaloneSystemdUnit)}
   fi

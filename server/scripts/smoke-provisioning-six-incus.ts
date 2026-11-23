@@ -235,6 +235,22 @@ try {
       const install = () => execWithOutput(transport, name, ['sh', '-c', dedicatedIpv6InstallScript(null, [])], {}, 20000)
       const configured = await install()
       assert.equal((configured.metadata as { return?: number }).return, 0, 'initial IPv6 service installation')
+      // Inject the legacy link after the early repair check, at final unit
+      // publication. This deterministically exercises the cloud-final race
+      // that left both target links behind on the real Debian image.
+      const raced = await execWithOutput(transport, name, ['sh', '-c', `
+systemctl() {
+  if [ "$1" = cat ] && [ "$2" = cloud-final.service ]; then
+    mkdir -p /etc/systemd/system/multi-user.target.wants
+    ln -s /etc/systemd/system/payincus-ipv6.service /etc/systemd/system/multi-user.target.wants/payincus-ipv6.service
+  fi
+  command systemctl "$@"
+}
+${dedicatedIpv6InstallScript(null, [])}
+test ! -e /etc/systemd/system/multi-user.target.wants/payincus-ipv6.service
+test -L /etc/systemd/system/cloud-init.target.wants/payincus-ipv6.service
+`], {}, 20000)
+      assert.equal((raced.metadata as { return?: number }).return, 0, 'final IPv6 publication removes the legacy link created after the early check')
       const baseline = await execWithOutput(transport, name, ['sh', '-c', 'stat -c %Y /var/lib/incudal/initialization-ready'], {}, 5000)
       // Reproduce the shipped old cycle on this disposable guest. Debian's new
       // cloud-final is ordered after multi-user.target, so its boot job is dropped.
