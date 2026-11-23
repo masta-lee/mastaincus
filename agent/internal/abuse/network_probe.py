@@ -8,6 +8,7 @@ import socket
 import struct
 import subprocess
 import sys
+import time
 from pathlib import Path
 
 if os.environ.get("INCUDAL_ABUSE_NETNS_INNER") != "1":
@@ -83,6 +84,7 @@ except socket.timeout:sys.exit(2)
 '''
 
 def probe(pid, family, protocol, payload, allowed):
+    started=time.monotonic()
     address = "172.30.20.2" if family == "4" else "fd42:20::2"
     prefix = [] if pid is None else ["nsenter", "-t", str(pid), "-n"]
     result = subprocess.run(prefix + ["python3", "-c", client_code, family, protocol, address, payload.hex()], capture_output=True)
@@ -90,6 +92,15 @@ def probe(pid, family, protocol, payload, allowed):
     if result.returncode != expected:
         diagnostics()
         raise AssertionError(("packet result", family, protocol, "allowed", allowed, result.returncode, result.stderr.decode()))
+    print('PACKET_VERIFIED',family,protocol,'allowed',allowed,'seconds',round(time.monotonic()-started,2),flush=True)
+
+def parallel_probes(cases):
+    # Independent sockets may execute together after the rules are installed.
+    # Keep every existing packet assertion and its .7s response deadline.
+    from concurrent.futures import ThreadPoolExecutor
+    with ThreadPoolExecutor(max_workers=4) as pool:
+        outcomes=[pool.submit(probe,*case)for case in cases]
+        for outcome in outcomes:outcome.result()
 
 def diagnostics():
     # Failed baseline reachability is separate from a firewall assertion. Keep
@@ -170,34 +181,51 @@ try:
     run("ip","neigh","replace","172.30.10.3","lladdr","02:00:00:00:00:03","nud","permanent","dev","incusbr0")
     run("ip","-6","neigh","replace","fd42:10::3","lladdr","02:00:00:00:00:03","nud","permanent","dev","incusbr0")
     mac=bytes.fromhex(json.loads(run("ip","-j","link","show","dev","incusbr0"))[0]["address"].replace(":",""))
-    # Establish neighbor reachability separately from the short DROP deadline.
-    # A newly created IPv6 link can still be completing multicast membership /
-    # neighbor discovery. ICMP is never part of the signature filter assertions.
+    # This fixture owns all addresses and MACs. Pin their routing neighbors so
+    # multicast membership timing cannot poison the packet filter assertions.
+    # No production neighbor-discovery policy or firewall rule is changed.
+    router_mac=json.loads(run('ip','-j','link','show','dev','uplink'))[0]['address']
+    server_mac=json.loads(ns(server,'ip','-j','link','show','dev','server0'))[0]['address']
+    guest_mac=json.loads(ns(guest,'ip','-j','link','show','dev','guest0'))[0]['address']
+    bridge_mac=':'.join(f'{part:02x}'for part in mac)
+    for family in [[],['-6']]:
+        suffix='4'if not family else'6'
+        router_server='172.30.20.2'if suffix=='4'else'fd42:20::2'
+        server_router='172.30.20.1'if suffix=='4'else'fd42:20::1'
+        router_guest='172.30.10.2'if suffix=='4'else'fd42:10::2'
+        guest_router='172.30.10.1'if suffix=='4'else'fd42:10::1'
+        run('ip',*family,'neigh','replace',router_server,'lladdr',server_mac,'nud','permanent','dev','uplink')
+        ns(server,'ip',*family,'neigh','replace',server_router,'lladdr',router_mac,'nud','permanent','dev','server0')
+        run('ip',*family,'neigh','replace',router_guest,'lladdr',guest_mac,'nud','permanent','dev','incusbr0')
+        ns(guest,'ip',*family,'neigh','replace',guest_router,'lladdr',bridge_mac,'nud','permanent','dev','guest0')
     for family, address in [("-4", "172.30.20.2"), ("-6", "fd42:20::2")]:
         try:
             ns(guest, "ping", family, "-c", "1", "-W", "3", address)
         except AssertionError:
             diagnostics()
             raise
+    print('BASELINE_REACHABLE',flush=True)
     bt=b"\x13BitTorrent protocol"+b"\0"*40
     mining=b'{"id":1,"method":"mining.subscribe","params":[]}\n'
     plain=b"ordinary DNS or web traffic, no matched protocol signature"
     speed_signatures=[b".speed", b"speed.", b".speed.", b"fast.com", b"speedtest.net", b"speedtest.com", b"speedtest.cn", b"test.ustc.edu.cn", b"10000.gd.cn", b"db.laomoe.com", b"jiyou.cloud", b"ovo.speedtestcustom.com", b"speed.cloudflare.com", b"speedtest"]
     for family in ("4","6"):
         probe(guest,family,"udp",bt,True);tap_probe(tap,family,plain,True,mac)
+    print('UNFILTERED_PACKETS_VERIFIED',flush=True)
     for family in ("iptables","ip6tables"):
         run(family+"-restore","--wait","3","--noflush","--test",input=(root/"enable.rules").read_text())
         run(family+"-restore","--wait","3","--noflush",input=(root/"enable.rules").read_text())
         (root/(family+".saved")).write_text(run(family+"-save","-t","mangle"))
+    cases=[]
     for family in ("4","6"):
         for protocol,payload in [("tcp",bt),("udp",bt),("tcp",mining),("udp",b'd1:q9:get_peers1:y1:qe')]:
-            probe(guest,family,protocol,payload,False)
-            probe(None,family,protocol,payload,True)
-        probe(guest,family,"tcp",plain,True);probe(guest,family,"udp",plain,True)
+            cases.extend([(guest,family,protocol,payload,False),(None,family,protocol,payload,True)])
+        cases.extend([(guest,family,"tcp",plain,True),(guest,family,"udp",plain,True)])
         for index, signature in enumerate(speed_signatures):
-            probe(guest,family,"tcp" if index % 2 else "udp",signature,False)
-        probe(None,family,"tcp",b"fast.com",True)
-        probe(None,family,"udp",b"speedtest",True)
+            cases.append((guest,family,"tcp" if index % 2 else "udp",signature,False))
+        cases.extend([(None,family,"tcp",b"fast.com",True),(None,family,"udp",b"speedtest",True)])
+    parallel_probes(cases)
+    for family in ("4","6"):
         tap_probe(tap,family,b"speedtest",False,mac)
         tap_probe(tap,family,bt,False,mac);tap_probe(tap,family,plain,True,mac)
     run("ip","link","set","uplink","name","incudal-mgmt")

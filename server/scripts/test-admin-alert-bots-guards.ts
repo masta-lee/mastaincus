@@ -151,7 +151,7 @@ assert.ok(
     workerSource.includes('adminOfflineAlertedAt: { not: null }') &&
     (workerSource.match(/if \(claimed\.count !== 1\) continue/g)?.length ?? 0) === 2 &&
     workerSource.includes('export function startHostOfflineAlertWorker()') &&
-    workerSource.includes('export function stopHostOfflineAlertWorker()'),
+    workerSource.includes('export async function stopHostOfflineAlertWorker()') && workerSource.includes('await activity.drain()'),
   'host offline worker must alert once per offline transition, clear on recovery and be start/stoppable'
 )
 
