@@ -25,7 +25,7 @@ Description=PayIncus installed and running security component inventory
 [Service]
 Type=oneshot
 ExecStart=/usr/bin/python3 -I -B /usr/local/libexec/incudal/system-security-inventory.py --maintain
-TimeoutStartSec=15min
+TimeoutStartSec=90min
 EOF
   cat > /etc/systemd/system/incudal-system-security.timer <<'EOF'
 [Unit]

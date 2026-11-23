@@ -1,5 +1,11 @@
 # 安全修复阶段收尾与未完成清单
 
+2026-11-24最新：持续执行本清单。已推启动预算修复b8623a06，后端startup10min/restart46min与原stop35min/command36min全部首装/atomic/旧workerhook对齐；原生95秒prestart+31秒活HTTP排空2164通过、types/build/OTA2171/security2185通过。无tag完整预览45262379304及主CI45262347944仍在途，不能计全部通过。主控本轮未更新、未正式发行，root密码仍由owner自行换。
+
+Node/PG自动维护实现本轮已完成代码及本机原生阶段验证：真实Node24.22.2→24.22.3、PG16.15→16.16与客户端，两份dump、原进程正常排空、新exeinode/PG配置及全部include/env/unit/financial+authentication基线、恢复续接与重复不再停启2130/2162/2165通过；真实半unpacked补偿2168通过，最新冻结Python37项2186全部通过（Windows2185仅11Linuxskip），下载前置与失败不停止后端、half-installed必须精确reinstall、完整startup policy复核、completed回执及七份/30天证据保留均已补。最终自动执行器同source双包、实际无人值守timer/旧worker部署及全量仍待，不将本机成功称全池生产已激活。此前CPUmax TCG动态代码地址SIGSEGV2051/2054、jitless不支持PrismaWasm、noopt及qemu64原优化启动对照2098通过保日志；产品不带诊断参数。
+
+当前专用本机VM是原环境的完整副本`logs/security-runtime-clone1881/disk.qcow2`，原`security-systemd-lab140/disk-v2.qcow2`已正常关机且保持，副本localhost20032/qemu64专用；候选仅测试无hosts/instances，当前唯一业务就绪backend8072/PG7020、包已恢复最新、原financial/auth基线及clientcode/hash保持，临时JIT/timeoutdropin已移至私密测试root保存。原始证据、数据库dump、崩溃及工具均在副本/root/security-runtime1869，勿当生产，也不进行大范围清理。基础库/内核、旧APKworld归属迁移、真实OSS/A整机失联→B与外部TG/生产存储/logACL等依旧未完成。保存后继续上述剩余项与CI终态，不阶段停止。
+
 2026-11-24当前正在执行本清单，已解除11月23日的阶段暂停：后端35分钟排空预算、四原生定时任务跟踪和只关闭idle HTTP连接已提交；原生31秒活请求正常结束、231全量通过。防篡改巡查保原seal、固定脱敏异常与历史证据已提交。完整候选9359256的预览45221379889终态success，含双架构首装/root备份恢复、31秒排空、六旧v1.8.14 worker正常/迁移留库/失败回退再升级；独立双包签名/SHA1870及实际tar来源、运行模块、权限和唯一条目1874通过。本轮未生产部署或正式发行。
 
 当前源码8684c9d833da2490fc426ce49012dca6ef2208e5已推，修同source主CI刷新测试竞态并记录owner自行换root密码决定；真实Chrome1865全断言通过，新主CI45227143944及配套六工作流全部终态success。旧主45221357628最终cancelled且保原auth-refresh失败137856355035，不计全绿。Node/PG事务为当前未提交工作：补稳定服务策略hash、明确主控环境文件、业务就绪与恢复保护核验，以及精确计划内unpacked/half-configured中断续接；Windows34测试通过（10Linux专属skip）、真实Linux1914全部34通过；实际包事务仍未完成。基础库/内核、旧APK world归属迁移及真实OSS/A完全失联→B仍未完成，不能据局部预览宣称全部清单已结束。

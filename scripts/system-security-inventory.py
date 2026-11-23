@@ -14,7 +14,7 @@ DEBIAN=['openssl','libssl3','libssl3t64','curl','libcurl4','libcurl4t64','openss
 ALPINE+=['musl','musl-utils','chrony','chrony-openrc','ca-certificates','fuse3-libs','lvm2-libs','device-mapper-libs','device-mapper-event-libs',
     'tar','gzip','xz','squashfs-tools','rsync','libpsl','libidn2','libunistring','c-ares','brotli-libs','nghttp2-libs','nftables','libnftnl','libmnl','iptables','ip6tables']
 DEBIAN+=['libc6','libc-bin','libfuse3-3','libfuse3-4','libnftnl11','libmnl0','iptables','libxtables12','libip4tc2','libip6tc2',
-    'tar','gzip','xz-utils','squashfs-tools','rsync','libpsl5','libpsl5t64','libidn2-0','libunistring5','libc-ares2','libbrotli1','libnghttp2-14','openssh-sftp-server','libpq5','postgresql-common','postgresql-client-common']
+    'tar','gzip','xz-utils','zstd','squashfs-tools','rsync','libpsl5','libpsl5t64','libidn2-0','libunistring5','libc-ares2','libbrotli1','libnghttp2-14','openssh-sftp-server','libpq5','postgresql-common','postgresql-client-common']
 
 # These tools and libraries have no daemon lifecycle operation. Installed
 # services loading an old mapping remain activation-required, never marked
@@ -22,7 +22,7 @@ DEBIAN+=['libc6','libc-bin','libfuse3-3','libfuse3-4','libnftnl11','libmnl0','ip
 # their separate reviewed activation paths and are still fully inventoried.
 AUTOMATIC_DEBIAN=frozenset(['openssl','libssl3','libssl3t64','curl','libcurl4','libcurl4t64','ca-certificates',
     'libsqlite3-0','libseccomp2','libcap2','libacl1','libattr1','libuv1','libuv1t64','liblz4-1','libzstd1','liblzma5',
-    'tar','gzip','xz-utils','squashfs-tools','libpsl5','libpsl5t64','libidn2-0','libunistring5','libc-ares2','libbrotli1','libnghttp2-14'])
+    'tar','gzip','xz-utils','zstd','squashfs-tools','libpsl5','libpsl5t64','libidn2-0','libunistring5','libc-ares2','libbrotli1','libnghttp2-14'])
 
 def ssh_listener_proof(proc=pathlib.Path('/proc')):
     output=command(['systemctl','show','ssh.service','--property=LoadState,ActiveState,MainPID,FragmentPath,ExecStart,ExecReload,DropInPaths'],30)
@@ -399,17 +399,21 @@ def patch_plan(output,installed,allowed):
     return changes
 
 def debian_installed_packages():
+    return {key:value['version']for key,value in debian_package_states().items()if value['status']=='installed'}
+
+def debian_package_states():
     output=command(['dpkg-query','-W','-f=${Package}\t${Architecture}\t${db:Status-Status}\t${Version}\n'],30)
     packages={}
     for line in output.splitlines():
         fields=line.split('\t')
         if len(fields)!=4:raise ValueError('SYSTEM_SECURITY_PACKAGE_QUERY_FAILED')
         name,architecture,status,version=fields
-        if status!='installed':continue
+        if status in ['not-installed','config-files']:continue
+        if status not in ['installed','unpacked','half-configured','half-installed','triggers-awaited','triggers-pending']:raise ValueError('SYSTEM_SECURITY_PACKAGE_QUERY_FAILED')
         if not re.fullmatch(r'[a-z0-9+.-]+',name)or not re.fullmatch(r'[a-z0-9-]+',architecture)or not re.fullmatch(r'[^\s\x00-\x1f]{1,200}',version):raise ValueError('SYSTEM_SECURITY_PACKAGE_QUERY_FAILED')
         identity=name+':'+architecture
         if identity in packages or len(packages)>=20000:raise ValueError('SYSTEM_SECURITY_PACKAGE_QUERY_FAILED')
-        packages[identity]=version
+        packages[identity]={'version':version,'status':status}
     return packages
 
 def reviewed_debian_inventory(installed,names):
@@ -504,6 +508,12 @@ def apply_patches(automatic=False):
         # Routine checks must catch code tampering before any repository or
         # service mutation. Never reseal or stop customer instances here.
         if automatic:verify_runtime_integrity()
+        recovered=recover_runtime_maintenance()if automatic else None
+        if recovered:
+            value=inventory(all_loaded_code=True);value['patchPlan']=recovered['packages'];value['patchState']='installed-activation-required'
+            value['backendActivation']={'state':'activated','pid':recovered['activatedBackendPID'],'backup':recovered['backup']}
+            if recovered.get('database'):value['databaseActivation']={'state':'activated','pid':recovered['activatedDatabasePID']}
+            defer_security_check(value);persist(value,verify_activation=True);return value
         status=lock/'status.json'
         if automatic and status.exists():
             info=status.lstat()
@@ -516,6 +526,16 @@ def apply_patches(automatic=False):
         # Recheck installed versions after owning the maintenance lane. A
         # concurrent authorized updater may have completed since discovery.
         value=inventory()
+        runtime_before=None;runtime_error=None
+        if automatic and 'nodejs'in value['packages']:
+            try:runtime_before=backend_runtime_proof()
+            except (ValueError,OSError):runtime_error='SYSTEM_SECURITY_BACKEND_UNREVIEWED'
+        database_before=None;database_error=None
+        if automatic and any(name.startswith('postgresql-')and name.removeprefix('postgresql-').isdigit()for name in value['packages']):
+            try:database_before=database_runtime_proof()
+            except (ValueError,OSError):database_error='SYSTEM_SECURITY_DATABASE_UNREVIEWED'
+            if runtime_before is not None and database_before is not None:
+                allowed|={'nodejs','postgresql-'+str(database_before['major']),'postgresql-client-'+str(database_before['major']),'libpq5','postgresql-common','postgresql-client-common'}
         ssh_before=None;ssh_error=None
         if automatic and 'openssh-server'in value['packages']:
             try:ssh_before=ssh_listener_proof()
@@ -547,12 +567,19 @@ def apply_patches(automatic=False):
                 name,version=item.split('=',1);matches=[identity for identity in before if identity.split(':',1)[0]==name]
                 if len(matches)!=1 or before[matches[0]]!=value['packages'][name]:raise ValueError('SYSTEM_SECURITY_PLAN_REJECTED')
                 expected[matches[0]]=version
-            prepare_service_policy()
-            try:command(['apt-get','-o','DPkg::Lock::Timeout=5','-o','APT::Get::AllowUnauthenticated=false','-o','Dpkg::Options::=--force-confold','--assume-yes','--only-upgrade','--no-remove','install',*changes],600)
-            finally:
-                clean_service_policy()
+            runtime_plan=[item for item in changes if item.split('=',1)[0]=='nodejs' or item.split('=',1)[0].startswith('postgresql-')or item.split('=',1)[0]in ['libpq5','postgresql-common']]
+            if automatic and runtime_plan:
+                install_runtime_patches(changes,runtime_before,database_before,value,expected)
+            else:
+                prepare_service_policy()
+                try:command(['apt-get','-o','DPkg::Lock::Timeout=5','-o','APT::Get::AllowUnauthenticated=false','-o','Dpkg::Options::=--force-confold','--assume-yes','--only-upgrade','--no-remove','install',*changes],600)
+                finally:
+                    clean_service_policy()
             if debian_installed_packages()!=expected:raise ValueError('SYSTEM_SECURITY_PATCH_NOT_CONFIRMED')
         after=inventory(all_loaded_code=True)
+        if value.get('backendActivation'):after['backendActivation']=value['backendActivation']
+        if runtime_error:after['backendActivation']={'state':'pending','error':runtime_error}
+        if database_error:after['databaseActivation']={'state':'pending','error':database_error}
         for package in changes:
             name,version=package.split('=',1)
             if after['packages'].get(name)!=version:raise ValueError('SYSTEM_SECURITY_PATCH_NOT_CONFIRMED')
@@ -588,7 +615,361 @@ def maintain_system_packages():
     if value is not None:print(json.dumps(value,separators=(',',':')))
 
 def maintenance_needs_prompt_retry(value):
-    return value.get('patchState')in ['prepared','failed']or value.get('activationRequired')or any(isinstance(value.get(key),dict)and value[key].get('state')in ['draining','pending']for key in ['nginxActivation','sshListenerActivation','clockActivation'])
+    return value.get('patchState')in ['prepared','failed']or value.get('activationRequired')or any(isinstance(value.get(key),dict)and value[key].get('state')in ['draining','pending']for key in ['nginxActivation','sshListenerActivation','clockActivation','backendActivation','databaseActivation'])
+
+def protected_hash(path,owners=(0,),private=False):
+    path=pathlib.Path(path);info=path.lstat()
+    if not stat.S_ISREG(info.st_mode)or info.st_uid not in owners or info.st_nlink!=1 or info.st_mode&(0o077 if private else 0o022)or info.st_size>1048576:raise ValueError('SYSTEM_SECURITY_UNTRUSTED_PATH')
+    return hashlib.sha256(path.read_bytes()).hexdigest()
+
+def backend_service_policy():
+    values=dict(line.split('=',1)for line in command(['systemctl','show','incudal-backend.service','--property=ActiveState,MainPID,User,Group,WorkingDirectory,TimeoutStartUSec,TimeoutStopUSec,ExecStart,ExecStartPre,ExecStartPost,ExecStop,Environment,EnvironmentFiles,DropInPaths'],20).splitlines()if '='in line)
+    if values.get('User')!='incudal'or values.get('Group')!='incudal'or values.get('WorkingDirectory')not in ['/opt/incudal','/opt/incudal/current']:raise ValueError('SYSTEM_SECURITY_BACKEND_UNREVIEWED')
+    if values.get('TimeoutStopUSec')!='35min':raise ValueError('SYSTEM_SECURITY_BACKEND_DRAIN_POLICY_REQUIRED')
+    if values.get('ExecStop',''):raise ValueError('SYSTEM_SECURITY_BACKEND_UNREVIEWED')
+    app=pathlib.Path(values['WorkingDirectory']).resolve()
+    if not (str(app)=='/opt/incudal'or str(app).startswith('/opt/incudal/releases/')):raise ValueError('SYSTEM_SECURITY_BACKEND_UNREVIEWED')
+    unit_data=command(['systemctl','show','incudal-backend.service','--property=FragmentPath,DropInPaths'],20)
+    unit_fields=dict(line.split('=',1)for line in unit_data.splitlines()if '='in line)
+    if unit_fields.get('FragmentPath')!='/etc/systemd/system/incudal-backend.service':raise ValueError('SYSTEM_SECURITY_BACKEND_UNREVIEWED')
+    allowed_dropins=['/etc/systemd/system/incudal-backend.service.d/platform-backup.conf','/etc/systemd/system/incudal-backend.service.d/zz-database-security.conf','/etc/systemd/system/incudal-backend.service.d/local-gateway.conf']
+    if any(path not in allowed_dropins for path in unit_fields.get('DropInPaths','').split()):raise ValueError('SYSTEM_SECURITY_BACKEND_UNREVIEWED')
+    units=[unit_fields['FragmentPath'],*unit_fields.get('DropInPaths','').split()]
+    unit_hashes={path:protected_hash(path)for path in units}
+    expected_start='argv[]=/usr/bin/node '+str(app/'server/dist/app.js')+' ;'
+    if expected_start not in values.get('ExecStart','')and 'argv[]=/usr/bin/node /opt/incudal/current/server/dist/app.js ;'not in values.get('ExecStart',''):raise ValueError('SYSTEM_SECURITY_BACKEND_UNREVIEWED')
+    if values.get('EnvironmentFiles')not in ['/opt/incudal/.env (ignore_errors=no)','/opt/incudal/.env (ignore_errors=yes)']:raise ValueError('SYSTEM_SECURITY_BACKEND_UNREVIEWED')
+    stable={key:(re.findall(r'argv\[\]=(.*?) ;',value)if key.startswith('Exec')else value)for key,value in values.items()if key not in ['ActiveState','MainPID']}
+    service_hash=hashlib.sha256(json.dumps(stable,sort_keys=True).encode()).hexdigest()
+    return values,app,unit_hashes,service_hash
+
+def backend_runtime_proof():
+    values,app,unit_hashes,service_hash=backend_service_policy()
+    if values.get('ActiveState')!='active':return None
+    pid=int(values.get('MainPID','0'))
+    process=pathlib.Path('/proc',str(pid))
+    if pid<2 or str((process/'exe').readlink()).removesuffix(' (deleted)')!='/usr/bin/node':raise ValueError('SYSTEM_SECURITY_BACKEND_PROCESS_CHANGED')
+    if (process/'ns/pid').readlink()!=pathlib.Path('/proc/1/ns/pid').readlink():raise ValueError('SYSTEM_SECURITY_BACKEND_PROCESS_CHANGED')
+    import pwd
+    user_id=pwd.getpwnam('incudal').pw_uid
+    process_uid=re.search(r'^Uid:\s+(\d+)\s+(\d+)\s+(\d+)\s+(\d+)',(process/'status').read_text(),re.M)
+    if not process_uid or any(int(value)!=user_id for value in process_uid.groups()):raise ValueError('SYSTEM_SECURITY_BACKEND_PROCESS_CHANGED')
+    argv=[x.decode()for x in (process/'cmdline').read_bytes().split(b'\0')if x]
+    if len(argv)!=2 or argv[0]!='/usr/bin/node'or pathlib.Path(argv[1]).resolve()!=app/'server/dist/app.js':raise ValueError('SYSTEM_SECURITY_BACKEND_PROCESS_CHANGED')
+    # Unknown parallel backends cannot be treated as the supported one writer.
+    deadline=time.monotonic()+5;count=0
+    for other in pathlib.Path('/proc').iterdir():
+        if not other.name.isdigit()or int(other.name)==pid:continue
+        count+=1
+        if count>65536 or time.monotonic()>deadline:raise ValueError('SYSTEM_SECURITY_BACKEND_PROCESS_CHECK_INCOMPLETE')
+        try:
+            commandline=(other/'cmdline').read_bytes()
+            if len(commandline)>65536:raise ValueError('SYSTEM_SECURITY_BACKEND_PROCESS_CHECK_INCOMPLETE')
+            arguments=commandline.split(b'\0')
+            if (other/'ns/pid').readlink()!=pathlib.Path('/proc/1/ns/pid').readlink():continue
+            if any(re.fullmatch(rb'/opt/incudal/(?:releases/[A-Za-z0-9._-]+/|current/)?server/dist/app\.js',argument)for argument in arguments):raise ValueError('SYSTEM_SECURITY_BACKEND_MULTIPLE_WRITERS')
+        except(FileNotFoundError,ProcessLookupError):pass
+    raw=(process/'stat').read_text();parts=raw[raw.rfind(') ')+2:].split()
+    if len(parts)<20:raise ValueError('SYSTEM_SECURITY_BACKEND_PROCESS_CHANGED')
+    if command(['systemctl','show','incudal-backend.service','--property=Result','--value'],20)!='success':raise ValueError('SYSTEM_SECURITY_BACKEND_PROCESS_CHANGED')
+    app=pathlib.Path(app)
+    for required in ['server/dist/lib/financial-integrity.js','server/dist/lib/authentication-integrity.js']:
+        protected_hash(app/required)
+    return {'pid':pid,'start':parts[19],'app':str(app),'environmentHash':protected_hash('/opt/incudal/.env'),
+        'codeHash':protected_hash(app/'server/dist/app.js'),'unitHashes':unit_hashes,
+        # ExecStart also contains per-launch pid, timestamps and exit status.
+        # Hash the reviewed argv and persistent policy, with runtime identity
+        # attested separately by /proc start time, exe and command line.
+        'serviceHash':service_hash}
+
+def database_runtime_proof():
+    sql="SELECT json_build_object('major',current_setting('server_version_num')::int/10000,'version',current_setting('server_version_num'),'data',current_setting('data_directory'),'config',current_setting('config_file'),'hba',current_setting('hba_file'),'recovery',pg_is_in_recovery(),'replication',(SELECT count(*) FROM pg_stat_replication),'otherDatabases',(SELECT count(*)FROM pg_database WHERE NOT datistemplate AND datname NOT IN('incudal','postgres')),'otherClients',(SELECT count(*) FROM pg_stat_activity WHERE backend_type='client backend'AND pid<>pg_backend_pid()AND(coalesce(datname,'')<>'incudal'OR usename NOT IN('incudal','incudal_migrate'))))"
+    value=json.loads(command(['runuser','-u','postgres','--','psql','-X','-At','-v','ON_ERROR_STOP=1','-d','incudal','-c',sql],20))
+    environment=pathlib.Path('/opt/incudal/.env').read_text()
+    matches=re.findall(r'^DATABASE_URL=(.+)$',environment,re.M)
+    if len(matches)!=1 or not re.fullmatch(r"['\"]?postgres(?:ql)?://incudal:[^\s]+@(?:127\.0\.0\.1|localhost):5432/incudal(?:\?[^'\"\s]*)?['\"]?",matches[0]):raise ValueError('SYSTEM_SECURITY_DATABASE_IDENTITY_UNREVIEWED')
+    if value['recovery']or value['replication']or value['otherDatabases']or value['otherClients']or value['major']not in [14,15,16,17,18]:raise ValueError('SYSTEM_SECURITY_DATABASE_SHARED_OR_REPLICATED')
+    major=value['major'];expected='/var/lib/postgresql/'+str(major)+'/main'
+    if value['data']!=expected or value['config']!='/etc/postgresql/'+str(major)+'/main/postgresql.conf'or value['hba']!='/etc/postgresql/'+str(major)+'/main/pg_hba.conf':raise ValueError('SYSTEM_SECURITY_DATABASE_CLUSTER_UNREVIEWED')
+    value['configHash']=protected_hash(value['config'],(0,pathlib.Path(expected).stat().st_uid));value['hbaHash']=protected_hash(value['hba'],(0,pathlib.Path(expected).stat().st_uid))
+    value['unit']='postgresql@'+str(major)+'-main.service'
+    clusters=json.loads(command(['pg_lsclusters','--json'],20))
+    if not isinstance(clusters,list)or any(not isinstance(row,dict)or row.get('running')not in [0,1]for row in clusters):raise ValueError('SYSTEM_SECURITY_DATABASE_CLUSTER_UNREVIEWED')
+    if any(row['running']==1 and (row.get('version')!=str(major)or row.get('cluster')!='main')for row in clusters):raise ValueError('SYSTEM_SECURITY_DATABASE_MULTIPLE_CLUSTERS')
+    if command(['systemctl','is-active',value['unit']],20)!='active':raise ValueError('SYSTEM_SECURITY_DATABASE_CLUSTER_UNREVIEWED')
+    service=dict(line.split('=',1)for line in command(['systemctl','show',value['unit'],'--property=MainPID,ExecStart,ExecStop,FragmentPath,DropInPaths'],20).splitlines()if '='in line)
+    if service.get('DropInPaths')or service.get('FragmentPath')not in ['/lib/systemd/system/postgresql@.service','/usr/lib/systemd/system/postgresql@.service']:raise ValueError('SYSTEM_SECURITY_DATABASE_CLUSTER_UNREVIEWED')
+    start='argv[]=/usr/bin/pg_ctlcluster --skip-systemctl-redirect '+str(major)+'-main start ;'
+    stop='argv[]=/usr/bin/pg_ctlcluster --skip-systemctl-redirect -m fast '+str(major)+'-main stop ;'
+    if start not in service.get('ExecStart','')or stop not in service.get('ExecStop',''):raise ValueError('SYSTEM_SECURITY_DATABASE_CLUSTER_UNREVIEWED')
+    value['unitHash']=protected_hash(service['FragmentPath'])
+    value['pid']=int(service.get('MainPID','0'));process=pathlib.Path('/proc',str(value['pid']))
+    if value['pid']<2 or str((process/'exe').readlink()).removesuffix(' (deleted)')!='/usr/lib/postgresql/'+str(major)+'/bin/postgres':raise ValueError('SYSTEM_SECURITY_DATABASE_PROCESS_CHANGED')
+    if (process/'ns/pid').readlink()!=pathlib.Path('/proc/1/ns/pid').readlink():raise ValueError('SYSTEM_SECURITY_DATABASE_PROCESS_CHANGED')
+    value['start']=(process/'stat').read_text().split(') ',1)[1].split()[19]
+    # Include effective settings and every parsed include, not just the two
+    # main files. Preserve ALTER SYSTEM and administrator configuration.
+    settings=json.loads(command(['runuser','-u','postgres','--','psql','-X','-At','-d','incudal','-c',"SELECT json_build_object('settings',(SELECT json_agg(json_build_array(name,setting,source)ORDER BY name)FROM pg_settings WHERE name NOT IN ('server_version','server_version_num')),'files',(SELECT json_agg(DISTINCT sourcefile)FROM pg_file_settings),'invalid',(SELECT count(*)FROM pg_file_settings WHERE error IS NOT NULL),'pending',(SELECT count(*)FROM pg_settings WHERE pending_restart))"],20))
+    if settings['invalid']or not isinstance(settings['files'],list)or len(settings['files'])>64:raise ValueError('SYSTEM_SECURITY_DATABASE_CONFIGURATION_CHANGED')
+    if settings['pending']:raise ValueError('SYSTEM_SECURITY_DATABASE_CONFIGURATION_RESTART_REQUIRED')
+    value['settingsHash']=hashlib.sha256(json.dumps(settings['settings'],sort_keys=True).encode()).hexdigest()
+    paths=set(settings['files'])|{expected+'/postgresql.auto.conf','/etc/postgresql/'+str(major)+'/main/pg_ctl.conf','/etc/postgresql/'+str(major)+'/main/start.conf'}
+    if any(not isinstance(path,str)or not(path.startswith('/etc/postgresql/'+str(major)+'/main/')or path==expected+'/postgresql.auto.conf')for path in paths):raise ValueError('SYSTEM_SECURITY_DATABASE_CLUSTER_UNREVIEWED')
+    value['fileHashes']={path:protected_hash(path,(0,pathlib.Path(expected).stat().st_uid))for path in sorted(paths)}
+    return value
+
+def install_runtime_patches(changes,backend,database,value,expected):
+    if backend is None or backend_runtime_proof()!=backend:raise ValueError('SYSTEM_SECURITY_BACKEND_PROCESS_CHANGED')
+    need_database=any(item.split('=',1)[0].startswith('postgresql-')or item.split('=',1)[0]in ['libpq5','postgresql-common']for item in changes)
+    if database is None or database_runtime_proof()!=database:raise ValueError('SYSTEM_SECURITY_DATABASE_CHANGED')
+    if command(['dpkg','--audit'],30):raise ValueError('SYSTEM_SECURITY_PACKAGE_CONFIGURATION_PENDING')
+    baseline=debian_installed_packages()
+    # Acquire authenticated exact archives while the existing backend is live.
+    # Repository/network failures must not leave it stopped awaiting download.
+    command(['apt-get','-o','DPkg::Lock::Timeout=5','-o','APT::Get::AllowUnauthenticated=false','--download-only','--assume-yes','--only-upgrade','--no-remove','install',*changes],600)
+    backup=pathlib.Path('/var/lib/incudal-system-security')/('runtime-backup-'+uuid.uuid4().hex);backup.mkdir(mode=0o700)
+    size=int(command(['runuser','-u','postgres','--','psql','-X','-At','-d','incudal','-c',"SELECT pg_database_size('incudal')"],20))
+    filesystem=os.statvfs(backup)
+    if size<0 or filesystem.f_bavail*filesystem.f_frsize<max(size*3,128*1024*1024):raise ValueError('SYSTEM_SECURITY_RUNTIME_BACKUP_SPACE_REQUIRED')
+    dump_runtime_database(backup/'database.dump')
+    originals={key:protected_hash(key,private=False)for key in ['/opt/incudal/.env',backend['app']+'/server/dist/app.js',*backend['unitHashes']]}
+    verify_runtime_financial_integrity(backend['app'])
+    if backend_runtime_proof()!=backend or database_runtime_proof()!=database or debian_installed_packages()!=baseline:raise ValueError('SYSTEM_SECURITY_RUNTIME_BASELINE_CHANGED')
+    stopped=False
+    journal={'version':1,'phase':'prepared','backend':backend,'database':database if need_database else None,'backup':backup.name,'packages':changes,'expectedPackages':expected,'baselinePackages':baseline}
+    write_runtime_maintenance(journal)
+    try:
+        journal['phase']='stopping-backend';write_runtime_maintenance(journal);stopped=True
+        command(['systemctl','stop','incudal-backend.service'],36*60)
+        if command(['systemctl','show','incudal-backend.service','--property=MainPID','--value'],20)!='0':raise ValueError('SYSTEM_SECURITY_BACKEND_DRAIN_PENDING')
+        if command(['systemctl','show','incudal-backend.service','--property=Result','--value'],20)!='success':raise ValueError('SYSTEM_SECURITY_BACKEND_DRAIN_UNCONFIRMED')
+        journal['drainConfirmed']=True;write_runtime_maintenance(journal)
+        if any(protected_hash(key)!=digest for key,digest in originals.items()):raise ValueError('SYSTEM_SECURITY_BACKEND_CONFIGURATION_CHANGED')
+        dump_runtime_database(backup/'database-after-drain.dump')
+        if need_database:
+            if database_runtime_proof()!=database:raise ValueError('SYSTEM_SECURITY_DATABASE_CHANGED')
+            journal['phase']='stopping-database';write_runtime_maintenance(journal)
+            command(['systemctl','stop',database['unit']],180)
+            state=dict(line.split('=',1)for line in command(['systemctl','show',database['unit'],'--property=MainPID,ActiveState,Result'],20).splitlines()if '='in line)
+            if state.get('MainPID')!='0'or state.get('ActiveState')!='inactive'or state.get('Result')!='success':raise ValueError('SYSTEM_SECURITY_DATABASE_STOP_UNCONFIRMED')
+        value['backendActivation']={'state':'draining','backup':backup.name};persist(value)
+        journal['phase']='installing';write_runtime_maintenance(journal)
+        prepare_service_policy()
+        try:command(['apt-get','-o','DPkg::Lock::Timeout=5','-o','APT::Get::AllowUnauthenticated=false','-o','Dpkg::Options::=--force-confold','--assume-yes','--only-upgrade','--no-remove','--no-download','install',*changes],600)
+        finally:clean_service_policy()
+        if command(['dpkg','--audit'],30)or debian_installed_packages()!=expected:raise ValueError('SYSTEM_SECURITY_PATCH_NOT_CONFIRMED')
+        journal['phase']='installed';write_runtime_maintenance(journal)
+    finally:
+        if stopped:recover_runtime_maintenance()
+    current=backend_runtime_proof()
+    if current is None or any(current[k]!=backend[k]for k in ['app','environmentHash','codeHash','serviceHash','unitHashes']):raise ValueError('SYSTEM_SECURITY_BACKEND_ACTIVATION_PENDING')
+    installed=pathlib.Path('/usr/bin/node').stat();running=pathlib.Path('/proc',str(current['pid']),'exe').stat()
+    if (installed.st_dev,installed.st_ino)!=(running.st_dev,running.st_ino):raise ValueError('SYSTEM_SECURITY_BACKEND_ACTIVATION_PENDING')
+    if need_database:
+        current_db=database_runtime_proof()
+        verify_database_activation(current_db,database)
+    verify_runtime_health()
+    verify_runtime_financial_integrity(backend['app'])
+    value['backendActivation']={'state':'activated','pid':current['pid'],'backup':backup.name};value['patchState']='installed-activation-required'
+    if need_database:value['databaseActivation']={'state':'activated','pid':current_db['pid']}
+    persist(value)
+    journal['phase']='activated';journal['activatedBackendPID']=current['pid']
+    if need_database:journal['activatedDatabasePID']=current_db['pid']
+    write_runtime_maintenance(journal);archive_runtime_receipt(journal,pathlib.Path('/var/lib/incudal-system-security'))
+
+def write_runtime_maintenance(value,root=pathlib.Path('/var/lib/incudal-system-security')):
+    info=root.lstat()
+    if not stat.S_ISDIR(info.st_mode)or info.st_uid!=0 or info.st_mode&0o077:raise ValueError('SYSTEM_SECURITY_UNTRUSTED_PATH')
+    fd,name=tempfile.mkstemp(prefix='.runtime-maintenance-',dir=root)
+    try:
+        with os.fdopen(fd,'w')as stream:stream.write(json.dumps(value,separators=(',',':')));stream.flush();os.fsync(stream.fileno())
+        os.replace(name,root/'runtime-maintenance.json')
+        parent=os.open(root,os.O_RDONLY|os.O_DIRECTORY|os.O_NOFOLLOW)
+        try:os.fsync(parent)
+        finally:os.close(parent)
+    finally:
+        if os.path.exists(name):os.unlink(name)
+
+def recover_runtime_maintenance(path=pathlib.Path('/var/lib/incudal-system-security/runtime-maintenance.json')):
+    if not path.exists()and not path.is_symlink():return
+    protected_hash(path,private=True);journal=json.loads(path.read_text())
+    if journal.get('version')!=1 or journal.get('phase')not in ['prepared','stopping-backend','stopping-database','installing','installed','activated','aborted']:raise ValueError('SYSTEM_SECURITY_RUNTIME_JOURNAL_INVALID')
+    if journal['phase']in ['prepared','activated','aborted']:return
+    backend=journal.get('backend',{});database=journal.get('database')
+    app=backend.get('app')
+    if not isinstance(app,str)or not(app=='/opt/incudal'or re.fullmatch(r'/opt/incudal/releases/[A-Za-z0-9._-]+',app))or str(pathlib.Path(app).resolve())!=app:raise ValueError('SYSTEM_SECURITY_RUNTIME_JOURNAL_INVALID')
+    if protected_hash('/opt/incudal/.env')!=backend.get('environmentHash')or protected_hash(pathlib.Path(backend['app'])/'server/dist/app.js')!=backend.get('codeHash'):raise ValueError('SYSTEM_SECURITY_BACKEND_CONFIGURATION_CHANGED')
+    if not isinstance(backend.get('unitHashes'),dict)or not backend['unitHashes']:raise ValueError('SYSTEM_SECURITY_RUNTIME_JOURNAL_INVALID')
+    for unit_path,digest in backend['unitHashes'].items():
+        if unit_path not in ['/etc/systemd/system/incudal-backend.service','/etc/systemd/system/incudal-backend.service.d/platform-backup.conf','/etc/systemd/system/incudal-backend.service.d/zz-database-security.conf','/etc/systemd/system/incudal-backend.service.d/local-gateway.conf']or protected_hash(unit_path)!=digest:raise ValueError('SYSTEM_SECURITY_BACKEND_CONFIGURATION_CHANGED')
+    _,app_path,units,service_hash=backend_service_policy()
+    if str(app_path)!=app or units!=backend['unitHashes']or service_hash!=backend.get('serviceHash'):raise ValueError('SYSTEM_SECURITY_BACKEND_CONFIGURATION_CHANGED')
+    if command(['systemctl','show','incudal-backend.service','--property=SubState','--value'],20)in ['stop','stop-sigterm','stop-sigkill','stop-post']:raise ValueError('SYSTEM_SECURITY_BACKEND_DRAIN_PENDING')
+    # A later start can fail transiently after a confirmed graceful stop. Its
+    # service Result must not permanently prevent restarting the same code.
+    # A crash during the stop still requires independent success evidence.
+    if not journal.get('drainConfirmed') and command(['systemctl','show','incudal-backend.service','--property=Result','--value'],20)!='success':raise ValueError('SYSTEM_SECURITY_BACKEND_DRAIN_UNCONFIRMED')
+    clean_service_policy()
+    installation_started=journal['phase']in ['installing','installed']
+    if installation_started:complete_runtime_package_transaction(journal)
+    elif command(['dpkg','--audit'],30):raise ValueError('SYSTEM_SECURITY_PACKAGE_CONFIGURATION_PENDING')
+    if database is not None:
+        major=database.get('major')
+        if major not in [14,15,16,17,18]or database.get('unit')!='postgresql@'+str(major)+'-main.service':raise ValueError('SYSTEM_SECURITY_RUNTIME_JOURNAL_INVALID')
+        if database.get('data')!='/var/lib/postgresql/'+str(major)+'/main'or database.get('config')!='/etc/postgresql/'+str(major)+'/main/postgresql.conf'or database.get('hba')!='/etc/postgresql/'+str(major)+'/main/pg_hba.conf':raise ValueError('SYSTEM_SECURITY_RUNTIME_JOURNAL_INVALID')
+        owner=pathlib.Path(database['data']).stat().st_uid
+        if protected_hash(database['config'],(0,owner))!=database['configHash']or protected_hash(database['hba'],(0,owner))!=database['hbaHash']:raise ValueError('SYSTEM_SECURITY_DATABASE_CONFIGURATION_CHANGED')
+        files=database.get('fileHashes')
+        if not isinstance(files,dict)or not files or len(files)>68:raise ValueError('SYSTEM_SECURITY_RUNTIME_JOURNAL_INVALID')
+        for file,digest in files.items():
+            if not isinstance(file,str)or not(file.startswith('/etc/postgresql/'+str(major)+'/main/')or file==database['data']+'/postgresql.auto.conf')or protected_hash(file,(0,owner))!=digest:raise ValueError('SYSTEM_SECURITY_DATABASE_CONFIGURATION_CHANGED')
+        unit_path=command(['systemctl','show',database['unit'],'--property=FragmentPath','--value'],20)
+        if unit_path not in ['/lib/systemd/system/postgresql@.service','/usr/lib/systemd/system/postgresql@.service']or protected_hash(unit_path)!=database.get('unitHash'):raise ValueError('SYSTEM_SECURITY_DATABASE_CONFIGURATION_CHANGED')
+        if command(['systemctl','show',database['unit'],'--property=SubState','--value'],20)in ['stop','stop-sigterm','stop-sigkill','stop-post']:raise ValueError('SYSTEM_SECURITY_DATABASE_STOP_PENDING')
+        command(['systemctl','start',database['unit']],180)
+    command(['systemctl','start','incudal-backend.service'],11*60)
+    verify_runtime_health()
+    current=backend_runtime_proof()
+    if current is None or any(current[key]!=backend.get(key)for key in ['app','environmentHash','codeHash','unitHashes','serviceHash']):raise ValueError('SYSTEM_SECURITY_BACKEND_ACTIVATION_PENDING')
+    installed=pathlib.Path('/usr/bin/node').stat();running=pathlib.Path('/proc',str(current['pid']),'exe').stat()
+    if (installed.st_dev,installed.st_ino)!=(running.st_dev,running.st_ino):raise ValueError('SYSTEM_SECURITY_BACKEND_ACTIVATION_PENDING')
+    if database is not None:
+        proof=database_runtime_proof()
+        verify_database_activation(proof,database)
+    verify_runtime_financial_integrity(app)
+    # A stop failure or interruption before apt ran only restores the prior
+    # services. Never issue an activation receipt for an unapplied patch.
+    journal['phase']='activated'if installation_started else 'aborted'
+    if installation_started:
+        journal['activatedBackendPID']=current['pid']
+        if database is not None:journal['activatedDatabasePID']=proof['pid']
+    write_runtime_maintenance(journal,path.parent)
+    if installation_started:
+        archive_runtime_receipt(journal,path.parent)
+    return journal if installation_started else None
+
+def archive_runtime_receipt(journal,root):
+    name=journal.get('backup')
+    if not isinstance(name,str)or not re.fullmatch(r'runtime-backup-[a-f0-9]{32}',name):raise ValueError('SYSTEM_SECURITY_RUNTIME_JOURNAL_INVALID')
+    backup=root/name;info=backup.lstat()
+    if not stat.S_ISDIR(info.st_mode)or info.st_uid!=0 or info.st_mode&0o077:raise ValueError('SYSTEM_SECURITY_UNTRUSTED_PATH')
+    for file in backup.iterdir():
+        if file.name not in ['database.dump','database-after-drain.dump','completed.json']:raise ValueError('SYSTEM_SECURITY_UNTRUSTED_PATH')
+        metadata=file.lstat()
+        if not stat.S_ISREG(metadata.st_mode)or metadata.st_uid!=0 or metadata.st_nlink!=1 or metadata.st_mode&0o077:raise ValueError('SYSTEM_SECURITY_UNTRUSTED_PATH')
+    receipt=backup/'completed.json'
+    if receipt.exists():protected_hash(receipt,private=True)
+    fd,temporary=tempfile.mkstemp(prefix='.completed-',dir=backup)
+    try:
+        with os.fdopen(fd,'w')as stream:stream.write(json.dumps(journal,separators=(',',':')));stream.flush();os.fsync(stream.fileno())
+        os.replace(temporary,receipt)
+    finally:
+        if os.path.exists(temporary):os.unlink(temporary)
+    # Keep seven completed rollback snapshots and all records newer than 30
+    # days. Incomplete, unrecognized or changed evidence is never swept.
+    complete=[]
+    for path in root.glob('runtime-backup-*'):
+        if not re.fullmatch(r'runtime-backup-[a-f0-9]{32}',path.name)or not(path/'completed.json').exists():continue
+        metadata=path.lstat()
+        if not stat.S_ISDIR(metadata.st_mode)or metadata.st_uid!=0 or metadata.st_mode&0o077:continue
+        record=path/'completed.json'
+        try:
+            protected_hash(record,private=True);value=json.loads(record.read_text())
+            if value.get('phase')!='activated'or value.get('backup')!=path.name:continue
+            if any(file.name not in ['database.dump','database-after-drain.dump','completed.json']or not stat.S_ISREG(file.lstat().st_mode)or file.lstat().st_uid!=0 or file.lstat().st_nlink!=1 or file.lstat().st_mode&0o077 for file in path.iterdir()):continue
+        except(ValueError,OSError,json.JSONDecodeError):continue
+        complete.append((record.stat().st_mtime,path))
+    for timestamp,path in sorted(complete,reverse=True)[7:]:
+        if path==backup or timestamp>time.time()-30*86400:continue
+        for file in path.iterdir():file.unlink()
+        path.rmdir()
+
+def complete_runtime_package_transaction(journal):
+    baseline=journal.get('baselinePackages');expected=journal.get('expectedPackages');changes=journal.get('packages')
+    if not isinstance(baseline,dict)or not isinstance(expected,dict)or baseline.keys()!=expected.keys()or not isinstance(changes,list)or not changes or len(changes)>64:raise ValueError('SYSTEM_SECURITY_RUNTIME_JOURNAL_INVALID')
+    if len(baseline)>20000 or any(not re.fullmatch(r'[a-z0-9+.-]+:[a-z0-9-]+',key)or not isinstance(version,str)or not re.fullmatch(r'[^\s=\x00-\x1f]{1,200}',version)for packages in [baseline,expected]for key,version in packages.items()):raise ValueError('SYSTEM_SECURITY_RUNTIME_JOURNAL_INVALID')
+    planned={}
+    for item in changes:
+        if not isinstance(item,str)or not re.fullmatch(r'[a-z0-9+.-]+=[^\s=\x00-\x1f]{1,200}',item):raise ValueError('SYSTEM_SECURITY_RUNTIME_JOURNAL_INVALID')
+        name,version=item.split('=',1);matches=[key for key in expected if key.split(':')[0]==name]
+        if len(matches)!=1 or expected[matches[0]]!=version or name in planned:raise ValueError('SYSTEM_SECURITY_RUNTIME_JOURNAL_INVALID')
+        planned[name]=version
+    if any(baseline[key]!=expected[key]and key.split(':')[0]not in planned for key in baseline):raise ValueError('SYSTEM_SECURITY_RUNTIME_JOURNAL_INVALID')
+    states=debian_package_states();current={key:value['version']for key,value in states.items()}
+    configured=all(value['status']=='installed'for value in states.values())
+    if current==expected and configured and not command(['dpkg','--audit'],30):return
+    # A failed install can have advanced some exact planned packages. Unknown
+    # removals, additions or versions are refused instead of starting that code.
+    if current.keys()!=baseline.keys()or any(current[key]not in [baseline[key],expected[key]]for key in baseline):raise ValueError('SYSTEM_SECURITY_RUNTIME_PACKAGE_BASELINE_CHANGED')
+    if any(value['status']!='installed'and key.split(':')[0]not in planned for key,value in states.items()):raise ValueError('SYSTEM_SECURITY_RUNTIME_PACKAGE_BASELINE_CHANGED')
+    remaining=[];reinstall=set()
+    for item in changes:
+        name,version=item.split('=',1);key=next(key for key in expected if key.split(':')[0]==name)
+        if current[key]!=version or states[key]['status']=='half-installed':remaining.append(item)
+        if states[key]['status']=='half-installed':reinstall.add(name)
+    if remaining:
+        reviewed={key.split(':')[0]:version for key,version in current.items()}
+        if len(reviewed)!=len(current):raise ValueError('SYSTEM_SECURITY_MULTIARCH_REVIEW_REQUIRED')
+        output=command(['apt-get','-o','DPkg::Lock::Timeout=5','-o','APT::Get::AllowUnauthenticated=false','--simulate','--only-upgrade','--no-remove',*(['--reinstall']if reinstall else []),'install',*remaining],90)
+        ordinary=[];reinstalled=[]
+        for line in output.splitlines():
+            if line.startswith('Inst '):
+                match=re.fullmatch(r'Inst ([a-z0-9+.-]+)(?::(?:amd64|arm64))? \[([^\]]+)\] \(([^\s]+) [^\r\n]+\)(?: \[[^\]\r\n]*\])?',line)
+                if match and match[1]in reinstall and match[2]==reviewed[match[1]]and match[3]==planned[match[1]]:
+                    reinstalled.append(match[1]+'='+match[3]);continue
+            ordinary.append(line)
+        planned=patch_plan('\n'.join(ordinary),reviewed,set(planned))+reinstalled
+        if sorted(planned)!=sorted(remaining):raise ValueError('SYSTEM_SECURITY_PLAN_REJECTED')
+    else:
+        prepare_service_policy()
+        configuring=sorted(key.split(':')[0]for key,value in states.items()if value['status']!='installed')
+        try:command(['dpkg','--force-confold','--configure',*configuring],300)
+        finally:clean_service_policy()
+        if command(['dpkg','--audit'],30)or debian_installed_packages()!=expected:raise ValueError('SYSTEM_SECURITY_PATCH_NOT_CONFIRMED')
+        return
+    prepare_service_policy()
+    try:
+        command(['apt-get','-o','DPkg::Lock::Timeout=5','-o','APT::Get::AllowUnauthenticated=false','-o','Dpkg::Options::=--force-confold','--assume-yes','--only-upgrade','--no-remove',*(['--reinstall']if reinstall else []),'install',*remaining],600)
+    finally:clean_service_policy()
+    if command(['dpkg','--audit'],30)or debian_installed_packages()!=expected:raise ValueError('SYSTEM_SECURITY_PATCH_NOT_CONFIRMED')
+
+def verify_database_activation(current,before):
+    if any(current[key]!=before[key]for key in ['major','data','configHash','hbaHash','unitHash','fileHashes','settingsHash']):raise ValueError('SYSTEM_SECURITY_DATABASE_CONFIGURATION_CHANGED')
+    installed=pathlib.Path('/usr/lib/postgresql',str(current['major']),'bin/postgres').stat();running=pathlib.Path('/proc',str(current['pid']),'exe').stat()
+    if (installed.st_dev,installed.st_ino)!=(running.st_dev,running.st_ino):raise ValueError('SYSTEM_SECURITY_DATABASE_ACTIVATION_PENDING')
+
+def verify_runtime_financial_integrity(app):
+    code="const root=process.argv[1];await import(root+'/server/dist/config/env.js');const{readFileSync}=await import('node:fs');const{verifyFinancialBaseline,verifyFinancialDatabaseSeals}=await import(root+'/server/dist/lib/financial-integrity.js');verifyFinancialBaseline(readFileSync('/var/lib/incudal-finance/baseline.json','utf8'),process.env.ENCRYPTION_KEY);await verifyFinancialDatabaseSeals('incudal',process.env.ENCRYPTION_KEY,false,true);console.log('SYSTEM_SECURITY_FINANCIAL_INTEGRITY_VERIFIED')"
+    if command(['/usr/bin/env','ENV_FILE=/opt/incudal/.env','NODE_ENV=production','/usr/bin/node','--input-type=module','-e',code,app],90)!='SYSTEM_SECURITY_FINANCIAL_INTEGRITY_VERIFIED':raise ValueError('SYSTEM_SECURITY_FINANCIAL_INTEGRITY_INVALID')
+
+def verify_runtime_health():
+    deadline=time.monotonic()+120
+    while True:
+        try:
+            value=json.loads(command(['curl','-fsS','--max-time','5','http://127.0.0.1:3001/api/health'],10))
+            if isinstance(value,dict)and value.get('status')=='ok'and value.get('businessStartupReady')is True and value.get('recoveryHeld')is False:return
+        except(ValueError,OSError,json.JSONDecodeError):pass
+        if time.monotonic()>deadline:raise ValueError('SYSTEM_SECURITY_BACKEND_ACTIVATION_PENDING')
+        time.sleep(.5)
+
+def dump_runtime_database(path):
+    fd=os.open(path,os.O_WRONLY|os.O_CREAT|os.O_EXCL|os.O_NOFOLLOW,0o600)
+    process=None
+    try:
+        with tempfile.TemporaryFile()as errors:
+            process=subprocess.Popen(['runuser','-u','postgres','--','pg_dump','-Fc','incudal'],stdout=fd,stderr=errors,start_new_session=True,env={'PATH':'/usr/sbin:/usr/bin:/sbin:/bin','LC_ALL':'C'})
+            try:code=process.wait(timeout=120)
+            except subprocess.TimeoutExpired:
+                os.killpg(process.pid,signal.SIGKILL);process.wait();raise ValueError('SYSTEM_SECURITY_RUNTIME_BACKUP_FAILED')
+            if code or os.fstat(fd).st_size<5 or live_process_group(process.pid):raise ValueError('SYSTEM_SECURITY_RUNTIME_BACKUP_FAILED')
+            os.fsync(fd)
+        with pathlib.Path(path).open('rb')as input:
+            if input.read(5)!=b'PGDMP':raise ValueError('SYSTEM_SECURITY_RUNTIME_BACKUP_FAILED')
+    finally:
+        if process is not None and live_process_group(process.pid):
+            try:os.killpg(process.pid,signal.SIGKILL)
+            except ProcessLookupError:pass
+        os.close(fd)
 
 def verify_runtime_integrity():
     helper=pathlib.Path('/usr/local/libexec/incudal/incudal-online-task')

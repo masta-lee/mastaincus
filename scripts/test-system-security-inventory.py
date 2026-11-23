@@ -6,6 +6,123 @@ spec=importlib.util.spec_from_file_location('inventory',pathlib.Path(__file__).w
 module=importlib.util.module_from_spec(spec);spec.loader.exec_module(module)
 
 class Plans(unittest.TestCase):
+    @unittest.skipUnless(hasattr(os,'geteuid')and os.geteuid()==0,'root private evidence permissions required')
+    def test_completed_runtime_evidence_retention_preserves_recent_incomplete_and_changed(self):
+        import json,time
+        with tempfile.TemporaryDirectory()as directory:
+            root=pathlib.Path(directory);root.chmod(0o700)
+            paths=[]
+            for number in range(12):
+                name='runtime-backup-'+f'{number:032x}';path=root/name;path.mkdir(mode=0o700)
+                record=path/'completed.json';record.write_text(json.dumps({'phase':'activated','backup':name}));record.chmod(0o600)
+                stamp=time.time()-(40+number)*86400;os.utime(record,(stamp,stamp));paths.append(path)
+            recent=paths[-1]/'completed.json';os.utime(recent,None)
+            incomplete=root/('runtime-backup-'+'f'*32);incomplete.mkdir(mode=0o700);(incomplete/'database.dump').write_text('unfinished')
+            (paths[-2]/'unknown-evidence').write_text('keep')
+            current=root/('runtime-backup-'+'e'*32);current.mkdir(mode=0o700)
+            module.archive_runtime_receipt({'backup':current.name,'phase':'activated'},root)
+            self.assertTrue(current.exists());self.assertTrue(paths[-1].exists());self.assertTrue(paths[-2].exists());self.assertTrue(incomplete.exists())
+            self.assertEqual(sum(path.exists()for path in paths),7,'seven newest completed sets plus changed evidence are retained')
+            self.assertEqual((current/'completed.json').stat().st_mode&0o777,0o600)
+    def test_runtime_download_failure_preserves_running_backend(self):
+        b={'pid':12};d={'major':16}
+        def execute(args,*_):
+            if args==['dpkg','--audit']:return ''
+            self.assertIn('--download-only',args);raise ValueError('SYSTEM_SECURITY_DOWNLOAD_UNAVAILABLE')
+        with patch.object(module,'backend_runtime_proof',return_value=b),patch.object(module,'database_runtime_proof',return_value=d),patch.object(module,'debian_installed_packages',return_value={}),patch.object(module,'command',side_effect=execute)as command,self.assertRaisesRegex(ValueError,'DOWNLOAD_UNAVAILABLE'):
+            module.install_runtime_patches(['nodejs=24.22.3'],b,d,{}, {})
+        self.assertFalse(any('systemctl'in c.args[0]for c in command.call_args_list))
+    def test_runtime_half_installed_exact_version_requires_reinstall(self):
+        journal={'baselinePackages':{'zstd:amd64':'1.5.5-1'},'expectedPackages':{'zstd:amd64':'1.5.5-2'},'packages':['zstd=1.5.5-2']}
+        states={'zstd:amd64':{'version':'1.5.5-2','status':'half-installed'}}
+        output='Inst zstd [1.5.5-2] (1.5.5-2 Ubuntu:24.04/noble-updates [amd64])'
+        def run(args,*_):return output if '--simulate'in args else ''
+        with patch.object(module,'debian_package_states',return_value=states),patch.object(module,'debian_installed_packages',return_value=journal['expectedPackages']),patch.object(module,'prepare_service_policy'),patch.object(module,'clean_service_policy'),patch.object(module,'command',side_effect=run)as command:
+            module.complete_runtime_package_transaction(journal)
+        self.assertEqual(sum('--reinstall'in call.args[0]for call in command.call_args_list),2)
+        for invalid in [output.replace('1.5.5-2 Ubuntu','1.5.5-3 Ubuntu'),output+'\nRemv zstd',output+'\n'+output]:
+            with patch.object(module,'debian_package_states',return_value=states),patch.object(module,'prepare_service_policy')as policy,patch.object(module,'command',return_value=invalid),patch.object(module.subprocess,'run',return_value=types.SimpleNamespace(returncode=0)),self.assertRaisesRegex(ValueError,'PLAN_REJECTED'):
+                module.complete_runtime_package_transaction(journal)
+            policy.assert_not_called()
+    def test_runtime_maintenance_requires_exact_current_authority(self):
+        before={'pid':12,'start':'123','app':'/opt/incudal','environmentHash':'a'*64,'codeHash':'b'*64}
+        for current in [None,{**before,'pid':13},{**before,'environmentHash':'c'*64}]:
+            with patch.object(module,'backend_runtime_proof',return_value=current),patch.object(module,'command')as command,self.assertRaisesRegex(ValueError,'BACKEND_PROCESS_CHANGED'):
+                module.install_runtime_patches(['nodejs=24.22.3'],before,None,{}, {})
+            command.assert_not_called()
+    @unittest.skipUnless(hasattr(os,'geteuid')and os.geteuid()==0,'real root journal required')
+    def test_runtime_recovery_preserves_configuration_and_busy_package_state(self):
+        import json
+        with tempfile.TemporaryDirectory()as directory:
+            root=pathlib.Path(directory);root.chmod(0o700);path=root/'runtime-maintenance.json'
+            before={'pid':12,'start':'123','app':'/opt/incudal','environmentHash':'a'*64,'codeHash':'b'*64,'serviceHash':'d'*64,'unitHashes':{'/etc/systemd/system/incudal-backend.service':'c'*64}}
+            data={'version':1,'phase':'stopping-backend','backend':before,'database':None}
+            module.write_runtime_maintenance(data,root)
+            with patch.object(module,'protected_hash',return_value='a'*64),patch.object(module,'clean_service_policy'),patch.object(module,'command')as command,self.assertRaisesRegex(ValueError,'CONFIGURATION_CHANGED'):
+                module.recover_runtime_maintenance(path)
+            command.assert_not_called()
+            hashes=['journal','a'*64,'b'*64,'c'*64]
+            with patch.object(module,'backend_service_policy',return_value=({},pathlib.Path('/opt/incudal'),before['unitHashes'],before['serviceHash'])),patch.object(module,'protected_hash',side_effect=hashes),patch.object(module,'clean_service_policy'),patch.object(module,'command',side_effect=lambda args,*_: 'success'if '--property=Result'in args else 'incomplete package')as command,self.assertRaisesRegex(ValueError,'PACKAGE_CONFIGURATION_PENDING'):
+                module.recover_runtime_maintenance(path)
+            self.assertEqual(command.call_args.args[0],['dpkg','--audit'])
+            self.assertEqual(json.loads(path.read_text())['phase'],'stopping-backend')
+            original_path=module.pathlib.Path
+            def fixture_path(*parts):
+                if parts in [('/usr/bin/node',),('/proc','12','exe')]:return types.SimpleNamespace(stat=lambda:types.SimpleNamespace(st_dev=1,st_ino=2))
+                return original_path(*parts)
+            policy=({},pathlib.Path('/opt/incudal'),before['unitHashes'],before['serviceHash'])
+            with patch.object(module,'backend_service_policy',return_value=policy),patch.object(module.pathlib,'Path',side_effect=fixture_path),patch.object(module,'protected_hash',side_effect=hashes),patch.object(module,'backend_runtime_proof',return_value=before),patch.object(module,'verify_runtime_financial_integrity'),patch.object(module,'verify_runtime_health'),patch.object(module,'clean_service_policy'),patch.object(module,'command',side_effect=lambda args,*_: 'success'if '--property=Result'in args else '')as command:
+                module.recover_runtime_maintenance(path)
+            self.assertEqual([call.args[0]for call in command.call_args_list],[['systemctl','show','incudal-backend.service','--property=SubState','--value'],['systemctl','show','incudal-backend.service','--property=Result','--value'],['dpkg','--audit'],['systemctl','start','incudal-backend.service']])
+            self.assertEqual(json.loads(path.read_text())['phase'],'aborted','restoring services before installation is not patch activation')
+    def test_runtime_interrupted_packages_are_exact_and_do_not_accept_drift(self):
+        journal={'baselinePackages':{'nodejs:amd64':'24.22.2','other:all':'1'},'expectedPackages':{'nodejs:amd64':'24.22.3','other:all':'1'},'packages':['nodejs=24.22.3']}
+        states=lambda packages,status='installed':{key:{'version':value,'status':status}for key,value in packages.items()}
+        with patch.object(module,'debian_package_states',return_value=states(journal['expectedPackages'])),patch.object(module,'command',return_value='')as command:
+            module.complete_runtime_package_transaction(journal)
+        self.assertEqual([c.args[0]for c in command.call_args_list],[['dpkg','--audit']])
+        for drift in [{'nodejs:amd64':'25.0.0','other:all':'1'},{'nodejs:amd64':'24.22.2'},{**journal['baselinePackages'],'extra:all':'1'}]:
+            with patch.object(module,'debian_package_states',return_value=states(drift)),patch.object(module,'command')as command,self.assertRaisesRegex(ValueError,'BASELINE_CHANGED'):
+                module.complete_runtime_package_transaction(journal)
+            command.assert_not_called()
+        with patch.object(module,'debian_package_states',return_value=states(journal['baselinePackages'])),patch.object(module,'debian_installed_packages',return_value=journal['expectedPackages']),patch.object(module,'patch_plan',return_value=journal['packages']),patch.object(module,'prepare_service_policy'),patch.object(module,'clean_service_policy'),patch.object(module,'command',return_value='')as command:
+            module.complete_runtime_package_transaction(journal)
+        self.assertEqual(command.call_args_list[0].args[0][-1],'nodejs=24.22.3')
+        for unreviewed in [[],['nodejs=25.0.0'],['nodejs=24.22.3','unrelated=2']]:
+            with patch.object(module,'debian_package_states',return_value=states(journal['baselinePackages'])),patch.object(module,'patch_plan',return_value=unreviewed),patch.object(module,'prepare_service_policy')as policy,patch.object(module,'command',return_value=''),self.assertRaisesRegex(ValueError,'PLAN_REJECTED'):
+                module.complete_runtime_package_transaction(journal)
+            policy.assert_not_called()
+        partial=states(journal['expectedPackages']);partial['nodejs:amd64']['status']='unpacked'
+        with patch.object(module,'debian_package_states',return_value=partial),patch.object(module,'debian_installed_packages',return_value=journal['expectedPackages']),patch.object(module,'prepare_service_policy')as policy,patch.object(module,'clean_service_policy'),patch.object(module,'command',return_value='')as command:
+            module.complete_runtime_package_transaction(journal)
+        policy.assert_called_once();self.assertIn(['dpkg','--force-confold','--configure','nodejs'],[call.args[0]for call in command.call_args_list])
+        partial['other:all']['status']='half-configured'
+        with patch.object(module,'debian_package_states',return_value=partial),patch.object(module,'command')as command,self.assertRaisesRegex(ValueError,'BASELINE_CHANGED'):
+            module.complete_runtime_package_transaction(journal)
+        command.assert_not_called()
+    def test_health_requires_business_ready_and_no_recovery_hold(self):
+        import json
+        rows=[{'status':'ok','businessStartupReady':False,'recoveryHeld':False},{'status':'ok','businessStartupReady':True,'recoveryHeld':True},{'status':'ok','businessStartupReady':True,'recoveryHeld':False}]
+        with patch.object(module,'command',side_effect=[json.dumps(row)for row in rows])as command,patch.object(module.time,'sleep'):
+            module.verify_runtime_health()
+        self.assertEqual(command.call_count,3)
+    def test_runtime_integrity_uses_explicit_environment_and_authentication_seals(self):
+        with patch.object(module,'command',return_value='SYSTEM_SECURITY_FINANCIAL_INTEGRITY_VERIFIED')as command:
+            module.verify_runtime_financial_integrity('/opt/incudal')
+        self.assertEqual(command.call_args.args[0][:5],['/usr/bin/env','ENV_FILE=/opt/incudal/.env','NODE_ENV=production','/usr/bin/node','--input-type=module'])
+        self.assertIn('false,true',command.call_args.args[0][-2])
+        self.assertIn("verifyFinancialBaseline(readFileSync('/var/lib/incudal-finance/baseline.json'",command.call_args.args[0][-2])
+    def test_database_activation_requires_config_and_installed_executable(self):
+        before={key:'same'for key in ['major','data','configHash','hbaHash','unitHash','fileHashes','settingsHash']};before.update(major=16,pid=12)
+        for key in ['major','data','configHash','hbaHash','unitHash','fileHashes','settingsHash']:
+            with patch.object(module.pathlib,'Path')as path,self.assertRaisesRegex(ValueError,'CONFIGURATION_CHANGED'):
+                module.verify_database_activation({**before,key:'changed'},before)
+            path.assert_not_called()
+        with patch.object(module.pathlib,'Path')as path:
+            path.return_value.stat.return_value=types.SimpleNamespace(st_dev=1,st_ino=2)
+            module.verify_database_activation(before,before)
+            path.return_value.stat.side_effect=[types.SimpleNamespace(st_dev=1,st_ino=2),types.SimpleNamespace(st_dev=1,st_ino=3)]
+            with self.assertRaisesRegex(ValueError,'ACTIVATION_PENDING'):module.verify_database_activation(before,before)
     @unittest.skipUnless(hasattr(os,'geteuid')and os.geteuid()==0,'real root file hashes and symlinks required')
     def test_original_sealed_file_checker_rejects_tampered_added_and_changed_links(self):
         import subprocess,hashlib
