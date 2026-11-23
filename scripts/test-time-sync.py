@@ -22,6 +22,16 @@ spec.loader.exec_module(m)
 
 
 class ClockTests(unittest.TestCase):
+    def test_clock_package_install_forces_repository_authentication(self):
+        policy=self.root/'policy';calls=[]
+        with patch.object(m,'POLICY',policy),patch.object(m,'write',side_effect=lambda path,data,*args:path.write_bytes(data)),patch.object(m,'trusted'),patch.object(m.shutil,'which',return_value=None),patch.object(m,'command',side_effect=lambda args,**kwargs:calls.append(args)):
+            m.install_chrony('systemd')
+        apt=[args for args in calls if args[0]=='apt-get']
+        self.assertEqual(len(apt),2)
+        for args in apt:
+            for setting in ['Acquire::AllowInsecureRepositories=false','Acquire::AllowDowngradeToInsecureRepositories=false','Acquire::AllowWeakRepositories=false','APT::Get::AllowUnauthenticated=false']:
+                self.assertIn(setting,args)
+        self.assertFalse(policy.exists())
     def test_reviewed_clock_files_reject_policy_and_service_changes(self):
         for init in ['systemd','openrc']:
             config=Mock();config.read_bytes.return_value=m.managed_clock_configuration()

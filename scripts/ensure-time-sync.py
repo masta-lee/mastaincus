@@ -333,8 +333,9 @@ def install_chrony(init):
             if binary and package_state in ['unpacked','half-configured','triggers-awaited','triggers-pending']:
                 command(['dpkg','--configure','chrony'],timeout=90)
                 return
-            command(['apt-get','-o','DPkg::Lock::Timeout=10','-o','Acquire::Retries=1','-o','Acquire::http::Timeout=15','-o','Acquire::https::Timeout=15','update','-qq'], timeout=60)
-            command(['apt-get','-o','DPkg::Lock::Timeout=10','-y','--no-install-recommends','install','chrony'], timeout=90)
+            authentication=['-o','Acquire::AllowInsecureRepositories=false','-o','Acquire::AllowDowngradeToInsecureRepositories=false','-o','Acquire::AllowWeakRepositories=false','-o','APT::Get::AllowUnauthenticated=false']
+            command(['apt-get',*authentication,'-o','DPkg::Lock::Timeout=10','-o','Acquire::Retries=1','-o','Acquire::http::Timeout=15','-o','Acquire::https::Timeout=15','update','-qq'], timeout=60)
+            command(['apt-get',*authentication,'-o','DPkg::Lock::Timeout=10','-y','--no-install-recommends','install','chrony'], timeout=90)
         finally:
             # Remove only the exact policy created by this helper.
             trusted(POLICY)
