@@ -14,7 +14,7 @@ DEBIAN=['openssl','libssl3','libssl3t64','curl','libcurl4','libcurl4t64','openss
 ALPINE+=['musl','musl-utils','chrony','chrony-openrc','ca-certificates','fuse3-libs','lvm2-libs','device-mapper-libs','device-mapper-event-libs',
     'tar','gzip','xz','squashfs-tools','rsync','libpsl','libidn2','libunistring','c-ares','brotli-libs','nghttp2-libs','nftables','libnftnl','libmnl','iptables','ip6tables']
 DEBIAN+=['libc6','libc-bin','libfuse3-3','libfuse3-4','libnftnl11','libmnl0','iptables','libxtables12','libip4tc2','libip6tc2',
-    'tar','gzip','xz-utils','squashfs-tools','rsync','libpsl5','libpsl5t64','libidn2-0','libunistring5','libc-ares2','libbrotli1','libnghttp2-14','openssh-sftp-server']
+    'tar','gzip','xz-utils','squashfs-tools','rsync','libpsl5','libpsl5t64','libidn2-0','libunistring5','libc-ares2','libbrotli1','libnghttp2-14','openssh-sftp-server','libpq5','postgresql-common','postgresql-client-common']
 
 # These tools and libraries have no daemon lifecycle operation. Installed
 # services loading an old mapping remain activation-required, never marked
@@ -358,10 +358,8 @@ def inventory(all_loaded_code=False):
         simulated=command(['apk','--simulate','--no-cache','--wait','5','upgrade',*sorted(packages)]) if packages else ''
         pending=[line for line in simulated.splitlines() if 'Upgrading 'in line]
     elif system in ['debian','ubuntu']:
-        names=DEBIAN+['postgresql-'+str(n) for n in range(14,19)]+['linux-image-amd64','linux-image-arm64','linux-image-'+os.uname().release]
-        for name in names:
-            result=subprocess.run(['dpkg-query','-W','-f=${db:Status-Status} ${Version}',name],capture_output=True,timeout=5)
-            if result.returncode==0 and result.stdout.startswith(b'installed '):packages[name]=result.stdout.decode().split(' ',1)[1]
+        names=set(DEBIAN)|{'postgresql-'+str(n)for n in range(14,19)}|{'postgresql-client-'+str(n)for n in range(14,19)}|{'linux-image-amd64','linux-image-arm64','linux-image-'+os.uname().release}
+        packages=reviewed_debian_inventory(debian_installed_packages(),names)
         output=command(['apt-get','-o','DPkg::Lock::Timeout=5','--simulate','--only-upgrade','--no-remove','install',*sorted(packages)]) if packages else ''
         pending=[line for line in output.splitlines() if line.startswith('Inst ')]
     else:raise ValueError('SYSTEM_SECURITY_DISTRIBUTION_UNSUPPORTED')
@@ -412,6 +410,17 @@ def debian_installed_packages():
         identity=name+':'+architecture
         if identity in packages or len(packages)>=20000:raise ValueError('SYSTEM_SECURITY_PACKAGE_QUERY_FAILED')
         packages[identity]=version
+    return packages
+
+def reviewed_debian_inventory(installed,names):
+    # One complete bounded dpkg snapshot replaces dozens of independent reads.
+    # Query failures cannot silently turn a missing security component green.
+    packages={}
+    for identity,version in installed.items():
+        name,architecture=identity.split(':',1)
+        if name not in names:continue
+        if name in packages:raise ValueError('SYSTEM_SECURITY_MULTIARCH_REVIEW_REQUIRED')
+        packages[name]=version
     return packages
 
 POLICY=pathlib.Path('/usr/sbin/policy-rc.d')

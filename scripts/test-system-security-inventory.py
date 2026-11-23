@@ -6,6 +6,12 @@ spec=importlib.util.spec_from_file_location('inventory',pathlib.Path(__file__).w
 module=importlib.util.module_from_spec(spec);spec.loader.exec_module(module)
 
 class Plans(unittest.TestCase):
+    def test_reviewed_debian_inventory_rejects_ambiguous_architectures(self):
+        self.assertEqual(module.reviewed_debian_inventory({'libpq5:amd64':'17.12-1','postgresql-client-16:amd64':'16.16-1','unrelated:all':'1.0'},{'libpq5','postgresql-client-16'}),{'libpq5':'17.12-1','postgresql-client-16':'16.16-1'})
+        with self.assertRaisesRegex(ValueError,'MULTIARCH_REVIEW_REQUIRED'):
+            module.reviewed_debian_inventory({'libpq5:amd64':'17.12-1','libpq5:i386':'17.12-1'},{'libpq5'})
+        for name in ['libpq5','postgresql-common','postgresql-client-common']:
+            self.assertIn(name,module.DEBIAN)
     @unittest.skipIf(sys.platform=='win32','actual POSIX process exits')
     def test_process_group_native_exit_churn_is_not_an_error(self):
         import subprocess
