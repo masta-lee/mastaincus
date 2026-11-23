@@ -3,9 +3,43 @@
 package provisioning
 
 import (
+	"context"
+	"fmt"
 	"os"
+	"os/exec"
+	"path/filepath"
+	"strconv"
+	"strings"
+	"syscall"
 	"testing"
+	"time"
 )
+
+func TestHostCommandBoundsDetachedOutputAndFailedChildren(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "child.pid")
+	for _, code := range []int{0, 7} {
+		command := exec.Command("/bin/sh", "-c", fmt.Sprintf("sleep 30 & echo $! > %q; exit %d", path, code))
+		command.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
+		var out limitedBuffer
+		command.Stdout, command.Stderr = &out, &out
+		ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+		started := time.Now()
+		err := waitHostCommand(ctx, command)
+		cancel()
+		data, readErr := os.ReadFile(path)
+		if readErr != nil {
+			t.Fatal(readErr)
+		}
+		pid, parseErr := strconv.Atoi(strings.TrimSpace(string(data)))
+		if parseErr != nil {
+			t.Fatal(parseErr)
+		}
+		defer syscall.Kill(pid, syscall.SIGKILL)
+		if time.Since(started) > 2500*time.Millisecond || code == 0 && err != nil || code != 0 && err == nil {
+			t.Fatal("command deadline/exit code lost", code, err)
+		}
+	}
+}
 
 func TestResourceMountHelperRejectsUntrustedArguments(t *testing.T) {
 	old := os.Args

@@ -594,6 +594,7 @@
     "test:pool-disk-isolation": "node --import tsx scripts/test-pool-disk-isolation.ts",
     "test:pool-disk-preparation": "node --import tsx scripts/test-pool-disk-preparation.ts",
     "test:security-repair-guards": "node --import tsx scripts/test-security-repair-guards.ts",
+    "test:ci-artifact-download": "node ../scripts/test-ci-artifact-download.mjs",
     "test:publisher-installer-signatures": "node ../scripts/test-publisher-installer-signatures.mjs",
     "test:system-security-planner": "python ../scripts/test-system-security-inventory.py",
     "test:nginx-security-config": "python ../scripts/test-nginx-security.py",

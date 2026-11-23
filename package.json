@@ -272,6 +272,7 @@
     "pnpm --filter server test:gateway-dns-convergence",
     "pnpm --filter server test:gateway-domain-guards",
     "pnpm --filter server test:security-repair-guards",
+    "pnpm --filter server test:ci-artifact-download",
     "pnpm --filter server test:publisher-installer-signatures",
     "pnpm --filter server test:system-security-planner",
     "pnpm --filter server test:nginx-security-config"

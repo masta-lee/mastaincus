@@ -13,6 +13,7 @@ import (
 	"regexp"
 	"strings"
 	"syscall"
+	"time"
 
 	"incudal-agent/internal/localincus"
 )
@@ -79,21 +80,40 @@ func runWithFiles(ctx context.Context, name string, files []*os.File, args ...st
 	if name == "incus" || name == "apk" && len(args) > 0 && args[0] == "info" {
 		c.Stderr = &diagnostics
 	}
-	if e = c.Start(); e != nil {
-		return nil, e
+	e = waitHostCommand(ctx, c)
+	if out.overflow || diagnostics.overflow {
+		return nil, fmt.Errorf("host command output exceeded limit")
+	}
+	// Some packaged tools deliberately return 1 with valid version output.
+	// Preserve bounded bytes with that exit status so the caller can validate
+	// the exact expected output; never turn exit!=0 into generic success.
+	return out.data, e
+}
+
+func waitHostCommand(ctx context.Context, c *exec.Cmd) error {
+	// OpenRC legitimately forks a service into its own session. Close inherited
+	// output pipes after the command exits instead of waiting forever for that
+	// daemon; never kill the newly started service's separate process group.
+	c.WaitDelay = time.Second
+	if err := c.Start(); err != nil {
+		return err
 	}
 	done := make(chan error, 1)
 	go func() { done <- c.Wait() }()
 	select {
-	case e = <-done:
-		if out.overflow || diagnostics.overflow {
-			return nil, fmt.Errorf("host command output exceeded limit")
+	case err := <-done:
+		if err != nil && !errors.Is(err, exec.ErrWaitDelay) {
+			_ = syscall.Kill(-c.Process.Pid, syscall.SIGKILL)
 		}
-		return out.data, e
+		if errors.Is(err, exec.ErrWaitDelay) {
+			return nil // original command exited successfully; later state is verified
+		}
+		return err
 	case <-ctx.Done():
 		_ = syscall.Kill(-c.Process.Pid, syscall.SIGKILL)
+		_ = c.Process.Kill()
 		<-done
-		return nil, ctx.Err()
+		return ctx.Err()
 	}
 }
 
