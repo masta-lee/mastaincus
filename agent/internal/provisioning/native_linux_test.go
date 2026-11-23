@@ -20,7 +20,8 @@ func TestNativeRepairAndDrift(t *testing.T) {
 		t.Fatal("automatic package preparation", err)
 	}
 	world, err := os.ReadFile("/etc/apk/world")
-	if err != nil {
+	alpine := err == nil
+	if err != nil && !os.IsNotExist(err) {
 		t.Fatal(err)
 	}
 	if os.Getenv("INCUDAL_PROVISIONING_VISIBILITY_TEST") == "1" {
@@ -53,9 +54,11 @@ func TestNativeRepairAndDrift(t *testing.T) {
 	if err = check(ctx); err != nil {
 		t.Fatal("drift repair readiness", err)
 	}
-	currentWorld, err := os.ReadFile("/etc/apk/world")
-	if err != nil || string(world) != string(currentWorld) {
-		t.Fatal("file drift repair changed administrator package constraints", err)
+	if alpine {
+		currentWorld, err := os.ReadFile("/etc/apk/world")
+		if err != nil || string(world) != string(currentWorld) {
+			t.Fatal("file drift repair changed administrator package constraints", err)
+		}
 	}
 	if err = repair(ctx); err != nil {
 		t.Fatal("idempotent preparation", err)

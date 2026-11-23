@@ -179,4 +179,26 @@ func packagesFor(release string) ([]string, error) {
 
 var required = []string{"aa-exec", "tar", "gzip", "xz", "unsquashfs", "rsync", "nsenter", "lvm", "btrfs", "btrfstune", "mkfs.btrfs"}
 
+func brokenToolPackages(tools []string, alpine bool) []string {
+	owners := map[string][]string{"aa-exec": {"apparmor"}, "tar": {"tar"}, "gzip": {"gzip"}, "xz": {"xz-utils"},
+		"unsquashfs": {"squashfs-tools"}, "rsync": {"rsync"}, "nsenter": {"util-linux"}, "lvm": {"lvm2", "thin-provisioning-tools"},
+		"btrfs": {"btrfs-progs"}, "btrfstune": {"btrfs-progs"}, "mkfs.btrfs": {"btrfs-progs"}, "lxcfs": {"lxcfs"}}
+	if alpine {
+		owners["aa-exec"], owners["xz"], owners["lvm"], owners["lxcfs"] = []string{"apparmor-utils"}, []string{"xz"}, []string{"lvm2", "lvm2-extra", "device-mapper"}, []string{"lxcfs", "lxcfs-openrc"}
+		for _, name := range []string{"btrfs", "btrfstune", "mkfs.btrfs"} {
+			owners[name] = []string{"btrfs-progs", "btrfs-progs-extra"}
+		}
+	}
+	seen, packages := map[string]bool{}, []string{}
+	for _, name := range tools {
+		for _, owner := range owners[name] {
+			if !seen[owner] {
+				seen[owner] = true
+				packages = append(packages, owner)
+			}
+		}
+	}
+	return packages
+}
+
 func releaseFile() (string, error) { b, e := os.ReadFile("/etc/os-release"); return string(b), e }

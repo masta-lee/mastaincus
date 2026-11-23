@@ -119,32 +119,32 @@ func check(ctx context.Context) error {
 	if _, e := systemTool("lxcfs"); e != nil {
 		return e
 	}
-	for _, n := range required {
-		if _, e := systemTool(n); e != nil {
-			return e
-		}
-	}
 	// Dynamic-library/executable failures must not mint readiness from file presence.
 	for _, n := range required {
-		flag := "--help"
-		// Older unsquashfs versions exit 1 even on the version path. Require
-		// their real version output; missing loaders and crashes still fail.
-		if n == "unsquashfs" {
-			flag = "-version"
-		}
-		out, e := run(ctx, n, flag)
-		var exit *exec.ExitError
-		if n == "unsquashfs" && errors.As(e, &exit) && exit.ExitCode() == 1 && regexp.MustCompile(`(?m)^unsquashfs version [0-9]+\.[0-9]+`).Match(out) {
-			e = nil
-		}
-		if n == "btrfstune" && errors.As(e, &exit) && exit.ExitCode() == 1 && strings.Contains(string(out), "btrfstune [options]") {
-			e = nil
-		}
-		if e != nil {
+		if e := checkTool(ctx, n); e != nil {
 			return fmt.Errorf("host tool %s execution failed", n)
 		}
 	}
 	return nil
+}
+
+func checkTool(ctx context.Context, name string) error {
+	if _, err := systemTool(name); err != nil {
+		return err
+	}
+	flag := "--help"
+	if name == "unsquashfs" {
+		flag = "-version"
+	}
+	out, err := run(ctx, name, flag)
+	var exit *exec.ExitError
+	if name == "unsquashfs" && errors.As(err, &exit) && exit.ExitCode() == 1 && regexp.MustCompile(`(?m)^unsquashfs version [0-9]+\.[0-9]+`).Match(out) {
+		return nil
+	}
+	if name == "btrfstune" && errors.As(err, &exit) && exit.ExitCode() == 1 && strings.Contains(string(out), "btrfstune [options]") {
+		return nil
+	}
+	return err
 }
 
 func ensureDiskSupport(ctx context.Context) error {
@@ -251,6 +251,28 @@ func repair(ctx context.Context) error {
 		return e
 	}
 	alpine := strings.Contains(release, "ID=alpine") || strings.Contains(release, "ID=\"alpine\"")
+	// Reinstall only packages owning an actually missing/broken executable.
+	// Reinstalling every tool for one missing aa-exec also runs LXCFS/LVM
+	// maintainer hooks, which may disrupt otherwise healthy customer mounts.
+	broken := []string{}
+	for _, name := range append([]string{"lxcfs"}, required...) {
+		var err error
+		if name == "lxcfs" {
+			_, err = systemTool(name)
+		} else {
+			err = checkTool(ctx, name)
+		}
+		if err != nil {
+			broken = append(broken, name)
+		}
+		if ctx.Err() != nil {
+			return ctx.Err()
+		}
+	}
+	packages = brokenToolPackages(broken, alpine)
+	if len(packages) == 0 {
+		return check(ctx)
+	}
 	if alpine {
 		if e = repairAlpineTools(ctx, packages); e != nil {
 			return e
