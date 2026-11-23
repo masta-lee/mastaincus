@@ -943,7 +943,10 @@ def verify_runtime_financial_integrity(app):
     if command(['/usr/bin/env','ENV_FILE=/opt/incudal/.env','NODE_ENV=production','/usr/bin/node','--input-type=module','-e',code,app],90)!='SYSTEM_SECURITY_FINANCIAL_INTEGRITY_VERIFIED':raise ValueError('SYSTEM_SECURITY_FINANCIAL_INTEGRITY_INVALID')
 
 def verify_runtime_health():
-    deadline=time.monotonic()+120
+    # The service may be active while the unique backend still loads its
+    # database/authentication baseline. Match the reviewed startup budget;
+    # a live process alone never attests business readiness.
+    deadline=time.monotonic()+600
     while True:
         try:
             value=json.loads(command(['curl','-fsS','--max-time','5','http://127.0.0.1:3001/api/health'],10))
@@ -977,7 +980,9 @@ def verify_runtime_integrity():
     if not stat.S_ISREG(info.st_mode)or info.st_uid!=0 or info.st_nlink!=1 or info.st_mode&0o022:raise ValueError('SYSTEM_SECURITY_RUNTIME_HELPER_UNTRUSTED')
     verified=False
     try:
-        verified=command([str(helper),'verify-runtime'],90)=='INCUDAL_SEALED_RUNTIME_VERIFIED'
+        # Verify the complete release and every link on slow small controllers
+        # too. Retain a finite budget and the exact original seal checks.
+        verified=command([str(helper),'verify-runtime'],600)=='INCUDAL_SEALED_RUNTIME_VERIFIED'
     except (ValueError,OSError):pass
     record_runtime_integrity(verified)
     if not verified:raise ValueError('SYSTEM_SECURITY_RUNTIME_INTEGRITY_MISMATCH')

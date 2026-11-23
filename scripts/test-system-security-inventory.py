@@ -106,6 +106,11 @@ class Plans(unittest.TestCase):
         with patch.object(module,'command',side_effect=[json.dumps(row)for row in rows])as command,patch.object(module.time,'sleep'):
             module.verify_runtime_health()
         self.assertEqual(command.call_count,3)
+        with patch.object(module,'command',side_effect=[json.dumps(rows[0]),json.dumps(rows[2])])as command,patch.object(module.time,'sleep'),patch.object(module.time,'monotonic',side_effect=[0,180]):
+            module.verify_runtime_health()
+        self.assertEqual(command.call_count,2,'slow startup beyond two minutes retains exact business-ready checks')
+        with patch.object(module,'command',return_value=json.dumps(rows[0])),patch.object(module.time,'sleep'),patch.object(module.time,'monotonic',side_effect=[0,601]),self.assertRaisesRegex(ValueError,'ACTIVATION_PENDING'):
+            module.verify_runtime_health()
     def test_runtime_integrity_uses_explicit_environment_and_authentication_seals(self):
         with patch.object(module,'command',return_value='SYSTEM_SECURITY_FINANCIAL_INTEGRITY_VERIFIED')as command:
             module.verify_runtime_financial_integrity('/opt/incudal')
@@ -147,6 +152,7 @@ class Plans(unittest.TestCase):
             path.return_value.lstat.return_value=types.SimpleNamespace(st_mode=0o100755,st_uid=0,st_nlink=1)
             module.verify_runtime_integrity();receipt.assert_called_once_with(True)
             self.assertEqual(command.call_args.args[0][1:],[ 'verify-runtime'])
+            self.assertEqual(command.call_args.args[1],600,'complete original seal/link check gets a bounded slow-storage budget')
             self.assertNotIn('seal',str(command.call_args.args))
         with patch.object(module.pathlib,'Path')as path,patch.object(module,'command',side_effect=ValueError('private changed path')),patch.object(module,'record_runtime_integrity')as receipt,self.assertRaisesRegex(ValueError,'RUNTIME_INTEGRITY_MISMATCH'):
             path.return_value.lstat.return_value=types.SimpleNamespace(st_mode=0o100755,st_uid=0,st_nlink=1)
