@@ -298,6 +298,7 @@ class MaintenanceTests(unittest.TestCase):
         (root/'maintenance.lock').touch()
         saved={};snapshots=[['incus-7.0.1-r2','kernel-6.18.58-r0']]
         writes=[];ready=[False];persisted=[]
+        world=['incus\nlinux-lts\n']
         class FakePath:
             def __init__(self,value):self.value=str(value)
             def read_text(self):
@@ -309,10 +310,13 @@ class MaintenanceTests(unittest.TestCase):
         def run(args,**options):
             writes.append(args)
             self.assertIn('pass_fds',options)
+            if args[-1]=='update':return types.SimpleNamespace(returncode=0,stdout=b'',stderr=b'')
             if '--simulate' in args:
-                self.assertEqual(options['timeout'],30)
+                self.assertEqual(options['timeout'],15)
                 return types.SimpleNamespace(returncode=0,stdout=b'(1/2) Installing apparmor (4.1.7-r1)\n(2/2) Installing apparmor-openrc (4.1.7-r1)\n',stderr=b'')
-            self.assertEqual(args[-2:],['apparmor=4.1.7-r1','apparmor-openrc=4.1.7-r1'])
+            self.assertIn('apparmor',args);self.assertIn('apparmor-openrc',args)
+            self.assertFalse(any('='in arg for arg in args),'installation does not persist exact version constraints')
+            world[0]+='\n'.join(args[args.index('add')+1:])+'\n'
             ready[0]=True
             snapshots[0]+=['apparmor-4.1.7-r1','apparmor-openrc-4.1.7-r1']
             return types.SimpleNamespace(returncode=0,stdout=b'',stderr=b'')
@@ -322,13 +326,14 @@ class MaintenanceTests(unittest.TestCase):
             patch.object(module,'installed_packages',side_effect=lambda:sorted(snapshots[0])), \
             patch.object(module.os,'statvfs',return_value=types.SimpleNamespace(f_flag=0,f_bavail=262144,f_frsize=4096,f_favail=4096),create=True), \
             patch.object(module.os,'ST_RDONLY',getattr(module.os,'ST_RDONLY',1),create=True), \
+            patch.object(module,'read',side_effect=lambda *_:world[0].encode()), \
             patch.object(module.subprocess,'run',side_effect=run):
             self.assertTrue(module.ensure_grub_tools(9,saved,lambda:persisted.append(json.loads(json.dumps(saved)))))
-            self.assertEqual(len(writes),1,'simulation yields without starting installation')
+            self.assertEqual(len(writes),2,'signed index and simulation yield without installation')
             self.assertEqual(persisted[0],saved)
             snapshots[0]=['incus-7.0.2-r0','kernel-6.18.58-r0']
             with self.assertRaisesRegex(ValueError,'PACKAGE_BUSY'):module.ensure_grub_tools(9,saved,lambda:None)
-            self.assertEqual(len(writes),1,'changed package baseline never reaches install')
+            self.assertEqual(len(writes),2,'changed package baseline never reaches install')
             snapshots[0]=saved['dependencyPlan']['installed'].copy()
             checks=[]
             def expiry_before_install():
@@ -338,10 +343,10 @@ class MaintenanceTests(unittest.TestCase):
                 if len(checks)==2:raise ValueError('HARDENING_REQUEST_EXPIRED')
             with self.assertRaisesRegex(ValueError,'REQUEST_EXPIRED'):
                 module.ensure_grub_tools(9,saved,lambda:None,expiry_before_install)
-            self.assertEqual(len(writes),1,'expired preparation cannot start the real package install')
+            self.assertEqual(len(writes),2,'expired preparation cannot start the real package install')
             self.assertEqual(saved['dependencyPlan']['phase'],'planned')
             self.assertTrue(module.ensure_grub_tools(9,saved,lambda:None))
-            self.assertEqual(len(writes),2)
+            self.assertEqual(len(writes),4)
             with patch.object(module,'command',return_value=b'') as compile_rules:
                 self.assertTrue(module.ensure_grub_tools(9,saved,lambda:None),'compile yields separately after install')
                 self.assertEqual(compile_rules.call_count,1)
@@ -351,6 +356,26 @@ class MaintenanceTests(unittest.TestCase):
             with self.assertRaisesRegex(ValueError,'PACKAGE_BUSY'):module.ensure_grub_tools(9,saved,lambda:None)
             snapshots[0]=saved['dependencyPlan']['installed']+['apparmor-4.1.7-r1']
             with self.assertRaisesRegex(ValueError,'TOOLS_REQUIRED'):module.ensure_grub_tools(9,saved,lambda:None)
+
+    def test_apparmor_transaction_preserves_admin_world_and_complete_plan(self):
+        world='incus=7.0.1-r2\nlinux-lts\n'
+        self.assertTrue(module.apparmor_world_preserved(world,world+'apparmor\napparmor-openrc\n',['apparmor','apparmor-openrc']))
+        for after in [world+'apparmor=4.1.7-r1\n',world+'apparmor\nlibapparmor\n','incus\nlinux-lts\napparmor\n']:
+            self.assertFalse(module.apparmor_world_preserved(world,after,['apparmor']))
+        self.assertEqual(module.apparmor_install_plan('Installing apparmor (4.1.7-r1)\nInstalling libapparmor (4.1.7-r1)'),['apparmor=4.1.7-r1','libapparmor=4.1.7-r1'])
+        for plan in ['Installing apparmor (unknown)','Installing apparmor (4.1.7-r1)\nInstalling apparmor (4.1.7-r1)','Upgrading incus (7.0.1-r2 -> 7.6.0-r0)','Installing apparmor (4.1.7-r1)\nRemoving incus']:
+            with self.assertRaises(ValueError):module.apparmor_install_plan(plan)
+
+    @unittest.skipUnless(hasattr(os,'geteuid')and os.geteuid()==0,'native root-owned cache paths')
+    def test_actual_apparmor_cache_cleanup_preserves_untrusted_entries(self):
+        with tempfile.TemporaryDirectory(dir='/root')as folder:
+            root=Path(folder);cache=root/'cache';cache.mkdir(mode=0o700)
+            (cache/'signed-index').write_bytes(b'fixture')
+            module.clean_apparmor_package_cache(cache)
+            self.assertFalse(cache.exists())
+            cache.mkdir(mode=0o700);(cache/'unexpected-link').symlink_to('/etc/passwd')
+            with self.assertRaises(ValueError):module.clean_apparmor_package_cache(cache)
+            self.assertTrue((cache/'unexpected-link').is_symlink())
 
     def test_customer_autostart_journal_cas_lost_reply_and_exact_restore(self):
         for original in [None,'true','1','false','0']:

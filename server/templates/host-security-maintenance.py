@@ -181,6 +181,27 @@ def installed_packages():
     if not lines or any(not re.fullmatch(r'[a-zA-Z0-9+_.-]+-[0-9][a-zA-Z0-9+_.~-]*',line) for line in lines):fail('HARDENING_APPARMOR_TOOLS_REQUIRED')
     return sorted(lines)
 
+def apparmor_install_plan(text):
+    if re.search(r'\b(Upgrading|Downgrading|Purging|Removing|Reinstalling)\b',text):fail('HARDENING_APPARMOR_TOOLS_REQUIRED')
+    packages=re.findall(r'Installing ([a-zA-Z0-9+_.-]+) \(([0-9][a-zA-Z0-9+_.~-]*)\)',text)
+    if not packages or len(packages)>20 or len(packages)!=len(set(name for name,_ in packages))or text.count('Installing ')!=len(packages):fail('HARDENING_PACKAGE_BUSY')
+    return sorted(name+'='+version for name,version in packages)
+
+def apparmor_world_preserved(before,after,requested):
+    existing=set(before.splitlines());current=set(after.splitlines())
+    expected=set(existing)
+    for name in requested:
+        if not any(re.split(r'[@=~<>]',line,maxsplit=1)[0]==name for line in existing):expected.add(name)
+    return current==expected
+
+def clean_apparmor_package_cache(path):
+    protected(path,True)
+    for entry in path.iterdir():
+        info=entry.lstat()
+        if not stat.S_ISREG(info.st_mode)or info.st_uid!=0 or info.st_nlink!=1 or info.st_mode&0o022:fail()
+        entry.unlink()
+    path.rmdir()
+
 def apparmor_tools_ready():
     branch='.'.join(Path('/etc/alpine-release').read_text().strip().split('.')[:2])
     if not Path('/usr/bin/aa-exec').is_file() or not os.access('/usr/bin/aa-exec',os.X_OK):return False
@@ -219,6 +240,10 @@ def ensure_grub_tools(lock_fd,state,persist,allowed=lambda:None):
     repositories=ROOT/'apparmor.repositories'
     allowed()
     atomic(repositories,('https://dl-cdn.alpinelinux.org/alpine/v'+branch+'/main\nhttps://dl-cdn.alpinelinux.org/alpine/v'+branch+'/community\n').encode())
+    signed_cache=ROOT/'apparmor-package-cache'
+    if not signed_cache.exists():signed_cache.mkdir(mode=0o700)
+    protected(signed_cache,True)
+    cache_base=['apk','--cache-dir',str(signed_cache),'--cache-max-age','60','--timeout','10','--repositories-file',str(repositories)]
     # Simulate the signed dependency transaction first. Installing a missing
     # dependency is fine; replacing existing packages is a separate operation.
     if plan is None:
@@ -227,13 +252,14 @@ def ensure_grub_tools(lock_fd,state,persist,allowed=lambda:None):
         # installation never shares the simulation's remaining time budget.
         before=installed_packages()
         allowed()
-        simulated=subprocess.run(['apk','--simulate','--no-cache','--repositories-file',str(repositories),'add',*apparmor_packages(branch)],capture_output=True,timeout=30,pass_fds=(lock_fd,),env={'PATH':'/usr/sbin:/usr/bin:/sbin:/bin','LC_ALL':'C'})
+        updated=subprocess.run(['timeout','10',*cache_base,'update'],capture_output=True,timeout=15,pass_fds=(lock_fd,),env={'PATH':'/usr/sbin:/usr/bin:/sbin:/bin','LC_ALL':'C'})
+        if updated.returncode:fail('HARDENING_APPARMOR_TOOLS_REQUIRED')
+        simulated=subprocess.run([*cache_base,'--simulate','add',*apparmor_packages(branch)],capture_output=True,timeout=15,pass_fds=(lock_fd,),env={'PATH':'/usr/sbin:/usr/bin:/sbin:/bin','LC_ALL':'C'})
         if simulated.returncode:fail('HARDENING_APPARMOR_TOOLS_REQUIRED')
         simulation=(simulated.stdout+simulated.stderr).decode(errors='replace')
-        if re.search(r'\b(Upgrading|Downgrading|Purging|Reinstalling)\b',simulation):fail('HARDENING_APPARMOR_TOOLS_REQUIRED')
-        packages=re.findall(r'Installing ([a-zA-Z0-9+_.-]+) \(([0-9][a-zA-Z0-9+_.~-]*)\)',simulation)
-        if not packages or len(packages)>20 or len(packages)!=len(set(name for name,_ in packages)) or installed_packages()!=before:fail('HARDENING_PACKAGE_BUSY')
-        state['dependencyPlan']={'packages':[name+'='+version for name,version in packages],'installed':before,'phase':'planned'}
+        packages=apparmor_install_plan(simulation)
+        if installed_packages()!=before:fail('HARDENING_PACKAGE_BUSY')
+        state['dependencyPlan']={'packages':packages,'installed':before,'phase':'planned'}
         persist();return True
     if not isinstance(plan,dict) or set(plan) not in [{'packages','installed'},{'packages','installed','phase'}] or plan.get('phase','planned') not in ['planned','installed','verified'] or not isinstance(plan['packages'],list) or not 1<=len(plan['packages'])<=20 or any(not isinstance(p,str) or not re.fullmatch(r'[a-zA-Z0-9+_.-]+=[0-9][a-zA-Z0-9+_.~-]*',p) for p in plan['packages']) or not isinstance(plan['installed'],list) or not plan['installed'] or any(not isinstance(p,str) or not re.fullmatch(r'[a-zA-Z0-9+_.-]+-[0-9][a-zA-Z0-9+_.~-]*',p) for p in plan['installed']):fail()
     if len({p.split('=',1)[0] for p in plan['packages']})!=len(plan['packages']) or len(set(plan['installed']))!=len(plan['installed']):fail()
@@ -244,17 +270,34 @@ def ensure_grub_tools(lock_fd,state,persist,allowed=lambda:None):
     complete=set(current)==set(plan['installed'])|new
     if complete:
         if not apparmor_tools_ready():fail('HARDENING_APPARMOR_TOOLS_REQUIRED')
-        if plan.get('phase')=='verified':return False
+        if plan.get('phase')=='verified':
+            clean_apparmor_package_cache(signed_cache);return False
         # Compilation is its own bounded request after installation, never
         # shares apk's 35-second budget. Use one worker on small hosts.
         allowed()
         command(['apparmor_parser','-Q','-T','-j','1','/etc/apparmor.d'],timeout=15)
-        plan['phase']='verified';persist();return True
+        plan['phase']='verified';persist();clean_apparmor_package_cache(signed_cache);return True
     if plan.get('phase','planned')!='planned':fail('HARDENING_APPARMOR_TOOLS_REQUIRED')
     allowed()
-    result=subprocess.run(['timeout','30','apk','--no-cache','--repositories-file',str(repositories),'add',*plan['packages']],capture_output=True,timeout=35,pass_fds=(lock_fd,),env={'PATH':'/usr/sbin:/usr/bin:/sbin:/bin','LC_ALL':'C'})
+    # Exact add atoms persist every dependency in world and block its next
+    # security revision. The persisted full plan still pins this transaction;
+    # refresh one signed private index, re-simulate and add only missing
+    # reviewed AppArmor package names. Administrator constraints remain fixed.
+    world=read(Path('/etc/apk/world')).decode()
+    present={re.match(r'^(.*)-([0-9][a-zA-Z0-9+_.~-]*)$',p).group(1)for p in current}
+    requested=[name for name in apparmor_packages(branch)if name not in present]
+    if not requested:fail('HARDENING_APPARMOR_TOOLS_REQUIRED')
+    if any(re.split(r'[@=~<>]',line,maxsplit=1)[0]in requested and line not in requested for line in world.splitlines()):fail('HARDENING_PACKAGE_BUSY')
+    simulated=subprocess.run([*cache_base,'--simulate','add',*requested],capture_output=True,timeout=15,pass_fds=(lock_fd,),env={'PATH':'/usr/sbin:/usr/bin:/sbin:/bin','LC_ALL':'C'})
+    if simulated.returncode:fail('HARDENING_APPARMOR_TOOLS_REQUIRED')
+    remaining={p for p in plan['packages']if p.replace('=','-',1)not in current}
+    if set(apparmor_install_plan((simulated.stdout+simulated.stderr).decode(errors='replace')))!=remaining or installed_packages()!=current:fail('HARDENING_PACKAGE_BUSY')
+    allowed()
+    result=subprocess.run(['timeout','30',*cache_base,'add',*requested],capture_output=True,timeout=35,pass_fds=(lock_fd,),env={'PATH':'/usr/sbin:/usr/bin:/sbin:/bin','LC_ALL':'C'})
     if result.returncode:fail('HARDENING_APPARMOR_TOOLS_REQUIRED')
+    if not apparmor_world_preserved(world,read(Path('/etc/apk/world')).decode(),requested):fail('HARDENING_PACKAGE_BUSY')
     if set(installed_packages())!=set(plan['installed'])|new:fail('HARDENING_PACKAGE_BUSY')
+    clean_apparmor_package_cache(signed_cache)
     plan['phase']='installed';persist()
     return True
 
