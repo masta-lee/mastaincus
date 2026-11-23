@@ -4,6 +4,7 @@ import { spawnSync } from 'node:child_process'
 import { generateContainerConfig } from '../src/lib/incus-config-container.js'
 import { generateVmConfig } from '../src/lib/incus-config-vm.js'
 import { alpineSshSecurityScript, assertAlpineSshSecurityInspection } from '../src/lib/alpine-ssh-security.js'
+import { alpinePythonPackagePreparation } from '../src/lib/alpine-python-init.js'
 
 for (const branch of ['3.19', '3.20', '3.21', '3.22', '3.23', '3.24']) {
   for (const generate of [generateContainerConfig, generateVmConfig]) {
@@ -12,9 +13,27 @@ for (const branch of ['3.19', '3.20', '3.21', '3.22', '3.23', '3.24']) {
     assert.ok(data.includes('PasswordAuthentication yes') && data.includes('ssh_pwauth: true'))
     assert.ok(!data.includes('--allow-untrusted') && !data.includes('s/https:/http:/'))
     assert.ok(!data.includes('echo "PasswordAuthentication no"') && !data.includes('PasswordAuthentication no/'))
+    assert.ok(data.includes('prepare_alpine_python_packages') && data.includes('python3-ndbm'), 'fresh Alpine container and VM align Python before split-package dependency installation')
     // Both generators retain Alpine password login and verify parsed policy.
     if (generate === generateVmConfig) assert.ok(data.includes('passwordauthentication yes$'))
   }
+}
+for (const mode of ['clean', 'partial', 'repair-failed', 'no-python']) {
+  const shell = spawnSync(process.platform === 'win32' ? 'C:/Program Files/Git/bin/bash.exe' : '/bin/sh', [], {
+    input: `set -eu\n${alpinePythonPackagePreparation}\n` + `
+trace=''
+apk() {
+  if [ "$1" = info ]; then [ '${mode}' != no-python ] && [ "$3" = python3 ]; return; fi
+  trace="$trace $5"
+  if [ "$5" = upgrade ]; then [ '${mode}' = clean ]; else [ '${mode}' != repair-failed ]; fi
+}
+if prepare_alpine_python_packages; then result=ok; else result=failed; fi
+printf '%s|%s' "$result" "$trace"
+`, encoding: 'utf8', windowsHide: true
+  })
+  assert.equal(shell.status, 0, shell.stderr)
+  const expected = mode === 'clean' ? 'ok| upgrade' : mode === 'partial' ? 'ok| upgrade fix' : mode === 'repair-failed' ? 'failed| upgrade fix' : 'ok|'
+  assert.equal(shell.stdout, expected)
 }
 assert.doesNotThrow(() => assertAlpineSshSecurityInspection('INCUDAL_SSH_NOT_ALPINE\n'))
 assert.doesNotThrow(() => assertAlpineSshSecurityInspection('INCUDAL_ALPINE_SSH_FIXED\n'))

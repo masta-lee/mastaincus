@@ -4,6 +4,8 @@
 
 ## 续接实施状态（2026-11-22，尚未完成）
 
+2026-11-24新Alpine初始化修复：780cafa83fd460211421df9d790fadf8561ee891已推关闭修复，CI45286102220双Alpine失败完整2306保留；此前1446CI最终cancelled/26success/2failure，不计绿。官方cloud实际SHA2292/2293复现Python3.14.10-r1→ndbm-r2拆包文件冲突，正常网络/APKupdate不代安装成功；先升级已装Python组/按当前组fix，再装必需工具，容器和VM共用helper。官方新root项目实际脚本2302、故意部分失败后自动恢复2305都成功，types/build2300、AlpineSSHguard2301及创建补偿2303通过；未force-overwrite/破world/移除初始化验收。待同source双架构开通/完整预览/实际自动runtime事务，主控本轮未写、不正式发版，基础库内核/历史锁迁移/真实OSS未完成。
+
 2026-11-24自动维护继续实证：systemd入口2270两轮真实成功、activated/pending[]/正常deadline/重复原backendPG不重启；这次无新包，不代完整更新事务。旧runtime起点2281在SIGTERM exit1即停止，NodePG尚未降级/PG7020保持，2284确证Avvio默认10秒覆盖preClose长排空。源码HTTP先停接入/HTTP与后台全settled→Fastify短preClose，保失败/活请求/35分钟预算，备份longhook/type/build2289与真实systemd31秒HTTP+长hook/95秒启动2287过。原隔离候选已33077正常healthy/财务身份2286，关闭修复待保存及最终source包，不能说完整自动更新验收已过。1446完整预览45282424927全success，主CI45282299097双Alpine3.24失败job138069609178/138069609877完整2288卡APK必要初始化，未查明/待修，不计全绿。生产本轮仍未写、正式发行暂停、root密码由owner自行换。
 
 2026-11-24后续预算精修：e516cab84f606554608c71620de283e1a5128fe2主CI45274577617 30/30及配套五工作流、完整预览45275124048双首装/root恢复/六旧worker全success，Release预期skipped。实际隔离timer入口准备2227原installer/完整249验签包23719文件通过，测试脚本误生成pyc被原seal拒绝已移私有证据、统一-I-B且未重seal；后端稍晚就绪，原seal完整成功431秒。改维护health120秒/seal90秒为有界600秒，保完整内容/身份/恢复hold/业务ready核验；37Linux2264与security2264/planner2268通过，新预算完整原seal入口2267自然成功且保历史失败/原后台18085 PG7020/env/财务认证。实际systemd维护/重复2270仍在途，最终新sourceCI/包仍待。主控本轮未改、root密码由owner自行换、正式发版暂停；旧锁迁移/基础库内核/真实OSS缺口保持。

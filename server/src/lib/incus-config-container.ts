@@ -6,6 +6,7 @@
 import crypto from 'crypto'
 import { rootCertificates } from 'node:tls'
 import { alpineSshSecurityScript } from './alpine-ssh-security.js'
+import { alpinePythonPackagePreparation } from './alpine-python-init.js'
 import { rhelPackageInstallCommand } from './rhel-package-install.js'
 
 // ==================== 类型定义 ====================
@@ -258,7 +259,8 @@ function getSetupCommands(osInfo: OsInfo): string[] {
   // ================= Alpine =================
   if (osInfo.family === 'alpine') {
     const essentialPkgs = 'openssh openssh-server-pam bash shadow sed grep dhcpcd openresolv util-linux ca-certificates curl iproute2'
-    const installCmd = `apk update && apk add --no-cache ${essentialPkgs}`
+    cmds.push(alpinePythonPackagePreparation)
+    const installCmd = `apk update && prepare_alpine_python_packages && apk add --no-cache ${essentialPkgs}`
     cmds.push(wrapWithNetworkRetry(installCmd))
     cmds.push('/usr/local/bin/incudal-alpine-ssh-security.sh install')
     cmds.push('touch /etc/shadow && chmod 640 /etc/shadow || true')

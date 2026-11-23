@@ -1,6 +1,7 @@
 import { rootCertificates } from 'node:tls'
 import { generateVmNicMacs, type VmNicMacs } from './vm-network-identifiers.js'
 import { alpineSshSecurityScript } from './alpine-ssh-security.js'
+import { alpinePythonPackagePreparation } from './alpine-python-init.js'
 import { rhelPackageInstallCommand } from './rhel-package-install.js'
 
 // ================= 类型定义 =================
@@ -166,7 +167,7 @@ function getPackageInstallCommand(osInfo: VmOsInfo): string {
     case 'yum':
       return `retry_cmd "${rhelPackageInstallCommand('yum', ['qemu-guest-agent', 'openssh-server', 'openssh-clients', 'curl', 'ca-certificates'])}"`
     case 'apk':
-      return 'retry_cmd "apk update" && retry_cmd "apk add --no-cache qemu-guest-agent openssh curl ca-certificates shadow util-linux"'
+      return 'retry_cmd "apk update" && prepare_alpine_python_packages && retry_cmd "apk add --no-cache qemu-guest-agent openssh curl ca-certificates shadow util-linux"'
     default:
       return ':'
   }
@@ -246,7 +247,7 @@ export PATH
 LOG_FILE="/var/log/incudal-vm-setup.log"
 exec >>"$LOG_FILE" 2>&1
 # 不启用 shell trace，避免 ROOT_PASSWORD/SSH_KEY 写入 guest 日志
-${osInfo.family === 'alpine' ? alpineSshSecurityScript : ''}
+${osInfo.family === 'alpine' ? alpineSshSecurityScript + '\n' + alpinePythonPackagePreparation : ''}
 
 SSH_KEY="${escapedKey}"
 ROOT_PASSWORD='${escapedPassword}'
