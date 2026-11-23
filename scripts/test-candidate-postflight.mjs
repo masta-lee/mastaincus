@@ -4,10 +4,17 @@ import{join}from'node:path'
 import{tmpdir}from'node:os'
 import{execFileSync}from'node:child_process'
 import{verifyInstalledCandidate}from'./finalize-verified-owner-candidate.mjs'
+import{sealedRuntimeLinks}from'./sealed-runtime-links.mjs'
 if(process.platform==='linux'&&process.getuid()===0){
  const root=mkdtempSync(join(tmpdir(),'incudal-postflight-'));try{
   const source=join(root,'source'),app=join(root,'app'),archive=join(root,'candidate.tar.gz'),version='v1.8.14-test.abcdef1'
   for(const dir of[source,app]){mkdirSync(dir);writeFileSync(join(dir,'runtime.js'),'exact original code\n');symlinkSync('runtime.js',join(dir,'runtime-link'))}
+  for (const name of ['space link','line\nlink','单引号\'','--option']) symlinkSync('target with\nline and space',join(app,name))
+  symlinkSync('target\n\n',join(app,'trailing-newline'))
+  const originalLinks=execFileSync('/bin/bash',['-c',String.raw`while IFS= read -r -d '' link; do printf '%q -> %q\n' "$link" "$(readlink -- "$link")"; done < <(find . -xdev -type l -print0 | sort -z)`],{cwd:app,encoding:'utf8'})
+  assert.equal(sealedRuntimeLinks(app),originalLinks,'bulk read must retain original quoting, ordering and exact targets')
+  for (const name of ['space link','line\nlink','单引号\'','--option']) rmSync(join(app,name))
+  rmSync(join(app,'trailing-newline'))
   writeFileSync(join(source,'version.json'),JSON.stringify({version,deployedAt:null,gitCommit:'a'.repeat(12)}));writeFileSync(join(app,'version.json'),JSON.stringify({version,deployedAt:new Date().toISOString(),gitCommit:'a'.repeat(12)}))
   for(const dir of[source,app])linkSync(join(dir,'runtime.js'),join(dir,'runtime-hardlink.js'))
   execFileSync('tar',['-czf',archive,'-C',source,'.']);verifyInstalledCandidate(archive,app,version)

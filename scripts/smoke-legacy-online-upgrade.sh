@@ -190,7 +190,7 @@ if tar -xOf "$candidate" ./version.json | python3 -c 'import json,sys,re; sys.ex
   # Checkout files belong to the GitHub runner. Protect only these reviewed
   # test tools in a separate root directory; never relax production ownership.
   install -d -o root -g root -m700 "$work/owner-candidate-tools"
-  for tool in apply-verified-owner-candidate.mjs finalize-verified-owner-candidate.mjs panel-package-signature.mjs agent-package-signature.mjs; do
+  for tool in apply-verified-owner-candidate.mjs finalize-verified-owner-candidate.mjs panel-package-signature.mjs agent-package-signature.mjs sealed-runtime-links.mjs; do
     install -o root -g root -m600 "$repo/scripts/$tool" "$work/owner-candidate-tools/$tool"
   done
   INCUDAL_OWNER_CANDIDATE_DEPLOY=authorized-test node "$work/owner-candidate-tools/apply-verified-owner-candidate.mjs" "$candidate" "$candidate_version" --preflight

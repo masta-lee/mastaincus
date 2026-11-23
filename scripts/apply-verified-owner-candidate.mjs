@@ -7,6 +7,7 @@ import {createHash,createPublicKey,verify} from 'node:crypto'
 import {execFileSync} from 'node:child_process'
 import {Readable} from 'node:stream'
 import {resolve,basename,join} from 'node:path'
+import {sealedRuntimeLinks} from './sealed-runtime-links.mjs'
 
 assert.equal(process.platform,'linux');assert.equal(process.getuid(),0)
 assert.equal(process.env.INCUDAL_OWNER_CANDIDATE_DEPLOY,'authorized-test')
@@ -27,8 +28,8 @@ assert.ok(!existsSync('/var/lib/incudal-backup/recovery-hold.json'))
 const sourceManifest='/var/lib/incudal-ota/manifests/'+createHash('sha256').update(app).digest('hex')+'.sha256'
 for(const file of[sourceManifest,sourceManifest+'.links']){const s=lstatSync(file);assert.ok(s.isFile()&&!s.isSymbolicLink()&&s.uid===0&&s.gid===0&&!(s.mode&0o022))}
 execFileSync('sha256sum',['--check','--strict','--quiet',sourceManifest],{cwd:app,stdio:'pipe'})
-const links=execFileSync('/bin/bash',['-c',String.raw`while IFS= read -r -d '' link; do printf '%q -> %q\n' "$link" "$(readlink -- "$link")"; done < <(find . -xdev -type l ! -path './server/certs/*' ! -path './.npm/*' ! -path './.cache/*' ! -path './.incudal-update-downloads/*' ! -path './update-logs/*' ! -path './agent-release/*' -print0 | sort -z)`],{cwd:app,encoding:'utf8'})
-assert.equal(links,readFileSync(sourceManifest+'.links','utf8'))
+const links=sealedRuntimeLinks(app)
+assert.ok(links===readFileSync(sourceManifest+'.links','utf8'),'SEALED_RUNTIME_LINKS_MISMATCH')
 assert.equal(execFileSync('git',['-C','/opt/incudal','remote','get-url','origin'],{encoding:'utf8'}).trim(),'https://github.com/mastalee928/payincus.git')
 process.env.INCUDAL_APP_DIR=app;process.env.INSTALL_DIR='/opt/incudal';process.env.SYSTEM_UPDATE_APPLY_MODE='artifact';process.env.SERVICE_NAME='incudal-backend'
 assert.notEqual(process.env.RUN_DB_CHECKS,'0')
