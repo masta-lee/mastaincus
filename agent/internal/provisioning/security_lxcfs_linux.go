@@ -5,6 +5,7 @@ package provisioning
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 	"strconv"
@@ -118,18 +119,30 @@ func repairLxcfsSecurity(ctx context.Context, permit *CompatPermit) error {
 }
 
 func repairEmptyHostServiceSecurity(ctx context.Context, permit *CompatPermit) error {
-	packages, done := context.WithTimeout(ctx, 60*time.Second)
-	err := repairLxcfsSecurity(packages, permit)
-	done()
-	if err != nil {
-		return err
+	return runEmptyHostSecurityStages(ctx, permit, repairLxcfsSecurity, repairHostClockSecurity, repairEmptyHostDNSSecurity)
+}
+
+func runEmptyHostSecurityStages(ctx context.Context, permit *CompatPermit, stages ...func(context.Context, *CompatPermit) error) error {
+	var failed []error
+	for _, stage := range stages {
+		if err := ctx.Err(); err != nil {
+			failed = append(failed, err)
+			break
+		}
+		current, cancel := context.WithTimeout(ctx, 60*time.Second)
+		err := stage(current, permit)
+		cancel()
+		if err != nil {
+			failed = append(failed, err)
+		}
 	}
-	clock, done := context.WithTimeout(ctx, 60*time.Second)
-	err = repairHostClockSecurity(clock, permit)
-	done()
-	if err != nil {
-		return err
-	}
+	// A clock/config or mirror failure must not skip independent DNS/FUSE
+	// maintenance. Every stage still checks its own original authority and
+	// returns its failure; the whole pass retries instead of reporting success.
+	return errors.Join(failed...)
+}
+
+func repairEmptyHostDNSSecurity(ctx context.Context, permit *CompatPermit) error {
 	ctx, cancel := context.WithTimeout(ctx, 60*time.Second)
 	defer cancel()
 	old, err := managedDNSActivationPending(ctx, "/var/lib/incus/networks", "/proc")

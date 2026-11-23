@@ -12,10 +12,31 @@ import (
 	"time"
 )
 
+func nativeClockPermit(t *testing.T) *CompatPermit {
+	t.Helper()
+	permit := &CompatPermit{RequestID: "11111111-1111-4111-8111-111111111111", HostIdentity: strings.Repeat("a", 64), ExpiresAt: time.Now().Add(240 * time.Second).Format(time.RFC3339Nano)}
+	// The preceding DNS reload schedules real Incus image refresh operations.
+	// Settle that fixture before replacing any clock executable; production
+	// still refuses busy operations immediately and retries its next pass.
+	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
+	defer cancel()
+	for {
+		if err := authorizeEmptySecurityHost(ctx, permit); err == nil {
+			return permit
+		}
+		select {
+		case <-ctx.Done():
+			t.Fatal("native preceding Incus operations did not settle")
+		case <-time.After(100 * time.Millisecond):
+		}
+	}
+}
+
 func TestNativeManagedHostClockSecurityActivation(t *testing.T) {
 	if os.Getenv("INCUDAL_SYSINFO_COMPAT_TEST") != "disposable" || os.Getenv("INCUDAL_COMPAT_RELOAD_SCENARIO") != "empty-pool" {
 		t.Skip("disposable empty Alpine clock only")
 	}
+	permit := nativeClockPermit(t)
 	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
 	defer cancel()
 	before, err := managedHostClockProcess(ctx)
@@ -33,7 +54,6 @@ func TestNativeManagedHostClockSecurityActivation(t *testing.T) {
 	if err = os.Rename(path+".security-test", path); err != nil {
 		t.Fatal(err)
 	}
-	permit := &CompatPermit{RequestID: "11111111-1111-4111-8111-111111111111", HostIdentity: strings.Repeat("a", 64), ExpiresAt: time.Now().Add(240 * time.Second).Format(time.RFC3339Nano)}
 	if err = repairHostClockSecurity(ctx, permit); err != nil {
 		t.Fatal(err)
 	}
@@ -53,6 +73,7 @@ func TestNativeManagedHostClockStoppedRecovery(t *testing.T) {
 	if os.Getenv("INCUDAL_SYSINFO_COMPAT_TEST") != "disposable" || os.Getenv("INCUDAL_COMPAT_RELOAD_SCENARIO") != "empty-pool" {
 		t.Skip("disposable empty Alpine clock only")
 	}
+	permit := nativeClockPermit(t)
 	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
 	defer cancel()
 	if _, err := run(ctx, "rc-service", "incudal-clock", "stop"); err != nil {
@@ -61,7 +82,6 @@ func TestNativeManagedHostClockStoppedRecovery(t *testing.T) {
 	if _, err := managedHostClockProcess(ctx); !errors.Is(err, errManagedClockStopped) {
 		t.Fatal("exact stopped state not detected", err)
 	}
-	permit := &CompatPermit{RequestID: "11111111-1111-4111-8111-111111111111", HostIdentity: strings.Repeat("a", 64), ExpiresAt: time.Now().Add(120 * time.Second).Format(time.RFC3339Nano)}
 	if err := repairHostClockSecurity(ctx, permit); err != nil {
 		t.Fatal("stopped activation did not resume", err)
 	}

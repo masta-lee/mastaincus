@@ -4,6 +4,7 @@ package provisioning
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	"os/exec"
@@ -13,6 +14,33 @@ import (
 	"testing"
 	"time"
 )
+
+func TestEmptyHostSecurityContinuesIndependentStages(t *testing.T) {
+	first, third := errors.New("first failed"), errors.New("third failed")
+	permit := &CompatPermit{}
+	called := 0
+	err := runEmptyHostSecurityStages(context.Background(), permit, func(ctx context.Context, p *CompatPermit) error {
+		called++
+		if p != permit {
+			t.Fatal("authority changed")
+		}
+		deadline, ok := ctx.Deadline()
+		if !ok || time.Until(deadline) > 60*time.Second {
+			t.Fatal("stage deadline lost")
+		}
+		return first
+	}, func(context.Context, *CompatPermit) error { called++; return nil }, func(context.Context, *CompatPermit) error { called++; return third })
+	if called != 3 || !errors.Is(err, first) || !errors.Is(err, third) {
+		t.Fatal("independent maintenance skipped or failure lost", called, err)
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	called = 0
+	err = runEmptyHostSecurityStages(ctx, permit, func(context.Context, *CompatPermit) error { called++; return nil })
+	if called != 0 || !errors.Is(err, context.Canceled) {
+		t.Fatal("expired pass continued", called, err)
+	}
+}
 
 func TestLxcfsSecurityRejectsOccupiedOrExpiredAuthority(t *testing.T) {
 	p := &CompatPermit{RequestID: "11111111-1111-4111-8111-111111111111", HostIdentity: strings.Repeat("a", 64), ExpiresAt: time.Now().Add(time.Minute).Format(time.RFC3339Nano), Guests: []CompatGuestPermit{{Name: "paid", UUID: "11111111-1111-4111-8111-111111111111", State: "Running"}}}
