@@ -11,7 +11,9 @@ import types
 import unittest
 from unittest.mock import patch
 if os.name=='nt':sys.modules.setdefault('fcntl',types.SimpleNamespace(LOCK_EX=2,LOCK_NB=4,flock=lambda *_:None))
-spec=importlib.util.spec_from_file_location('host_maintenance',Path(__file__).parents[1]/'server/templates/host-security-maintenance.py')
+source_path=Path(__file__).parents[1]/'server/templates/host-security-maintenance.py'
+if not source_path.exists():source_path=Path(__file__).with_name('host-security-maintenance.py')
+spec=importlib.util.spec_from_file_location('host_maintenance',source_path)
 module=importlib.util.module_from_spec(spec);spec.loader.exec_module(module)
 class MaintenanceTests(unittest.TestCase):
     def fixture(self, initial_enabled=False):
@@ -296,9 +298,10 @@ class MaintenanceTests(unittest.TestCase):
     def test_dependency_plan_yields_pins_versions_and_rejects_changed_baseline(self):
         stack,root,_,_,_,_,_,_=self.fixture()
         (root/'maintenance.lock').touch()
-        saved={};snapshots=[['incus-7.0.1-r2','kernel-6.18.58-r0']]
+        baseline=['incus-7.0.1-r2','kernel-6.18.58-r0',*[name+'-4.1.7-r1'for name in module.apparmor_packages('3.24')if name not in ['apparmor','apparmor-openrc']]]
+        saved={};snapshots=[baseline.copy()]
         writes=[];ready=[False];persisted=[]
-        world=['incus\nlinux-lts\n']
+        world=['incus=7.0.1-r2\nlinux-lts\n']
         class FakePath:
             def __init__(self,value):self.value=str(value)
             def read_text(self):
@@ -313,12 +316,14 @@ class MaintenanceTests(unittest.TestCase):
             if args[-1]=='update':return types.SimpleNamespace(returncode=0,stdout=b'',stderr=b'')
             if '--simulate' in args:
                 self.assertEqual(options['timeout'],15)
-                return types.SimpleNamespace(returncode=0,stdout=b'(1/2) Installing apparmor (4.1.7-r1)\n(2/2) Installing apparmor-openrc (4.1.7-r1)\n',stderr=b'')
-            self.assertIn('apparmor',args);self.assertIn('apparmor-openrc',args)
+                remaining=[name for name in ['apparmor','apparmor-openrc']if name+'-4.1.7-r1'not in snapshots[0]]
+                return types.SimpleNamespace(returncode=0,stdout=''.join('Installing '+name+' (4.1.7-r1)\n'for name in remaining).encode(),stderr=b'')
+            requested=args[args.index('add')+1:]
+            self.assertTrue(requested);self.assertTrue(set(requested).issubset({'apparmor','apparmor-openrc'}))
             self.assertFalse(any('='in arg for arg in args),'installation does not persist exact version constraints')
-            world[0]+='\n'.join(args[args.index('add')+1:])+'\n'
+            world[0]+='\n'.join(requested)+'\n'
             ready[0]=True
-            snapshots[0]+=['apparmor-4.1.7-r1','apparmor-openrc-4.1.7-r1']
+            snapshots[0]+=[name+'-4.1.7-r1'for name in requested]
             return types.SimpleNamespace(returncode=0,stdout=b'',stderr=b'')
         # Keep this focused on the actual planner/installer, not the surrounding
         # boot fixture. Network simulation and installation must be separate.
@@ -331,6 +336,14 @@ class MaintenanceTests(unittest.TestCase):
             self.assertTrue(module.ensure_grub_tools(9,saved,lambda:persisted.append(json.loads(json.dumps(saved)))))
             self.assertEqual(len(writes),2,'signed index and simulation yield without installation')
             self.assertEqual(persisted[0],saved)
+            self.assertEqual(saved['dependencyPlan']['worldBefore'],world[0])
+            original_world=world[0]
+            for changed in [original_world.replace('incus=7.0.1-r2','incus'),original_world+'unrelated\n',original_world+'apparmor=4.1.7-r1\n']:
+                world[0]=changed
+                with self.assertRaisesRegex(ValueError,'PACKAGE_BUSY'):module.ensure_grub_tools(9,saved,lambda:None)
+                self.assertEqual(len(writes),2,'world drift cannot reach simulation or installation')
+                self.assertEqual(world[0],changed,'administrator changes are never overwritten')
+            world[0]=original_world
             snapshots[0]=['incus-7.0.2-r0','kernel-6.18.58-r0']
             with self.assertRaisesRegex(ValueError,'PACKAGE_BUSY'):module.ensure_grub_tools(9,saved,lambda:None)
             self.assertEqual(len(writes),2,'changed package baseline never reaches install')
@@ -345,17 +358,60 @@ class MaintenanceTests(unittest.TestCase):
                 module.ensure_grub_tools(9,saved,lambda:None,expiry_before_install)
             self.assertEqual(len(writes),2,'expired preparation cannot start the real package install')
             self.assertEqual(saved['dependencyPlan']['phase'],'planned')
+            def partial_install(args,**options):
+                if 'add'in args and '--simulate'not in args:
+                    writes.append(args);snapshots[0].append('apparmor-4.1.7-r1');world[0]+='apparmor\n'
+                    raise TimeoutError('lost partial install response')
+                return run(args,**options)
+            with patch.object(module.subprocess,'run',side_effect=partial_install),self.assertRaises(TimeoutError):
+                module.ensure_grub_tools(9,saved,lambda:None)
+            self.assertEqual(saved['dependencyPlan']['phase'],'planned')
+            partial_world=world[0];world[0]+='libapparmor\n'
+            with self.assertRaisesRegex(ValueError,'PACKAGE_BUSY'):module.ensure_grub_tools(9,saved,lambda:None)
+            self.assertEqual(len(writes),4,'partial repair rejects unapproved dependencies in world')
+            world[0]=partial_world
             self.assertTrue(module.ensure_grub_tools(9,saved,lambda:None))
-            self.assertEqual(len(writes),4)
+            self.assertEqual(len(writes),6)
+            self.assertEqual(writes[-1][-1],'apparmor-openrc','resume installs only the missing approved package')
+            self.assertEqual(saved['dependencyPlan']['worldAfter'],world[0])
+            installed_world=world[0];world[0]+='unrelated\n'
+            with self.assertRaisesRegex(ValueError,'PACKAGE_BUSY'):module.ensure_grub_tools(9,saved,lambda:None)
+            saved['dependencyPlan']['worldAfter']=world[0]
+            with self.assertRaisesRegex(ValueError,'JOURNAL'):module.ensure_grub_tools(9,saved,lambda:None)
+            world[0]=installed_world
+            del saved['dependencyPlan']['worldAfter']
             with patch.object(module,'command',return_value=b'') as compile_rules:
                 self.assertTrue(module.ensure_grub_tools(9,saved,lambda:None),'compile yields separately after install')
+                self.assertEqual(saved['dependencyPlan']['worldAfter'],world[0],'lost receipt reconstructs only the validated original world change')
                 self.assertEqual(compile_rules.call_count,1)
                 self.assertFalse(module.ensure_grub_tools(9,saved,lambda:None),'verified tools avoid repeating install or compile')
                 self.assertEqual(compile_rules.call_count,1)
+            legacy=json.loads(json.dumps(saved));del legacy['dependencyPlan']['worldBefore'];del legacy['dependencyPlan']['worldAfter']
+            self.assertFalse(module.ensure_grub_tools(9,legacy,lambda:None),'legacy completed plans remain compatible')
+            self.assertNotIn('worldBefore',legacy['dependencyPlan'],'missing historical ownership is never invented')
             snapshots[0].append('unexpected-1.0-r0')
             with self.assertRaisesRegex(ValueError,'PACKAGE_BUSY'):module.ensure_grub_tools(9,saved,lambda:None)
             snapshots[0]=saved['dependencyPlan']['installed']+['apparmor-4.1.7-r1']
             with self.assertRaisesRegex(ValueError,'TOOLS_REQUIRED'):module.ensure_grub_tools(9,saved,lambda:None)
+            snapshots[0]=baseline.copy();ready[0]=False;world[0]=original_world
+            for step in ['initial','resume']:
+                race_state={}if step=='initial'else {'dependencyPlan':{'packages':['apparmor=4.1.7-r1','apparmor-openrc=4.1.7-r1'],'installed':sorted(baseline),'phase':'planned','worldBefore':original_world}}
+                def changed_during_simulation(args,**options):
+                    result=run(args,**options)
+                    if '--simulate'in args:world[0]+='administrator-package\n'
+                    return result
+                with patch.object(module.subprocess,'run',side_effect=changed_during_simulation),self.assertRaisesRegex(ValueError,'PACKAGE_BUSY'):
+                    module.ensure_grub_tools(9,race_state,lambda:None)
+                self.assertNotIn('worldAfter',race_state.get('dependencyPlan',{}))
+                self.assertTrue(world[0].endswith('administrator-package\n'))
+                world[0]=original_world
+
+    def test_apparmor_world_limits_and_encoding(self):
+        for invalid in [b'pkg\x00\n',b'pkg\r\n',b'p'*65537]:
+            with patch.object(module,'read',return_value=invalid),self.assertRaisesRegex(ValueError,'PACKAGE_BUSY'):
+                module.apparmor_world()
+        with patch.object(module,'read',return_value=b'pkg=1.0-r1\n'):
+            self.assertEqual(module.apparmor_world(),'pkg=1.0-r1\n')
 
     def test_apparmor_transaction_preserves_admin_world_and_complete_plan(self):
         world='incus=7.0.1-r2\nlinux-lts\n'

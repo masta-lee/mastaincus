@@ -194,6 +194,11 @@ def apparmor_world_preserved(before,after,requested):
         if not any(re.split(r'[@=~<>]',line,maxsplit=1)[0]==name for line in existing):expected.add(name)
     return current==expected
 
+def apparmor_world():
+    data=read(Path('/etc/apk/world'))
+    if len(data)>65536 or b'\x00'in data or b'\r'in data:fail('HARDENING_PACKAGE_BUSY')
+    return data.decode()
+
 def clean_apparmor_package_cache(path):
     protected(path,True)
     for entry in path.iterdir():
@@ -250,7 +255,7 @@ def ensure_grub_tools(lock_fd,state,persist,allowed=lambda:None):
         # One bounded request only discovers the signed transaction. Persist
         # exact versions and the installed package baseline before yielding;
         # installation never shares the simulation's remaining time budget.
-        before=installed_packages()
+        before=installed_packages();world_before=apparmor_world()
         allowed()
         updated=subprocess.run(['timeout','10',*cache_base,'update'],capture_output=True,timeout=15,pass_fds=(lock_fd,),env={'PATH':'/usr/sbin:/usr/bin:/sbin:/bin','LC_ALL':'C'})
         if updated.returncode:fail('HARDENING_APPARMOR_TOOLS_REQUIRED')
@@ -258,17 +263,30 @@ def ensure_grub_tools(lock_fd,state,persist,allowed=lambda:None):
         if simulated.returncode:fail('HARDENING_APPARMOR_TOOLS_REQUIRED')
         simulation=(simulated.stdout+simulated.stderr).decode(errors='replace')
         packages=apparmor_install_plan(simulation)
-        if installed_packages()!=before:fail('HARDENING_PACKAGE_BUSY')
-        state['dependencyPlan']={'packages':packages,'installed':before,'phase':'planned'}
+        if installed_packages()!=before or apparmor_world()!=world_before:fail('HARDENING_PACKAGE_BUSY')
+        state['dependencyPlan']={'packages':packages,'installed':before,'phase':'planned','worldBefore':world_before}
         persist();return True
-    if not isinstance(plan,dict) or set(plan) not in [{'packages','installed'},{'packages','installed','phase'}] or plan.get('phase','planned') not in ['planned','installed','verified'] or not isinstance(plan['packages'],list) or not 1<=len(plan['packages'])<=20 or any(not isinstance(p,str) or not re.fullmatch(r'[a-zA-Z0-9+_.-]+=[0-9][a-zA-Z0-9+_.~-]*',p) for p in plan['packages']) or not isinstance(plan['installed'],list) or not plan['installed'] or any(not isinstance(p,str) or not re.fullmatch(r'[a-zA-Z0-9+_.-]+-[0-9][a-zA-Z0-9+_.~-]*',p) for p in plan['installed']):fail()
+    if not isinstance(plan,dict) or set(plan)-{'worldBefore','worldAfter'} not in [{'packages','installed'},{'packages','installed','phase'}] or plan.get('phase','planned') not in ['planned','installed','verified'] or not isinstance(plan['packages'],list) or not 1<=len(plan['packages'])<=20 or any(not isinstance(p,str) or not re.fullmatch(r'[a-zA-Z0-9+_.-]+=[0-9][a-zA-Z0-9+_.~-]*',p) for p in plan['packages']) or not isinstance(plan['installed'],list) or not plan['installed'] or any(not isinstance(p,str) or not re.fullmatch(r'[a-zA-Z0-9+_.-]+-[0-9][a-zA-Z0-9+_.~-]*',p) for p in plan['installed']):fail()
+    for key in ['worldBefore','worldAfter']:
+        if key in plan and (not isinstance(plan[key],str)or len(plan[key].encode())>65536 or '\x00'in plan[key]or '\r'in plan[key]):fail()
+    if 'worldAfter'in plan and 'worldBefore'not in plan:fail()
     if len({p.split('=',1)[0] for p in plan['packages']})!=len(plan['packages']) or len(set(plan['installed']))!=len(plan['installed']):fail()
+    before_names={re.match(r'^(.*)-([0-9][a-zA-Z0-9+_.~-]*)$',line).group(1)for line in plan['installed']}
+    original_requests=[name for name in apparmor_packages(branch)if name not in before_names]
+    if 'worldAfter'in plan and not apparmor_world_preserved(plan['worldBefore'],plan['worldAfter'],original_requests):fail()
     current=installed_packages();new={p.replace('=','-',1) for p in plan['packages']}
     # Interrupted install may have added a subset of exactly planned packages.
     # Existing packages cannot be upgraded/downgraded or silently replaced.
     if not set(plan['installed']).issubset(current) or set(current)-set(plan['installed'])-new:fail('HARDENING_PACKAGE_BUSY')
     complete=set(current)==set(plan['installed'])|new
     if complete:
+        if 'worldBefore'in plan:
+            actual_world=apparmor_world()
+            if 'worldAfter'in plan:
+                if actual_world!=plan['worldAfter']:fail('HARDENING_PACKAGE_BUSY')
+            else:
+                if not apparmor_world_preserved(plan['worldBefore'],actual_world,original_requests):fail('HARDENING_PACKAGE_BUSY')
+                plan['worldAfter']=actual_world;persist()
         if not apparmor_tools_ready():fail('HARDENING_APPARMOR_TOOLS_REQUIRED')
         if plan.get('phase')=='verified':
             clean_apparmor_package_cache(signed_cache);return False
@@ -283,7 +301,11 @@ def ensure_grub_tools(lock_fd,state,persist,allowed=lambda:None):
     # security revision. The persisted full plan still pins this transaction;
     # refresh one signed private index, re-simulate and add only missing
     # reviewed AppArmor package names. Administrator constraints remain fixed.
-    world=read(Path('/etc/apk/world')).decode()
+    world=apparmor_world()
+    if 'worldBefore'in plan:
+        baseline_world=set(plan['worldBefore'].splitlines());current_world=set(world.splitlines())
+        permitted=baseline_world|set(original_requests)
+        if not baseline_world.issubset(current_world)or not current_world.issubset(permitted):fail('HARDENING_PACKAGE_BUSY')
     present={re.match(r'^(.*)-([0-9][a-zA-Z0-9+_.~-]*)$',p).group(1)for p in current}
     requested=[name for name in apparmor_packages(branch)if name not in present]
     if not requested:fail('HARDENING_APPARMOR_TOOLS_REQUIRED')
@@ -291,14 +313,17 @@ def ensure_grub_tools(lock_fd,state,persist,allowed=lambda:None):
     simulated=subprocess.run([*cache_base,'--simulate','add',*requested],capture_output=True,timeout=15,pass_fds=(lock_fd,),env={'PATH':'/usr/sbin:/usr/bin:/sbin:/bin','LC_ALL':'C'})
     if simulated.returncode:fail('HARDENING_APPARMOR_TOOLS_REQUIRED')
     remaining={p for p in plan['packages']if p.replace('=','-',1)not in current}
-    if set(apparmor_install_plan((simulated.stdout+simulated.stderr).decode(errors='replace')))!=remaining or installed_packages()!=current:fail('HARDENING_PACKAGE_BUSY')
+    if set(apparmor_install_plan((simulated.stdout+simulated.stderr).decode(errors='replace')))!=remaining or installed_packages()!=current or apparmor_world()!=world:fail('HARDENING_PACKAGE_BUSY')
     allowed()
     result=subprocess.run(['timeout','30',*cache_base,'add',*requested],capture_output=True,timeout=35,pass_fds=(lock_fd,),env={'PATH':'/usr/sbin:/usr/bin:/sbin:/bin','LC_ALL':'C'})
     if result.returncode:fail('HARDENING_APPARMOR_TOOLS_REQUIRED')
-    if not apparmor_world_preserved(world,read(Path('/etc/apk/world')).decode(),requested):fail('HARDENING_PACKAGE_BUSY')
+    world_after=apparmor_world()
+    if not apparmor_world_preserved(world,world_after,requested):fail('HARDENING_PACKAGE_BUSY')
     if set(installed_packages())!=set(plan['installed'])|new:fail('HARDENING_PACKAGE_BUSY')
     clean_apparmor_package_cache(signed_cache)
-    plan['phase']='installed';persist()
+    plan['phase']='installed'
+    if 'worldBefore'in plan:plan['worldAfter']=world_after
+    persist()
     return True
 
 def environment(value=None):
