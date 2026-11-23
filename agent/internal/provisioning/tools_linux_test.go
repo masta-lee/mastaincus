@@ -17,8 +17,16 @@ import (
 
 func TestHostCommandBoundsDetachedOutputAndFailedChildren(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "child.pid")
-	for _, code := range []int{0, 7} {
-		command := exec.Command("/bin/sh", "-c", fmt.Sprintf("sleep 30 & echo $! > %q; exit %d", path, code))
+	for _, scenario := range []struct {
+		code     int
+		detached bool
+	}{{0, true}, {0, false}, {7, false}} {
+		code := scenario.code
+		prefix := ""
+		if scenario.detached {
+			prefix = "setsid "
+		}
+		command := exec.Command("/bin/sh", "-c", fmt.Sprintf("%ssleep 30 & echo $! > %q; exit %d", prefix, path, code))
 		command.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
 		var out limitedBuffer
 		command.Stdout, command.Stderr = &out, &out
@@ -35,7 +43,7 @@ func TestHostCommandBoundsDetachedOutputAndFailedChildren(t *testing.T) {
 			t.Fatal(parseErr)
 		}
 		defer syscall.Kill(pid, syscall.SIGKILL)
-		if time.Since(started) > 2500*time.Millisecond || code == 0 && err != nil || code != 0 && err == nil {
+		if time.Since(started) > 2500*time.Millisecond || scenario.detached && err != nil || !scenario.detached && err == nil {
 			t.Fatal("command deadline/exit code lost", code, err)
 		}
 	}

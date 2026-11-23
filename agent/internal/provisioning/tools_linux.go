@@ -102,8 +102,14 @@ func waitHostCommand(ctx context.Context, c *exec.Cmd) error {
 	go func() { done <- c.Wait() }()
 	select {
 	case err := <-done:
-		if err != nil && !errors.Is(err, exec.ErrWaitDelay) {
+		groupErr := syscall.Kill(-c.Process.Pid, 0)
+		if groupErr == nil {
 			_ = syscall.Kill(-c.Process.Pid, syscall.SIGKILL)
+			if err == nil || errors.Is(err, exec.ErrWaitDelay) {
+				return fmt.Errorf("host command child process remained in original group")
+			}
+		} else if groupErr != syscall.ESRCH {
+			return fmt.Errorf("host command child process group unavailable")
 		}
 		if errors.Is(err, exec.ErrWaitDelay) {
 			return nil // original command exited successfully; later state is verified
