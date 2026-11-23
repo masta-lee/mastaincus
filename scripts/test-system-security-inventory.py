@@ -6,6 +6,17 @@ spec=importlib.util.spec_from_file_location('inventory',pathlib.Path(__file__).w
 module=importlib.util.module_from_spec(spec);spec.loader.exec_module(module)
 
 class Plans(unittest.TestCase):
+    def test_automatic_patch_policy_excludes_daemon_libc_and_kernel_actions(self):
+        self.assertTrue(module.AUTOMATIC_DEBIAN<=set(module.DEBIAN))
+        for name in ['openssl','libssl3','curl','libcurl4','ca-certificates','libsqlite3-0','libseccomp2','tar','gzip','xz-utils']:
+            self.assertIn(name,module.AUTOMATIC_DEBIAN)
+        for name in ['libc6','libc-bin','nginx','nodejs','systemd','chrony','dnsmasq','lxcfs','lvm2','nftables','rsync','postgresql-16','linux-image-amd64']:
+            self.assertNotIn(name,module.AUTOMATIC_DEBIAN)
+        with patch.object(module.os,'geteuid',return_value=0,create=True),patch.object(module.pathlib,'Path')as path,patch.object(module,'apply_patches')as apply:
+            path.return_value.exists.return_value=True
+            module.maintain_system_packages();apply.assert_not_called()
+            path.return_value.exists.return_value=False;apply.return_value=None
+            module.maintain_system_packages();apply.assert_called_once_with(automatic=True)
     def test_distro_inventory_covers_shared_libc_clock_and_runtime_helpers(self):
         for targets in [module.ALPINE,module.DEBIAN]:
             self.assertEqual(len(targets),len(set(targets)),'duplicate distro package query')

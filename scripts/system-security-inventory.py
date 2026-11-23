@@ -14,6 +14,14 @@ ALPINE+=['musl','musl-utils','chrony','chrony-openrc','ca-certificates','fuse3-l
 DEBIAN+=['libc6','libc-bin','libfuse3-3','libfuse3-4','libnftnl11','libmnl0','iptables','libxtables12','libip4tc2','libip6tc2',
     'tar','gzip','xz-utils','squashfs-tools','rsync','libpsl5','libpsl5t64','libidn2-0','libunistring5','libc-ares2','libbrotli1','libnghttp2-14']
 
+# These tools and libraries have no daemon lifecycle operation. Installed
+# services loading an old mapping remain activation-required, never marked
+# patched by an installed version alone. libc/kernel/service packages retain
+# their separate reviewed activation paths and are still fully inventoried.
+AUTOMATIC_DEBIAN=frozenset(['openssl','libssl3','libssl3t64','curl','libcurl4','libcurl4t64','ca-certificates',
+    'libsqlite3-0','libseccomp2','libcap2','libacl1','libattr1','libuv1','libuv1t64','liblz4-1','libzstd1','liblzma5',
+    'tar','gzip','xz-utils','squashfs-tools','libpsl5','libpsl5t64','libidn2-0','libunistring5','libc-ares2','libbrotli1','libnghttp2-14'])
+
 def command(args,timeout=90):
     # Keep the complete apt/dpkg process group under the deadline. A surviving
     # package hook must not outlive the temporary service policy or task lock.
@@ -204,15 +212,18 @@ def prepare_service_policy(policy=POLICY,receipt=POLICY_RECEIPT):
     fd=os.open(policy,os.O_WRONLY|os.O_CREAT|os.O_EXCL|os.O_NOFOLLOW,0o755)
     with os.fdopen(fd,'w')as out:out.write('#!/bin/sh\n# PayIncus security maintenance '+token+'\nexit 101\n');out.flush();os.fsync(out.fileno())
 
-def apply_patches():
-    # Explicit root maintenance action. Timers remain read-only. dpkg suppresses
+def apply_patches(automatic=False):
+    # Automatic mode is limited to reviewed tools and shared libraries; the
+    # explicit root action retains the full inventory policy. dpkg suppresses
     # service restarts during installation; actual activation stays visible as
     # pending until the operator uses the service's reviewed maintenance path.
     if os.geteuid()!=0:raise ValueError('SYSTEM_SECURITY_ROOT_REQUIRED')
     if pathlib.Path('/var/lib/incudal-backup/recovery-hold.json').exists():raise ValueError('SYSTEM_SECURITY_RECOVERY_HELD')
-    value=inventory()
-    if value['distribution'] not in ['debian','ubuntu']:raise ValueError('SYSTEM_SECURITY_DISTRIBUTION_UNSUPPORTED')
-    allowed=set(DEBIAN)|{'postgresql-'+str(n) for n in range(14,19)}
+    release=dict(line.split('=',1)for line in pathlib.Path('/etc/os-release').read_text().splitlines()if '='in line)
+    distribution=release.get('ID','').strip('"')
+    if distribution not in ['debian','ubuntu']:raise ValueError('SYSTEM_SECURITY_DISTRIBUTION_UNSUPPORTED')
+    value={'version':1,'distribution':distribution,'checkedAt':time.strftime('%Y-%m-%dT%H:%M:%SZ',time.gmtime())}
+    allowed=set(AUTOMATIC_DEBIAN)if automatic else set(DEBIAN)|{'postgresql-'+str(n) for n in range(14,19)}
     sources=[pathlib.Path('/etc/apt/sources.list'),*pathlib.Path('/etc/apt/sources.list.d').glob('*')]
     for source in sources:
         if not source.is_file():continue
@@ -225,7 +236,10 @@ def apply_patches():
     info=os.fstat(fd)
     if not stat.S_ISREG(info.st_mode)or info.st_uid!=0 or info.st_nlink!=1 or info.st_mode&0o077:os.close(fd);raise ValueError('SYSTEM_SECURITY_UNTRUSTED_PATH')
     try:
-        fcntl.flock(fd,fcntl.LOCK_EX|fcntl.LOCK_NB)
+        try:fcntl.flock(fd,fcntl.LOCK_EX|fcntl.LOCK_NB)
+        except BlockingIOError:
+            if automatic:return None
+            raise
         if pathlib.Path('/var/lib/incudal-backup/recovery-hold.json').exists():raise ValueError('SYSTEM_SECURITY_RECOVERY_HELD')
         # Recheck installed versions after owning the maintenance lane. A
         # concurrent authorized updater may have completed since discovery.
@@ -233,6 +247,7 @@ def apply_patches():
         clean_service_policy()
         command(['apt-get','-o','Acquire::AllowInsecureRepositories=false','-o','Acquire::AllowDowngradeToInsecureRepositories=false','-o','Acquire::AllowWeakRepositories=false','update'],180)
         names=sorted(set(value['packages'])&allowed)
+        if not names:return value
         output=command(['apt-get','-o','DPkg::Lock::Timeout=5','-o','APT::Get::AllowUnauthenticated=false','--simulate','--only-upgrade','--no-remove','install',*names])
         changes=patch_plan(output,value['packages'],allowed)
         value['patchPlan']=changes;value['patchState']='prepared';persist(value)
@@ -250,16 +265,24 @@ def apply_patches():
             finally:
                 clean_service_policy()
             if debian_installed_packages()!=expected:raise ValueError('SYSTEM_SECURITY_PATCH_NOT_CONFIRMED')
-        after=inventory()
+        after=inventory(all_loaded_code=True)
         for package in changes:
             name,version=package.split('=',1)
             if after['packages'].get(name)!=version:raise ValueError('SYSTEM_SECURITY_PATCH_NOT_CONFIRMED')
-        value=after;value['patchPlan']=changes;value['patchState']='installed-activation-required' if changes else 'current';persist(value)
+        value=after;value['patchPlan']=changes;value['patchState']='installed-activation-required' if changes else 'current';persist(value,verify_activation=True)
         return value
     except Exception:
         value['patchState']='failed';value['error']='SYSTEM_SECURITY_PATCH_NOT_CONFIRMED';persist(value)
         raise
     finally:os.close(fd)
+
+def maintain_system_packages():
+    if os.geteuid()!=0:raise ValueError('SYSTEM_SECURITY_ROOT_REQUIRED')
+    # Recovery and an already active maintenance transaction preserve their
+    # previous receipt. A busy lane is not an unsuccessful patch transaction.
+    if pathlib.Path('/var/lib/incudal-backup/recovery-hold.json').exists():return
+    value=apply_patches(automatic=True)
+    if value is not None:print(json.dumps(value,separators=(',',':')))
 
 def preserve_activation(value,previous):
     # Refreshing package inventory is not proof that daemons have reloaded the
@@ -379,6 +402,8 @@ if __name__=='__main__':
             sys.exit(0)
         if sys.argv[1:]==['--record']:
             record_inventory();sys.exit(0)
+        if sys.argv[1:]==['--maintain']:
+            maintain_system_packages();sys.exit(0)
         if sys.argv[1:]==['--apply']:value=apply_patches()
         else:value=inventory()
         if sys.argv[1:]==['--apply']:print(json.dumps(value,separators=(',',':')))
@@ -386,7 +411,7 @@ if __name__=='__main__':
         else:print(json.dumps(value,separators=(',',':')))
     except Exception as error:
         value=failure_receipt(error)
-        if sys.argv[1:]in [['--record'],['--apply'],['--verify-activation']]:
+        if sys.argv[1:]in [['--record'],['--apply'],['--maintain'],['--verify-activation']]:
             try:persist(value)
             except Exception:pass # Unsafe/unwritable state is never repaired implicitly.
         print(json.dumps(value,separators=(',',':')));sys.exit(1)
