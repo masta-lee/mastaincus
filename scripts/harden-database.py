@@ -58,9 +58,33 @@ fcntl.flock(lock_fd,fcntl.LOCK_EX)
 private_file=private_dir/'migration.url'
 if private_file.exists() and (private_file.is_symlink() or private_file.stat().st_uid!=0 or private_file.stat().st_nlink!=1 or private_file.stat().st_mode&0o077 or private_file.stat().st_size>4096):raise SystemExit('Untrusted migration credential file')
 existing=run("SELECT rolname FROM pg_roles WHERE rolname='incudal_migrate'")
-# Refuse shared ownership before making any role or credential changes.
-if run("SELECT datname FROM pg_database WHERE datdba=(SELECT oid FROM pg_roles WHERE rolname='incudal') AND datname<>'incudal' UNION ALL SELECT spcname FROM pg_tablespace WHERE spcowner=(SELECT oid FROM pg_roles WHERE rolname='incudal')"):
-    raise SystemExit('Database role owns unrelated resources; scoped ownership review required')
+# Global ownership reassignment also transfers shared databases/tablespaces,
+# including retained restore and test databases. Scope every ownership change
+# to supported objects in this application's public schema, in one transaction.
+ownership_sql="""
+DO $ownership$ DECLARE item record; BEGIN
+  FOR item IN SELECT c.oid,c.relkind FROM pg_class c JOIN pg_namespace n ON n.oid=c.relnamespace
+    WHERE c.relowner=(SELECT oid FROM pg_roles WHERE rolname='incudal') AND n.nspname='public'
+      AND c.relkind IN ('r','p','v','m','f','S') ORDER BY CASE WHEN c.relkind='S' THEN 1 ELSE 0 END,c.oid LOOP
+    EXECUTE format('ALTER %s %s OWNER TO incudal_migrate',CASE item.relkind WHEN 'v' THEN 'VIEW' WHEN 'm' THEN 'MATERIALIZED VIEW' WHEN 'f' THEN 'FOREIGN TABLE' WHEN 'S' THEN 'SEQUENCE' ELSE 'TABLE' END,item.oid::regclass);
+  END LOOP;
+  FOR item IN SELECT p.oid,p.prokind FROM pg_proc p JOIN pg_namespace n ON n.oid=p.pronamespace
+    WHERE p.proowner=(SELECT oid FROM pg_roles WHERE rolname='incudal') AND n.nspname='public' LOOP
+    EXECUTE format('ALTER %s %s OWNER TO incudal_migrate',CASE item.prokind WHEN 'p' THEN 'PROCEDURE' WHEN 'a' THEN 'AGGREGATE' ELSE 'FUNCTION' END,item.oid::regprocedure);
+  END LOOP;
+  FOR item IN SELECT t.oid,t.typtype FROM pg_type t JOIN pg_namespace n ON n.oid=t.typnamespace
+    WHERE t.typowner=(SELECT oid FROM pg_roles WHERE rolname='incudal') AND n.nspname='public'
+      AND t.typtype IN ('e','d','c') AND (t.typrelid=0 OR EXISTS(SELECT 1 FROM pg_class c WHERE c.oid=t.typrelid AND c.relkind='c')) LOOP
+    EXECUTE format('ALTER %s %s OWNER TO incudal_migrate',CASE WHEN item.typtype='d' THEN 'DOMAIN' ELSE 'TYPE' END,item.oid::regtype);
+  END LOOP;
+  ALTER SCHEMA public OWNER TO incudal_migrate;
+  IF EXISTS(SELECT 1 FROM pg_shdepend s WHERE s.refclassid='pg_authid'::regclass
+    AND s.refobjid=(SELECT oid FROM pg_roles WHERE rolname='incudal')
+    AND s.dbid=(SELECT oid FROM pg_database WHERE datname=current_database()) AND s.deptype='o') THEN
+    RAISE EXCEPTION 'DATABASE_LOCAL_OWNERSHIP_UNSUPPORTED';
+  END IF;
+END $ownership$;
+"""
 migration=urllib.parse.urlsplit(private_file.read_text().strip()) if private_file.exists() else None
 if migration and (migration.username!='incudal_migrate' or migration.hostname!=url.hostname or migration.path!=url.path or migration.port!=5432 or migration.scheme!=url.scheme or not migration.password):raise SystemExit('Retained migration identity is invalid')
 if existing:
@@ -93,10 +117,7 @@ for role in ['incudal','incudal_migrate']:
     members=run("SELECT parent.rolname FROM pg_auth_members m JOIN pg_roles parent ON parent.oid=m.roleid JOIN pg_roles child ON child.oid=m.member WHERE child.rolname="+literal(role))
     for parent in members.splitlines():
         if parent:run('REVOKE '+ident(parent)+' FROM '+ident(role)+';')
-script="""
-BEGIN;
-REASSIGN OWNED BY incudal TO incudal_migrate;
-ALTER SCHEMA public OWNER TO incudal_migrate;
+script="BEGIN;\n"+ownership_sql+"""
 REVOKE ALL ON ALL TABLES IN SCHEMA public FROM PUBLIC,incudal;
 REVOKE ALL ON ALL SEQUENCES IN SCHEMA public FROM PUBLIC,incudal;
 REVOKE CREATE ON SCHEMA public FROM PUBLIC,incudal;

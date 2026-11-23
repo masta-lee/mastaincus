@@ -53,6 +53,12 @@ tar -xOf "$old" ./scripts/install-panel.sh > "$work/old-install.sh"
 printf 'installer@example.invalid\n3\n' | ONBOARDING_PUBLIC_HOST=gateway.example.com \
   bash "$work/old-install.sh" > "$work/old-install.log" 2>&1
 systemctl is-active --quiet incudal-backend
+python3 "$repo/scripts/test-database-ownership-scope.py"
+# Retained test/restore databases are legitimate old-install inputs. The new
+# role migration must preserve them instead of requiring deletion or globally
+# transferring their owner to the migration role.
+runuser -u postgres -- createdb -O incudal incudal_retained_upgrade_test
+runuser -u postgres -- psql -X -v ON_ERROR_STOP=1 -d incudal_retained_upgrade_test -c "CREATE TABLE preserved(id int primary key,value text);INSERT INTO preserved VALUES(1,'original');" >/dev/null
 if [[ -n "${INCUDAL_PREVIEW_AGENT_DIR:-}" ]]; then
   # Same-source signed binaries are a disposable preview input, exactly as in
   # fresh-install. The installed backend still verifies both hashes/signatures.
@@ -180,4 +186,7 @@ fi
 stage=post-upgrade-verification
 node "$repo/scripts/smoke-legacy-online-upgrade.mjs" after "$candidate"
 test "$(ss -ltnp 'sport = :3001' | tail -n +2 | wc -l)" = 1
+test "$(runuser -u postgres -- psql -X -At -d postgres -c "SELECT datdba=(SELECT oid FROM pg_roles WHERE rolname='incudal') FROM pg_database WHERE datname='incudal_retained_upgrade_test'")" = t
+test "$(runuser -u postgres -- psql -X -At -d incudal_retained_upgrade_test -c 'SELECT value FROM preserved WHERE id=1')" = original
+runuser -u postgres -- dropdb incudal_retained_upgrade_test
 echo 'Legacy-to-current online upgrade passed with real old worker, signed archives and preserved controller/network identity.'

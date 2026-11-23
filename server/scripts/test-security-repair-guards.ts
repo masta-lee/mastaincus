@@ -64,6 +64,9 @@ assert.ok(systemPackages.includes('Acquire::AllowWeakRepositories=false')&&syste
 assert.ok(retained.includes('"$root/server/templates"')&&retained.includes('server/dist server/templates'),'rollback security modules need their matching runtime templates')
 assert.ok(retained.includes('/usr/bin/chown -R root:root "$stage"')&&!/^\s*chown -R root:root "\$stage"/m.test(retained),'new root runtime preparation must not hit the old worker PATH chown wrapper')
 const databasePreparation=await readFile(new URL('../../scripts/harden-database.py',import.meta.url),'utf8')
+assert.ok(!/^REASSIGN OWNED/m.test(databasePreparation)&&databasePreparation.includes("n.nspname='public'")&&databasePreparation.includes('DATABASE_LOCAL_OWNERSHIP_UNSUPPORTED'),'database role migration must preserve unrelated restore databases and reject unhandled local ownership atomically')
+const upgradeSmoke=await readFile(new URL('../../scripts/smoke-legacy-online-upgrade.sh',import.meta.url),'utf8')
+assert.ok(upgradeSmoke.includes('test-database-ownership-scope.py')&&upgradeSmoke.includes('incudal_retained_upgrade_test')&&upgradeSmoke.includes('datdba=(SELECT oid FROM pg_roles'),'genuine old worker upgrades must include preserved legacy databases in every architecture/scenario')
 const panelInstaller=await readFile(new URL('../../scripts/install-panel.sh',import.meta.url),'utf8')
 const pgRepository=panelInstaller.slice(panelInstaller.indexOf('install_postgresql() {'),panelInstaller.indexOf('# ========================== 安装 Redis'))
 assert.ok(pgRepository.includes('0144068502a1eddd2a0280ede10ef607d1ec592ce819940991203941564e8e76') &&
