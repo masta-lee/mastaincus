@@ -140,6 +140,20 @@ func TestSecurityPackagePlanRejectsUnrelatedRemovalAndMajorChange(t *testing.T) 
 	if err := safeSecurityPackagePlan("Upgrading lxc-libs (7.0.0-r0 -> 7.0.1-r0)\nUpgrading sqlite-libs (3.53.3-r0 -> 3.53.4-r0)", map[string]string{"lxc-libs": "7.0.0-r0", "sqlite-libs": "3.53.3-r0"}); err != nil {
 		t.Fatal("actual daemon runtime dependencies excluded", err)
 	}
+	paired := map[string]string{"rsync": "3.5.0-r0", "rsync-openrc": "3.5.0-r0", "linux-virt": "6.12.1-r0"}
+	pairedPlan := "Upgrading rsync (3.5.0-r0 -> 3.5.2-r1)\nUpgrading rsync-openrc (3.5.0-r0 -> 3.5.2-r1)"
+	if err := safeSecurityPackagePlan(pairedPlan, paired); err != nil {
+		t.Fatal("installed same-series rsync companion must not block the entire signed patch plan", err)
+	}
+	expectedPair := securityExpectedPackages(paired, pairedPlan)
+	if expectedPair["rsync-openrc"] != "3.5.2-r1" || expectedPair["linux-virt"] != paired["linux-virt"] || paired["rsync"] != "3.5.0-r0" {
+		t.Fatal("paired update failed to preserve the original full inventory")
+	}
+	for _, unreviewed := range []string{"Upgrading rsync-openrc (3.5.0-r0 -> 4.0.0-r0)", "Installing rsync-openrc (3.5.2-r1)", pairedPlan + "\nUpgrading linux-virt (6.12.1-r0 -> 6.12.2-r0)"} {
+		if safeSecurityPackagePlan(unreviewed, paired) == nil {
+			t.Fatal("companion acceptance loosened unrelated installation or series guards", unreviewed)
+		}
+	}
 	if err := safeSecurityPackagePlan("Upgrading musl (1.2.5-r0 -> 1.2.5-r1)", map[string]string{"musl": "1.2.5-r0"}); err == nil {
 		t.Fatal("unreviewed libc maintenance allowed")
 	}

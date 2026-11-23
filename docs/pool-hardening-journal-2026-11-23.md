@@ -10,6 +10,10 @@ owner随后明确仅源码修完后热推送，不直接修改主控文件/配�
 
 候选security.3版本包原子投送后未立即生效：主控服务读取包返回EACCES，不能误称只是五分钟缓存。新部署工具继承root umask077，writeFile mode0640实际落成0600；原目录路径／加载环境／mountnamespace一致，但服务账户读不到manifest。源码精修显式chmod0640＋发布前真正runuser incudal逐文件读权限核验，同一完整签名版本允许权限正确地重新投送；不手改主控配置或chmod线上文件。真实Linux root umask077前后交换和service读取回归1590，完整签名篡改拒绝/原子保旧测试及对应守卫后再部署。
 
+修复后使用仓库工具4e29f8b6重新原子投送同一signedAgentf084/security.3，后端API实际manifest转为.3，主控原PID3210150／NRestarts0／.env不变，未直接修改主控程序、配置或DB。208台全部自动接收，首轮软件包/运行组件检查12:05UTC（20:05北京时间）完整`dedicatedHostReadyWhere + hardeningReceiptMatches`208/208、compatPrepared0，不是裸DB208统计。实际inventory API及下轮自然维护周期继续观察，不能只据暂时清零宣布稳定。
+
+下一周期仍有少量旧宿主retry：#28/#34真实独立HTTPS完整plan有libcrypto3/libssl3/gzip/rsync/rsync-openrc/openssl6项升级；新清单漏已安装rsync-openrc配套，严格plan正确拒绝第5项导致整笔失败。原生只读生产Go诊断确认DNS/FUSE/Incus/empty-authority/source均通过，无旧code映射，问题来自package计划。加入已安装same-series rsync-openrc，仍拒绝新增/major/无关kernel变更，完整expected inventory保持。security.4候选双原生旧HTTP＋rsync配套回归及signed更新后再观察两周期，不能将首轮短暂0故障称稳定完成。
+
 2026-11-23，北京时间。Owner先授权只读取证，随后明确授权本问题源码修复后，将此前已做安全修复同批热更新主控作为测试；不正式发版。
 
 主控实际v1.8.14／ced7c10cd17d、唯一后端健康。208台专属宿主中12台故障一致：#16、#21、#24、#26、#30～#36、#46。均管理在线、无客户实例、Agent工具/网络防护有效、AppArmor维护已完成，后续检查反复`HARDENING_JOURNAL_CONFLICT`。它们不是离线宿主。

@@ -65,7 +65,7 @@ jobs:
           (cd agent && CGO_ENABLED=0 go test -c -o /tmp/incudal-provisioning-tests ./internal/provisioning)
       - name: Retain original HTTP settings during actual signed HTTPS security update
         run: |
-          docker run --rm -v /tmp/incudal-provisioning-tests:/test:ro -e INCUDAL_SYSINFO_COMPAT_TEST=disposable alpine:3.24 sh -ec 'apk add --no-cache openssl curl; mkdir -p /var/lib/incudal-agent; chmod 700 /var/lib/incudal-agent; /test -test.run "TestNativeSecurityPackageInventoryAndUpdate|TestSecurityRepositoriesRetainLegacySettingsWithIndependentHTTPS" -test.v'
+          docker run --rm -v /tmp/incudal-provisioning-tests:/test:ro -e INCUDAL_SYSINFO_COMPAT_TEST=disposable alpine:3.24 sh -ec 'apk add --no-cache openssl curl rsync rsync-openrc; mkdir -p /var/lib/incudal-agent; chmod 700 /var/lib/incudal-agent; /test -test.run "TestNativeSecurityPackageInventoryAndUpdate|TestSecurityRepositoriesRetainLegacySettingsWithIndependentHTTPS|TestSecurityPackagePlanRejectsUnrelatedRemovalAndMajorChange" -test.v'
   incus-compat:
     uses: ./.github/workflows/incus-sysinfo-compat.yml
   version:

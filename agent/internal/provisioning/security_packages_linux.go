@@ -16,7 +16,7 @@ import (
 // restarts stay under their separately validated maintenance recipes.
 var securityLeaves = []string{"openssl", "libssl3", "libcrypto3", "curl", "libcurl", "ca-certificates",
 	"lxc", "lxc-libs", "sqlite-libs", "libseccomp", "libcap2", "acl-libs", "libattr", "libuv", "lz4-libs", "zstd-libs", "xz-libs", "libintl", "libgcc",
-	"tar", "gzip", "xz", "squashfs-tools", "rsync", "libpsl", "libidn2", "libunistring", "c-ares", "brotli-libs", "nghttp2-libs"}
+	"tar", "gzip", "xz", "squashfs-tools", "rsync", "rsync-openrc", "libpsl", "libidn2", "libunistring", "c-ares", "brotli-libs", "nghttp2-libs"}
 var securityPackageVersionChange = regexp.MustCompile(`(?m)Upgrading ([a-zA-Z0-9+_.-]+) \(([0-9][a-zA-Z0-9+_.~-]*) -> ([0-9][a-zA-Z0-9+_.~-]*)\)`)
 var installedSecurityPackage = regexp.MustCompile(`^([a-zA-Z0-9+_.-]+)-([0-9][a-zA-Z0-9+_.~-]*)$`)
 var securityMajorVersion = regexp.MustCompile(`^([0-9]+)(?:\.|-r)`)
