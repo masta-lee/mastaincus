@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Bounded package/runtime security receipt. Never changes a major or reboots."""
 import json,os,pathlib,subprocess,sys,time,tempfile,re,fcntl,signal,uuid,stat
+import hashlib
 
 ALPINE=['openssl','libssl3','libcrypto3','curl','libcurl','openssh','openssh-server','openssh-client-default','dnsmasq','lxc','lxc-libs','lxcfs','lxcfs-openrc','lvm2','device-mapper','btrfs-progs','wireguard-tools','qemu-system-x86_64','qemu-system-aarch64','sqlite-libs','libseccomp','libcap2','acl-libs','libattr','libuv','lz4-libs','zstd-libs','xz-libs','libintl','libgcc','dbus-libs','eudev-libs','raft-cowsql','cowsql']
 DEBIAN=['openssl','libssl3','libssl3t64','curl','libcurl4','libcurl4t64','openssh-server','openssh-client','dnsmasq','lxc','liblxc1','liblxc-common','lxcfs','lvm2','libdevmapper1.02.1','libdevmapper-event1.02.1','btrfs-progs','wireguard-tools','nginx','nginx-common','nodejs','qemu-system-x86','qemu-system-arm','qemu-system-common','qemu-utils','systemd','systemd-dev','systemd-sysv','systemd-timesyncd','systemd-resolved','libsystemd0','libsystemd-shared','libpam-systemd','udev','libudev1','chrony','nftables','ca-certificates','libsqlite3-0','libseccomp2','libcap2','libacl1','libattr1','libuv1','libuv1t64','liblz4-1','libzstd1','liblzma5','libdbus-1-3','libgcc-s1']
@@ -12,7 +13,7 @@ DEBIAN=['openssl','libssl3','libssl3t64','curl','libcurl4','libcurl4t64','openss
 ALPINE+=['musl','musl-utils','chrony','chrony-openrc','ca-certificates','fuse3-libs','lvm2-libs','device-mapper-libs','device-mapper-event-libs',
     'tar','gzip','xz','squashfs-tools','rsync','libpsl','libidn2','libunistring','c-ares','brotli-libs','nghttp2-libs','nftables','libnftnl','libmnl','iptables','ip6tables']
 DEBIAN+=['libc6','libc-bin','libfuse3-3','libfuse3-4','libnftnl11','libmnl0','iptables','libxtables12','libip4tc2','libip6tc2',
-    'tar','gzip','xz-utils','squashfs-tools','rsync','libpsl5','libpsl5t64','libidn2-0','libunistring5','libc-ares2','libbrotli1','libnghttp2-14']
+    'tar','gzip','xz-utils','squashfs-tools','rsync','libpsl5','libpsl5t64','libidn2-0','libunistring5','libc-ares2','libbrotli1','libnghttp2-14','openssh-sftp-server']
 
 # These tools and libraries have no daemon lifecycle operation. Installed
 # services loading an old mapping remain activation-required, never marked
@@ -21,6 +22,62 @@ DEBIAN+=['libc6','libc-bin','libfuse3-3','libfuse3-4','libnftnl11','libmnl0','ip
 AUTOMATIC_DEBIAN=frozenset(['openssl','libssl3','libssl3t64','curl','libcurl4','libcurl4t64','ca-certificates',
     'libsqlite3-0','libseccomp2','libcap2','libacl1','libattr1','libuv1','libuv1t64','liblz4-1','libzstd1','liblzma5',
     'tar','gzip','xz-utils','squashfs-tools','libpsl5','libpsl5t64','libidn2-0','libunistring5','libc-ares2','libbrotli1','libnghttp2-14'])
+
+def ssh_listener_proof(proc=pathlib.Path('/proc')):
+    output=command(['systemctl','show','ssh.service','--property=LoadState,ActiveState,MainPID,FragmentPath,ExecStart,ExecReload,DropInPaths'],30)
+    fields=dict(line.split('=',1)for line in output.splitlines()if '='in line)
+    if fields.get('LoadState')!='loaded'or fields.get('ActiveState')!='active':return None
+    pid=int(fields.get('MainPID','0'))
+    if pid<2 or fields.get('DropInPaths','')or fields.get('FragmentPath')not in ['/usr/lib/systemd/system/ssh.service','/lib/systemd/system/ssh.service']:raise ValueError('SYSTEM_SECURITY_SSH_SERVICE_UNREVIEWED')
+    for name in ['FragmentPath']:
+        path=pathlib.Path(fields[name]);info=path.stat()
+        if not stat.S_ISREG(info.st_mode)or info.st_uid!=0 or info.st_mode&0o022:raise ValueError('SYSTEM_SECURITY_UNTRUSTED_PATH')
+    if 'argv[]=/usr/sbin/sshd -D $SSHD_OPTS ;'not in fields.get('ExecStart','')or '-HUP $MAINPID'not in fields.get('ExecReload',''):raise ValueError('SYSTEM_SECURITY_SSH_SERVICE_UNREVIEWED')
+    defaults=pathlib.Path('/etc/default/ssh')
+    defaults_hash=None
+    if defaults.exists():
+        info=defaults.lstat()
+        if not stat.S_ISREG(info.st_mode)or info.st_uid!=0 or info.st_mode&0o022 or info.st_size>65536:raise ValueError('SYSTEM_SECURITY_UNTRUSTED_PATH')
+        if any(line.strip()and not line.lstrip().startswith('#')and not re.fullmatch(r'SSHD_OPTS=(?:""|\'\'|)',line.strip())for line in defaults.read_text().splitlines()):raise ValueError('SYSTEM_SECURITY_SSH_SERVICE_UNREVIEWED')
+        defaults_hash=hashlib.sha256(defaults.read_bytes()).hexdigest()
+    process=proc/str(pid)
+    if (process/'ns/pid').readlink()!=(proc/'1/ns/pid').readlink()or str((process/'exe').readlink()).removesuffix(' (deleted)')!='/usr/sbin/sshd':raise ValueError('SYSTEM_SECURITY_SSH_PROCESS_CHANGED')
+    raw=(process/'stat').read_text();at=raw.rfind(') ');fields_stat=raw[at+2:].split()
+    if at<0 or len(fields_stat)<20:raise ValueError('SYSTEM_SECURITY_SSH_PROCESS_CHANGED')
+    config=command([str(process/'exe'),'-T'],30)
+    if len(config)>1024*1024:raise ValueError('SYSTEM_SECURITY_SSH_CONFIG_UNREVIEWED')
+    hostkeys=hashlib.sha256()
+    keys=sorted(pathlib.Path('/etc/ssh').glob('ssh_host_*_key'))
+    if not keys or len(keys)>16:raise ValueError('SYSTEM_SECURITY_SSH_KEY_UNREVIEWED')
+    for path in keys:
+        info=path.lstat()
+        if not stat.S_ISREG(info.st_mode)or info.st_uid!=0 or info.st_nlink!=1 or info.st_size>65536 or info.st_mode&0o077:raise ValueError('SYSTEM_SECURITY_UNTRUSTED_PATH')
+        hostkeys.update(path.name.encode());hostkeys.update(path.read_bytes())
+    return {'pid':pid,'start':fields_stat[19],'configHash':hashlib.sha256(config.encode()).hexdigest(),
+        'unitHash':hashlib.sha256(pathlib.Path(fields['FragmentPath']).read_bytes()).hexdigest(),'defaultsHash':defaults_hash,'hostKeyHash':hostkeys.hexdigest()}
+
+def activate_ssh_listener(before):
+    if before is None:return None
+    current=ssh_listener_proof()
+    if current!=before:raise ValueError('SYSTEM_SECURITY_SSH_PROCESS_CHANGED')
+    loaded=replaced_host_mappings(all_host=True)
+    if not loaded['complete']:raise ValueError('SYSTEM_SECURITY_SSH_CHECK_INCOMPLETE')
+    if not any(row['pid']==before['pid']for row in loaded['processes']):return {'state':'current','pid':before['pid']}
+    config=command(['/usr/sbin/sshd','-T'],30)
+    if hashlib.sha256(config.encode()).hexdigest()!=before['configHash']:raise ValueError('SYSTEM_SECURITY_SSH_CONFIG_CHANGED')
+    command(['/usr/sbin/sshd','-t'],30)
+    command(['systemctl','reload','ssh.service'],30)
+    after=None;deadline=time.monotonic()+10
+    while after is None and time.monotonic()<deadline:
+        after=ssh_listener_proof()
+        if after is None:time.sleep(.1)
+    if after is None or any(after[key]!=before[key]for key in ['configHash','unitHash','defaultsHash','hostKeyHash']):raise ValueError('SYSTEM_SECURITY_SSH_CONFIG_CHANGED')
+    installed=pathlib.Path('/usr/sbin/sshd').stat();running=pathlib.Path('/proc',str(after['pid']),'exe').stat()
+    loaded=replaced_host_mappings(all_host=True)
+    if (installed.st_dev,installed.st_ino)!=(running.st_dev,running.st_ino)or not loaded['complete']or any(row['pid']==after['pid']for row in loaded['processes']):raise ValueError('SYSTEM_SECURITY_SSH_ACTIVATION_PENDING')
+    # Existing authenticated child sessions keep their connection and old code;
+    # this receipt attests to the listener for new logins, not all processes.
+    return {'state':'activated','pid':after['pid'],'checkedAt':time.strftime('%Y-%m-%dT%H:%M:%SZ',time.gmtime())}
 
 def command(args,timeout=90):
     # Keep the complete apt/dpkg process group under the deadline. A surviving
@@ -244,6 +301,11 @@ def apply_patches(automatic=False):
         # Recheck installed versions after owning the maintenance lane. A
         # concurrent authorized updater may have completed since discovery.
         value=inventory()
+        ssh_before=None;ssh_error=None
+        if automatic and 'openssh-server'in value['packages']:
+            try:ssh_before=ssh_listener_proof()
+            except (ValueError,OSError):ssh_error='SYSTEM_SECURITY_SSH_SERVICE_UNREVIEWED'
+            if ssh_before is not None:allowed|={'openssh-server','openssh-client','openssh-sftp-server'}
         clean_service_policy()
         command(['apt-get','-o','Acquire::AllowInsecureRepositories=false','-o','Acquire::AllowDowngradeToInsecureRepositories=false','-o','Acquire::AllowWeakRepositories=false','update'],180)
         names=sorted(set(value['packages'])&allowed)
@@ -269,6 +331,10 @@ def apply_patches(automatic=False):
         for package in changes:
             name,version=package.split('=',1)
             if after['packages'].get(name)!=version:raise ValueError('SYSTEM_SECURITY_PATCH_NOT_CONFIRMED')
+        if automatic and ssh_before is not None:
+            after['sshListenerActivation']=activate_ssh_listener(ssh_before)
+            after['loadedCode']=replaced_host_mappings(all_host=True)
+        elif ssh_error:after['sshListenerActivation']={'state':'pending','error':ssh_error}
         value=after;value['patchPlan']=changes;value['patchState']='installed-activation-required' if changes else 'current';persist(value,verify_activation=True)
         return value
     except Exception:

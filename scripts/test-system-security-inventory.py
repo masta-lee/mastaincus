@@ -6,6 +6,18 @@ spec=importlib.util.spec_from_file_location('inventory',pathlib.Path(__file__).w
 module=importlib.util.module_from_spec(spec);spec.loader.exec_module(module)
 
 class Plans(unittest.TestCase):
+    def test_ssh_listener_activation_keeps_unmodified_services_and_rejects_conflicts(self):
+        before={'pid':12,'start':'111','configHash':'original','unitHash':'unit','defaultsHash':'defaults','hostKeyHash':'keys'}
+        current={'complete':True,'processes':[]}
+        with patch.object(module,'ssh_listener_proof',return_value=before),patch.object(module,'replaced_host_mappings',return_value=current),patch.object(module,'command')as command:
+            self.assertEqual(module.activate_ssh_listener(before),{'state':'current','pid':12});command.assert_not_called()
+        for changed in [{**before,'pid':13},{**before,'configHash':'changed'},{**before,'unitHash':'changed'},{**before,'hostKeyHash':'changed'}]:
+            with patch.object(module,'ssh_listener_proof',return_value=changed),patch.object(module,'command')as command,self.assertRaises(ValueError):
+                module.activate_ssh_listener(before)
+            command.assert_not_called()
+        with patch.object(module,'ssh_listener_proof',return_value=before),patch.object(module,'replaced_host_mappings',return_value={'complete':True,'processes':[{'pid':12}]}),patch.object(module,'command',return_value='changed')as command,self.assertRaisesRegex(ValueError,'CONFIG_CHANGED'):
+            module.activate_ssh_listener(before)
+        self.assertEqual(command.call_count,1,'changed effective configuration cannot reach service reload')
     def test_automatic_patch_policy_excludes_daemon_libc_and_kernel_actions(self):
         self.assertTrue(module.AUTOMATIC_DEBIAN<=set(module.DEBIAN))
         for name in ['openssl','libssl3','curl','libcurl4','ca-certificates','libsqlite3-0','libseccomp2','tar','gzip','xz-utils']:
