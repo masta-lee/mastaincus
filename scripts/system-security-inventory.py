@@ -224,13 +224,21 @@ def managed_clock_security_proof():
     for path in [helper,config,unit]:
         info=path.lstat()
         if not stat.S_ISREG(info.st_mode)or info.st_uid!=0 or info.st_nlink!=1 or info.st_mode&0o022 or info.st_size>262144:raise ValueError('SYSTEM_SECURITY_CLOCK_SERVICE_UNREVIEWED')
-    text=config.read_text()
-    if '# payincus-time-sync-v1'not in text.splitlines()or re.search(r'(?m)^\s*(?:makestep|initstepslew)\b',text)or '# payincus-time-sync-v1'not in unit.read_text().splitlines():raise ValueError('SYSTEM_SECURITY_CLOCK_SERVICE_UNREVIEWED')
-    value=dict(line.split('=',1)for line in command(['systemctl','show','incudal-clock.service','--property=MainPID,ActiveState'],20).splitlines()if '='in line)
+    expected_config='# payincus-time-sync-v1\npool pool.ntp.org iburst maxsources 4\ndriftfile /var/lib/chrony/incudal-clock/chrony.drift\nrtcsync\nmaxslewrate 10000\ncmdport 0\n'
+    if config.read_text()!=expected_config:raise ValueError('SYSTEM_SECURITY_CLOCK_SERVICE_UNREVIEWED')
+    value=dict(line.split('=',1)for line in command(['systemctl','show','incudal-clock.service','--property=MainPID,ActiveState,FragmentPath,DropInPaths,Environment'],20).splitlines()if '='in line)
+    if value.get('FragmentPath')!=str(unit)or value.get('DropInPaths','')or value.get('Environment',''):raise ValueError('SYSTEM_SECURITY_CLOCK_SERVICE_UNREVIEWED')
     if value.get('ActiveState')!='active'or int(value.get('MainPID','0'))<2:return None
     pid=int(value['MainPID']);process=pathlib.Path('/proc',str(pid))
-    if (process/'ns/pid').readlink()!=pathlib.Path('/proc/1/ns/pid').readlink()or str((process/'exe').readlink()).removesuffix(' (deleted)')not in ['/usr/sbin/chronyd','/sbin/chronyd']:raise ValueError('SYSTEM_SECURITY_CLOCK_PROCESS_CHANGED')
-    return {'pid':pid,'configurationHash':hashlib.sha256(config.read_bytes()+unit.read_bytes()).hexdigest(),'helperHash':hashlib.sha256(helper.read_bytes()).hexdigest()}
+    binary=str((process/'exe').readlink()).removesuffix(' (deleted)')
+    if (process/'ns/pid').readlink()!=pathlib.Path('/proc/1/ns/pid').readlink()or not os.path.samestat((process/'root').stat(),pathlib.Path('/').stat())or binary not in ['/usr/sbin/chronyd','/sbin/chronyd']:raise ValueError('SYSTEM_SECURITY_CLOCK_PROCESS_CHANGED')
+    expected_unit='# payincus-time-sync-v1\n[Unit]\nDescription=PayIncus continuous clock synchronization\nWants=network-online.target\nAfter=network-online.target\n[Service]\nType=simple\nRuntimeDirectory=chrony\nRuntimeDirectoryMode=0750\nExecStartPre=/usr/bin/install -d -m 0750 -o _chrony -g _chrony /run/chrony\nExecStart='+binary+' -d -f /etc/chrony/incudal-clock.conf\nRestart=on-failure\nRestartSec=10\n[Install]\nWantedBy=multi-user.target\n'
+    if unit.read_text()!=expected_unit:raise ValueError('SYSTEM_SECURITY_CLOCK_SERVICE_UNREVIEWED')
+    with (process/'cmdline').open('rb')as source:args=source.read(4097)
+    if args!=os.fsencode(binary)+b'\0-d\0-f\0/etc/chrony/incudal-clock.conf\0':raise ValueError('SYSTEM_SECURITY_CLOCK_PROCESS_CHANGED')
+    raw=(process/'stat').read_text();at=raw.rfind(') ');fields=raw[at+2:].split()
+    if at<0 or len(raw)>8192 or len(fields)<20:raise ValueError('SYSTEM_SECURITY_CLOCK_PROCESS_CHANGED')
+    return {'pid':pid,'start':fields[19],'configurationHash':hashlib.sha256(config.read_bytes()+unit.read_bytes()).hexdigest(),'helperHash':hashlib.sha256(helper.read_bytes()).hexdigest()}
 
 def activate_managed_clock(before):
     if before is None:return None

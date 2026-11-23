@@ -4,6 +4,12 @@
 
 ## 续接实施状态（2026-11-22，尚未完成）
 
+2026-11-23后续精修：`1bdbf0e868c68056523b5e22e69d7e99954795b6`已推，native45112993746已全部14success，新clockfixture双架构busy前序settle后activation／stopped恢复通过。配套Agent45112993799／SSH45112993804／memory45112993749全success，Incusbuild45112993766待核；主CI45112993806当前25success／1Almafailure／4poolbrowser在途，137489434468完整1182已读：Alma开通成功，resourcevisibility调用结束后全proc扫描错误。Go收尾先kernel Getpgid筛本commandgroup，已消失ESRCH／ENOENT按实际退出处理，其它错误和仍存活同group拒绝；实际75原生processchurn1187／背景pipe与failedchild／zombie及超预算拒绝全0（churn6.55秒），双compile-vet／Agent全套／security1187过。旧1183聚合75扫描5秒fixture预算不足、1186全proc较慢28.67秒保持记录，不改变产品command期限。
+
+主控／网关clock复审：旧仅marker／无makestep不能识别operator include／unit命令／drop-in，改完整固定config与unit生成及校验、原FragmentPath／无DropInPaths／Environment、hostnamespace＋同root／binaryargv／PIDstart，执行器与systemsecurityplanner双层核。31timefixtures（Windows2root明确skip）1193/1194、23planner（Windows6root明确skip）1194、安全／完整backup1194过；真实Linux31全0/固定unit systemd-analyze parser1180、23rootplanner1192全0。实际systemd1194固定策略更改拒绝／原PID保持／samebytes原子替换→旧code拒绝／原service换码／newPID与planner新start／原config保持／重复current全过，activation9.02秒，原timesyncd／唯一backend健康恢复与dpkg干净已自然0。1185准备daemonreload12秒超时／原service恢复1188过；1189严配置执行器20.72秒过但未先停同root旧timesyncd，是测试fixture缺口，最终1194显式停原timesyncd并补竞争process拒绝／restore原service。1177/1178缺repo辅助files、1179错要求非法unit也能parse、1176错调用不存在backupscript实际未跑等均保记录，实际31全Linux／真实parser／正确platform-backup1194补齐，不将pnpm missing-script零退出算通过。
+
+本批最后产品源码全量、最终same-source预览/独立双包验签仍需新轮；已完成231final11来源23f＋后续对应专项，不称最后所有源码全量已过。E03/E04余Node/PG/libc/musl/kernel自动激活、旧world安全归属与真实OSS／A整机失联仍未完成，暂不正式发行／tag/main／生产。
+
 2026-11-23再精修：源码`23f97e60a6245826a356b8ae3e3bda9db78bed84`已推；231全量final11全部自然0／14m50（日志security-repair-suite-final11），最终原生与后续Go小改另对应补验，不以旧全量覆盖未跑的新增路径。新主CI45111238176的两Debian14真实旧cycle→确定竞态→下一boot均success，24success／6poolbrowser在途；Agent45111238175全6success／预期Release skipped，SSH45111238047／memory45111238137／Incusbuild45111238078均success。native45111238125终态12success／2emptyfailure137484832510／2576完整1172双日志已读：DNS前序reload的实际Incus后台operations未settle，clock测试立即替换binary后忙拒绝。fixture现在先最多60秒等原emptyauthority／idleops，再开始独立60秒产品activation，原产品忙拒绝与5min重试不放宽，最终双archnative待新sourceCI。
 
 宿主独立维护收尾：LXCFS／clock任一错误此前return会跳过后续DNS，改每步独立60秒且保全部errors.Join，原总180秒／每步原fence／实际实例和operations核验保持，expired总ctx停止，整体有任一失败仍retry。真实Alpine1174完整clock两独立60秒60.54秒／stopped44.66秒／原IncusDNS98.57秒（含三个独立stage）／独立收尾unit0.01秒全自然0，双compile-vet1173与WindowsAgent/security1174通过。隔离多次pivotnamespace导致原FUSE在37504namespace、Incus/clock看不到挂载，1162真实失败被完整保留；1164/1166～1170只测试环境恢复尝试各失败不算成功，1171进入原FUSE namespace实际DNS122.12秒与收尾过，1174使用同原namespace最终全过，生产未动。回收六旧binary1155、当前无客户与同原identity保持，不用跨namespacebind错误当产品修复。
@@ -219,21 +225,21 @@ Incus进一步实证：旧7.0.1→7.6启动故障后的前进重试通过（`inc
 
 | 范围 | 修复目标 | 当前状态 |
 |---|---|---|
-| S01／S02／S03 | 外部拒绝摘要；认证资料防DB伪造、恢复码严格认证和一次性消费 | 已实施；隔离真实PG认证、OAuth、正常业务及资金最新回归通过，147表加密恢复/原密码与签名/篡改拒绝通过；原worker整体迁移和真实OSS仍待 |
+| S01／S02／S03 | 外部拒绝摘要；认证资料防DB伪造、恢复码严格认证和一次性消费 | 已实施；隔离真实PG认证、OAuth、正常业务及资金最新回归通过，147表加密恢复/原密码与签名/篡改拒绝通过；第十四/十五完整同来源双架构原v1.8.14worker与root恢复过；最新源码包和真实OSS仍待 |
 | S04 | 四协议实际连接期DNS、重定向及数据通道SSRF门禁 | 已实施；最终DNS拒私网无凭据、真实S3签名流CRUD、FTPS控制/数据TLS与错误证书、SFTP真传/坏hostkey均过，WebDAV流/XML/拒redirect过；均为本机传输夹具，生产存储未验 |
 | S05 | 终端HTTP／WS／重连及旧host test共用服务器pin | 已实施；假TLS0POST、原终端回归过，旧缺pin原受信SSH+TLS后补齐/错误旧pin拒绝/排队stop不互等真实PG425过、Linux固定探针413过；完整最终签名包/宿主实机仍待 |
-| S06 | OAuth授权码／刷新原子消费及锁内当前权限 | 已实施；真实PG并发码／刷新各一次、封禁／禁用client／撤销grant拒绝、复合upsert／select关联／aggregate篡改拒绝及app级联清理全过；恢复待 |
+| S06 | OAuth授权码／刷新原子消费及锁内当前权限 | 已实施；真实PG并发码／刷新各一次、封禁／禁用client／撤销grant拒绝、复合upsert／select关联／aggregate篡改拒绝及app级联清理全过；第十四/十五完整root恢复过，最新包及真实OSS待 |
 | S07 | 敏感配置／通知凭据统一严格加密、旧资料安全迁移 | 已实施；真实PG迁移/正常配置/通知/邮箱并发、抽奖专表、SMTP真TLS/错误证书/明文AUTH0、TG业务回归及147表恢复通过；外部TG及真实OSS另验 |
 | S08／S09 | SFTP host身份、FTP安全传输及控制字符拒绝 | SFTP固定hostkey、FTPS证书验证与控制字符门禁；真实SFTP/FTPS控制及数据上传、流下载、删除、错误服务器身份拒绝通过；旧不安全存储配置需管理员提供可验证身份/安全服务 |
 | S10 | 日志字段、URL票据、代理／错误输出完整脱敏 | 应用/数据库审计/通知/更新chunk脱敏与Nginx实际语法、reload、票据URL不记录、幂等通过；原worker自身旧日志及生产日志ACL/旁路未全部验证 |
-| S11 | DB业务／迁移角色分离、权限／网络核验、备份恢复兼容 | 实际低权限dump、root迁移restore、147表加密恢复/DDL与迁移写拒绝通过；业务DML/root私密角色/SCRAM/HBA持续保持。原worker任务2实际246迁移后封存与回退均在TCG超时failed，未降权；同提交完整root恢复worker/双架构回退与真实OSS待 |
+| S11 | DB业务／迁移角色分离、权限／网络核验、备份恢复兼容 | 实际低权限dump、root迁移restore、147表加密恢复/DDL与迁移写拒绝通过；业务DML/root私密角色/SCRAM/HBA持续保持。本机早期TCG原任务2升级/回退失败仍保记录；第十四/十五完整双架构公开原v1.8.14worker正常/迁移保留/故障回退再升与root恢复过，最新source包/真实OSS仍待 |
 | R12 | 有界流／响应／解析、连接测试与全局并发预算 | 真流与XML预算/远端成功后上传结束、取消请求后handler退出前继续占用预算、429后恢复通过；S3/WebDAV/SFTP/FTPS本机流CRUD已验，不等于任意32GiB满额文件实传 |
 | R13 | Agent生产HTTPS和升级真实性、防重放与origin限制 | 已实施HTTPS、同origin／无redirect、nonce绑定全部响应动作HMAC；增加固定独立发布公钥Ed25519包签名（版本／架构／真实二进制hash），Go正确／坏key／篡改／版本架构及正常替换与重启中断通过；发布链／真实旧Agent升级待 |
 | R14 | CSP／高权限access时间／Cookie／HTTP公网边界 | 管理员15min/用户1h、主题外置/拒inline/生产拒共享Cookie已实施；双端build、Chrome生产CSP三语登录主题/inline拒绝通过，实际Nginx配置通过；生产入口未部署 |
-| R15 | Action固定SHA、发布最小权限及下载来源验证 | 已固定外部Action真实SHA／发布job最小权限；下载链完整复审待 |
-| E01／E02 | Incus安全基线与原功能补丁、AgentGo／嵌入module升级 | 双架构编译/WindowsAgent全包6轮、Incus7.0.1→7.6保UUID/PID/boot/磁盘/sysinfo、跨版故障前进及同版回退再升、停启重启实证过；Go公告适用性已核。ARM实际daemonreload/正式签名payload/原Agent升级仍待 |
+| R15 | Action固定SHA、发布最小权限及下载来源验证 | 已固定外部Action真实SHA／发布job最小权限；PGDG/Zabbly固定keySHA、mutable快捷命令退役、固定module预算及artifact严格核验实证过，最终source包待 |
+| E01／E02 | Incus安全基线与原功能补丁、AgentGo／嵌入module升级 | 双架构编译/WindowsAgent全包6轮、Incus7.0.1→7.6保UUID/PID/boot/磁盘/sysinfo、跨版故障前进及同版回退再升、停启重启实证过；Go公告适用性已核。最新1bdb原生双架构14/14实际reload/故障恢复通过，正式签名payload/原Agent升级及最终source包仍待 |
 | E03／E04 | 配套程序补丁策略／新旧安装与自查，已有客户与管理员配置保护 | 实施中：系统有界库存／待更新／运行kernel／未公开OpenSSL条件持久巡查，Alpine Agent限定签名同branch安全leaf补丁自动重试且不影响可售；内核／Incus／DB／服务维护不擅重启；Node首装安全patch检查；完整原生／升级待 |
-| E05 | 全锁图公告更新与不适用入口核对、UI／邮件／支付回归 | 全图/prod联网audit0；新锁图双前端build、CSP浏览器、邮件/通知/支付及147表GCM恢复过；完整新包/root恢复worker/真实OSS仍待 |
+| E05 | 全锁图公告更新与不适用入口核对、UI／邮件／支付回归 | 全图/prod联网audit0；新锁图双前端build、CSP浏览器、邮件/通知/支付及147表GCM恢复过；第十四/十五同来源完整双包/root恢复worker过；最终source包/真实OSS仍待 |
 
 最终须保留本机攻击对照拒绝、真实PG并发和恢复、对应类型／守卫／双端build／Go及可执行原生验证。系统未知版本和未发布补丁继续明确边界；本机源码通过不等于生产或完整OSS灾备已经完成。
 

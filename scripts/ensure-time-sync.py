@@ -230,15 +230,44 @@ def clear_own_package_policy():
         trusted(POLICY)
         if POLICY.read_text() == own_policy: POLICY.unlink()
 
+def managed_clock_configuration():
+    return (MARK+'\npool pool.ntp.org iburst maxsources 4\n'
+            'driftfile /var/lib/chrony/incudal-clock/chrony.drift\n'
+            'rtcsync\nmaxslewrate 10000\ncmdport 0\n').encode()
+
+def managed_clock_unit(init,binary):
+    if binary not in ['/usr/sbin/chronyd','/sbin/chronyd']:raise ValueError('TIME_SYNC_BINARY_UNAVAILABLE')
+    if init=='systemd':
+        return (MARK+'\n[Unit]\nDescription=PayIncus continuous clock synchronization\nWants=network-online.target\nAfter=network-online.target\n'
+                '[Service]\nType=simple\nRuntimeDirectory=chrony\nRuntimeDirectoryMode=0750\n'
+                'ExecStartPre=/usr/bin/install -d -m 0750 -o _chrony -g _chrony /run/chrony\n'
+                'ExecStart='+binary+' -d -f '+str(CONFIG)+'\nRestart=on-failure\nRestartSec=10\n'
+                '[Install]\nWantedBy=multi-user.target\n').encode()
+    if init=='openrc':
+        return ('#!/sbin/openrc-run\n'+MARK+'\ncommand="'+binary+'"\ncommand_args="-d -f '+str(CONFIG)+'"\n'
+                'supervisor="supervise-daemon"\nrespawn_delay=10\nrespawn_max=0\n'
+                'output_log="/dev/null"\nerror_log="/dev/null"\n'
+                'start_pre() { checkpath --directory --mode 0750 --owner chrony:chrony /run/chrony; }\n'
+                'depend() { after net; }\n').encode()
+    raise ValueError('TIME_SYNC_INIT_UNSUPPORTED')
+
+def reviewed_clock_files(init):
+    trusted(CONFIG)
+    unit=Path('/etc/systemd/system/incudal-clock.service'if init=='systemd'else'/etc/init.d/incudal-clock')
+    trusted(unit)
+    if CONFIG.read_bytes()!=managed_clock_configuration():raise ValueError('TIME_SYNC_CONFIGURATION_CONFLICT')
+    payload=unit.read_bytes()
+    candidates=[binary for binary in ['/usr/sbin/chronyd','/sbin/chronyd']if payload==managed_clock_unit(init,binary)]
+    if len(candidates)!=1:raise ValueError('TIME_SYNC_CONFIGURATION_CONFLICT')
+    if init=='systemd':
+        fields=dict(line.split('=',1)for line in command(['systemctl','show','incudal-clock.service','--property=FragmentPath,DropInPaths,Environment'],20).stdout.splitlines()if '='in line)
+        if fields.get('FragmentPath')!=str(unit)or fields.get('DropInPaths','')or fields.get('Environment',''):raise ValueError('TIME_SYNC_CONFIGURATION_CONFLICT')
+    return unit,candidates[0]
+
 def managed_clock_patch_process(init):
     # Only our exact slew-only daemon may be restarted to load a signed patch.
     # Administrator clock services are never overwritten or switched here.
-    trusted(CONFIG)
-    configuration=CONFIG.read_text()
-    if MARK not in configuration.splitlines()or re.search(r'(?m)^\s*(?:makestep|initstepslew)\b',configuration):raise ValueError('TIME_SYNC_CONFIGURATION_CONFLICT')
-    unit=Path('/etc/systemd/system/incudal-clock.service'if init=='systemd'else'/etc/init.d/incudal-clock')
-    trusted(unit)
-    if MARK not in unit.read_text().splitlines():raise ValueError('TIME_SYNC_CONFIGURATION_CONFLICT')
+    unit,expected_binary=reviewed_clock_files(init)
     if any(active(init,s)for s in services(init)if s!='incudal-clock'):raise ValueError('TIME_SYNC_MULTIPLE_SERVICES')
     proof=[];host=Path('/proc/1/ns/pid').readlink();deadline=time.monotonic()+5;checked=0
     for process in Path('/proc').iterdir():
@@ -246,16 +275,21 @@ def managed_clock_patch_process(init):
         checked+=1
         if checked>4096 or time.monotonic()>deadline:raise ValueError('TIME_SYNC_PROCESS_BUDGET_EXCEEDED')
         try:
-            if (process/'ns/pid').readlink()!=host or (process/'comm').read_text().strip()!='chronyd':continue
-            args=(process/'cmdline').read_bytes().split(b'\0')
+            if (process/'ns/pid').readlink()!=host or not os.path.samestat((process/'root').stat(),Path('/').stat()):continue
+            name=(process/'comm').read_text().strip()
+            if name in ['ntpd','systemd-timesyn']:raise ValueError('TIME_SYNC_MULTIPLE_SERVICES')
+            if name!='chronyd':continue
+            with (process/'cmdline').open('rb')as source:raw=source.read(4097)
+            if len(raw)>4096:raise ValueError('TIME_SYNC_PROCESS_BUDGET_EXCEEDED')
+            args=raw.split(b'\0')
             if len(args)<4 or args[1:4]!=[b'-d',b'-f',os.fsencode(str(CONFIG))]or any(arg for arg in args[4:]):raise ValueError('TIME_SYNC_SERVICE_CHANGED')
             path=str((process/'exe').readlink());binary=path.removesuffix(' (deleted)')
-            if binary not in ['/usr/sbin/chronyd','/sbin/chronyd']:raise ValueError('TIME_SYNC_SERVICE_CHANGED')
+            if binary!=expected_binary or args[0]!=os.fsencode(binary):raise ValueError('TIME_SYNC_SERVICE_CHANGED')
             with (process/'maps').open()as source:maps=source.read(1024*1024+1)
             if len(maps)>1024*1024:raise ValueError('TIME_SYNC_PROCESS_BUDGET_EXCEEDED')
             pending=path.endswith(' (deleted)')or any(line.endswith(' (deleted)')and 'x'in line.split()[1]and not line.split()[-2].startswith(('/dev/','/memfd:','/SYSV'))for line in maps.splitlines()if len(line.split())>=6)
             proof.append((int(process.name),binary,pending))
-        except FileNotFoundError:continue
+        except (FileNotFoundError,ProcessLookupError):continue
     if len(proof)!=1:raise ValueError('TIME_SYNC_SERVICE_CHANGED')
     return proof[0],unit
 
@@ -321,24 +355,14 @@ def managed_clock(init):
     drift=Path('/var/lib/chrony/incudal-clock')
     daemon_directory(drift,user)
     # This owned leaf is daemon data, never used as a trusted executable path.
-    conf=(MARK+'\npool pool.ntp.org iburst maxsources 4\n'
-          'driftfile /var/lib/chrony/incudal-clock/chrony.drift\n'
-          'rtcsync\nmaxslewrate 10000\ncmdport 0\n').encode()
+    conf=managed_clock_configuration()
     write(CONFIG, conf, managed=True)
     if init == 'systemd':
-        unit=(MARK+'\n[Unit]\nDescription=PayIncus continuous clock synchronization\nWants=network-online.target\nAfter=network-online.target\n'
-              '[Service]\nType=simple\nRuntimeDirectory=chrony\nRuntimeDirectoryMode=0750\n'
-              'ExecStartPre=/usr/bin/install -d -m 0750 -o _chrony -g _chrony /run/chrony\n'
-              'ExecStart='+binary+' -d -f '+str(CONFIG)+'\nRestart=on-failure\nRestartSec=10\n'
-              '[Install]\nWantedBy=multi-user.target\n').encode()
+        unit=managed_clock_unit(init,binary)
         changed=write(Path('/etc/systemd/system/incudal-clock.service'),unit,managed=True)
         if changed: command(['systemctl','daemon-reload'])
     else:
-        unit=('#!/sbin/openrc-run\n'+MARK+'\ncommand="'+binary+'"\ncommand_args="-d -f '+str(CONFIG)+'"\n'
-              'supervisor="supervise-daemon"\nrespawn_delay=10\nrespawn_max=0\n'
-              'output_log="/dev/null"\nerror_log="/dev/null"\n'
-              'start_pre() { checkpath --directory --mode 0750 --owner chrony:chrony /run/chrony; }\n'
-              'depend() { after net; }\n').encode()
+        unit=managed_clock_unit(init,binary)
         write(Path('/etc/init.d/incudal-clock'),unit,0o755,managed=True)
     if not active(init,'incudal-clock'):
         # Recheck immediately before starting; another service may have started

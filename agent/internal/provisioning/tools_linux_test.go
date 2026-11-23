@@ -77,6 +77,36 @@ func TestHostCommandGroupIgnoresOnlyExitedZombies(t *testing.T) {
 	}
 }
 
+func TestHostCommandGroupSurvivesNativeProcessChurn(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+	for i := 0; i < 75; i++ {
+		command := exec.Command("/bin/true")
+		if err := command.Start(); err != nil {
+			t.Fatal(err)
+		}
+		done := make(chan error, 1)
+		go func() { done <- command.Wait() }()
+		_, err := liveHostCommandGroup(ctx, "/proc", -1)
+		if waitErr := <-done; waitErr != nil {
+			t.Fatal(waitErr)
+		}
+		if err != nil {
+			t.Fatal("exited native process poisoned group inventory", err)
+		}
+	}
+	root := t.TempDir()
+	if err := os.Mkdir(filepath.Join(root, "2"), 0700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(root, "2/stat"), make([]byte, 8193), 0600); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := liveHostCommandGroup(ctx, root, 100); err == nil {
+		t.Fatal("oversized present proc status accepted")
+	}
+}
+
 func TestBoundedCommandOutputNeverSilentlyTruncatesJSON(t *testing.T) {
 	var out limitedBuffer
 	data := make([]byte, 300000)

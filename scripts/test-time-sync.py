@@ -22,6 +22,24 @@ spec.loader.exec_module(m)
 
 
 class ClockTests(unittest.TestCase):
+    def test_reviewed_clock_files_reject_policy_and_service_changes(self):
+        for init in ['systemd','openrc']:
+            config=Mock();config.read_bytes.return_value=m.managed_clock_configuration()
+            unit=Mock()
+            with patch.object(m,'CONFIG',config),patch.object(m,'Path',return_value=unit),patch.object(m,'trusted'),patch.object(m,'command')as command:
+                unit.read_bytes.return_value=m.managed_clock_unit(init,'/usr/sbin/chronyd')
+                command.return_value=self.result([],out=f'FragmentPath={unit}\nDropInPaths=\nEnvironment=\n')
+                self.assertEqual(m.reviewed_clock_files(init),(unit,'/usr/sbin/chronyd'))
+                config.read_bytes.return_value=m.managed_clock_configuration()+b'include /tmp/operator.conf\n'
+                with self.assertRaisesRegex(ValueError,'CONFIGURATION_CONFLICT'):m.reviewed_clock_files(init)
+                config.read_bytes.return_value=m.managed_clock_configuration()
+                unit.read_bytes.return_value=m.managed_clock_unit(init,'/usr/sbin/chronyd')+b'ExecStartPost=/bin/true\n'
+                with self.assertRaisesRegex(ValueError,'CONFIGURATION_CONFLICT'):m.reviewed_clock_files(init)
+                unit.read_bytes.return_value=m.managed_clock_unit(init,'/usr/sbin/chronyd')
+                if init=='systemd':
+                    for extra in ['DropInPaths=/etc/systemd/system/operator.conf','Environment=LD_PRELOAD=operator','FragmentPath=/etc/operator.service']:
+                        command.return_value=self.result([],out=f'FragmentPath={unit}\nDropInPaths=\nEnvironment=\n'+extra+'\n')
+                        with self.assertRaisesRegex(ValueError,'CONFIGURATION_CONFLICT'):m.reviewed_clock_files(init)
     def test_security_activation_checks_current_loaded_daemon_and_preserves_policy(self):
         unit=Mock();unit.read_bytes.return_value=b'fixed-unit'
         before=(12,'/usr/sbin/chronyd',False)

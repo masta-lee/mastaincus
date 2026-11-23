@@ -145,14 +145,30 @@ func liveHostCommandGroup(ctx context.Context, proc string, group int) (bool, er
 		return false, fmt.Errorf("host command process inventory unavailable")
 	}
 	for _, entry := range entries {
-		if _, err := strconv.Atoi(entry.Name()); err != nil {
+		pid, err := strconv.Atoi(entry.Name())
+		if err != nil {
 			continue
 		}
 		if ctx.Err() != nil {
 			return false, ctx.Err()
 		}
+		if proc == "/proc" {
+			// Most processes are unrelated to this newly created command group.
+			// Query the kernel group first; a disappearing or unreadable foreign
+			// proc entry cannot poison an otherwise successful command receipt.
+			pgid, groupErr := syscall.Getpgid(pid)
+			if errors.Is(groupErr, syscall.ESRCH) {
+				continue
+			}
+			if groupErr != nil {
+				return false, fmt.Errorf("host command process group unavailable")
+			}
+			if pgid != group {
+				continue
+			}
+		}
 		data, err := os.ReadFile(filepath.Join(proc, entry.Name(), "stat"))
-		if os.IsNotExist(err) {
+		if os.IsNotExist(err) || errors.Is(err, syscall.ESRCH) {
 			continue
 		}
 		if err != nil || len(data) > 8192 {
