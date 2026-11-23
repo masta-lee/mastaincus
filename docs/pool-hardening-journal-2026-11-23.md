@@ -24,6 +24,10 @@ security.4/source e470547b9107400575bd0b5a5317270dbd09e5d3：完整231/231、Go�
 
 最终22d1ab34本机full1675自然231/231，CI45181874055全部30success，native/SSH/memory/Agent同source全部success。完整测试版本v1.8.14-test.22d1ab3/workflow45181889126双首装root恢复＋六原v1.8.14worker正常/迁移留库/后半失败回滚再升全13success/Release预期skipped；旧worker实际target版本和候选preflight成功日志独立读过。双包1702独立publisher/SHA与archive真实rootowner/receipt/backup3模块与本地build一致：ARMcb48536843926ef45c578242d676bd2eb69cc5d4c6bb0695141d2aab18c86fb6，AMD057e641d98bf7a553bf29c569aaa4cd9fe35fae7a666b6d706c8a1cb4460af5e。主控部署前sealed检查检出双首页外部脚本注入，事件另见controller-static-tampering报告；未绕过seal或部署失败候选。Owner单独授权撤销未知rootkey/断两个SSH已做，原backend客户钱保持。仓库可信恢复工具及原生/目标只读check通过；另恢复/原worker热更授权问题待答复。21:36库存202available/4assigned/2unavailable仍例行expiry波动，不误报已稳定完成。
 
+Owner随后明确授权可信恢复两首页并原worker完整候选热更新。恢复工具核原签名/原seal，只还原两页，1707实机原seal通过且未重新seal。任务59于21:54:51至21:57:26原worker升级v1.8.14-test.22d1ab3/source22d1成功，旧应用/DB备份保留，完整signed5关键模块/静态页独立吻合，新backend3276787/NRestarts0/唯一监听/正常管理员登录/四客户原PID UUID磁盘密码账期/19财务与seal全部通过。原systemd30秒停止旧backend超时SIGKILL已取完整1712日志，原worker仍完成迁移/检查/启动；不把该升级称优雅停止通过，停止预算后续需代码修和验收。
+
+新代码自然只读续验58～61期间原expiry/verified/finished/saleability保持，完成才续expiry（1717）。进一步发现启动cursor从低ID先续尚有效receipt，137/138已过期却排后，随后139/140也过期；21:57～22:09的1～4不可售不是Agent软件包重试。新增优先lane按过期时间核原verified/finished/同revision且无维护/已付创建占用的expired宿主，先完整重验，失败按原backoff退出lane；旧identity/expiry/核远端/受信权限保持，不手动加expiry/标绿。真实PG1729高ID过期优先/低ID健康不撤回/已付创建不占住lane通过，fullsaleability1724双架构/type/backendbuild通过。测试fixture曾因重复publicIP/缺配额被原守卫正确拒绝，补真实fixture不改产品门槛。新完整signed候选及原worker部署/两轮自然期仍待；不能将已部署22d1说成priority已上线。
+
 2026-11-23，北京时间。Owner先授权只读取证，随后明确授权本问题源码修复后，将此前已做安全修复同批热更新主控作为测试；不正式发版。
 
 主控实际v1.8.14／ced7c10cd17d、唯一后端健康。208台专属宿主中12台故障一致：#16、#21、#24、#26、#30～#36、#46。均管理在线、无客户实例、Agent工具/网络防护有效、AppArmor维护已完成，后续检查反复`HARDENING_JOURNAL_CONFLICT`。它们不是离线宿主。

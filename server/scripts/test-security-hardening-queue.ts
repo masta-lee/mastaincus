@@ -187,6 +187,36 @@ try {
   assert.equal(connections,beforePriority.connections+2)
   assert.deepEqual(resumed,[host.id],'terminal proof is inspected rather than rebooted or resumed again')
   await prisma.host.update({where:{id:host.id},data:{securityHardening:beforeMaintenance}})
+  const earlyReceipt={...beforeMaintenance,nextCheckAt:new Date(Date.now()+3600000).toISOString()}
+  await prisma.host.update({where:{id:host.id},data:{securityHardening:earlyReceipt}})
+  const expiredHost=await prisma.host.create({data:{userId:admin.id,name:prefix+'-expired-priority',url:host.url,
+    isInstalled:true,singleTenant:true,status:'online',managementSshHost:managementIp,managementSshPort:22,managementSshUser:'root',
+    serverCertificate:host.serverCertificate,serverFingerprint:host.serverFingerprint,
+    cpuAllowanceMax:200,memoryMax:768,customerDiskGiB:30,
+    securityHardening:{...beforeMaintenance,nextCheckAt:new Date(0).toISOString()},
+    onboardingNode:{create:{batchId:batch.id,name:prefix+'-expired-priority',publicIp:'192.0.2.240',managementIp,sshPort:22,
+      sshFingerprint:'SHA256:original',nodePublicKey:'A'.repeat(43)+'=',status:'succeeded',credentialsExpireAt:new Date(0)}}}})
+  try{
+    await processSecurityHardeningQueue({...deps,connect:async target=>{
+      assert.equal(target.id,expiredHost.id,'expired higher ID is inspected before a healthy lower ID renewal')
+      return {request:async()=>[]} as any
+    }})
+    assert.equal((await prisma.host.findUniqueOrThrow({where:{id:expiredHost.id}})).securityHardening?.['status'],'verified')
+    assert.deepEqual(await state(),earlyReceipt,'urgent expired recovery does not revoke or claim the early receipt')
+    const expiredReceipt=(await prisma.host.findUniqueOrThrow({where:{id:expiredHost.id}})).securityHardening as object
+    await prisma.host.update({where:{id:expiredHost.id},data:{securityHardening:{...expiredReceipt,nextCheckAt:new Date(0).toISOString()}}})
+    const busyOrder=await prisma.poolOrder.create({data:{id:randomUUID(),userId:buyer.id,requestHash:prefix+'-busy-priority',totalCents:900}})
+    const creating=await prisma.instance.create({data:{userId:buyer.id,hostId:expiredHost.id,name:prefix+'-delivery',incusId:prefix+'-delivery',status:'creating',image:'images:alpine/3.22/cloud',purchaseBatchId:busyOrder.id,cpu:100,memory:256,disk:1024}})
+    const busyState=(await prisma.host.findUniqueOrThrow({where:{id:expiredHost.id}})).securityHardening
+    try{
+      await processSecurityHardeningQueue({...deps,connect:async target=>{
+        assert.equal(target.id,host.id,'in-flight paid delivery cannot monopolize the expired priority lane')
+        return client
+      }})
+      assert.deepEqual((await prisma.host.findUniqueOrThrow({where:{id:expiredHost.id}})).securityHardening,busyState)
+    }finally{await prisma.instance.delete({where:{id:creating.id}});await prisma.poolOrder.delete({where:{id:busyOrder.id}})}
+  }finally{await prisma.host.delete({where:{id:expiredHost.id}})}
+  await prisma.host.update({where:{id:host.id},data:{securityHardening:beforeMaintenance}})
   const beforeResource = guestWrites
   await due(); preflight.memoryAvailableKiB = 1; await hardenExistingHost(host.id,deps)
   assert.equal((await state()).diagnostic.reason,'HARDENING_MEMORY_LOW'); assert.equal(guestWrites,beforeResource)

@@ -390,6 +390,23 @@ export async function processSecurityHardeningQueue(deps = securityHardeningDepe
     await hardenExistingHost(completed.id,deps)
     return
   }
+  // A restart can leave an older receipt expired while many lower-numbered
+  // hosts enter the early-renewal window. Restore expired admissions first;
+  // a failed inspection records its backoff and leaves this priority lane.
+  const verified=await prisma.host.findMany({where:{singleTenant:true,isInstalled:true,
+    onboardingNode:{is:{status:'succeeded',deletedAt:null}},securityHardening:{path:['status'],equals:'verified'},
+    NOT:{instances:{some:{status:'creating',purchaseBatchId:{not:null}}}}},
+    select:{id:true,securityHardening:true}})
+  const expired=verified.filter(host=>{
+    const state=currentState(host.securityHardening),expiry=Date.parse(state.nextCheckAt||'')
+    return state.revision===SECURITY_HARDENING_REVISION&&state.phase==='finished'&&Number.isFinite(expiry)&&expiry<=Date.now()&&
+      !hostMaintenanceBlocked(host.securityHardening)
+  }).sort((a,b)=>Date.parse(currentState(a.securityHardening).nextCheckAt!)-Date.parse(currentState(b.securityHardening).nextCheckAt!)||a.id-b.id)[0]
+  if(expired&&!deps.held()&&!stopped()){
+    await hardenExistingHost(expired.id,deps)
+    if(deps===securityHardeningDependencies)await prepareAutomaticHostMaintenance(expired.id)
+    return
+  }
   const hosts = await prisma.host.findMany({ where: { id: { gt: cursor }, singleTenant:true,isInstalled:true,
     onboardingNode: { is: { status: 'succeeded',deletedAt:null } } },
     select: { id: true, securityHardening: true }, orderBy: { id: 'asc' }, take: 50 })
