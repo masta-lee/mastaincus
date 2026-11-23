@@ -62,6 +62,7 @@ func (e *Engine) Run(ctx context.Context) {
 	securityChecked := time.Time{}
 	securityState := "pending"
 	loadedChecked := time.Time{}
+	lxcfsChecked := time.Time{}
 	for ctx.Err() == nil {
 		e.mu.Lock()
 		enabled := e.enabled != nil && *e.enabled
@@ -97,6 +98,27 @@ func (e *Engine) Run(ctx context.Context) {
 				if permit != nil && validCompatPermit(permit) {
 					_ = prepareIncusCompatibility(c, permit)
 					compatStatus, compatRequest, compatHashValue = incusCompatibilityStatus(c)
+				}
+			}
+			if compatStatus == "verified" && len(guests) == 0 && time.Since(lxcfsChecked) >= 6*time.Hour {
+				// Ask for the existing durable host fence even for a same-binary
+				// maintenance pass. The Agent's guest list alone cannot authorize
+				// interrupting a host service while a checkout is in flight.
+				if validCompatPermit(permit) && len(permit.Guests) == 0 {
+					securityContext, done := context.WithTimeout(c, 60*time.Second)
+					lxcfsError := repairLxcfsSecurity(securityContext, permit)
+					done()
+					if lxcfsError == nil {
+						lxcfsChecked = time.Now()
+						loadedChecked = time.Time{}
+					} else {
+						// Release this bounded maintenance pass on a mirror/service
+						// failure. Keep sales independent and retry in five minutes.
+						lxcfsChecked = time.Now().Add(-6*time.Hour + 5*time.Minute)
+						securityState = "retry"
+					}
+				} else {
+					compatStatus = "needed"
 				}
 			}
 			if compatStatus == "verified" {

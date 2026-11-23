@@ -4,6 +4,12 @@
 
 ## 续接实施状态（2026-11-22，尚未完成）
 
+2026-11-23续接：第十三无tag预览`45082866944`／source`3a257527c64ae35fc3c7d19fe5e40b879edcbd6c`全终态13success／Release预期skipped，双完整包、双首装完整备份／独立B恢复与六原v1.8.14worker通过；真实OSStransport／A整机失联不包含在内。旧4dCI`45081437338`已30/30success；HEAD64efCI`45083413884`当前25success／余5在途／零failure，Agent`45083413963`、memory`45083413912`、SSH`45083413956`、build`45083413874`、native`45083413860`均全success。最新新增LXCFS源码尚不由这些旧source证明。
+
+本阶段新增Alpine LXCFS空闲维护：官方musl不支持模块热卸载，不能重启带客户的FUSE服务。保持live leaf更新清单不含LXCFS；原主控持久fence＋当前无checkout/任务＋Agent全项目空实例／operations核验，在同root维护锁下签名同branch两次模拟、完整包清单／world核验，空闲才更新LXCFS／OpenRC／FUSE库并确认真实进程及已加载代码。客户删除后的reactivate同步清空旧fence实例集合，防永久沿用旧客机登记。失败不改客户、不故障隔离或永久占售，五分钟续接；六小时重新核更新。补丁状态与可售分离，原Incus身份／hash／回退门禁不放宽。
+
+证据：双Go compile/vet、Windowsprovisioning通过；servertype887、build894、securityguards887/906/915、hosttools914通过；真实PG/mTLS104任务双archreinstall892自然0，新增删除后空fence对照通过。真实Alpine/FUSE测试`security-lxcfs-native913.log`自然0／74.32秒总流程，两次单维护分别受原60秒deadline约束，准确旧executable更换→只空宿主停／起原LXCFS→真实可读FUSE／新process映射→重复幂等通过。较早891磁盘满（定向清16过期测试binary893）、890测试OpenSSL路径缺失（892补原path）、894启动operations、896DBus旧pid、897上传模式、900缺真实kernelmodules及910复用已离开mountnamespace的旧服务均保原日志；906无单次deadline虽通过137秒，不代913实际deadline验收。CI miniroot新增只读真实runner `/lib/modules`，不伪造modprobe或放宽服务检查。新增双arch原生CI、完整same-source包及最终系统DNS／musl／kernel维护仍待；正式Release／生产暂停。下文早期“在途／未提交”是历史，不代顶部最新状态。
+
 latest3a257527c64ae35fc3c7d19fe5e40b879edcbd6c已推，同source第十三完整无tag45082866944（目前双Incusbuildsuccess/双panel在途），CI45082798463/Agent45082798472/native45082798408/memory45082798395/SSH45082798405/build45082798473 queued继续，原64d/4f重复定向cancel不绿。新增流程精修只同PR的整套CI/Agent/SSH/memory/nativeconcurrency取消过期轮；push与manual使用runid独立且cancel=false，不触发发布；reusableIncusbuild不设PRsharedgroup防互取消，repo/security880与全部YAML882通过。原4dCI45081437338 24success/6inprogress零失败，不能止于阶段记录；E03/E04剩service/kernelautomaticpatch与最终包/实际OSS仍缺，暂不正式Release/生产。
 
 当前64d08b0089bae47a4e4add49537995e01f9ff93a已推，普通CI45082466070及其它配套仍待（记录运行ID而不是宣称过）。新版CA信任库用日期编号不是程序major，Alpine严格8位date-rN及Debiandate/revision格式、apk/dpkg顺序仍核；普通库数字series依严格major，Linuxplan877/13rootplanner878/双Gocompile-vetWindows876与本机security878全0，准备保存。当前8362CI45079616715 29success/1inprogress零失败，4dCI45081437338 19success/11pending零失败，最新fullsource及完整包尚未验；E03/E04全配套服务/kernel自动patchactivation仍缺，正式Release/生产/真实OSS保持暂停或独立未验。

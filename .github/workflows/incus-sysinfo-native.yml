@@ -90,6 +90,12 @@ jobs:
           sudo mount -t proc proc "$root/proc"
           sudo mount --rbind /sys "$root/sys"
           sudo mount --make-rslave "$root/sys"
+          # LXCFS's original OpenRC recipe probes the runner's real kernel
+          # modules. The minirootfs has none; expose them read-only rather
+          # than faking modprobe or weakening product service readiness.
+          sudo mkdir -p "$root/lib/modules"
+          sudo mount --bind /lib/modules "$root/lib/modules"
+          sudo mount -o remount,bind,ro "$root/lib/modules"
           # Ubuntu restricts user namespaces for the Alpine chroot executable,
           # which has no Ubuntu AppArmor profile. Only this disposable runtime
           # fixture adjusts that host restriction; product rules stay intact.

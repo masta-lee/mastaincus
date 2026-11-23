@@ -66,7 +66,7 @@ export async function incusCompatibilityPermit(agent:HostAgentRecord) {
    // keep the durable host fence until its verified receipt and remote check.
    const current=[]
    for(const row of occupants){const previous=fence.instances.find(i=>i.id===row.id&&i.name===row.incusId),identity=await registeredGuestIdentity(tx,row,host),state=row.status==='running'?'Running':'Stopped';if(!previous||identity.uuid!==previous.uuid||!(state===previous.state||previous.state==='Running'&&state==='Stopped'))return null;current.push({...previous,state})}
-   if(reactivate)await tx.host.update({where:{id:host.id},data:{securityHardening:{...state,incusCompat:{...fence,phase:'prepared'}} as Prisma.InputJsonValue}})
+   if(reactivate)await tx.host.update({where:{id:host.id},data:{securityHardening:{...state,incusCompat:{...fence,phase:'prepared',instances:current}} as Prisma.InputJsonValue}})
    return {requestId:fence.requestId,hostIdentity:fence.hostIdentity,guests:current.map(i=>({name:i.name,uuid:i.uuid,state:i.state})),expiresAt:new Date(Date.now()+240000).toISOString()}
   }
   const client=await connect()

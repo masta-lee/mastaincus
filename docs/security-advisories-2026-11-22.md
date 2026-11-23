@@ -534,3 +534,5 @@ Agent正式v1.0.16双架构SHA已核；其Go1.22.12，内嵌daemon来源Incus7.0
 | dnsmasq／curl／chrony／LXCFS／LVM2／QEMU／systemd | [Debian安全数据库](https://security-tracker.debian.org/tracker/data/json)、[Alpine v3.24 main](https://secdb.alpinelinux.org/v3.24/main.json)、[community](https://secdb.alpinelinux.org/v3.24/community.json)、[curl官方](https://curl.se/docs/vulnerabilities.html) | 已下载按项目程序名筛选；状态含resolved／open／not-affected和回补版本，不能按CVE总数判在线缺陷 |
 
 证据索引：`logs/security-online-20261122/sources.json`、`followup-sources.json`、`evidence-manifest.json`；包含原URL、HTTP状态、读取时间、大小、SHA-256，缺失或404来源不作为已确认公告。所有生产安装／原生攻击验证待独立授权和隔离验收。
+
+2026-11-23维护策略补查：[LXCFS官方无重启升级说明](https://github.com/lxc/lxcfs#upgrading-lxcfs-without-restart)明确musl的`dlclose`不卸载模块，Alpine不能用SIGUSR1当作补丁已生效，完整重启又会破坏已有客户FUSE挂载。源码新增仅在主控持久空闲维护锁、Agent全项目空清单及无在途操作共同确认后更新并激活LXCFS；有客户的宿主等待自然清空，不能用库热换／重启客户或只报安装版本代替生效。官方源及Alpine原OpenRC服务脚本证据分别留在`security-lxcfs-*883`与`security-lxcfs-openrc886`本地记录，真实服务验收见修复台账。

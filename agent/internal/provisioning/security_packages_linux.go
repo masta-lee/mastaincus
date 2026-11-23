@@ -58,6 +58,9 @@ func securityExpectedPackages(before map[string]string, plan string) map[string]
 }
 
 func safeSecurityPackagePlan(output string, before map[string]string) error {
+	return safeSecurityPackagePlanFor(output, before, securityLeaves)
+}
+func safeSecurityPackagePlanFor(output string, before map[string]string, targets []string) error {
 	if strings.Contains(output, "Removing ") || strings.Contains(output, "Downgrading ") || strings.Contains(output, "UNTRUSTED") {
 		return fmt.Errorf("security package plan refused")
 	}
@@ -66,7 +69,7 @@ func safeSecurityPackagePlan(output string, before map[string]string) error {
 	}
 	allowed := map[string]bool{}
 	seen := map[string]bool{}
-	for _, name := range securityLeaves {
+	for _, name := range targets {
 		allowed[name] = true
 	}
 	for _, change := range securityPackageVersionChange.FindAllStringSubmatch(output, -1) {
@@ -82,6 +85,9 @@ func safeSecurityPackagePlan(output string, before map[string]string) error {
 	return nil
 }
 func repairSecurityPackages(ctx context.Context) error {
+	return repairSecurityPackageSet(ctx, securityLeaves, nil)
+}
+func repairSecurityPackageSet(ctx context.Context, targets []string, authorize func(context.Context) error) error {
 	if os.Geteuid() != 0 {
 		return fmt.Errorf("security package update requires root")
 	}
@@ -112,6 +118,11 @@ func repairSecurityPackages(ctx context.Context) error {
 		return err
 	}
 	defer unlock()
+	if authorize != nil {
+		if err := authorize(ctx); err != nil {
+			return err
+		}
+	}
 	installed, err := run(ctx, "apk", "info", "-v")
 	if err != nil {
 		return err
@@ -121,7 +132,7 @@ func repairSecurityPackages(ctx context.Context) error {
 		return err
 	}
 	requested := []string{}
-	for _, name := range securityLeaves {
+	for _, name := range targets {
 		if before[name] != "" {
 			requested = append(requested, name)
 		}
@@ -149,7 +160,7 @@ func repairSecurityPackages(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
-	if err = safeSecurityPackagePlan(string(output), before); err != nil {
+	if err = safeSecurityPackagePlanFor(string(output), before, targets); err != nil {
 		return err
 	}
 	pinned := []string{}
@@ -185,12 +196,17 @@ func repairSecurityPackages(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
-	if err = safeSecurityPackagePlan(string(actualPlan), before); err != nil {
+	if err = safeSecurityPackagePlanFor(string(actualPlan), before, targets); err != nil {
 		return err
 	}
 	expected := securityExpectedPackages(before, string(output))
 	if !reflect.DeepEqual(expected, securityExpectedPackages(before, string(actualPlan))) {
 		return fmt.Errorf("security package install plan changed")
+	}
+	if authorize != nil {
+		if err := authorize(ctx); err != nil {
+			return err
+		}
 	}
 	if _, err = run(ctx, "apk", append(append([]string{}, base...), append([]string{"upgrade"}, pinned...)...)...); err != nil {
 		return err

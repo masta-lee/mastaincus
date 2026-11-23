@@ -211,6 +211,14 @@ try {
       assert.equal(hostMaintenanceBlocked((await prisma.host.findUniqueOrThrow({where:{id:host.id}})).securityHardening),true)
       await incusCompatibilityPermit({...rawAgent,lastReport:{hostProvisioningStatus:{incusCompat:'verified',compatHash:nextHash,compatRequest:permit.requestId}}})
       assert.equal(hostMaintenanceBlocked((await prisma.host.findUniqueOrThrow({where:{id:host.id}})).securityHardening),false)
+      // A deleted customer's original fence must become an exact empty-host
+      // fence before it can authorize Alpine FUSE package maintenance.
+      await prisma.instance.update({where:{id:instance.id},data:{status:'deleted'}})
+      const emptyPermit=await incusCompatibilityPermit({...rawAgent,lastReport:{hostProvisioningStatus:{incusCompat:'needed',compatHash:nextHash,compatRequest:permit.requestId}}})
+      assert.deepEqual(emptyPermit?.guests,[])
+      assert.deepEqual(((await prisma.host.findUniqueOrThrow({where:{id:host.id}})).securityHardening as any).incusCompat.instances,[],
+        'durable empty-host fence no longer inherits a deleted customer')
+      await prisma.instance.update({where:{id:instance.id},data:{status:'stopped'}})
       await prisma.hostAgent.delete({where:{id:rawAgent.id}})
       await prisma.host.update({where:{id:host.id},data:{singleTenant:cleanHost.singleTenant,securityHardening:cleanHost.securityHardening===null?Prisma.DbNull:cleanHost.securityHardening}})
       const savedHost = await prisma.host.findUniqueOrThrow({ where: { id: host.id } })
