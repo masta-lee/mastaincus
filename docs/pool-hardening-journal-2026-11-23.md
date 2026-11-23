@@ -25,3 +25,11 @@ Agent测试候选版为v1.0.17-security.1，使宿主能通过原版本比较/�
 第二次source `f6fc3021`：本机231/231，主CI`45136874843`30/30及完整预览`45136888916`13success／Release预期skipped，全native/memory/SSH/Agent成功。新增保留旧DB实景的六旧升级及双首装/root恢复全部通过；独立dual包签名/SHA与ARM15文件核过。约16:45北京时间真实完整候选热更新成功，246迁移／384资金seal／530认证seal完整验签，角色低权限及私有迁移身份核过；其它DB归属、原12宿主身份及.env秘密保持，仅signed Agent目录更新。正常管理员口令登录、me/hosts/users/Agent manifest及双域页面/health均200，4客户原UUID/PID/config与Running保持。未正式发行。
 
 线上自然队列恢复9/12可售、12台均自动升级Agentv1.0.17-security.1。实际并发再发现两点并从源码修：兼容待核验被全局加固队列误当未完成重启，卡在已terminal的维护上；IPv6只拿instance advisory后锁host、Agent观测拿instance row后检查host，构成实际PG死锁。新queue区分重启维护与单宿主兼容fence，所有门禁保持／仅该host等待，后续due目标继续；IPv6先按instance→host拿row锁。真实PG1404加固队列（含他机compat阻塞不饿死）／IPv6 Agent并发回归全部0、对应guards/types/backendbuild过。准备同批精确3模块热补并刷新受信root兼容runtime，不能手改DB状态假装剩余3台通过。
+
+后续source `10927334e030bce0d530ba6bede1400de5ada468`已推。主控约17:04北京时间热补3个编译模块且逐SHA核对，root兼容runtime同步／seal完成，唯一backend健康。17:06／17:08／17:10／17:12／后续真实销售条件快照12/12全部verified/finished与可售，旧JOURNAL_CONFLICT消失；没有手动DB清状态。208台管理在线／均已自动升级signed候选Agent／加固verified，全池当前销售查询208通过。兼容回执在后台正常跟进，目标实机抽查journal verified、当前incusd、无旧代码映射；不把瞬时prepared维护说成永久故障或将其全局阻塞其它宿主。
+
+真实客户#58～#61均Running、原PID/UUID/created/rootDisk保持。#58/#60完整config摘要变化仅Incus `volatile.last_state.ready`被daemon更新：原宿主compat journal完整配置hash与更新前相同，其余所有key不变；#59/#61全部原key一致。不能说原字节完全相同，也没有恢复volatile状态或重启客机。资金19类原余额/账单/支付/退款/价格/客户配额密码与已付期限最终比对保持，384资金seal和认证seal全库验证；观察IPv6自然同步单字段独立记录，首份与切换基线均保留。
+
+实际主控正常admin口令登录／只读me/hosts/users/manifest及双端页面和health200；测试用户原密码登录／自己的实例200、管理users/hosts403、伪造roleJWT401通过。实际双架构Agent下载hash/ELF/publisher再核过，原身份/密钥和其它DB归属保持。自然五分钟expiry巡检17:05/17:10等success，4付费未到期客户无stop/delete测试注入；traffic/status成功且新热补后无再现PG死锁。最后109源码完整231和CI/原生仍在进行，保持不正式tag/Release/main，真实OSS等旧缺口继续保留。
+
+观察另发现Agent empty-host维护判据：兼容fence会让主控暂不发资源客机列表，Agent误把空列表当空宿主，再次请求LXCFS维护；签名permit实际仍有客户。新增candidate同时检查permit占用（远端原精确空库存/签名门禁不变），避免持久反复待核验。测试候选Agent递增v1.0.17-security.2，等待Go／真实Linux／signed双Agent后由主控原自动升级跟进；不把已部署.1写成.2已通过。

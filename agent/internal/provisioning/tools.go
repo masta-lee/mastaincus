@@ -57,6 +57,12 @@ func (e *Engine) SetGuests(v []Guest) {
 	e.mu.Unlock()
 }
 func (e *Engine) Status() Status { e.mu.Lock(); defer e.mu.Unlock(); return e.status }
+
+// A withheld resource instruction list during maintenance is not proof that
+// the host is empty. The signed compatibility permit retains real occupancy.
+func emptyHostServiceCandidate(guests []Guest, permit *CompatPermit) bool {
+	return len(guests) == 0 && (permit == nil || len(permit.Guests) == 0)
+}
 func (e *Engine) Run(ctx context.Context) {
 	previousMemoryError := ""
 	securityChecked := time.Time{}
@@ -100,7 +106,7 @@ func (e *Engine) Run(ctx context.Context) {
 					compatStatus, compatRequest, compatHashValue = incusCompatibilityStatus(c)
 				}
 			}
-			if compatStatus == "verified" && len(guests) == 0 && time.Since(lxcfsChecked) >= 6*time.Hour {
+			if compatStatus == "verified" && emptyHostServiceCandidate(guests, permit) && time.Since(lxcfsChecked) >= 6*time.Hour {
 				// Ask for the existing durable host fence even for a same-binary
 				// maintenance pass. The Agent's guest list alone cannot authorize
 				// interrupting a host service while a checkout is in flight.
