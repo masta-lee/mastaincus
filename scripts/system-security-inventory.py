@@ -79,6 +79,143 @@ def activate_ssh_listener(before):
     # this receipt attests to the listener for new logins, not all processes.
     return {'state':'activated','pid':after['pid'],'checkedAt':time.strftime('%Y-%m-%dT%H:%M:%SZ',time.gmtime())}
 
+def nginx_listening_sockets(process,proc=pathlib.Path('/proc')):
+    listeners=set()
+    for name in ['tcp','tcp6','udp','udp6']:
+        path=proc/'net'/name
+        if not path.exists():continue
+        data=path.read_text()
+        if len(data)>2*1024*1024:raise ValueError('SYSTEM_SECURITY_NGINX_LISTENERS_UNREVIEWED')
+        for line in data.splitlines()[1:]:
+            fields=line.split()
+            if len(fields)<10:raise ValueError('SYSTEM_SECURITY_NGINX_LISTENERS_UNREVIEWED')
+            if fields[3]=='0A'or name.startswith('udp')and fields[3]=='07':listeners.add('socket:['+fields[9]+']')
+    path=proc/'net/unix'
+    if path.exists():
+        data=path.read_text()
+        if len(data)>2*1024*1024:raise ValueError('SYSTEM_SECURITY_NGINX_LISTENERS_UNREVIEWED')
+        for line in data.splitlines()[1:]:
+            fields=line.split()
+            if len(fields)>=7 and fields[3]=='00010000':listeners.add('socket:['+fields[6]+']')
+    sockets=[]
+    for path in (process/'fd').iterdir():
+        try:value=str(path.readlink())
+        except FileNotFoundError:continue
+        if value in listeners:sockets.append(value)
+    return sorted(sockets)
+
+def nginx_master_proof(pid=None):
+    unit=command(['systemctl','show','nginx.service','--property=LoadState,ActiveState,MainPID,FragmentPath,DropInPaths,ExecStart,PIDFile'],30)
+    fields=dict(line.split('=',1)for line in unit.splitlines()if '='in line)
+    if fields.get('LoadState')!='loaded'or fields.get('ActiveState')!='active':return None
+    if fields.get('DropInPaths','')or fields.get('PIDFile')!='/run/nginx.pid'or fields.get('FragmentPath')not in ['/usr/lib/systemd/system/nginx.service','/lib/systemd/system/nginx.service']or 'argv[]=/usr/sbin/nginx -g daemon on; master_process on; ;'not in fields.get('ExecStart',''):raise ValueError('SYSTEM_SECURITY_NGINX_SERVICE_UNREVIEWED')
+    service_pid=int(fields.get('MainPID','0'));pid=service_pid if pid is None else pid
+    process=pathlib.Path('/proc',str(pid))
+    if pid<2 or (process/'ns/pid').readlink()!=pathlib.Path('/proc/1/ns/pid').readlink()or str((process/'exe').readlink()).removesuffix(' (deleted)')!='/usr/sbin/nginx':raise ValueError('SYSTEM_SECURITY_NGINX_PROCESS_CHANGED')
+    command_line=(process/'cmdline').read_bytes()
+    if not command_line.startswith(b'nginx: master process /usr/sbin/nginx -g daemon on; master_process on;'):raise ValueError('SYSTEM_SECURITY_NGINX_SERVICE_UNREVIEWED')
+    raw=(process/'stat').read_text();at=raw.rfind(') ');stats=raw[at+2:].split()
+    if at<0 or len(stats)<20:raise ValueError('SYSTEM_SECURITY_NGINX_PROCESS_CHANGED')
+    unit_path=pathlib.Path(fields['FragmentPath']);info=unit_path.lstat()
+    if not stat.S_ISREG(info.st_mode)or info.st_uid!=0 or info.st_mode&0o022:raise ValueError('SYSTEM_SECURITY_UNTRUSTED_PATH')
+    configuration=command([str(process/'exe'),'-T','-g','daemon on; master_process on;'],30)
+    sockets=nginx_listening_sockets(process)
+    if not sockets or len(sockets)>256:raise ValueError('SYSTEM_SECURITY_NGINX_LISTENERS_UNREVIEWED')
+    return {'pid':pid,'servicePID':service_pid,'start':stats[19],'configurationHash':hashlib.sha256(configuration.encode()).hexdigest(),
+        'unitHash':hashlib.sha256(unit_path.read_bytes()).hexdigest(),'sockets':sockets}
+
+def nginx_pid(path):
+    info=path.lstat()
+    if not stat.S_ISREG(info.st_mode)or info.st_uid!=0 or info.st_nlink!=1 or info.st_mode&0o022 or info.st_size>32:raise ValueError('SYSTEM_SECURITY_UNTRUSTED_PATH')
+    text=path.read_text().strip()
+    if not text.isdecimal()or int(text)<2:raise ValueError('SYSTEM_SECURITY_NGINX_PROCESS_CHANGED')
+    return int(text)
+
+def nginx_workers_current(master):
+    loaded=replaced_host_mappings(all_host=True)
+    if not loaded['complete']:return False
+    old={row['pid']for row in loaded['processes']};workers=[]
+    installed=pathlib.Path('/usr/sbin/nginx').stat()
+    for process in pathlib.Path('/proc').iterdir():
+        if not process.name.isdigit():continue
+        try:
+            raw=(process/'stat').read_text();stats=raw[raw.rfind(') ')+2:].split()
+            if int(stats[1])!=master or (process/'comm').read_text().strip()!='nginx':continue
+            if stats[0]in ['Z','X']:continue
+            mapped=(process/'exe').stat()
+            if int(process.name)in old or (mapped.st_dev,mapped.st_ino)!=(installed.st_dev,installed.st_ino):return False
+            workers.append(process.name)
+        except FileNotFoundError:continue
+    return bool(workers)
+
+def finish_nginx_activation(before,new):
+    # systemd reloads PIDFile when a forking MainPID exits. Verify the new
+    # process/listeners first, then QUIT only the old master after WINCH;
+    # existing old workers continue draining their established connections.
+    if new['configurationHash']!=before['configurationHash']or new['unitHash']!=before['unitHash']or not set(before['sockets'])<=set(new['sockets'])or not nginx_workers_current(new['pid']):raise ValueError('SYSTEM_SECURITY_NGINX_CONFIG_CHANGED')
+    current=nginx_master_proof(before['pid'])
+    if current is None or current['start']!=before['start']or current['configurationHash']!=before['configurationHash']or current['unitHash']!=before['unitHash']:raise ValueError('SYSTEM_SECURITY_NGINX_PROCESS_CHANGED')
+    os.kill(before['pid'],signal.SIGWINCH)
+    # Do not QUIT the master until its old workers have finished active
+    # requests. It retains inherited listeners as a supervised standby while
+    # a long transfer drains, and a later maintenance pass completes adoption.
+    deadline=time.monotonic()+10
+    while time.monotonic()<deadline:
+        workers=False
+        for process in pathlib.Path('/proc').iterdir():
+            if not process.name.isdigit():continue
+            try:
+                raw=(process/'stat').read_text();stats=raw[raw.rfind(') ')+2:].split()
+                if int(stats[1])==before['pid']and stats[0]not in ['Z','X']and (process/'comm').read_text().strip()=='nginx'and int(process.name)!=new['pid']:workers=True;break
+            except FileNotFoundError:continue
+        if not workers:break
+        time.sleep(.1)
+    if workers:return {'state':'draining','pid':new['pid'],'supervisedStandbyPID':before['pid'],'checkedAt':time.strftime('%Y-%m-%dT%H:%M:%SZ',time.gmtime())}
+    current=nginx_master_proof(before['pid'])
+    if current is None or current['start']!=before['start']or not nginx_workers_current(new['pid']):raise ValueError('SYSTEM_SECURITY_NGINX_PROCESS_CHANGED')
+    os.kill(before['pid'],signal.SIGQUIT)
+    deadline=time.monotonic()+10
+    while time.monotonic()<deadline:
+        # The supervised old PID may be gracefully draining and have closed
+        # its own listen sockets. Wait for systemd's PIDFile adoption before
+        # collecting the new master's listener proof.
+        current=int(command(['systemctl','show','nginx.service','--property=MainPID','--value'],10))
+        proof=nginx_master_proof()if current==new['pid']else None
+        if proof is not None and proof['pid']==new['pid']and proof['configurationHash']==before['configurationHash']and proof['unitHash']==before['unitHash']and nginx_workers_current(proof['pid']):
+            return {'state':'activated','pid':proof['pid'],'checkedAt':time.strftime('%Y-%m-%dT%H:%M:%SZ',time.gmtime())}
+        time.sleep(.1)
+    raise ValueError('SYSTEM_SECURITY_NGINX_SUPERVISOR_PENDING')
+
+def activate_nginx_master(before):
+    if before is None:return None
+    if nginx_master_proof()!=before:raise ValueError('SYSTEM_SECURITY_NGINX_PROCESS_CHANGED')
+    oldbin=pathlib.Path('/run/nginx.pid.oldbin');current_pid=pathlib.Path('/run/nginx.pid')
+    # Resume only the original PIDFile handoff; never start a third master.
+    if oldbin.exists():
+        if nginx_pid(oldbin)!=before['pid']:raise ValueError('SYSTEM_SECURITY_NGINX_PROCESS_CHANGED')
+        new=nginx_master_proof(nginx_pid(current_pid))
+        if new is None or new['configurationHash']!=before['configurationHash']or new['unitHash']!=before['unitHash']or not set(before['sockets'])<=set(new['sockets'])or not nginx_workers_current(new['pid']):raise ValueError('SYSTEM_SECURITY_NGINX_ACTIVATION_PENDING')
+        return finish_nginx_activation(before,new)
+    loaded=replaced_host_mappings(all_host=True)
+    if not loaded['complete']:raise ValueError('SYSTEM_SECURITY_NGINX_CHECK_INCOMPLETE')
+    if not any(row['service']=='nginx'for row in loaded['processes']):return {'state':'current','pid':before['pid']}
+    configuration=command(['/usr/sbin/nginx','-T','-g','daemon on; master_process on;'],30)
+    if hashlib.sha256(configuration.encode()).hexdigest()!=before['configurationHash']:raise ValueError('SYSTEM_SECURITY_NGINX_CONFIG_CHANGED')
+    command(['/usr/sbin/nginx','-t'],30)
+    if nginx_master_proof()!=before:raise ValueError('SYSTEM_SECURITY_NGINX_PROCESS_CHANGED')
+    os.kill(before['pid'],signal.SIGUSR2)
+    new=None;deadline=time.monotonic()+20
+    while time.monotonic()<deadline:
+        try:
+            if oldbin.exists()and nginx_pid(oldbin)==before['pid']:
+                candidate=nginx_master_proof(nginx_pid(current_pid))
+                if candidate is not None and candidate['pid']!=before['pid']and nginx_workers_current(candidate['pid']):new=candidate;break
+        except FileNotFoundError:pass
+        time.sleep(.1)
+    if new is None:raise ValueError('SYSTEM_SECURITY_NGINX_ACTIVATION_PENDING')
+    if new['configurationHash']!=before['configurationHash']or new['unitHash']!=before['unitHash']or not set(before['sockets'])<=set(new['sockets']):raise ValueError('SYSTEM_SECURITY_NGINX_CONFIG_CHANGED')
+    return finish_nginx_activation(before,new)
+
 def live_process_group(group,proc=pathlib.Path('/proc')):
     checked=0
     for path in proc.iterdir():
@@ -317,6 +454,11 @@ def apply_patches(automatic=False):
             try:ssh_before=ssh_listener_proof()
             except (ValueError,OSError):ssh_error='SYSTEM_SECURITY_SSH_SERVICE_UNREVIEWED'
             if ssh_before is not None:allowed|={'openssh-server','openssh-client','openssh-sftp-server'}
+        nginx_before=None;nginx_error=None
+        if automatic and 'nginx'in value['packages']:
+            try:nginx_before=nginx_master_proof()
+            except (ValueError,OSError):nginx_error='SYSTEM_SECURITY_NGINX_SERVICE_UNREVIEWED'
+            if nginx_before is not None and not pathlib.Path('/run/nginx.pid.oldbin').exists():allowed|={'nginx','nginx-common'}
         clean_service_policy()
         command(['apt-get','-o','Acquire::AllowInsecureRepositories=false','-o','Acquire::AllowDowngradeToInsecureRepositories=false','-o','Acquire::AllowWeakRepositories=false','update'],180)
         names=sorted(set(value['packages'])&allowed)
@@ -346,6 +488,10 @@ def apply_patches(automatic=False):
             after['sshListenerActivation']=activate_ssh_listener(ssh_before)
             after['loadedCode']=replaced_host_mappings(all_host=True)
         elif ssh_error:after['sshListenerActivation']={'state':'pending','error':ssh_error}
+        if automatic and nginx_before is not None:
+            after['nginxActivation']=activate_nginx_master(nginx_before)
+            after['loadedCode']=replaced_host_mappings(all_host=True)
+        elif nginx_error:after['nginxActivation']={'state':'pending','error':nginx_error}
         value=after;value['patchPlan']=changes;value['patchState']='installed-activation-required' if changes else 'current';persist(value,verify_activation=True)
         return value
     except Exception:

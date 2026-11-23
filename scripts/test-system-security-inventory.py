@@ -6,6 +6,23 @@ spec=importlib.util.spec_from_file_location('inventory',pathlib.Path(__file__).w
 module=importlib.util.module_from_spec(spec);spec.loader.exec_module(module)
 
 class Plans(unittest.TestCase):
+    @unittest.skipIf(sys.platform=='win32','native socket symlinks')
+    def test_nginx_socket_proof_excludes_worker_ipc(self):
+        with tempfile.TemporaryDirectory()as folder:
+            root=pathlib.Path(folder);(root/'net').mkdir();process=root/'2';(process/'fd').mkdir(parents=True)
+            (root/'net/tcp').write_text('header\n0: 00000000:0050 00000000:0000 0A 0 0 0 0 0 123\n')
+            (root/'net/unix').write_text('header\n000: 0 0 00000000 0001 03 456\n')
+            (process/'fd/3').symlink_to('socket:[123]');(process/'fd/4').symlink_to('socket:[456]')
+            self.assertEqual(module.nginx_listening_sockets(process,root),['socket:[123]'])
+    def test_nginx_activation_rejects_changed_supervisor_before_signal(self):
+        before={'pid':12,'servicePID':12,'start':'111','configurationHash':'original','unitHash':'unit','sockets':['socket:[1]']}
+        for changed in [None,{**before,'pid':13},{**before,'configurationHash':'changed'},{**before,'sockets':['socket:[2]']}]:
+            with patch.object(module,'nginx_master_proof',return_value=changed),patch.object(module.os,'kill')as signal,self.assertRaises(ValueError):
+                module.activate_nginx_master(before)
+            signal.assert_not_called()
+        with patch.object(module,'nginx_master_proof',return_value=before),patch.object(module.pathlib,'Path')as path,patch.object(module,'replaced_host_mappings',return_value={'complete':True,'processes':[]}),patch.object(module.os,'kill')as signal:
+            path.return_value.exists.return_value=False
+            self.assertEqual(module.activate_nginx_master(before),{'state':'current','pid':12});signal.assert_not_called()
     def test_process_group_excludes_only_exited_states(self):
         with tempfile.TemporaryDirectory()as folder:
             root=pathlib.Path(folder);(root/'2').mkdir()
