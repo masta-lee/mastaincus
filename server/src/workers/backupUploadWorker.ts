@@ -121,6 +121,7 @@ async function processQueue(): Promise<void> {
         })
 
         for (const group of hostsWithPendingTasks) {
+            if (stopping) break
             const hostId = group.hostId
 
             // 使用事务原子操作：检查锁 + 获取任务 + 标记为 PROCESSING

@@ -35,6 +35,9 @@ export async function verifyAppWorkerLifecycle(source: string) {
   }
   const resourceHook=hooks.find(hook=>/stopInstanceTaskWorker.*stopRestoreWorker.*stopBackupUploadWorker/.test(hook.getText(file)))
   assert.ok(resourceHook,'instance, restore and upload drains must be registered before listen')
+  assert.ok(resourceHook.getText(file).includes("'preClose'"),'stop resource admission before waiting for existing HTTP/WebSocket connections')
+  const connectionHook=hooks.find(hook=>hook.getText(file).includes('closeAllSessions'))
+  assert.ok(connectionHook?.getText(file).includes("'preClose'"),'terminal connections close before HTTP server waits for connections')
   const fastify=Fastify()
   const released:Array<()=>void>=[]
   const stopped:string[]=[]
@@ -62,6 +65,25 @@ export async function verifyAppWorkerLifecycle(source: string) {
   releaseWork();await draining
   await assert.rejects(activity.run(async()=>{throw Error('synthetic failure')}))
   await activity.drain()
+  const shutdown=file.statements.find(node=>ts.isFunctionDeclaration(node)&&node.name?.text==='gracefulShutdown')
+  assert.ok(shutdown)
+  const signals=source.indexOf("process.on('SIGTERM'")
+  assert.ok(signals>0&&signals<source.indexOf('const start = async'),'exit signals cover protected startup before initialization')
+  const javascript=ts.transpileModule(shutdown.getText(file),{compilerOptions:{target:ts.ScriptTarget.ES2022,module:ts.ModuleKind.ESNext}}).outputText
+  let releaseStartup!:()=>void
+  const starting=new Promise<void>(resolve=>{releaseStartup=resolve})
+  const steps:string[]=[]
+  const shutdownProcess={exit:()=>{steps.push('exit')}}
+  const shutdownFastify={close:async()=>{steps.push('fastify')},log:{error:()=>{}}}
+  const createShutdown=new Function('fastify','closePrismaDatabase','process','console','starting',`let startupPromise=starting,shutdownPromise=null,shuttingDown=false,businessStartupReady=true;${javascript};return {run:gracefulShutdown,state:()=>({shuttingDown,businessStartupReady})}`)
+  const shutdownHarness=createShutdown(shutdownFastify,async()=>{steps.push('database')},shutdownProcess,{log:()=>{}},starting)
+  const first=shutdownHarness.run('SIGTERM'),second=shutdownHarness.run('SIGINT')
+  assert.equal(first,second,'two signals cannot race database/worker close')
+  assert.deepEqual(shutdownHarness.state(),{shuttingDown:true,businessStartupReady:false})
+  assert.deepEqual(steps,[],'database and Fastify remain open while startup finishes')
+  releaseStartup();await first
+  assert.deepEqual(steps,['fastify','database','exit'])
+  console.log('PASS protected startup shutdown: signals registered early, startup drain precedes database close, repeated signals share one close')
   console.log('PASS resource worker lifecycle: real Fastify waits for all drains, nested claim execution and failed work cleanup')
   console.log('PASS app worker lifecycle: hooks registered before ordinary/protected listen; real Fastify close awaits checkout and recovery cleanup')
 }

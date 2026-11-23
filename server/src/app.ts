@@ -12,6 +12,9 @@ import { startCheckoutWorker, stopCheckoutWorker } from './workers/checkoutWorke
 import { stopInstanceTaskWorker } from './workers/instanceTaskWorker.js'
 import { stopRestoreWorker } from './workers/restoreTaskWorker.js'
 import { stopBackupUploadWorker } from './workers/backupUploadWorker.js'
+import { stopHostNotificationEmailWorker } from './workers/hostNotificationEmailWorker.js'
+import { stopProxySiteOperationWorker } from './workers/proxySiteOperationWorker.js'
+import { stopSessionCleanup, closeAllSessions } from './lib/terminal-proxy.js'
 import { startHostOnboardingWorker, stopHostOnboardingWorker } from './workers/hostOnboardingWorker.js'
 import { startHostRepairWorker, stopHostRepairWorker } from './workers/hostRepairWorker.js'
 import { startSecurityHardeningWorker, stopSecurityHardeningWorker } from './workers/securityHardeningWorker.js'
@@ -543,7 +546,8 @@ await fastify.register(adminAliyunOssRoutes, { prefix: '/api/admin/aliyun-oss' }
 fastify.addHook('onClose', async () => { stopPlatformBackupScheduler() })
 fastify.addHook('onClose', async () => { stopRecoveryReviewWorker() })
 fastify.addHook('onClose', async () => { await stopCheckoutWorker() })
-fastify.addHook('onClose', async () => { await Promise.all([stopInstanceTaskWorker(), stopRestoreWorker(), stopBackupUploadWorker()]) })
+fastify.addHook('preClose', async () => { await Promise.all([stopInstanceTaskWorker(), stopRestoreWorker(), stopBackupUploadWorker()]) })
+fastify.addHook('preClose', async () => { stopSessionCleanup(); closeAllSessions('Server shutdown'); stopHostNotificationEmailWorker(); await stopProxySiteOperationWorker() })
 
 // 注册 API 路由
 await fastify.register(authRoutes, { prefix: '/api/auth' })
@@ -772,6 +776,31 @@ if (shouldServeStaticClient) {
 }
 
 // 启动服务器
+let shuttingDown = false
+let shutdownPromise: Promise<void> | null = null
+let startupPromise: Promise<void> | null = null
+function gracefulShutdown(signal: string): Promise<void> {
+  if (shutdownPromise) return shutdownPromise
+  shuttingDown = true
+  businessStartupReady = false
+  shutdownPromise = (async () => {
+    console.log(`\n🛑 收到 ${signal} 信号，开始优雅关闭...`)
+    try {
+      // Protected startup exits its wait as soon as shuttingDown is set. Any
+      // current initializer must finish before its DB connection is closed.
+      await startupPromise?.catch(() => {})
+      await fastify.close()
+      await closePrismaDatabase()
+      process.exit(0)
+    } catch (error) {
+      fastify.log.error(error)
+      process.exit(1)
+    }
+  })()
+  return shutdownPromise
+}
+process.on('SIGTERM', () => { void gracefulShutdown('SIGTERM') })
+process.on('SIGINT', () => { void gracefulShutdown('SIGINT') })
 const start = async (): Promise<void> => {
   try {
     // 安全配置检查
@@ -788,6 +817,7 @@ const start = async (): Promise<void> => {
 
     if(process.env.NODE_ENV==='production')await assertRuntimeDatabaseRole(prisma)
     await initializeFinancialDatabaseIntegrity()
+    if (shuttingDown) return
     // Do not run startup mutations or workers against a database awaiting review.
     if (recoveryHeld()) {
       startRecoveryReviewWorker()
@@ -795,7 +825,8 @@ const start = async (): Promise<void> => {
       console.log('Platform recovery protection is active; background jobs are disabled.')
       // The root worker commits the reviewed activation after protected health.
       // Keep every business initializer stopped until it durably removes hold.
-      while (recoveryHeld()) await new Promise(resolve => setTimeout(resolve, 500))
+      while (!shuttingDown && recoveryHeld()) await new Promise(resolve => setTimeout(resolve, 500))
+      if (shuttingDown) return
       stopRecoveryReviewWorker()
     }
 
@@ -804,17 +835,20 @@ const start = async (): Promise<void> => {
     await initPrismaDatabase({
       resetDatabase: process.env.RESET_DATABASE === 'true' || process.env.RESET_DATABASE === '1'
     })
+    if (shuttingDown) return
 
     const { cleanupStaleCreatingBackups } = await import('./db/backups.js')
     const staleCreatingBackups = await cleanupStaleCreatingBackups()
     if (staleCreatingBackups > 0) {
       console.log(`📦 清理了 ${staleCreatingBackups} 个长时间停留在创建中的备份记录`)
     }
+    if (shuttingDown) return
 
     const port = parseInt(process.env.PORT || '3001', 10)
     const host = process.env.HOST || '127.0.0.1'
 
     if (!fastify.server.listening) await fastify.listen({ port, host })
+    if (shuttingDown) return
     console.log(`🚀 Incudal 服务已启动: http://localhost:${port}`)
 
     startPlatformBackupScheduler()
@@ -881,6 +915,7 @@ const start = async (): Promise<void> => {
     } = await import('./workers/backupUploadWorker.js')
     await cleanupStaleRestoreTasks()
     await cleanupStaleUploadTasks()
+    if (shuttingDown) return
     startRestoreWorker()
     startBackupUploadWorker()
     console.log('📦 备份恢复和远程上传队列已启动')
@@ -888,8 +923,7 @@ const start = async (): Promise<void> => {
     // 启动宿主机通知邮件队列 Worker
     const {
       cleanupStaleHostNotificationEmailTasks,
-      startHostNotificationEmailWorker,
-      stopHostNotificationEmailWorker
+      startHostNotificationEmailWorker
     } = await import('./workers/hostNotificationEmailWorker.js')
     const staleHostNotificationEmailTasks = await cleanupStaleHostNotificationEmailTasks()
     if (staleHostNotificationEmailTasks > 0) {
@@ -898,46 +932,15 @@ const start = async (): Promise<void> => {
     startHostNotificationEmailWorker()
     console.log('📧 宿主机通知邮件队列已启动')
 
-    const { startProxySiteOperationWorker, stopProxySiteOperationWorker } = await import('./workers/proxySiteOperationWorker.js')
+    const { startProxySiteOperationWorker } = await import('./workers/proxySiteOperationWorker.js')
     startProxySiteOperationWorker()
     console.log('反代站点持久操作队列已启动')
 
     // 启动终端会话清理任务
-    const { startSessionCleanup, stopSessionCleanup } = await import('./lib/terminal-proxy.js')
+    const { startSessionCleanup } = await import('./lib/terminal-proxy.js')
     startSessionCleanup()
     console.log('🖥️ 终端会话清理任务已启动')
 
-    // 优雅关闭处理
-    const gracefulShutdown = async (signal: string) => {
-      console.log(`\n🛑 收到 ${signal} 信号，开始优雅关闭...`)
-      
-      // 停止终端会话清理定时器
-      stopSessionCleanup()
-      stopHostNotificationEmailWorker()
-      await stopProxySiteOperationWorker()
-      
-      // 清理所有活跃终端会话
-      const { closeAllSessions } = await import('./lib/terminal-proxy.js')
-      const closedSessions = closeAllSessions('Server shutdown')
-      if (closedSessions > 0) {
-        console.log(`🖥️ 关闭了 ${closedSessions} 个终端会话`)
-      }
-      
-      // 关闭 Fastify 服务器
-      try {
-        await fastify.close()
-        await closePrismaDatabase()
-        console.log('✅ 服务器已关闭')
-        process.exit(0)
-      } catch (err) {
-        console.error('❌ 关闭服务器失败:', err)
-        process.exit(1)
-      }
-    }
-    
-    // 监听进程信号
-    process.on('SIGTERM', () => gracefulShutdown('SIGTERM'))
-    process.on('SIGINT', () => gracefulShutdown('SIGINT'))
 
     // 清理卡住的转移 processing 状态
     const { cleanupStaleTransfers, cleanupTimeoutTransfers } = await import('./db/transfers.js')
@@ -1039,6 +1042,7 @@ const start = async (): Promise<void> => {
 
     console.log(`🔒 安全模式: ${process.env.NODE_ENV === 'production' ? '生产环境' : '开发环境'}`)
     printRateLimitSummary()
+    if (shuttingDown) return
     businessStartupReady = true
 
     if (process.env.RESET_DATABASE === 'true' || process.env.RESET_DATABASE === '1') {
@@ -1046,8 +1050,9 @@ const start = async (): Promise<void> => {
     }
   } catch (err) {
     fastify.log.error(err)
+    if (shuttingDown) return
     process.exit(1)
   }
 }
 
-start()
+startupPromise = start()

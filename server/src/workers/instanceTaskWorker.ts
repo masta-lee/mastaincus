@@ -387,6 +387,7 @@ async function processHostTasks(
   hostId: number,
   tasks: Array<{ id: number; hostId: number; taskType: string }>
 ): Promise<void> {
+  if (stopping) return
   // 分离轻量任务和重量任务
   const lightTasks = tasks.filter(t => LIGHT_TASK_NAMES.has(t.taskType))
   const heavyTasks = tasks.filter(t => HEAVY_TASK_NAMES.has(t.taskType))
@@ -412,6 +413,7 @@ async function processHostTasks(
 
     // 尝试获取多个轻量任务
     for (const task of lightTasks.slice(0, LIGHT_TASK_CONCURRENCY)) {
+      if (stopping) break
       const claimed = await claimLightTask(hostId, task.id)
       if (claimed) {
         claimedLightTasks.push(claimed)
@@ -432,13 +434,13 @@ async function processHostTasks(
 
   // 处理重量任务（串行，需要独占锁）
   // 注意：如果没有待处理的轻量任务，或者轻量任务已全部被处理，则处理重量任务
-  if (heavyTasks.length > 0) {
+  if (!stopping && heavyTasks.length > 0) {
     // 检查是否有正在执行的任何任务
     const runningAnyTask = await prisma.instanceTask.findFirst({
       where: { hostId, status: 'PROCESSING' }
     })
 
-    if (!runningAnyTask) {
+    if (!runningAnyTask && !stopping) {
       // 没有任务在执行，可以处理重量任务
       const claimedTask = await claimNextTask(hostId)
       if (claimedTask) {
