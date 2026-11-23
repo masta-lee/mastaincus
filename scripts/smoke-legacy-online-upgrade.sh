@@ -187,9 +187,15 @@ stage=post-upgrade-verification
 node "$repo/scripts/smoke-legacy-online-upgrade.mjs" after "$candidate"
 if tar -xOf "$candidate" ./version.json | python3 -c 'import json,sys,re; sys.exit(0 if re.fullmatch(r"v1\.8\.14-test\.[a-f0-9]{7}",json.load(sys.stdin)["version"]) else 1)'; then
   candidate_version=$(tar -xOf "$candidate" ./version.json | python3 -c 'import json,sys; print(json.load(sys.stdin)["version"])')
-  INCUDAL_OWNER_CANDIDATE_DEPLOY=authorized-test node "$repo/scripts/apply-verified-owner-candidate.mjs" "$candidate" "$candidate_version" --preflight
+  # Checkout files belong to the GitHub runner. Protect only these reviewed
+  # test tools in a separate root directory; never relax production ownership.
+  install -d -o root -g root -m700 "$work/owner-candidate-tools"
+  for tool in apply-verified-owner-candidate.mjs finalize-verified-owner-candidate.mjs panel-package-signature.mjs agent-package-signature.mjs; do
+    install -o root -g root -m600 "$repo/scripts/$tool" "$work/owner-candidate-tools/$tool"
+  done
+  INCUDAL_OWNER_CANDIDATE_DEPLOY=authorized-test node "$work/owner-candidate-tools/apply-verified-owner-candidate.mjs" "$candidate" "$candidate_version" --preflight
   candidate_task=$(python3 -c 'import json; print(json.load(open("/root/incudal-legacy-upgrade.json"))["taskId"])')
-  INCUDAL_OWNER_CANDIDATE_DEPLOY=authorized-test node "$repo/scripts/finalize-verified-owner-candidate.mjs" "$candidate" "$candidate_version" "$candidate_task"
+  INCUDAL_OWNER_CANDIDATE_DEPLOY=authorized-test node "$work/owner-candidate-tools/finalize-verified-owner-candidate.mjs" "$candidate" "$candidate_version" "$candidate_task"
 fi
 test "$(ss -ltnp 'sport = :3001' | tail -n +2 | wc -l)" = 1
 test "$(runuser -u postgres -- psql -X -At -d postgres -c "SELECT datdba=(SELECT oid FROM pg_roles WHERE rolname='incudal') FROM pg_database WHERE datname='incudal_retained_upgrade_test'")" = t

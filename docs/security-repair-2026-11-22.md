@@ -10,6 +10,8 @@
 
 防篡改常规核验新增：原rootlauncher提供只读verify-runtime，完整原file/links及受信git检查，不加seal、不改客户。每5min安全maintain持有维护锁后在任何inventory/包更新/服务动作前调用；失败固定脱敏code并持久runtime-integrity首次/最后异常时间，后来成功仍保留异常历史。Windowsplanner28过（9Linux专属skip），真实Linux1838全部28通过，包括原seal正常/注入修改/新增code/越界link拒绝、root600持久状态及篡改证据不抹除。与最高root失陷能力边界分开：攻击者若改全部受信根和密钥，软件本机检查不能证明干净；本次只读事件线索owner确认未授权rootpassword→pubkey，整体凭据/可信重建仍待明确方案。
 
+退出完整包45217290400六旧升级在post-upgrade验证owner工具属主拒绝：原worker任务真实success，随后repo checkout runner属主finalizer被严格root guard拒绝。完整失败日志1848/1850逐job保存；测试工具改独立root700目录内root600四文件，不放宽production判据；finalizer补实际current/releases来源而非flat固定断言，OTA专项1849过。双首装/长排空实际运行继续核，自身失败不能用此前普通preview绿替代；新source预览重新验证此修复。NodePG事务仍未提交/未部署原型，保当前工作区，不混为已验收。
+
 **2026-11-23 owner已调整优先级：本安全阶段收尾，转处理更重要任务。** 最后产品/测试`1c2929811133f536864246ff31e1816a7c4e2370`已推，代码工作区无未提交产品改动。完整已做、未完成、验证边界、待查CI与下一次接手顺序统一见[阶段收尾](security-handoff-2026-11-23.md)。旧下文“在途／未提交／未通过”是对应轮历史；不以最后专项通过覆盖最终全量和最新完整包缺口。未正式Release/tag/main/生产，整体安全修复与真实OSS/A失联目标未完成。按owner本轮指令停止展开新的安全实现。
 
 2026-11-23防火墙最终复验：原CI137518861981邻居INCOMPLETE发生过滤前，probe仅固定自建namespace地址/MAC的ARP/NDP邻居，不改生产rules；全部独立socket验证最多4并行、原每packet .7s/原总60s保持，保baseline/TAP/tcp/udp/hostOUTPUT/管理及interbridge豁免/规则移除/ingress共存全部断言。实际Linux1245整套PASS56.02s、双archcompile-vet1245/WindowsAgent全套与alerts1245过。旧1233缺iptables、1235隔离Alpine缺tool、1237独立提取缺alternatives链接、1241上传mode、1239/1242/1244串行总60s超时保日志；未对主控安装系统包，独立/root/security-nettools1237仅本测试使用。final13/source8d7已自然230/231唯一alerts同步stop字符串断言过时，1238改异步stop+真实activitydrain后通过，不将原failed轮写绿。e248359e017b018491d787883d9ae6953187908a已推，主45124125934当前24success/6poolbrowser在途无fail，native45124125958全14success，最终source全量/包及NodePG/libc/kernel/world完整自动activation、真实OSS仍未完。暂不正式发行/生产。

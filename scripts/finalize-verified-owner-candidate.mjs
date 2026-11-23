@@ -55,7 +55,7 @@ const archive=resolve(process.argv[2]||''),version=String(process.argv[3]||''),t
 assert.ok(process.argv.length===5||process.argv.length===6&&process.argv[5]==='--check');assert.match(version,/^v1\.8\.14-test\.[a-f0-9]{7}$/);assert.ok(Number.isSafeInteger(taskId)&&taskId>0)
 const arch=process.arch==='arm64'?'arm64':'amd64',bytes=readFileSync(archive),sha=createHash('sha256').update(bytes).digest('hex')
 assert.ok(verifyPanelDigest(version,arch,sha,readFileSync(archive+'.sig','utf8').trim()))
-const app=realpathSync('/opt/incudal');assert.equal(app,'/opt/incudal')
+const app=realpathSync(existsSync('/opt/incudal/current')?'/opt/incudal/current':'/opt/incudal');assert.ok(app==='/opt/incudal'||app.startsWith('/opt/incudal/releases/'))
 const seal='/var/lib/incudal-ota/manifests/'+createHash('sha256').update(app).digest('hex')+'.sha256',s=lstatSync(seal);assert.ok(s.uid===0&&!s.isSymbolicLink()&&!(s.mode&0o022))
 const require=createRequire(join(app,'server/package.json')),prismaRequire=createRequire(require.resolve('prisma/config')),{createJiti}=prismaRequire('jiti')
 const configPath=join(app,'server/prisma.config.ts'),jiti=createJiti(configPath,{fsCache:false})
