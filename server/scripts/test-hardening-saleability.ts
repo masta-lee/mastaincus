@@ -100,6 +100,15 @@ try {
     assert.deepEqual((await state()).maintenance, maintenance)
     assert.equal(await prisma.host.count({ where: { id: host.id, ...dedicatedHostReadyWhere() } }), 1, architecture + ': complete reinspection after rollback must restore readiness')
     await stock(1, 'complete reinspection after rollback restores actual sales')
+    const priorRenewal=await state(),refreshExpiry=new Date(Date.now()+3600000).toISOString()
+    await prisma.host.update({where:{id:host.id},data:{securityHardening:{...priorRenewal,nextCheckAt:refreshExpiry}}})
+    let releaseRenewal!:()=>void,enteredRenewal!:()=>void
+    const renewalGate=new Promise<void>(resolve=>{releaseRenewal=resolve}),renewalStarted=new Promise<void>(resolve=>{enteredRenewal=resolve})
+    const renewal=hardenExistingHost(host.id,{...deps,host:async(...args:Parameters<typeof deps.host>)=>{enteredRenewal();await renewalGate;return deps.host(...args)}})
+    await renewalStarted
+    const duringRenewalStock=stock(1,'unexpired read-only renewal preserves real inventory/catalog/admin/locked allocation')
+    try{assert.equal((await state()).nextCheckAt,refreshExpiry)}finally{releaseRenewal();await Promise.all([renewal,duringRenewalStock])}
+    await stock(1,'complete read-only renewal publishes the new proof without a saleability gap')
     // An in-flight delivery may reuse its original hardening admission time.
     // Agent liveness and network protection must still use the current clock.
     const admittedEarlier = new Date(Date.now() - 600000)

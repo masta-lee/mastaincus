@@ -1,0 +1,42 @@
+// Deploy an unpublished, publisher-signed candidate through the installed OTA
+// worker. Only the candidate Release HTTP transport is supplied locally; all
+// package verification, backup, migrations, readiness and rollback stay real.
+import assert from 'node:assert/strict'
+import {readFileSync,createReadStream,existsSync,realpathSync} from 'node:fs'
+import {createHash,createPublicKey,verify} from 'node:crypto'
+import {Readable} from 'node:stream'
+import {resolve,basename,join} from 'node:path'
+
+assert.equal(process.platform,'linux');assert.equal(process.getuid(),0)
+assert.equal(process.env.INCUDAL_OWNER_CANDIDATE_DEPLOY,'authorized-test')
+const archive=resolve(process.argv[2]||''),version=String(process.argv[3]||'')
+assert.match(version,/^v1\.8\.14-test\.[a-f0-9]{7}$/)
+const arch=process.arch==='arm64'?'arm64':'amd64',name=`incudal-${version}-linux-${arch}.tar.gz`
+assert.equal(basename(archive),name)
+const bytes=readFileSync(archive),sha256=createHash('sha256').update(bytes).digest('hex'),signature=readFileSync(archive+'.sig','utf8').trim()
+const key=createPublicKey({format:'der',type:'spki',key:Buffer.concat([Buffer.from('302a300506032b6570032100','hex'),Buffer.from('y6C9aLon6OtgHPp5KPVDpxoNha95YptW03o4Dp2djQA=','base64')])})
+assert.ok(verify(null,Buffer.from('payincus/panel-package/v1\n'+version.slice(1)+'\nlinux-'+arch+'\n'+sha256),key,Buffer.from(signature,'base64')))
+const app=realpathSync(existsSync('/opt/incudal/current')?'/opt/incudal/current':'/opt/incudal')
+process.env.INCUDAL_APP_DIR=app;process.env.INSTALL_DIR='/opt/incudal';process.env.SYSTEM_UPDATE_APPLY_MODE='artifact';process.env.SERVICE_NAME='incudal-backend'
+assert.notEqual(process.env.RUN_DB_CHECKS,'0')
+await import(app+'/server/dist/config/env.js')
+const {prisma}=await import(app+'/server/dist/db/prisma.js')
+assert.equal(await prisma.systemUpdateTask.count({where:{status:{in:['pending','running']}}}),0)
+assert.equal(await prisma.instanceTask.count({where:{status:{in:['PENDING','PROCESSING']}}}),0)
+const admin=await prisma.user.findFirstOrThrow({where:{role:'admin',status:'active'},orderBy:{id:'asc'},select:{id:true}})
+const task=await prisma.systemUpdateTask.create({data:{targetVersion:version,status:'pending',startedByUserId:admin.id}})
+const url=`https://github.com/mastalee928/payincus/releases/download/${version}/${name}`,manifestUrl=`https://github.com/mastalee928/payincus/releases/download/${version}/ota-manifest.json`
+const manifest={artifacts:[{name,platform:'linux',arch,url,sha256,size:bytes.length,version,signature}]}
+const release={tag_name:version,draft:false,prerelease:true,assets:[{id:1,name:'ota-manifest.json',browser_download_url:manifestUrl},{id:2,name,browser_download_url:url,size:bytes.length,digest:'sha256:'+sha256}]}
+const original=globalThis.fetch
+globalThis.fetch=async(input,options)=>{
+ const address=String(input)
+ if(address===`https://api.github.com/repos/mastalee928/payincus/releases/tags/${version}`)return Response.json(release)
+ if(address===manifestUrl||address==='https://api.github.com/repos/mastalee928/payincus/releases/assets/1')return Response.json(manifest)
+ if(address===url||address==='https://api.github.com/repos/mastalee928/payincus/releases/assets/2')return new Response(Readable.toWeb(createReadStream(archive)),{headers:{'content-length':String(bytes.length)}})
+ return original(input,options)
+}
+process.env.PATH='/usr/local/libexec/incudal/ota-path:'+process.env.PATH
+process.argv=[process.execPath,join(app,'server/dist/scripts/run-system-update-task.js'),String(task.id),version]
+console.log('OWNER_SIGNED_CANDIDATE_TASK:'+task.id)
+await import(join(app,'server/dist/scripts/run-system-update-task.js'))

@@ -18,6 +18,8 @@ security.4/source e470547b9107400575bd0b5a5317270dbd09e5d3：完整231/231、Go�
 
 观察20:33～20:39暂无包更新retry/compat反复，但常规到期加固检查#208短暂status retry/authority：原queue到期先撤下receipt再检查，本库其他健康宿主随24h轮询也可能闪动。新增源码提前6h只读续验，保旧verified/finished/原checkedAt及原expiry，仅登记独立leaseUntil；同host再次调用不能重复认领，原receipt过期仍严格失效，发现隔离故障立即撤回。fullhost+customer检查成功才写新expiry。真实PG1651证实提前复核中原receipt/expiry不变、无host/customer补丁写入、并发lease去重、unsafe立即撤回及完整原钱/客户保持；guards/types/build过。必须完整签名包以原worker部署，不直接主控改文件，后续自然周期继续核。
 
+受信候选面板部署：仓库新增`apply-verified-owner-candidate.mjs`，先独立publisher/完整SHA/版本/架构验签，再仅提供未公开候选Release HTTP输入，调用当前安装的原OTA worker；备份、迁移、DB/支付就绪、单后端启动、失败回退全部原路径，不手改线上模块/.env/状态。候选`v1.8.14-test.9995256`无tag工作流45177810363真实双包与旧升级验收进行中；不正式Release。
+
 2026-11-23，北京时间。Owner先授权只读取证，随后明确授权本问题源码修复后，将此前已做安全修复同批热更新主控作为测试；不正式发版。
 
 主控实际v1.8.14／ced7c10cd17d、唯一后端健康。208台专属宿主中12台故障一致：#16、#21、#24、#26、#30～#36、#46。均管理在线、无客户实例、Agent工具/网络防护有效、AppArmor维护已完成，后续检查反复`HARDENING_JOURNAL_CONFLICT`。它们不是离线宿主。
