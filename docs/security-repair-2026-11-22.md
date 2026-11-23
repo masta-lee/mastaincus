@@ -4,6 +4,8 @@
 
 ## 续接实施状态（2026-11-22，尚未完成）
 
+**2026-11-23 owner已调整优先级：本安全阶段收尾，转处理更重要任务。** 最后产品/测试`1c2929811133f536864246ff31e1816a7c4e2370`已推，代码工作区无未提交产品改动。完整已做、未完成、验证边界、待查CI与下一次接手顺序统一见[阶段收尾](security-handoff-2026-11-23.md)。旧下文“在途／未提交／未通过”是对应轮历史；不以最后专项通过覆盖最终全量和最新完整包缺口。未正式Release/tag/main/生产，整体安全修复与真实OSS/A失联目标未完成。按owner本轮指令停止展开新的安全实现。
+
 2026-11-23防火墙最终复验：原CI137518861981邻居INCOMPLETE发生过滤前，probe仅固定自建namespace地址/MAC的ARP/NDP邻居，不改生产rules；全部独立socket验证最多4并行、原每packet .7s/原总60s保持，保baseline/TAP/tcp/udp/hostOUTPUT/管理及interbridge豁免/规则移除/ingress共存全部断言。实际Linux1245整套PASS56.02s、双archcompile-vet1245/WindowsAgent全套与alerts1245过。旧1233缺iptables、1235隔离Alpine缺tool、1237独立提取缺alternatives链接、1241上传mode、1239/1242/1244串行总60s超时保日志；未对主控安装系统包，独立/root/security-nettools1237仅本测试使用。final13/source8d7已自然230/231唯一alerts同步stop字符串断言过时，1238改异步stop+真实activitydrain后通过，不将原failed轮写绿。e248359e017b018491d787883d9ae6953187908a已推，主45124125934当前24success/6poolbrowser在途无fail，native45124125958全14success，最终source全量/包及NodePG/libc/kernel/world完整自动activation、真实OSS仍未完。暂不正式发行/生产。
 
 2026-11-23关闭遗漏／CI修复：8d7f5bd6a1ed59841583d320db64828a674f0def已推，其第十八完整45122367845已13success／Release预期skipped，双首装root恢复／六旧worker均过；本机final13/source8d7正在192/231未终态。主CI45122350261的137518861940工单／137518861981网络探针两个failure完整1230／1232已读（当前22success／2failure／5在途／1skipped）；工单callback用void导致测试runCycle不返回promise，改返回activity原promise＋两stop调用await，真实PG1231原收据／部分失败/重试/不重复／allfailed全0；网络失败地址nodad但neighborINCOMPLETE，发生过滤之前未修改rules，probe正在补确定fixtureMAC邻居，原生尚未通过，不随本阶段提交。
