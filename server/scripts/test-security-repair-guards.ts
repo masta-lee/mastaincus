@@ -14,7 +14,16 @@ process.env.ENCRYPTION_KEY='isolated-security-repair-test-key'
 const envelope=sealNotificationConfig({botToken:'123:SyntheticOnly',chatId:'test'})
 assert.ok(!JSON.stringify(envelope).includes('SyntheticOnly'))
 assert.deepEqual(openNotificationConfig(envelope),{botToken:'123:SyntheticOnly',chatId:'test'})
-assert.throws(()=>openNotificationConfig({...envelope,sealed:String(envelope.sealed).slice(0,-2)+'00'}))
+const sealedNotification = String(envelope.sealed)
+for (const [index, part] of sealedNotification.split(':').entries()) {
+  const bytes = Buffer.from(part, 'hex')
+  bytes[bytes.length - 1] ^= 1
+  const parts = sealedNotification.split(':')
+  parts[index] = bytes.toString('hex')
+  const tampered = parts.join(':')
+  assert.notEqual(tampered, sealedNotification)
+  assert.throws(() => openNotificationConfig({...envelope, sealed:tampered}))
+}
 assert.throws(()=>openNotificationConfig({botToken:'123:SyntheticOnly'}))
 const codes=encodeRecoveryCodes(['ABCD-EFGH'])
 assert.equal(readRecoveryCodeHashes(codes)?.length,1)
