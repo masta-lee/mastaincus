@@ -6,6 +6,96 @@ spec=importlib.util.spec_from_file_location('inventory',pathlib.Path(__file__).w
 module=importlib.util.module_from_spec(spec);spec.loader.exec_module(module)
 
 class Plans(unittest.TestCase):
+    def test_runtime_library_maps_only_read_exact_host_process(self):
+        import io
+        class ProcFile:
+            def __init__(self,path):self.path=path
+            def __truediv__(self,other):return ProcFile(self.path+'/'+other)
+            def readlink(self):return namespaces[self.path]
+            def open(self,**_):
+                self_outer.assertEqual(self.path,'/proc/12/maps')
+                return io.StringIO(maps)
+        self_outer=self
+        namespaces={'/proc/12/ns/pid':'pid:[1]','/proc/1/ns/pid':'pid:[1]'}
+        with patch.object(module.pathlib,'Path',side_effect=lambda *parts:ProcFile('/'.join(parts))):
+            for maps,expected in [('a-b r-xp 0 0 0 /usr/lib/current.so\n',False),('a-b r-xp 0 0 0 /usr/lib/old.so (deleted)\n',True),
+                ('a-b rw-p 0 0 0 /usr/lib/old.so (deleted)\n',False),('a-b r-xp 0 0 0 /memfd:jit (deleted)\n',False)]:
+                self.assertEqual(module.runtime_process_has_replaced_libraries(12),expected)
+            namespaces['/proc/12/ns/pid']='pid:[2]'
+            with self.assertRaisesRegex(ValueError,'PROCESS_CHANGED'):module.runtime_process_has_replaced_libraries(12)
+            namespaces['/proc/12/ns/pid']='pid:[1]';maps='x'*(1024*1024+1)
+            with self.assertRaisesRegex(ValueError,'CHECK_INCOMPLETE'):module.runtime_process_has_replaced_libraries(12)
+        for pid in [1,True,'12',None]:
+            with self.assertRaisesRegex(ValueError,'PROCESS_CHANGED'):module.runtime_process_has_replaced_libraries(pid)
+    def test_runtime_library_activation_noop_and_shared_database_protection(self):
+        backend={'pid':12};database={'pid':13,'major':16}
+        with patch.object(module.pathlib,'Path')as path,patch.object(module,'runtime_process_has_replaced_libraries',return_value=False),patch.object(module,'command')as command:
+            path.return_value.stat.return_value=types.SimpleNamespace(st_dev=1,st_ino=2)
+            module.activate_runtime_libraries(backend,database,{})
+            command.assert_not_called()
+            path.reset_mock();module.activate_runtime_libraries(backend,{**database,'sharedReadOnly':True},{})
+            self.assertEqual(path.call_count,2,'shared PG must not even be selected for activation')
+            command.assert_not_called()
+        for current in [None,{**backend,'pid':14}]:
+            with patch.object(module.pathlib,'Path')as path,patch.object(module,'runtime_process_has_replaced_libraries',return_value=True),patch.object(module,'backend_runtime_proof',return_value=current),patch.object(module,'command')as command,self.assertRaisesRegex(ValueError,'PROCESS_CHANGED'):
+                path.return_value.stat.return_value=types.SimpleNamespace(st_dev=1,st_ino=2)
+                module.activate_runtime_libraries(backend,database,{})
+            command.assert_not_called()
+    @unittest.skipUnless(hasattr(os,'geteuid')and os.geteuid()==0,'root-owned original maintenance receipt metadata')
+    def test_automatic_no_package_change_still_finishes_runtime_activation(self):
+        real_path=pathlib.Path
+        with tempfile.TemporaryDirectory()as folder:
+            root=real_path(folder);(root/'security').mkdir(mode=0o700);(root/'os-release').write_text('ID=debian\n')
+            (root/'sources.list').write_text('');(root/'sources.list.d').mkdir()
+            paths={'/etc/os-release':root/'os-release','/etc/apt/sources.list':root/'sources.list','/etc/apt/sources.list.d':root/'sources.list.d','/var/lib/incudal-system-security':root/'security','/var/lib/incudal-backup/recovery-hold.json':root/'absent-hold'}
+            def fixture_path(value,*parts):return paths.get(str(value),real_path(value)).joinpath(*parts)
+            backend={'pid':12};database={'pid':13,'major':16};initial={'packages':{'nodejs':'24.22.3-1','postgresql-16':'16.16-1'}}
+            updated={**initial,'loadedCode':{'complete':True,'allHostProcesses':True,'processes':[{'pid':13,'service':'postgres','replacedMappings':1}]}}
+            def activate(b,d,value):
+                self.assertEqual((b,d),(backend,database));self.assertIs(value,updated)
+                value['backendActivation']={'state':'activated','pid':20,'activationOnly':True}
+                value['databaseActivation']={'state':'activated','pid':21,'activationOnly':True}
+            fd=os.open(root/'operation.lock',os.O_RDWR|os.O_CREAT,0o600)
+            try:
+                with patch.object(module.pathlib,'Path',side_effect=fixture_path),patch.object(module,'open_platform_operation_lock',return_value=fd),patch.object(module,'verify_runtime_integrity'),patch.object(module,'recover_runtime_maintenance',return_value=None),patch.object(module,'inventory',side_effect=[initial,updated]),patch.object(module,'backend_runtime_proof',return_value=backend),patch.object(module,'database_runtime_proof',return_value=database),patch.object(module,'clean_service_policy'),patch.object(module,'command',return_value='')as command,patch.object(module,'patch_plan',return_value=[]),patch.object(module,'activate_runtime_libraries',side_effect=activate)as activation,patch.object(module,'replaced_host_mappings',return_value={'complete':True,'allHostProcesses':True,'processes':[]}),patch.object(module,'install_runtime_patches')as install,patch.object(module,'persist')as persist:
+                    result=module.apply_patches(automatic=True)
+                activation.assert_called_once();install.assert_not_called()
+                self.assertTrue(result['backendActivation']['activationOnly']);self.assertTrue(result['databaseActivation']['activationOnly'])
+                self.assertEqual(persist.call_args.args[0]['databaseActivation'],result['databaseActivation'])
+                self.assertFalse(any(call.args[0][0]=='apt-get'and '--simulate'not in call.args[0]and call.args[0][-1]!='update'for call in command.call_args_list))
+            finally:
+                try:os.close(fd)
+                except OSError:pass
+    @unittest.skipUnless(hasattr(os,'geteuid')and os.geteuid()==0,'actual root journal and protected file permissions')
+    def test_activation_only_recovery_keeps_packages_and_proves_loaded_libraries(self):
+        import json
+        real_path=pathlib.Path
+        with tempfile.TemporaryDirectory()as folder:
+            root=real_path(folder);root.chmod(0o700);path=root/'runtime-maintenance.json'
+            backend={'pid':12,'start':'123','app':'/opt/incudal','environmentHash':'a'*64,'codeHash':'b'*64,'serviceHash':'d'*64,'unitHashes':{'/etc/systemd/system/incudal-backend.service':'c'*64}}
+            packages={'nodejs:amd64':'24.22.3-1'}
+            journal={'version':1,'phase':'stopping-backend','activationOnly':True,'drainConfirmed':True,'backend':backend,'database':None,'backup':'runtime-backup-'+'e'*32,'packages':[], 'baselinePackages':packages,'expectedPackages':packages}
+            def fixture_path(*parts):
+                if parts in [('/usr/bin/node',),('/proc','12','exe')]:return types.SimpleNamespace(stat=lambda:types.SimpleNamespace(st_dev=1,st_ino=2))
+                return real_path(*parts)
+            def protected(value,*_,**__):return {str(path):'journal','/opt/incudal/.env':'a'*64,'/opt/incudal/server/dist/app.js':'b'*64,'/etc/systemd/system/incudal-backend.service':'c'*64}[str(value)]
+            def run(args,*_):return 'success'if '--property=Result'in args else ''
+            for old_maps,actual_packages in [(False,packages),(True,packages),(False,{**packages,'extra:all':'1'})]:
+                module.write_runtime_maintenance(journal,root)
+                with patch.object(module.pathlib,'Path',side_effect=fixture_path),patch.object(module,'protected_hash',side_effect=protected),patch.object(module,'backend_service_policy',return_value=({},real_path('/opt/incudal'),backend['unitHashes'],backend['serviceHash'])),patch.object(module,'backend_runtime_proof',return_value=backend),patch.object(module,'runtime_process_has_replaced_libraries',return_value=old_maps),patch.object(module,'debian_installed_packages',return_value=actual_packages),patch.object(module,'clean_service_policy'),patch.object(module,'verify_runtime_health'),patch.object(module,'verify_runtime_financial_integrity'),patch.object(module,'archive_runtime_receipt')as receipt,patch.object(module,'complete_runtime_package_transaction')as install,patch.object(module,'command',side_effect=run)as command:
+                    if old_maps or actual_packages!=packages:
+                        with self.assertRaisesRegex(ValueError,'ACTIVATION_PENDING|BASELINE_CHANGED'):module.recover_runtime_maintenance(path)
+                        self.assertEqual(json.loads(path.read_text())['phase'],'stopping-backend');receipt.assert_not_called()
+                    else:
+                        completed=module.recover_runtime_maintenance(path)
+                        self.assertEqual(completed['phase'],'activated');self.assertTrue(completed['activationOnly']);receipt.assert_called_once()
+                    install.assert_not_called()
+                    self.assertFalse(any(call.args[0][0]=='apt-get'for call in command.call_args_list),'already-installed activation never downloads or reinstalls')
+                    if actual_packages!=packages:self.assertFalse(any(call.args[0][:2]==['systemctl','start']for call in command.call_args_list))
+            for delta in [{'activationOnly':'true'},{'packages':['nodejs=24.22.3-1']},{'expectedPackages':{'nodejs:amd64':'25.0.0'}},{'phase':'installed'}]:
+                module.write_runtime_maintenance({**journal,**delta},root)
+                with patch.object(module,'command')as command,self.assertRaisesRegex(ValueError,'JOURNAL_INVALID'):module.recover_runtime_maintenance(path)
+                command.assert_not_called()
     @unittest.skipUnless(hasattr(os,'geteuid')and os.geteuid()==0,'real root inventory receipt metadata')
     def test_automatic_runtime_upgrade_preserves_both_activation_receipts(self):
         import json
@@ -140,7 +230,7 @@ class Plans(unittest.TestCase):
                 if parts in [('/usr/bin/node',),('/proc','12','exe')]:return types.SimpleNamespace(stat=lambda:types.SimpleNamespace(st_dev=1,st_ino=2))
                 return original_path(*parts)
             policy=({},pathlib.Path('/opt/incudal'),before['unitHashes'],before['serviceHash'])
-            with patch.object(module,'backend_service_policy',return_value=policy),patch.object(module.pathlib,'Path',side_effect=fixture_path),patch.object(module,'protected_hash',side_effect=hashes),patch.object(module,'backend_runtime_proof',return_value=before),patch.object(module,'verify_runtime_financial_integrity'),patch.object(module,'verify_runtime_health'),patch.object(module,'clean_service_policy'),patch.object(module,'command',side_effect=lambda args,*_: 'success'if '--property=Result'in args else '')as command:
+            with patch.object(module,'backend_service_policy',return_value=policy),patch.object(module.pathlib,'Path',side_effect=fixture_path),patch.object(module,'protected_hash',side_effect=hashes),patch.object(module,'backend_runtime_proof',return_value=before),patch.object(module,'runtime_process_has_replaced_libraries',return_value=False),patch.object(module,'verify_runtime_financial_integrity'),patch.object(module,'verify_runtime_health'),patch.object(module,'clean_service_policy'),patch.object(module,'command',side_effect=lambda args,*_: 'success'if '--property=Result'in args else '')as command:
                 module.recover_runtime_maintenance(path)
             self.assertEqual([call.args[0]for call in command.call_args_list],[['systemctl','show','incudal-backend.service','--property=SubState','--value'],['systemctl','show','incudal-backend.service','--property=Result','--value'],['dpkg','--audit'],['systemctl','start','incudal-backend.service']])
             self.assertEqual(json.loads(path.read_text())['phase'],'aborted','restoring services before installation is not patch activation')
@@ -192,11 +282,14 @@ class Plans(unittest.TestCase):
             with patch.object(module.pathlib,'Path')as path,self.assertRaisesRegex(ValueError,'CONFIGURATION_CHANGED'):
                 module.verify_database_activation({**before,key:'changed'},before)
             path.assert_not_called()
-        with patch.object(module.pathlib,'Path')as path:
+        with patch.object(module.pathlib,'Path')as path,patch.object(module,'runtime_process_has_replaced_libraries',return_value=False):
             path.return_value.stat.return_value=types.SimpleNamespace(st_dev=1,st_ino=2)
             module.verify_database_activation(before,before)
             path.return_value.stat.side_effect=[types.SimpleNamespace(st_dev=1,st_ino=2),types.SimpleNamespace(st_dev=1,st_ino=3)]
             with self.assertRaisesRegex(ValueError,'ACTIVATION_PENDING'):module.verify_database_activation(before,before)
+        with patch.object(module.pathlib,'Path')as path,patch.object(module,'runtime_process_has_replaced_libraries',return_value=True),self.assertRaisesRegex(ValueError,'ACTIVATION_PENDING'):
+            path.return_value.stat.return_value=types.SimpleNamespace(st_dev=1,st_ino=2)
+            module.verify_database_activation(before,before)
     @unittest.skipUnless(hasattr(os,'geteuid')and os.geteuid()==0,'real root file hashes and symlinks required')
     def test_original_sealed_file_checker_rejects_tampered_added_and_changed_links(self):
         import subprocess,hashlib

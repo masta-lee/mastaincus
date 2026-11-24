@@ -1,5 +1,14 @@
 # 安全修复阶段收尾与未完成清单
 
+2026-11-24 23:42接续：来源 c33060c99d4210ce196c750bbe014f48df0bced7 的主CI45419654947已终态30/30 success；完整无tag预览45419671242双首装/root恢复/六原旧worker共13项success、Release预期skipped，Agent45419655008、SSH45419654759、原生45419654896、memory45419654934、sysinfo45419654709全部success。不能代替本轮新源码验收，生产仍a241/Agent.10。
+
+新库自动激活补漏：无新APT包也核受管Node/PG的真实旧exe/library；沿原配置、整包seal、财务、两dump和正常排空恢复，持久activationOnly空计划及相同包基线，禁止共享PG重启/包漂移/假安装阶段。原生3169冻结源码45/45无skip，Windows45（15 Linux/root skip）、233334安全+更新2/2与server类型通过。独立3175已实际同字节原子替换公共libm、Node72395→89256/PG42386→88982正常排空恢复、两dump/原配置身份与钱保持、phase activated；幂等/共享DB/清理和最终自然退出仍在途，不记整项通过。
+
+首轮3171在测试保护快照误把incudal持有的财务baseline当root文件被拒；实际文件原600/原owner正确，未停止服务/换库，原失败材料保留。只修夹具按实际应用账户核原私密文件，产品权限门槛不改。新增双架构首装原生检查，严格限制一次性GitHub root，检查真实库激活/重复不启停/共享PG不重启/两dump/配置财务保持，最终来源完整验证继续；冻结源码全量231正在logs/test-run-20261124-234137执行，尚未终态。一次本机--only误用正则无匹配返回非零，按重复--only分别选择后2/2成功，不记空轮为通过。
+
+主控3173仅读：唯一backend3774054/0restart健康/当前库无旧映射；PG共享六历史库均0连接，仍两旧库映射，PID1及其它旧进程需独立来源分类；不得删除历史库/停止未知进程来清绿。新增libc安全u5/新kernel6.12.118与PGcommon297/libpq19 major候选仍待受限策略，不将installed或restartRequired=false称无更新。旧channels源码包已安全提取但现有二进制Go1.27.3/CGO1 ARM尚无独立字节一致证明；现有三公网测试机身份档案仍未认证，不绕过原pin用于重建。剩余基础库/musl/kernel完整策略、最终Agent.11全池/新版备份隔离恢复/公开发行保持未完成，原客户#58–#61及独立B出站drop保持；没有本轮生产现场补丁/正式发行。
+
+
 2026-11-24 22:55接续核验：原3157已自然exit-code，preview730a2afc-c981-49e7-8308-d642d0e9c0fd在切库前被OSS_CONTROLLER_IDENTITY_INVALID拦下，原B后台72395/PG42386/无hold与出站drop保持，旧失败材料保留。原enrollment helper独立完整核验3160 exit0/32.99秒、身份schema/严格canonical/0600原root权限正常；备份worker仍30秒，新增源码只等待同一原签名双架构核验120秒，不重试、不改身份/信任。实际新worker边界3161原生单次31.69秒success、原三身份文件/后端/PG不变，worker SHA6c8865d87ddb81262b92307321de49b5d0fb70f5b0664a055b0fe5ae30449851。224932备份/safety过，interruption首次Windows join路径夹具失败保留，精确修夹具后225040通过；server类型/build、JS语法及diff检查通过。locale3151原生修复证据保持，准备同批阶段提交和新来源完整候选；3157不重跑未改输入，真实完整恢复待最终候选同版本新备份。生产3163/3165只读仍a241/原PID健康、可疑key无/18099无/新密码后两已知可疑来源成功登录0；系统pending明确来自PG共享/未审查门禁，额外六历史库均无连接，不删除/绕过保护。全基础库/kernel/Agent.11/旧channels来源等余项继续，未正式发行。
 
 2026-11-24 22:40新恢复根因已修：unit3141自然失败于preview/create校验库，原数据未切换。备份库为en_US.UTF-8；目标localedef成功、root/postgres/incudal新进程均可用且archive0644，PG角色/连接正常，但原长驻postmaster保留扩展前archive映射。3150实测同原PG先拒绝，再生成独立locale文件后立即接受原LC_COLLATE/LC_CTYPE，PG/唯一后端与原archive hash均保持。源码locale助手对archive-only已列出名称也要求可读独立目录；按系统定义和严格UTF8名称生成--no-archive，固定子shell只改变自身umask022，保原worker077/全局区域/PG/客户。生成不完整、链接/危险权限继续拒绝；对应SQLSTATE22023只对固定locale错误给精确既有code，不放宽其它错误。默认新源码3151完整原生自动修复、真实PG建库/删除、重复不生成、原后端/PG不变和公开系统locale数据全部成功（source SHA03c1127270f8f14fedfcd2bccad7314f3c61822c9ba85183cbd06e00a13b77ed）。本机222600两守卫2/2、server类型/build和JS语法/diff检查过；双架构首装恢复drill新增真实postmaster+archive-only区域步骤，最终同source完整CI/包仍待。旧3124版本断言及3141真实失败/诊断材料保留；3157原同版本a241完整生产备份恢复再次启动，目标系统locale由隔离原生测试已备齐，最终整库/钱/权限核验尚待，不把此输入准备称已安装最新候选或真实OSS通过。前f92全部CI与完整预览已终态成功，新locale批次继续阶段保存。生产3155仅只读、原PID业务ready，撤钥/18099残留未见、已知可疑来源新密码交接后Accepted为0；整机信任缺口与剩余基础库/kernel等未完成要求继续。

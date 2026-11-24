@@ -609,6 +609,16 @@ def apply_patches(automatic=False):
                     clean_service_policy()
             if debian_installed_packages()!=expected:raise ValueError('SYSTEM_SECURITY_PATCH_NOT_CONFIRMED')
         after=inventory(all_loaded_code=True)
+        # A prior package install can leave the same executable mapped against
+        # old libraries. A no-op apt plan must still finish the reviewed runtime
+        # activation; it does not reinstall packages or restart shared PG.
+        if automatic and runtime_before is not None and database_before is not None and not value.get('backendActivation'):
+            try:activate_runtime_libraries(runtime_before,database_before,after)
+            except (ValueError,OSError)as error:
+                code=str(error)
+                if not re.fullmatch(r'SYSTEM_SECURITY_[A-Z_]{1,100}',code):code='SYSTEM_SECURITY_RUNTIME_ACTIVATION_PENDING'
+                after['backendActivation']={'state':'pending','error':code}
+            after['loadedCode']=replaced_host_mappings(all_host=True)
         for receipt in ['backendActivation','databaseActivation']:
             if value.get(receipt):after[receipt]=value[receipt]
         if runtime_error:after['backendActivation']={'state':'pending','error':runtime_error}
@@ -752,6 +762,48 @@ def database_runtime_proof(shared_read_only=False):
     value['fileHashes']={path:protected_hash(path,(0,pathlib.Path(expected).stat().st_uid))for path in sorted(paths)}
     return value
 
+def activate_runtime_libraries(backend,database,value):
+    def replaced(pid,program):
+        installed=pathlib.Path(program).stat();running=pathlib.Path('/proc',str(pid),'exe').stat()
+        return (installed.st_dev,installed.st_ino)!=(running.st_dev,running.st_ino)or runtime_process_has_replaced_libraries(pid)
+    need_backend=replaced(backend['pid'],'/usr/bin/node')
+    need_database=not database.get('sharedReadOnly')and replaced(database['pid'],'/usr/lib/postgresql/'+str(database['major'])+'/bin/postgres')
+    if not need_backend and not need_database:return
+    if backend_runtime_proof()!=backend:raise ValueError('SYSTEM_SECURITY_BACKEND_PROCESS_CHANGED')
+    def database_proof():return database_runtime_proof(shared_read_only=True)if database.get('sharedReadOnly')else database_runtime_proof()
+    if database_proof()!=database:raise ValueError('SYSTEM_SECURITY_DATABASE_CHANGED')
+    if command(['dpkg','--audit'],30):raise ValueError('SYSTEM_SECURITY_PACKAGE_CONFIGURATION_PENDING')
+    baseline=debian_installed_packages()
+    backup=pathlib.Path('/var/lib/incudal-system-security')/('runtime-backup-'+uuid.uuid4().hex);backup.mkdir(mode=0o700)
+    size=int(command(['runuser','-u','postgres','--','psql','-X','-At','-d','incudal','-c',"SELECT pg_database_size('incudal')"],20))
+    filesystem=os.statvfs(backup)
+    if size<0 or filesystem.f_bavail*filesystem.f_frsize<max(size*3,128*1024*1024):raise ValueError('SYSTEM_SECURITY_RUNTIME_BACKUP_SPACE_REQUIRED')
+    dump_runtime_database(backup/'database.dump')
+    verify_runtime_financial_integrity(backend['app'])
+    if backend_runtime_proof()!=backend or database_proof()!=database or debian_installed_packages()!=baseline:raise ValueError('SYSTEM_SECURITY_RUNTIME_BASELINE_CHANGED')
+    journal={'version':1,'phase':'prepared','activationOnly':True,'backend':backend,'database':database if need_database else None,
+        'backup':backup.name,'packages':[],'baselinePackages':baseline,'expectedPackages':baseline}
+    write_runtime_maintenance(journal)
+    stopped=False
+    try:
+        journal['phase']='stopping-backend';write_runtime_maintenance(journal);stopped=True
+        command(['systemctl','stop','incudal-backend.service'],36*60)
+        if command(['systemctl','show','incudal-backend.service','--property=MainPID','--value'],20)!='0':raise ValueError('SYSTEM_SECURITY_BACKEND_DRAIN_PENDING')
+        if command(['systemctl','show','incudal-backend.service','--property=Result','--value'],20)!='success':raise ValueError('SYSTEM_SECURITY_BACKEND_DRAIN_UNCONFIRMED')
+        journal['drainConfirmed']=True;write_runtime_maintenance(journal)
+        dump_runtime_database(backup/'database-after-drain.dump')
+        if need_database:
+            if database_proof()!=database:raise ValueError('SYSTEM_SECURITY_DATABASE_CHANGED')
+            journal['phase']='stopping-database';write_runtime_maintenance(journal)
+            command(['systemctl','stop',database['unit']],180)
+            state=dict(line.split('=',1)for line in command(['systemctl','show',database['unit'],'--property=MainPID,ActiveState,Result'],20).splitlines()if '='in line)
+            if state.get('MainPID')!='0'or state.get('ActiveState')!='inactive'or state.get('Result')!='success':raise ValueError('SYSTEM_SECURITY_DATABASE_STOP_UNCONFIRMED')
+    finally:
+        if stopped:completed=recover_runtime_maintenance()
+    if not completed or completed.get('phase')!='activated':raise ValueError('SYSTEM_SECURITY_RUNTIME_ACTIVATION_PENDING')
+    value['backendActivation']={'state':'activated','pid':completed['activatedBackendPID'],'backup':backup.name,'activationOnly':True}
+    if need_database:value['databaseActivation']={'state':'activated','pid':completed['activatedDatabasePID'],'activationOnly':True}
+
 def install_runtime_patches(changes,backend,database,value,expected):
     if backend is None or backend_runtime_proof()!=backend:raise ValueError('SYSTEM_SECURITY_BACKEND_PROCESS_CHANGED')
     need_database=any(item.split('=',1)[0].startswith('postgresql-')or item.split('=',1)[0]in ['libpq5','postgresql-common']for item in changes)
@@ -802,6 +854,7 @@ def install_runtime_patches(changes,backend,database,value,expected):
     if current is None or any(current[k]!=backend[k]for k in ['app','environmentHash','codeHash','serviceHash','unitHashes']):raise ValueError('SYSTEM_SECURITY_BACKEND_ACTIVATION_PENDING')
     installed=pathlib.Path('/usr/bin/node').stat();running=pathlib.Path('/proc',str(current['pid']),'exe').stat()
     if (installed.st_dev,installed.st_ino)!=(running.st_dev,running.st_ino):raise ValueError('SYSTEM_SECURITY_BACKEND_ACTIVATION_PENDING')
+    verify_runtime_process_libraries(current['pid'],'SYSTEM_SECURITY_BACKEND_ACTIVATION_PENDING')
     if need_database:
         current_db=database_runtime_proof()
         verify_database_activation(current_db,database)
@@ -831,6 +884,12 @@ def recover_runtime_maintenance(path=pathlib.Path('/var/lib/incudal-system-secur
     if not path.exists()and not path.is_symlink():return
     protected_hash(path,private=True);journal=json.loads(path.read_text())
     if journal.get('version')!=1 or journal.get('phase')not in ['prepared','stopping-backend','stopping-database','installing','installed','activated','aborted']:raise ValueError('SYSTEM_SECURITY_RUNTIME_JOURNAL_INVALID')
+    activation_only=journal.get('activationOnly',False)
+    if not isinstance(activation_only,bool):raise ValueError('SYSTEM_SECURITY_RUNTIME_JOURNAL_INVALID')
+    if activation_only:
+        baseline=journal.get('baselinePackages')
+        if journal.get('packages')!=[]or not isinstance(baseline,dict)or not baseline or len(baseline)>20000 or baseline!=journal.get('expectedPackages')or journal['phase']in ['installing','installed']:raise ValueError('SYSTEM_SECURITY_RUNTIME_JOURNAL_INVALID')
+        if any(not re.fullmatch(r'[a-z0-9+.-]+:[a-z0-9-]+',key)or not isinstance(version,str)or not re.fullmatch(r'[^\s=\x00-\x1f]{1,200}',version)for key,version in baseline.items()):raise ValueError('SYSTEM_SECURITY_RUNTIME_JOURNAL_INVALID')
     if journal['phase']in ['prepared','activated','aborted']:return
     backend=journal.get('backend',{});database=journal.get('database')
     app=backend.get('app')
@@ -850,6 +909,7 @@ def recover_runtime_maintenance(path=pathlib.Path('/var/lib/incudal-system-secur
     installation_started=journal['phase']in ['installing','installed']
     if installation_started:complete_runtime_package_transaction(journal)
     elif command(['dpkg','--audit'],30):raise ValueError('SYSTEM_SECURITY_PACKAGE_CONFIGURATION_PENDING')
+    if activation_only and debian_installed_packages()!=baseline:raise ValueError('SYSTEM_SECURITY_RUNTIME_BASELINE_CHANGED')
     if database is not None:
         major=database.get('major')
         if database.get('sharedReadOnly'):raise ValueError('SYSTEM_SECURITY_RUNTIME_JOURNAL_INVALID')
@@ -871,20 +931,21 @@ def recover_runtime_maintenance(path=pathlib.Path('/var/lib/incudal-system-secur
     if current is None or any(current[key]!=backend.get(key)for key in ['app','environmentHash','codeHash','unitHashes','serviceHash']):raise ValueError('SYSTEM_SECURITY_BACKEND_ACTIVATION_PENDING')
     installed=pathlib.Path('/usr/bin/node').stat();running=pathlib.Path('/proc',str(current['pid']),'exe').stat()
     if (installed.st_dev,installed.st_ino)!=(running.st_dev,running.st_ino):raise ValueError('SYSTEM_SECURITY_BACKEND_ACTIVATION_PENDING')
+    verify_runtime_process_libraries(current['pid'],'SYSTEM_SECURITY_BACKEND_ACTIVATION_PENDING')
     if database is not None:
         proof=database_runtime_proof()
         verify_database_activation(proof,database)
     verify_runtime_financial_integrity(app)
     # A stop failure or interruption before apt ran only restores the prior
     # services. Never issue an activation receipt for an unapplied patch.
-    journal['phase']='activated'if installation_started else 'aborted'
-    if installation_started:
+    journal['phase']='activated'if installation_started or activation_only else 'aborted'
+    if installation_started or activation_only:
         journal['activatedBackendPID']=current['pid']
         if database is not None:journal['activatedDatabasePID']=proof['pid']
     write_runtime_maintenance(journal,path.parent)
-    if installation_started:
+    if installation_started or activation_only:
         archive_runtime_receipt(journal,path.parent)
-    return journal if installation_started else None
+    return journal if installation_started or activation_only else None
 
 def archive_runtime_receipt(journal,root):
     name=journal.get('backup')
@@ -975,6 +1036,24 @@ def verify_database_activation(current,before):
     if any(current[key]!=before[key]for key in ['major','data','configHash','hbaHash','unitHash','fileHashes','settingsHash']):raise ValueError('SYSTEM_SECURITY_DATABASE_CONFIGURATION_CHANGED')
     installed=pathlib.Path('/usr/lib/postgresql',str(current['major']),'bin/postgres').stat();running=pathlib.Path('/proc',str(current['pid']),'exe').stat()
     if (installed.st_dev,installed.st_ino)!=(running.st_dev,running.st_ino):raise ValueError('SYSTEM_SECURITY_DATABASE_ACTIVATION_PENDING')
+    verify_runtime_process_libraries(current['pid'],'SYSTEM_SECURITY_DATABASE_ACTIVATION_PENDING')
+
+def verify_runtime_process_libraries(pid,error):
+    if runtime_process_has_replaced_libraries(pid):raise ValueError(error)
+
+def runtime_process_has_replaced_libraries(pid):
+    # Prove this exact managed process independently. An unrelated process or
+    # a partial global inventory cannot prevent its original service recovery.
+    if type(pid)is not int or pid<2:raise ValueError('SYSTEM_SECURITY_RUNTIME_PROCESS_CHANGED')
+    process=pathlib.Path('/proc',str(pid))
+    if (process/'ns/pid').readlink()!=pathlib.Path('/proc/1/ns/pid').readlink():raise ValueError('SYSTEM_SECURITY_RUNTIME_PROCESS_CHANGED')
+    with (process/'maps').open(encoding='utf-8',errors='replace')as stream:data=stream.read(1024*1024+1)
+    if len(data)>1024*1024:raise ValueError('SYSTEM_SECURITY_RUNTIME_CHECK_INCOMPLETE')
+    for line in data.splitlines():
+        if not line.endswith(' (deleted)'):continue
+        fields=line.split(maxsplit=5)
+        if len(fields)==6 and 'x'in fields[1]and fields[5].startswith('/')and not fields[5].startswith(('/dev/','/memfd:','/SYSV')):return True
+    return False
 
 def verify_runtime_financial_integrity(app):
     code="const root=process.argv[1];await import(root+'/server/dist/config/env.js');const{readFileSync}=await import('node:fs');const{verifyFinancialBaseline,verifyFinancialDatabaseSeals}=await import(root+'/server/dist/lib/financial-integrity.js');verifyFinancialBaseline(readFileSync('/var/lib/incudal-finance/baseline.json','utf8'),process.env.ENCRYPTION_KEY);await verifyFinancialDatabaseSeals('incudal',process.env.ENCRYPTION_KEY,false,true);console.log('SYSTEM_SECURITY_FINANCIAL_INTEGRITY_VERIFIED')"
