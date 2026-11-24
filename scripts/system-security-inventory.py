@@ -725,6 +725,22 @@ def backend_runtime_proof():
         # attested separately by /proc start time, exe and command line.
         'serviceHash':service_hash}
 
+def database_settings_hashes(settings):
+    if not isinstance(settings,list)or not settings or len(settings)>10000:raise ValueError('SYSTEM_SECURITY_DATABASE_CONFIGURATION_CHANGED')
+    legacy=[];effective=[];names=set()
+    for row in settings:
+        if not isinstance(row,list)or len(row)!=4 or any(not isinstance(value,str)for value in row)or row[0]in names:raise ValueError('SYSTEM_SECURITY_DATABASE_CONFIGURATION_CHANGED')
+        name,setting,source,context=row;names.add(name)
+        legacy.append(row[:3])
+        # The installer retains localhost and adds its local-only include.
+        # PostgreSQL keeps the default source until its first restart even
+        # when the parsed setting is identical. Preserve every effective
+        # value and all other sources; file hashes still attest the include.
+        if name=='listen_addresses'and setting=='localhost'and context=='postmaster'and source in ['default','configuration file']:source='retained-local-listener'
+        effective.append([name,setting,source])
+    digest=lambda rows:hashlib.sha256(json.dumps(rows,sort_keys=True).encode()).hexdigest()
+    return digest(effective),digest(legacy)
+
 def database_runtime_proof(shared_read_only=False):
     sql="SELECT json_build_object('major',current_setting('server_version_num')::int/10000,'version',current_setting('server_version_num'),'data',current_setting('data_directory'),'config',current_setting('config_file'),'hba',current_setting('hba_file'),'recovery',pg_is_in_recovery(),'replication',(SELECT count(*) FROM pg_stat_replication),'otherDatabases',(SELECT count(*)FROM pg_database WHERE NOT datistemplate AND datname NOT IN('incudal','postgres')),'otherClients',(SELECT count(*) FROM pg_stat_activity WHERE backend_type='client backend'AND pid<>pg_backend_pid()AND(coalesce(datname,'')<>'incudal'OR usename NOT IN('incudal','incudal_migrate'))))"
     value=json.loads(command(['runuser','-u','postgres','--','psql','-X','-At','-v','ON_ERROR_STOP=1','-d','incudal','-c',sql],20))
@@ -753,10 +769,10 @@ def database_runtime_proof(shared_read_only=False):
     value['start']=(process/'stat').read_text().split(') ',1)[1].split()[19]
     # Include effective settings and every parsed include, not just the two
     # main files. Preserve ALTER SYSTEM and administrator configuration.
-    settings=json.loads(command(['runuser','-u','postgres','--','psql','-X','-At','-d','incudal','-c',"SELECT json_build_object('settings',(SELECT json_agg(json_build_array(name,setting,source)ORDER BY name)FROM pg_settings WHERE name NOT IN ('server_version','server_version_num')),'files',(SELECT json_agg(DISTINCT sourcefile)FROM pg_file_settings),'invalid',(SELECT count(*)FROM pg_file_settings WHERE error IS NOT NULL),'pending',(SELECT count(*)FROM pg_settings WHERE pending_restart))"],20))
+    settings=json.loads(command(['runuser','-u','postgres','--','psql','-X','-At','-d','incudal','-c',"SELECT json_build_object('settings',(SELECT json_agg(json_build_array(name,setting,source,context)ORDER BY name)FROM pg_settings WHERE name NOT IN ('server_version','server_version_num')),'files',(SELECT json_agg(DISTINCT sourcefile)FROM pg_file_settings),'invalid',(SELECT count(*)FROM pg_file_settings WHERE error IS NOT NULL),'pending',(SELECT count(*)FROM pg_settings WHERE pending_restart))"],20))
     if settings['invalid']or not isinstance(settings['files'],list)or len(settings['files'])>64:raise ValueError('SYSTEM_SECURITY_DATABASE_CONFIGURATION_CHANGED')
     if settings['pending']:raise ValueError('SYSTEM_SECURITY_DATABASE_CONFIGURATION_RESTART_REQUIRED')
-    value['settingsHash']=hashlib.sha256(json.dumps(settings['settings'],sort_keys=True).encode()).hexdigest()
+    value['settingsHash'],value['settingsLegacyHash']=database_settings_hashes(settings['settings']);value['settingsHashVersion']=2
     paths=set(settings['files'])|{expected+'/postgresql.auto.conf','/etc/postgresql/'+str(major)+'/main/pg_ctl.conf','/etc/postgresql/'+str(major)+'/main/start.conf'}
     if any(not isinstance(path,str)or not(path.startswith('/etc/postgresql/'+str(major)+'/main/')or path==expected+'/postgresql.auto.conf')for path in paths):raise ValueError('SYSTEM_SECURITY_DATABASE_CLUSTER_UNREVIEWED')
     value['fileHashes']={path:protected_hash(path,(0,pathlib.Path(expected).stat().st_uid))for path in sorted(paths)}
@@ -1033,7 +1049,13 @@ def complete_runtime_package_transaction(journal):
     if command(['dpkg','--audit'],30)or debian_installed_packages()!=expected:raise ValueError('SYSTEM_SECURITY_PATCH_NOT_CONFIRMED')
 
 def verify_database_activation(current,before):
-    if any(current[key]!=before[key]for key in ['major','data','configHash','hbaHash','unitHash','fileHashes','settingsHash']):raise ValueError('SYSTEM_SECURITY_DATABASE_CONFIGURATION_CHANGED')
+    if any(current[key]!=before[key]for key in ['major','data','configHash','hbaHash','unitHash','fileHashes']):raise ValueError('SYSTEM_SECURITY_DATABASE_CONFIGURATION_CHANGED')
+    version=before.get('settingsHashVersion',1)
+    if type(version)is not int or version not in [1,2]or version==2 and current.get('settingsHashVersion')!=2:raise ValueError('SYSTEM_SECURITY_DATABASE_CONFIGURATION_CHANGED')
+    # Earlier private receipts remain bound to their exact original digest.
+    # A new comparison policy cannot silently re-attest an old baseline.
+    settings=current.get('settingsLegacyHash',current.get('settingsHash'))if version==1 else current.get('settingsHash')
+    if not isinstance(before.get('settingsHash'),str)or settings!=before['settingsHash']:raise ValueError('SYSTEM_SECURITY_DATABASE_CONFIGURATION_CHANGED')
     installed=pathlib.Path('/usr/lib/postgresql',str(current['major']),'bin/postgres').stat();running=pathlib.Path('/proc',str(current['pid']),'exe').stat()
     if (installed.st_dev,installed.st_ino)!=(running.st_dev,running.st_ino):raise ValueError('SYSTEM_SECURITY_DATABASE_ACTIVATION_PENDING')
     verify_runtime_process_libraries(current['pid'],'SYSTEM_SECURITY_DATABASE_ACTIVATION_PENDING')

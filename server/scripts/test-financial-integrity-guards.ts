@@ -21,7 +21,18 @@ assert.ok(dump.includes('verifyFinancialDatabaseSeals(staging'))
 for (const source of [registration,reconcile]) assert.ok(source.includes('PAYMENT_SETTLEMENT_LOCK_NAMESPACE') && source.includes('assertPaymentNotDeleted'))
 const snapshot = buildRechargeProviderConfigSnapshot('yipay', { pid: 'test-merchant', key: 'fixture-secret' })
 assert.equal(resolveRechargeProviderConfigSnapshot('yipay', {}, snapshot).source, 'snapshot')
-for (const invalid of ['plaintext', snapshot.slice(0,-2)+'ff', buildRechargeProviderConfigSnapshot('antom', {})]) assert.throws(() => resolveRechargeProviderConfigSnapshot('yipay', { pid: 'replacement' }, invalid), /SNAPSHOT_INVALID/)
+// Flip a bit in each authenticated component. Replacing a random byte with
+// a constant occasionally leaves the original ciphertext unchanged.
+const tamperedSnapshots = snapshot.split(':').map((_, index, parts) => {
+  const changed = [...parts]
+  const bytes = Buffer.from(changed[index], 'hex')
+  bytes[bytes.length - 1] ^= 1
+  changed[index] = bytes.toString('hex')
+  const tampered = changed.join(':')
+  assert.notEqual(tampered, snapshot)
+  return tampered
+})
+for (const invalid of ['plaintext', ...tamperedSnapshots, buildRechargeProviderConfigSnapshot('antom', {})]) assert.throws(() => resolveRechargeProviderConfigSnapshot('yipay', { pid: 'replacement' }, invalid), /SNAPSHOT_INVALID/)
 assert.equal(resolveRechargeProviderConfigSnapshot('yipay', {}, null).source, 'provider')
 assert.throws(() => verifyFinancialBaseline(legacyFinancialBaseline(process.env.ENCRYPTION_KEY!), process.env.ENCRYPTION_KEY!), /FINANCIAL_INTEGRITY_INVALID/)
 const keys = generateKeyPairSync('rsa', { modulusLength: 2048 })

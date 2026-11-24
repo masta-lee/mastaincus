@@ -53,7 +53,7 @@ import { dirname, join } from 'path'
 
 // 导入数据库
 import { initPrismaDatabase } from './db/init-prisma.js'
-import { closePrismaDatabase, prisma, initializeFinancialDatabaseIntegrity } from './db/prisma.js'
+import { closePrismaDatabase, prisma, initializeFinancialDatabaseIntegrity, waitForInitialDatabaseConnection } from './db/prisma.js'
 
 // 导入安全工具
 import { checkJwtConfig, isAccessTokenInvalidated } from './lib/security.js'
@@ -851,6 +851,7 @@ const start = async (): Promise<void> => {
       jwtCheck.warnings.forEach(w => console.warn(`   - ${w}`))
     }
 
+    if (!await waitForInitialDatabaseConnection(() => shuttingDown)) return
     if(process.env.NODE_ENV==='production')await assertRuntimeDatabaseRole(prisma)
     await initializeFinancialDatabaseIntegrity()
     if (shuttingDown) return

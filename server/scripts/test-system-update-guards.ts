@@ -55,6 +55,8 @@ const rootPackage = read('package.json')
 const serverPackage = read('server/package.json')
 const freshInstall = read('scripts/smoke-fresh-install.sh')
 assert.ok(freshInstall.includes('python3 -I -B "$repo_dir/scripts/test-runtime-library-activation.py"'), 'both actual fresh installs must exercise loaded-library activation, idempotency and shared PostgreSQL protection')
+assert.ok(freshInstall.includes('node "$repo_dir/scripts/test-startup-database-admission.mjs"') &&
+  read('scripts/test-startup-database-admission.mjs').includes("error?.code === '28P01'"), 'both real fresh installs must verify transient database admission and refuse invalid credentials without repeating')
 const nativeRuntime = read('scripts/test-runtime-library-activation.py')
 assert.ok(nativeRuntime.includes("os.environ.get('RUNNER_ENVIRONMENT')!='github-hosted'") && nativeRuntime.includes('activate_runtime_libraries') && nativeRuntime.includes('sharedDatabaseRestarts=0'), 'native runtime mutations are restricted to disposable runners and keep shared PostgreSQL running')
 const legacyUpgrade=read('scripts/smoke-legacy-online-upgrade.sh')

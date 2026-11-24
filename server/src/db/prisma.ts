@@ -11,6 +11,7 @@ import { Pool } from 'pg'
 import { PrismaPg } from '@prisma/adapter-pg'
 import { protectFinancialClient, initializeFinancialIntegrity } from '../lib/financial-integrity.js'
 import { protectAuthenticationClient, initializeAuthenticationIntegrity } from '../lib/authentication-integrity.js'
+import { waitForStartupDatabase } from '../lib/database-startup.js'
 
 const globalForPrisma = globalThis as unknown as {
   prisma: PrismaClient | undefined
@@ -52,6 +53,10 @@ const pool = new Pool({
   // 查询超时（30秒）
   query_timeout: parseInt(process.env.DB_QUERY_TIMEOUT || '30000', 10),
 })
+
+export function waitForInitialDatabaseConnection(isStopping: () => boolean): Promise<boolean> {
+  return waitForStartupDatabase(() => pool.query('SELECT 1'), isStopping)
+}
 
 async function normalizeLegacyNetworkModesForPool(dbPool: Pool): Promise<void> {
   const enumValuesResult = await dbPool.query<{ enumlabel: string }>(`

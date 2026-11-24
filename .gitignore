@@ -102,6 +102,7 @@ docs/*
 !docs/security-repair-2026-11-22.md
 !docs/security-handoff-2026-11-23.md
 !docs/security-incident-2026-11-24.md
+!docs/security-validation-2026-11-25.md
 !docs/pool-hardening-journal-2026-11-23.md
 !docs/release-v1.8.5-validation.md
 !docs/release-v1.8.5-owner-click-test.md

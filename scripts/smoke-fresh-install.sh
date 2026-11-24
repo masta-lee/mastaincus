@@ -158,6 +158,7 @@ nginx -t
 systemctl restart nginx
 node "$repo_dir/scripts/smoke-fresh-install.mjs"
 node "$repo_dir/scripts/smoke-prisma-transaction-start.mjs"
+GITHUB_ACTIONS=true RUNNER_ENVIRONMENT=github-hosted node "$repo_dir/scripts/test-startup-database-admission.mjs"
 GITHUB_ACTIONS=true RUNNER_ENVIRONMENT=github-hosted python3 -I -B "$repo_dir/scripts/test-runtime-library-activation.py"
 node "$repo_dir/scripts/smoke-platform-backup.mjs"
 RUN_BACKUP_INTEGRITY_DRILL=1 node "$repo_dir/scripts/smoke-platform-backup-integrity.mjs"

@@ -276,6 +276,31 @@ class Plans(unittest.TestCase):
         self.assertEqual(command.call_args.args[0][:5],['/usr/bin/env','ENV_FILE=/opt/incudal/.env','NODE_ENV=production','/usr/bin/node','--input-type=module'])
         self.assertIn('false,true',command.call_args.args[0][-2])
         self.assertIn("verifyFinancialBaseline(readFileSync('/var/lib/incudal-finance/baseline.json'",command.call_args.args[0][-2])
+    def test_database_settings_keep_effective_values_and_local_listener_source_transition(self):
+        import hashlib,json
+        original=[['listen_addresses','localhost','default','postmaster'],['port','5432','default','postmaster'],['search_path','"$user", public','default','user']]
+        changed=[row.copy()for row in original];changed[0][2]='configuration file'
+        effective,legacy=module.database_settings_hashes(original)
+        updated,updated_legacy=module.database_settings_hashes(changed)
+        self.assertEqual(effective,updated)
+        self.assertNotEqual(legacy,updated_legacy)
+        self.assertEqual(legacy,hashlib.sha256(json.dumps([row[:3]for row in original],sort_keys=True).encode()).hexdigest())
+        for index,column,value in [(0,1,'*'),(0,2,'override'),(0,3,'user'),(1,2,'configuration file'),(2,2,'user')]:
+            rows=[row.copy()for row in original];rows[index][column]=value
+            self.assertNotEqual(module.database_settings_hashes(rows)[0],effective)
+        for rows in [[],[original[0],original[0]],[[True,'localhost','default','postmaster']],[[*original[0],'extra']]]:
+            with self.assertRaisesRegex(ValueError,'CONFIGURATION_CHANGED'):module.database_settings_hashes(rows)
+    def test_database_activation_retains_legacy_settings_receipts(self):
+        before={key:'same'for key in ['major','data','configHash','hbaHash','unitHash','fileHashes','settingsHash']};before.update(major=16,pid=12)
+        current={**before,'settingsHashVersion':2,'settingsHash':'new-policy','settingsLegacyHash':'same'}
+        with patch.object(module.pathlib,'Path')as path,patch.object(module,'runtime_process_has_replaced_libraries',return_value=False):
+            path.return_value.stat.return_value=types.SimpleNamespace(st_dev=1,st_ino=2)
+            module.verify_database_activation(current,before)
+            with self.assertRaisesRegex(ValueError,'CONFIGURATION_CHANGED'):module.verify_database_activation({**current,'settingsLegacyHash':'changed'},before)
+            module.verify_database_activation(current,{**before,'settingsHashVersion':2,'settingsHash':'new-policy'})
+            for version in [True,0,3,'2']:
+                with self.assertRaisesRegex(ValueError,'CONFIGURATION_CHANGED'):module.verify_database_activation(current,{**before,'settingsHashVersion':version})
+            with self.assertRaisesRegex(ValueError,'CONFIGURATION_CHANGED'):module.verify_database_activation(before,{**before,'settingsHashVersion':2})
     def test_database_activation_requires_config_and_installed_executable(self):
         before={key:'same'for key in ['major','data','configHash','hbaHash','unitHash','fileHashes','settingsHash']};before.update(major=16,pid=12)
         for key in ['major','data','configHash','hbaHash','unitHash','fileHashes','settingsHash']:
