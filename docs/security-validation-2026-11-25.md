@@ -1,5 +1,7 @@
 # 2026-11-25 安全修复接续与验证
 
+最新并行分工、7f9dd2全CI终态／完整预览AMD首装失败的实际根因、PG版本选择精修与原生3217证据、独立Debian来源认证及未完范围见[并行审查记录](security-parallel-review-2026-11-25.md)。下面保留此前各轮证据，不代替新的完整预览。
+
 ## 本轮修复
 
 - PostgreSQL 首次正常重启后，`listen_addresses=localhost` 的来源会从 `default` 变为 `configuration file`。仅归一化这一同值、`postmaster` 上下文的转换；实际配置值、全部配置文件、HBA、服务、数据目录及其它设置来源仍须一致。新回执使用版本 2，历史回执继续核原始摘要，不能用新规则重签旧基线。

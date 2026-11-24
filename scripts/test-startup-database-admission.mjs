@@ -16,11 +16,13 @@ const evidence = await mkdtemp('/tmp/incudal-database-admission-')
 const require = createRequire(join(serverRoot, 'package.json'))
 const { Pool } = require('pg')
 const sockets = new Set()
-let server, pool, badPasswordPool
+let server, pool, badPasswordPool, databaseUnit
+let phase = 'read-installed-module'
 const result = { success: false, readOnly: true, actualPostgreSQL: true }
 
 function pids() {
-  return ['incudal-backend', 'postgresql@16-main'].map(unit =>
+  assert.match(databaseUnit, /^postgresql@(?:16|17|18)-main$/)
+  return ['incudal-backend', databaseUnit].map(unit =>
     execFileSync('systemctl', ['show', unit, '--property=MainPID', '--value'], { encoding: 'utf8', timeout: 20_000 }).trim())
 }
 async function protectedFiles() {
@@ -31,13 +33,26 @@ async function protectedFiles() {
 }
 try {
   const { waitForStartupDatabase } = await import(modulePath)
-  const originalPids = pids(), originalFiles = await protectedFiles()
-  assert.ok(originalPids.every(pid => Number(pid) > 1))
+  phase = 'read-database-configuration'
   const matches = (await readFile('/opt/incudal/.env', 'utf8')).match(/^DATABASE_URL=(.+)$/gm)
   assert.equal(matches?.length, 1)
   const database = new URL(matches[0].slice('DATABASE_URL='.length).trim().replace(/^(['"])(.*)\1$/, '$2'))
   assert.ok(['localhost', '127.0.0.1', '[::1]'].includes(database.hostname))
   assert.equal(database.pathname, '/incudal')
+  // The installer retains an existing supported PostgreSQL. Newer GitHub
+  // images may already run 17/18; never fingerprint an unrelated 16 unit.
+  phase = 'identify-original-database-service'
+  const version = execFileSync('runuser', ['-u', 'postgres', '--', 'psql', '-X', '-At',
+    '-p', String(database.port || 5432), '-d', 'incudal', '-c', 'SHOW server_version_num'],
+    { encoding: 'utf8', timeout: 20_000 }).trim()
+  assert.match(version, /^[0-9]{6}$/)
+  const major = Math.floor(Number(version) / 10_000)
+  assert.ok([16, 17, 18].includes(major))
+  databaseUnit = 'postgresql@' + major + '-main'
+  result.postgresqlMajor = major
+  phase = 'fingerprint-original-runtime'
+  const originalPids = pids(), originalFiles = await protectedFiles()
+  assert.ok(originalPids.every(pid => Number(pid) > 1))
   let connections = 0
   server = createServer(socket => {
     sockets.add(socket); socket.on('error', () => {}); socket.once('close', () => sockets.delete(socket))
@@ -52,6 +67,7 @@ try {
   pool = new Pool({ connectionString: forwarded.href, max: 1, connectionTimeoutMillis: 5_000, statement_timeout: 15_000, query_timeout: 15_000 })
   pool.on('error', () => {})
   let reads = 0
+  phase = 'read-through-two-real-connection-timeouts'
   assert.equal(await waitForStartupDatabase(async () => { reads++; return pool.query('SELECT 1') }, () => false), true)
   assert.equal(reads, 3); assert.equal(connections, 3)
   assert.equal((await pool.query('SELECT 1')).rows[0]['?column?'], 1)
@@ -60,15 +76,19 @@ try {
   badPasswordPool = new Pool({ connectionString: invalid.href, max: 1, connectionTimeoutMillis: 15_000, statement_timeout: 15_000, query_timeout: 15_000 })
   badPasswordPool.on('error', () => {})
   let invalidAttempts = 0
+  phase = 'reject-invalid-database-password'
   await assert.rejects(waitForStartupDatabase(async () => { invalidAttempts++; return badPasswordPool.query('SELECT 1') }, () => false),
     error => error?.code === '28P01')
   assert.equal(invalidAttempts, 1)
+  phase = 'verify-original-runtime-preserved'
   assert.deepEqual(pids(), originalPids); assert.deepEqual(await protectedFiles(), originalFiles)
   result.success = true; result.transientConnectionRetries = 2; result.authenticationFailureAttempts = 1
   result.originalBackendAndDatabasePreserved = true; result.configurationIdentityFinancePreserved = true
 } catch (error) {
   await writeFile(join(evidence, 'error.private.log'), String(error?.stack || 'DATABASE_ADMISSION_FAILED'), { mode: 0o600 })
-  console.error('NATIVE_DATABASE_ADMISSION_FAILED; private evidence: ' + evidence)
+  result.failedPhase = phase
+  result.errorCode = typeof error?.code === 'string' && /^[A-Z0-9_]{1,64}$/.test(error.code) ? error.code : 'DATABASE_ADMISSION_FAILED'
+  console.error('NATIVE_DATABASE_ADMISSION_FAILED; ' + JSON.stringify({ phase, code: result.errorCode, postgresqlMajor: result.postgresqlMajor }) + '; private evidence: ' + evidence)
   process.exitCode = 1
 } finally {
   await badPasswordPool?.end(); await pool?.end()
