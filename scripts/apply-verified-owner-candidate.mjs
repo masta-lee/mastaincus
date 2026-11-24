@@ -2,7 +2,7 @@
 // worker. Only the candidate Release HTTP transport is supplied locally; all
 // package verification, backup, migrations, readiness and rollback stay real.
 import assert from 'node:assert/strict'
-import {readFileSync,createReadStream,existsSync,realpathSync,lstatSync} from 'node:fs'
+import {readFileSync,createReadStream,existsSync,realpathSync,lstatSync,writeFileSync} from 'node:fs'
 import {createHash,createPublicKey,verify} from 'node:crypto'
 import {execFileSync} from 'node:child_process'
 import {Readable} from 'node:stream'
@@ -44,7 +44,21 @@ const admin=await prisma.user.findFirstOrThrow({where:{role:'admin',status:'acti
 if(process.argv[4]==='--preflight'){await closePrismaDatabase();console.log('OWNER_SIGNED_CANDIDATE_PREFLIGHT_PASSED');process.exit(0)}
 // Legacy systemd policy may still have a 30-second stop timeout. Our exact
 // sealed current process drains before the original worker's no-op stop call.
-try { await drainLegacyOwnerBackend(app) }
+try {
+ const drained=await drainLegacyOwnerBackend(app)
+ // The legacy timeout may happen while idempotent host patrol drains. Never
+ // proceed over durable accepted instance/restore/upload work or old tasks.
+ assert.equal(await prisma.instanceTask.count({where:{status:{in:['PENDING','PROCESSING']}}}),0)
+ assert.equal(await prisma.restoreTask.count({where:{status:{in:['PENDING','PROCESSING']}}}),0)
+ assert.equal(await prisma.backupUploadTask.count({where:{status:{in:['PENDING','PROCESSING']}}}),0)
+ if(drained.legacyExitTimeout){
+  const root=import.meta.dirname;assert.ok(root.startsWith('/root/'))
+  execFileSync('/usr/bin/python3',['-I','-B',join(root,'baseline.py'),'verify-after-workers'],{stdio:'pipe',timeout:60000})
+  execFileSync(process.execPath,[join(root,'authority.mjs'),'verify'],{stdio:'pipe',timeout:60000})
+  execFileSync(process.execPath,[join(root,'customers.mjs'),'verify'],{stdio:'pipe',timeout:60000})
+  writeFileSync(join(root,'legacy-exit-timeout.private.json'),JSON.stringify({...drained,at:new Date().toISOString(),taskQueueEmpty:true,originalBaselinesVerified:true}),{mode:0o600,flag:'wx'})
+ }
+}
 catch(error) {
   await closePrismaDatabase()
   // No candidate files or database migrations have been applied. Start the
