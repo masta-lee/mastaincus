@@ -134,7 +134,7 @@ fi
   const newConnection = await connect(password); newConnection.end()
   // Replaced libcrypto with an unchanged sshd executable must trigger reexec.
   const crypto = docker(['exec', name, 'sh', '-c', 'awk \'$2 ~ /x/ && $6 ~ /libcrypto/ { print $6; exit }\' /proc/$(cat /run/sshd.pid)/maps']).trim()
-  assert.match(crypto, /^\/usr\/lib\/libcrypto\.so\.[0-9]+$/)
+  assert.match(crypto, /^\/(?:usr\/)?lib\/libcrypto\.so\.[0-9]+$/)
   docker(['exec', name, 'sh', '-c', 'set -e; file="$1"; cp -p "$file" "$file.security-test"; mv "$file.security-test" "$file"', 'sh', crypto])
   assert.equal(docker(['exec', name, 'sh', '-c', '. /opt/alpine-ssh-security.sh; if alpine_ssh_listener_current; then echo stale-wrongly-current; else echo stale-detected; fi']).trim(), 'stale-detected')
   await new Promise((resolve, reject) => execFile('docker', ['exec', name, 'sh', '-c', '. /opt/alpine-ssh-security.sh; alpine_ssh_security_update update'], { timeout: 90000 }, (error, stdout) => {

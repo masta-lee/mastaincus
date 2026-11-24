@@ -1,5 +1,9 @@
 # 安全修复阶段收尾与未完成清单
 
+16:57继续：SSH loaded-library/sharedPG源码298e3c58689eaa156d89f557f77f3d4c82ec8d49已推，完整preview45359833587/主45359813552在途。SSH45359812301两失败2835/2836完整joblog确证仅新测试路径假设错误：Alpine3.19/3.20实际/lib/libcrypto.so.3，原断言只收/usr/lib；产品maps判据已通用，不改产品，测试精确收这两标准目录并保原真实inode替换/旧code拒绝/原SSH/SFTP字节核。Alpine/security/系统40Linux/OTA与typechecks全过，修测试待保存同source复验；其余7SSHjob成功，失败保留不计全绿。
+
+主控自然timer08:43/08:49已两轮成功，真实7包签名更新与SSHlistener/nginx自动activated，原backend3678674业务ready/0restart/库存203/5/0、原客户SSH3336/0。仍pending真实11项包括libc(其-dev/locales同组)、kernel新增具体版本、PGcommon297及libpq19跨major，不放宽整计划或任意升级；systemd/PG等旧映射仍未全部activated，原所有余项保持。AMD#62复测到期Stopped/手动1.23单扣幂等后Running，当即公网SSH一瞬未ready导致脚本失败，只读2838随后真实SSH成功/guestsshdactive，已沿同report续接，当前第二到期Stopped等自然autoRenew；未重复扣费。正式面板未发，Agent仅已签名测试预发布.10。
+
 16:50进度：完整f5b1455fd75adc0001636b29cac25d7454510f4e已主CI45352440138终态30/30、双原生45352440194 14/14、完整preview45352434847双首装/rootrestore六旧worker13success/Release跳过、其余五配套全success。signedAgent45352439384已测试预发布agent-v1.0.17-security.10（面板正式版未发），双实际asset2787签名/原publisher/ELF/source核过，原子资产2799部署后208全自动接收.10。升级间库存曾74～79不可售，09?以脚本UTC为准，全部维护收尾后实际203可售/5分配/0不可售；新版helper自动DNS实读#53/#78 oldPython消失，#16刚升级尚待新回执，全loaded库存与自然稳定观察继续。原四客户第三观察当前3032/0，既有2h3500/0自然过。
 
 原worker任务65于08:37:31Z成功→完整v1.8.14-test.f5b1455、backend3678674唯一业务ready/NRestarts0。前后sealed exact tar/postflight、19财务208authority五运行客户严格PID/UUID/rootconfig及test#63真实删除absence通过；源码原worker完整包，没有现场main补丁。实际双tar2796/2797 unique/root权限/OpenSSLprovider/最新busy代码source通过（ARM220454775 SHA17fa0120aa9d723a95553de344029c5d4ec9b35fc186b45ec2b7eb7892bcdfa8，AMD221273779 SHAb3bc942a7e1fde1745653f781e813d6e92c0785a290384817935b1e973199455）。包刻意不含agent源码/VERSION；其独立signed发布核验，不把误加VERSION资产断言失败称产品漏包。升级后自然systemtimer08:43与08:49均实际success，真实7项签名APT更新安装，SSHlistener/nginx activated；仍有systemd/其它/PG旧映射及11项基础库/新kernel/PGcommon/libpq19major等待，activation-required保留，未称全生效。
