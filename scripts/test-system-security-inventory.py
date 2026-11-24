@@ -408,5 +408,17 @@ class Plans(unittest.TestCase):
     def test_real_apt_dependency_annotation(self):
         with patch.object(module.subprocess,'run',return_value=types.SimpleNamespace(returncode=0)):
             self.assertEqual(module.patch_plan('Inst libsystemd0:amd64 [255.4-1ubuntu8.18] (255.4-1ubuntu8.19 Ubuntu:24.04/noble-updates [amd64]) [systemd:amd64 ]',{'libsystemd0':'255.4-1ubuntu8.18'},{'libsystemd0'}),['libsystemd0=255.4-1ubuntu8.19'])
+    def test_installed_openssl_provider_is_part_of_the_complete_patch_plan(self):
+        before={'openssl-provider-legacy':'3.5.7-1~deb13u3','libssl3t64':'3.5.7-1~deb13u3','openssl':'3.5.7-1~deb13u3'}
+        output='\n'.join('Inst '+name+' ['+old+'] (3.5.9-1~deb13u1 Debian:13/stable [arm64])'for name,old in before.items())
+        inventory=module.reviewed_debian_inventory({name+':arm64':old for name,old in before.items()},set(module.DEBIAN))
+        self.assertEqual(inventory,before,'the provider must be inventoried before solving upgrades')
+        with patch.object(module.subprocess,'run',return_value=types.SimpleNamespace(returncode=0)):
+            self.assertEqual(module.patch_plan(output,inventory,module.AUTOMATIC_DEBIAN),[name+'=3.5.9-1~deb13u1'for name in before])
+            for unsafe in [output.replace('Inst openssl-provider-legacy [3.5.7-1~deb13u3]','Inst openssl-provider-legacy'),output.replace('3.5.9-1~deb13u1','4.0.0-1'),output+'\nInst unrelated-provider [1.0] (1.1 Debian:13/stable [arm64])']:
+                with self.subTest(plan=unsafe),self.assertRaisesRegex(ValueError,'PLAN_REJECTED'):
+                    module.patch_plan(unsafe,inventory,module.AUTOMATIC_DEBIAN)
+        with patch.object(module.subprocess,'run',return_value=types.SimpleNamespace(returncode=1)),self.assertRaisesRegex(ValueError,'PLAN_REJECTED'):
+            module.patch_plan(output,inventory,module.AUTOMATIC_DEBIAN)
 
 if __name__=='__main__':unittest.main()

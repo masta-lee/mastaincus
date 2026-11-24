@@ -35,14 +35,14 @@ DEBIAN=['openssl','libssl3','libssl3t64','curl','libcurl4','libcurl4t64','openss
 # never guest software; installation and activation retain separate receipts.
 ALPINE+=['musl','musl-utils','chrony','chrony-openrc','ca-certificates','fuse3-libs','lvm2-libs','device-mapper-libs','device-mapper-event-libs',
     'tar','gzip','xz','squashfs-tools','rsync','libpsl','libidn2','libunistring','c-ares','brotli-libs','nghttp2-libs','nftables','libnftnl','libmnl','iptables','ip6tables']
-DEBIAN+=['libc6','libc-bin','libfuse3-3','libfuse3-4','libnftnl11','libmnl0','iptables','libxtables12','libip4tc2','libip6tc2',
+DEBIAN+=['openssl-provider-legacy','libc6','libc-bin','libfuse3-3','libfuse3-4','libnftnl11','libmnl0','iptables','libxtables12','libip4tc2','libip6tc2',
     'tar','gzip','xz-utils','zstd','squashfs-tools','rsync','libpsl5','libpsl5t64','libidn2-0','libunistring5','libc-ares2','libbrotli1','libnghttp2-14','openssh-sftp-server','libpq5','postgresql-common','postgresql-client-common']
 
 # These tools and libraries have no daemon lifecycle operation. Installed
 # services loading an old mapping remain activation-required, never marked
 # patched by an installed version alone. libc/kernel/service packages retain
 # their separate reviewed activation paths and are still fully inventoried.
-AUTOMATIC_DEBIAN=frozenset(['openssl','libssl3','libssl3t64','curl','libcurl4','libcurl4t64','ca-certificates',
+AUTOMATIC_DEBIAN=frozenset(['openssl','openssl-provider-legacy','libssl3','libssl3t64','curl','libcurl4','libcurl4t64','ca-certificates',
     'libsqlite3-0','libseccomp2','libcap2','libacl1','libattr1','libuv1','libuv1t64','liblz4-1','libzstd1','liblzma5',
     'tar','gzip','xz-utils','zstd','squashfs-tools','libpsl5','libpsl5t64','libidn2-0','libunistring5','libc-ares2','libbrotli1','libnghttp2-14'])
 
