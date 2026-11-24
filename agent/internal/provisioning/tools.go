@@ -115,6 +115,9 @@ func (e *Engine) Run(ctx context.Context) {
 				done()
 			}
 			if (securityState == "checked" || securityState == "activation-required" || securityState == "verification-pending") && time.Since(loadedChecked) >= 5*time.Minute {
+				activationContext, activated := context.WithTimeout(ctx, 30*time.Second)
+				_ = repairGatewayDNSPythonSecurity(activationContext)
+				activated()
 				checkContext, done := context.WithTimeout(ctx, 5*time.Second)
 				state, err := securityLoadedState(checkContext, "/proc")
 				if err != nil {

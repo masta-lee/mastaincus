@@ -61,17 +61,20 @@ func securityExpectedPackages(before map[string]string, plan string) map[string]
 	return expected
 }
 
-// Alpine 3.24 split _dbm out of this exact signed Python revision. The
-// solver adds the new companion to unrelated transactions before upgrading
-// the old interpreter that owns _dbm. Align only the reviewed Python group;
-// other interpreter series, dependencies and world constraints stay refused.
+// Alpine 3.24 split _dbm out of the interpreter, then rebuilt that module
+// separately as python3-extra r3 using gdbm. Interpreter/cache revisions remain
+// r2. Bind only these reviewed combinations in the complete signed plan;
+// unrelated dependency additions and administrator world changes stay refused.
 var securityPythonGroup = []string{"python3", "python3-ndbm", "pyc", "python3-pyc", "python3-pycache-pyc0"}
 
 func reviewedSecurityPython(version string) bool {
 	return version == "3.14.8-r0" || version == "3.14.10-r1" || version == "3.14.10-r2"
 }
 func securityPythonSplit(before map[string]string, name, version string) bool {
-	return name == "python3-ndbm" && version == "3.14.10-r2" && before["python3"] == version && before[name] == ""
+	return name == "python3-ndbm" && reviewedSecurityNdbm(version) && before["python3"] == "3.14.10-r2" && before[name] == ""
+}
+func reviewedSecurityNdbm(version string) bool {
+	return version == "3.14.10-r2" || version == "3.14.10-r3"
 }
 
 func safeSecurityPackagePlan(output string, before map[string]string) error {
@@ -88,19 +91,32 @@ func safeSecurityPackagePlanFor(output string, before map[string]string, targets
 	pythonAligned := reviewedSecurityPython(before["python3"]) && expected["python3"] == "3.14.10-r2"
 	if pythonAligned {
 		for _, name := range securityPythonGroup {
+			if name == "python3-ndbm" {
+				if before[name] != "" && !reviewedSecurityNdbm(before[name]) || expected[name] != "" && !reviewedSecurityNdbm(expected[name]) {
+					return fmt.Errorf("Python split companion not reviewed")
+				}
+				continue
+			}
 			if before[name] != "" && (before[name] != before["python3"] || expected[name] != expected["python3"]) {
 				return fmt.Errorf("Python split group not aligned")
 			}
 		}
+		if expected["python3-ndbm"] == "3.14.10-r3" && expected["gdbm"] != "1.26-r0" {
+			return fmt.Errorf("Python split gdbm dependency not aligned")
+		}
 	}
 	additions := securityPackageInstallation.FindAllStringSubmatch(output, -1)
-	if strings.Count(output, "Installing ") != len(additions) || len(additions) > 1 {
+	if strings.Count(output, "Installing ") != len(additions) || len(additions) > 2 {
 		return fmt.Errorf("unexpected security package installation refused")
 	}
+	additionNames := map[string]bool{}
 	for _, addition := range additions {
-		if !pythonAligned || addition[1] != "python3-ndbm" || addition[2] != expected["python3"] || before[addition[1]] != "" {
+		companion := addition[1] == "python3-ndbm" && reviewedSecurityNdbm(addition[2])
+		gdbm := addition[1] == "gdbm" && addition[2] == "1.26-r0" && expected["python3-ndbm"] == "3.14.10-r3"
+		if !pythonAligned || (!companion && !gdbm) || before[addition[1]] != "" || additionNames[addition[1]] {
 			return fmt.Errorf("unexpected security package installation refused")
 		}
+		additionNames[addition[1]] = true
 	}
 	allowed := map[string]bool{}
 	seen := map[string]bool{}
@@ -113,6 +129,9 @@ func safeSecurityPackagePlanFor(output string, before map[string]string, targets
 		for _, name := range securityPythonGroup {
 			if name == change[1] {
 				python = pythonAligned && old == before["python3"] && change[3] == "3.14.10-r2"
+				if name == "python3-ndbm" {
+					python = pythonAligned && old == "3.14.10-r2" && change[3] == "3.14.10-r3"
+				}
 			}
 		}
 		if !ok || (!allowed[change[1]] && !python) || seen[change[1]] || old != change[2] || !securitySameSeries(change[1], old, change[3]) {
@@ -219,6 +238,9 @@ func repairSecurityPackageSet(ctx context.Context, targets []string, authorize f
 		// companion version and rejects extra dependencies before mutation.
 		if before["python3"] == "3.14.10-r2" {
 			pinned = append(pinned, "python3")
+		}
+		if before["python3-ndbm"] != "" {
+			pinned = append(pinned, "python3-ndbm")
 		}
 	}
 	if len(pinned) == 0 {

@@ -56,6 +56,7 @@ if test "${INCUDAL_COMPAT_RELOAD_SCENARIO:-}" = empty-pool; then
   chmod 755 /etc/init.d/incudal-clock
   rc-service incudal-clock start
     /out/provisioning-test -test.run '^(TestNativeManagedHostClockSecurityActivation|TestNativeManagedHostClockStoppedRecovery|TestManagedClockFileRejectsUntrustedInputs)$' -test.v
+    timeout -s KILL 60 /out/provisioning-test -test.run '^TestNativeGatewayDNSPythonSecurityActivation$' -test.v
   /out/provisioning-test -test.run '^(TestCompatibilityStreamRejectsCorruption|TestCompatibilityFileHashAndRollbackCopy)$' -test.v
   INCUDAL_MEMORY_RUNTIME_TEST=1 /out/memory-budget-test -test.run '^TestNativeAgentBudgetRuntime$' -test.v
   for mode in legacy stream; do

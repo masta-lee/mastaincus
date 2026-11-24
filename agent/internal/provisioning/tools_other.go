@@ -17,6 +17,7 @@ func prepareIncusCompatibility(context.Context, *CompatPermit) error      { retu
 func validCompatPermit(*CompatPermit) bool                                { return false }
 func reconcileMemoryWatermark(context.Context) error                      { return nil }
 func repairSecurityPackages(context.Context) error                        { return nil }
+func repairGatewayDNSPythonSecurity(context.Context) error                { return nil }
 func migrateLegacyAlpineWorld(context.Context, *LegacyWorldPermit) error  { return nil }
 func repairLxcfsSecurity(context.Context, *CompatPermit) error            { return nil }
 func repairEmptyHostServiceSecurity(context.Context, *CompatPermit) error { return nil }

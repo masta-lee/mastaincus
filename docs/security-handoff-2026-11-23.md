@@ -1,5 +1,15 @@
 # 安全修复阶段收尾与未完成清单
 
+16:00继续：b077主CI45347479611终态30/30、完整preview45347492601全13success/Release跳过，SSH/sysinfo/memory配套success；Agent/原生失败仍保留不计全绿。Python r3合法组合源码及Go全套/vet、双架构编译/agentversion/hosttools/security守卫已过；真实ARM官方旧组2751及缺模块/重复2758通过，TCG AMD初轮60s超时但最终已装r2/r3/gdbm，独立完整重复2762两实际native检查自然PASS，TCG耗时69/102s明确仅夹具较慢，不扩产品60s预算。全池仍旧Agent.9；下一签名Agent.10及完整候选待生成部署。
+
+原安全activation缺口实读：受管incudal-gateway-dns Python3.14进程exe已deleted，helperhash/原OpenRC单位及监督args双架构取证2744一致。新Agent仅针对这段固定受管服务、原父监督PID/start/args/exe/namespace/root、完整原helper/hash与私有身份/原WireGuard config，绑定Linux pidfd后复读身份，SIGTERM该Python子进程让原supervise-daemon自动加载已装Python；不操作wg/Incus/SSH/客户，不下载未知脚本、不改原配置。新Linux实际OpenRC测试2775在隔离ARM+netnamespace完成新PID/同监督/当前maps/配置保持、重复及自定义unit拒绝，自然退出0；初2770正文成功但无init回收的测试cleanup卡住，已仅定向终止该独立namespace测试、补10s fixture teardown后最终过，保旧137失败，不把卡住测试算完成。Agent版本.10同批待源码保存/双原生CI/全池实证。
+
+ARM到期/手自动续费/宽限删除与原定价复验2766/2768通过：Incus all-project清单空、旧override1.23不进入商品18（原月2800分/setup300分/idle2），真实库存203可售/5分配/0不可售。stock工具先错用Host.assignedUserId、账单工具先读不存在status字段，已按schema修本地只读脚本，不修改产品/DB。AMD矩阵21/24、原4客户仍持续SSH零错误，最终全部镜像/新候选/自然timer/其余基础库内核DB/真实OSS余项继续，未发版。
+
+15:48最新：b07702777abda5383c16adba65df1abd57d0d80a OpenSSLprovider修复已推，完整preview45347492601双首装/六原worker13success、Release跳过；主CI45347479611此时28success/2在途。Agent45347479621双旧repo与原生45347479602十二runtime失败日志2745/2746已取回：官方同branch python3-ndbm刚独立origin python3-extra更新r3且新增gdbm1.26-r0，解释器/cache仍r2，原对齐判据正确拒绝新依赖但缺合法组合覆盖。新源码只接纳已核双官方APK metadata的r2解释器+r2/r3伴随模块+r3专属gdbm，完整双simulate/安装集合/world/repo/拒绝未知新增不变；已安装r2可升级r3，原组旧修订仍须全对齐r2。Go全套/vet、双架构编译、hosttools与agentversion守卫过，版本security.10待保存签名部署。真实隔离ARM官方旧root2751更新5.79s/实际dbm导入/world不变重复过，2758实际缺模块恢复/当前重复亦过；TCG AMD首轮已装组但产品60s超时（71s）保失败，后续完整重复2762仍在途，不能称双架构全部过。
+
+ARM测试#63完整24可选镜像全部重装/新密码SSH/DNS/IPv6/内存磁盘停启重启自然通过。真实到期2753/2764：先到期Incus Stopped、手动余额续费1.23元自动Running/SSH/密码保持，同key重放恰一次；再次到期Stopped后开autoRenew，自然07:45巡检续费1.23元自动Running；三天宽限过后07:46:12真实删除，all-project Incus实例清单空，两个真实renew账单89/90绑定余额110/111、最终共246分，无删除退款。首次测试脚本错用prisma.bill及读取status字段和过期admin JWT失败均保留，正常重新登录后续接，不绕鉴权/不改SQL资金。AMD矩阵18/24继续；原客户SSH持续零错误。机器池回售原定价和后续新候选全部部署/激活/DB/OSS等仍待，不正式发行。
+
 15:24续接：source2e主CI45341707600终态30/30、五配套45341707675/07584/07602/07657/07674与完整preview45341736788、signedAgent45341741088全部success（正式Release仍跳过），不是历史cancelled轮。自然timer07:10:36Z实际检查失败SYSTEM_SECURITY_PLAN_REJECTED；真实APT计划要求同步已安装openssl-provider-legacy3.5.7→3.5.9，原DEBIAN/automatic清单漏伴随provider导致完整计划拒绝。仅源码补该现有签名包纳入完整库存/同major/防降级/双精确计划和全安装集合核，保拒绝新安装与其它provider；39本机专项（12Linuxskip）和真实Linux39/39过，主控仓库外候选仅解析真实APT7项/重复精确simulate全过2732/2734，security-hardening/system-update均过。首次守卫直接运行缺DATABASE_URL，已改用实际run-tests入口；并行两专项用了同秒日志目录，后续统一单runner保唯一日志。新完整候选待保存生成原worker更新后自然timer复验。
 
 独立DB维护判据实际返回shared：主控另有6个旧测试/恢复数据库、均无连接，元数据私密保留2732/2733；不自动删除证据或放宽为共享PG随意停止，后续需基于已核归属处理或保留明确维护边界。全镜像最新AMD14/24、ARM16/24，原客户SSH观察零错误；全部激活/到期续费停删/真实OSS等原余项继续，未发版。

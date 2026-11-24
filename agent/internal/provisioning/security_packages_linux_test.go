@@ -61,14 +61,19 @@ func TestNativeSecurityPackageInventoryAndUpdate(t *testing.T) {
 	for _, name := range securityLeaves {
 		allowed[name] = true
 	}
-	if len(after) != len(before) && !(len(after) == len(before)+1 && securityPythonSplit(before, "python3-ndbm", after["python3-ndbm"])) {
-		t.Fatal("leaf update added an unreviewed package or removed a package")
+	for name, version := range after {
+		if before[name] == "" && !securityPythonSplit(map[string]string{"python3": after["python3"]}, name, version) && !(name == "gdbm" && version == "1.26-r0" && after["python3-ndbm"] == "3.14.10-r3") {
+			t.Fatal("leaf update added an unreviewed package")
+		}
 	}
 	for name, version := range before {
 		python := false
 		for _, target := range securityPythonGroup {
 			if target == name {
 				python = reviewedSecurityPython(version) && after[name] == "3.14.10-r2"
+				if name == "python3-ndbm" {
+					python = version == "3.14.10-r2" && after[name] == "3.14.10-r3"
+				}
 			}
 		}
 		if after[name] != version && !allowed[name] && !python {
@@ -78,6 +83,11 @@ func TestNativeSecurityPackageInventoryAndUpdate(t *testing.T) {
 	currentWorld, err := os.ReadFile("/etc/apk/world")
 	if err != nil || string(currentWorld) != string(world) {
 		t.Fatal("administrator world constraints changed", err)
+	}
+	if after["python3-ndbm"] != "" {
+		if _, err = run(ctx, "python3", "-c", "import dbm.ndbm"); err != nil {
+			t.Fatal("installed split module must actually import", err)
+		}
 	}
 	t.Log("PASS actual Alpine apk: complete installed inventory, signed leaf update and unrelated package preservation")
 }
@@ -105,6 +115,35 @@ func TestSecurityPythonOldGroupRequiresCompleteAlignedPlan(t *testing.T) {
 	}
 }
 
+func TestSecurityPythonSeparateCompanionRevisionBindsCompleteDependencyPlan(t *testing.T) {
+	for _, old := range []string{"3.14.8-r0", "3.14.10-r1", "3.14.10-r2"} {
+		before := map[string]string{"python3": old, "pyc": old, "python3-pyc": old, "python3-pycache-pyc0": old}
+		plan := "Installing python3-ndbm (3.14.10-r3)\nInstalling gdbm (1.26-r0)\n"
+		if old != "3.14.10-r2" {
+			for _, name := range []string{"python3", "pyc", "python3-pyc", "python3-pycache-pyc0"} {
+				plan += fmt.Sprintf("Upgrading %s (%s -> 3.14.10-r2)\n", name, old)
+			}
+		}
+		if err := safeSecurityPackagePlan(plan, before); err != nil {
+			t.Fatal("reviewed independently rebuilt module rejected", old, err)
+		}
+		for _, bad := range []string{strings.ReplaceAll(plan, "Installing gdbm (1.26-r0)\n", ""), strings.ReplaceAll(plan, "1.26-r0", "1.27-r0"), strings.ReplaceAll(plan, "3.14.10-r3", "3.14.11-r0"), plan + "Installing gdbm (1.26-r0)\n", plan + "Installing unexpected (1-r0)\n", strings.ReplaceAll(plan, "3.14.10-r2", "3.15.0-r0")} {
+			if bad != plan && safeSecurityPackagePlan(bad, before) == nil {
+				t.Fatal("incomplete or expanded dependency plan accepted", old, bad)
+			}
+		}
+	}
+	before := map[string]string{"python3": "3.14.10-r2", "python3-ndbm": "3.14.10-r2"}
+	plan := "Upgrading python3-ndbm (3.14.10-r2 -> 3.14.10-r3)\nInstalling gdbm (1.26-r0)\n"
+	if err := safeSecurityPackagePlan(plan, before); err != nil {
+		t.Fatal("existing split companion security rebuild rejected", err)
+	}
+	after := securityExpectedPackages(before, plan)
+	if err := safeSecurityPackagePlan("", after); err != nil {
+		t.Fatal("current separate revisions must be idempotent", err)
+	}
+}
+
 func TestNativeSecurityOldPythonSplit(t *testing.T) {
 	if os.Getenv("INCUDAL_SECURITY_OLD_PYTHON_TEST") != "disposable" {
 		t.Skip("official old Alpine cloud root only")
@@ -125,7 +164,7 @@ func TestNativeSecurityOldPythonSplit(t *testing.T) {
 	}
 	output, err = run(ctx, "apk", "info", "-v")
 	after, parseErr := securityInstalledPackages(string(output))
-	if err != nil || parseErr != nil || after["python3"] != "3.14.10-r2" || after["python3-ndbm"] != after["python3"] || len(after) != len(before)+1 {
+	if err != nil || parseErr != nil || after["python3"] != "3.14.10-r2" || !reviewedSecurityNdbm(after["python3-ndbm"]) || len(after) != len(before)+1 && !(len(after) == len(before)+2 && after["python3-ndbm"] == "3.14.10-r3" && before["gdbm"] == "" && after["gdbm"] == "1.26-r0") {
 		t.Fatal("old interpreter complete split not confirmed", err, parseErr)
 	}
 	allowed := map[string]bool{}
@@ -135,6 +174,11 @@ func TestNativeSecurityOldPythonSplit(t *testing.T) {
 	for n, v := range before {
 		if after[n] != v && !allowed[n] {
 			t.Fatal("unrelated package changed", n)
+		}
+	}
+	for n, v := range after {
+		if before[n] == "" && n != "python3-ndbm" && !(n == "gdbm" && v == "1.26-r0" && after["python3-ndbm"] == "3.14.10-r3") {
+			t.Fatal("unrelated package added", n)
 		}
 	}
 	current, err := os.ReadFile("/etc/apk/world")
@@ -194,7 +238,7 @@ func TestNativeSecurityPythonSplitRecovery(t *testing.T) {
 	defer cancel()
 	output, err := run(ctx, "apk", "info", "-v")
 	before, parseErr := securityInstalledPackages(string(output))
-	if err != nil || parseErr != nil || before["python3"] != "3.14.10-r2" || before["python3-ndbm"] != before["python3"] {
+	if err != nil || parseErr != nil || before["python3"] != "3.14.10-r2" || !reviewedSecurityNdbm(before["python3-ndbm"]) {
 		t.Fatal("native split fixture requires exact signed Python group", err, parseErr)
 	}
 	world, err := os.ReadFile("/etc/apk/world")

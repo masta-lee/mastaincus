@@ -82,6 +82,7 @@ jobs:
           sudo mkdir -p "$root/out"
           sudo cp output/incusd "$root/out/incusd"
           sudo cp output/provisioning-test "$root/out/provisioning-test"
+          sudo cp scripts/refresh-host-gateway-endpoint.py "$root/out/gateway-dns-helper"
           sudo cp output/memory-budget-test "$root/out/memory-budget-test"
           sudo chmod 755 "$root/out/provisioning-test"
           sudo cp scripts/test-incus-sysinfo-compat.sh "$root/test.sh"
