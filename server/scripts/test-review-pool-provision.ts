@@ -27,6 +27,7 @@ const keyPath=join(root,'key.pem'),certPath=join(root,'cert.pem')
 execFileSync(process.env.REVIEW_OPENSSL || 'openssl',['req','-x509','-newkey','rsa:2048','-nodes','-days','1','-subj','/CN=incus-fixture','-addext','subjectAltName=IP:127.0.0.1','-keyout',keyPath,'-out',certPath],{stdio:'pipe',windowsHide:true})
 const certificate=await readFile(certPath,'utf8'), actions:string[]=[]
 let mode='existing', name='', currentId=0, remote: {name:string;status:string;type?:string;created_at?:string;project?:string;devices?:Record<string,any>;profiles?:string[];config:Record<string,string>}|null=null
+let cacheOperations:unknown={}, cacheOperationReplies:unknown[]=[]
 const storagePending = ['storage-refused','storage-unknown','disk-residue','snapshot-residue']
 const server=createServer({key:await readFile(keyPath),cert:certificate,ca:certificate,requestCert:true,rejectUnauthorized:true},async(req,res)=>{
   const ok=(metadata:unknown={})=>res.end(JSON.stringify({type:'sync',metadata})),fail=(code:number,error:string)=>{res.statusCode=code;res.end(JSON.stringify({type:'error',error}))}
@@ -51,6 +52,7 @@ const server=createServer({key:await readFile(keyPath),cert:certificate,ca:certi
     }
     if(path.includes('/files?')){if(mode==='replaced-before-cleanup'&&remote)remote.config['volatile.uuid']=randomUUID();return fail(500,'fixture initialization failed')}
     if(path==='/1.0/operations?recursion=1')return ok(mode==='pending'?{running:[{status:'Running',resources:{instances:[`/1.0/instances/${name}`]}}]}:{})
+    if(path==='/1.0/operations?recursion=1&all-projects=true')return ok(cacheOperationReplies.length?cacheOperationReplies.shift():cacheOperations)
     if(path==='/1.0/storage-pools?recursion=1') {
       assert.equal(req.method,'GET')
       if(mode==='storage-refused')return fail(500,'fixture storage API unavailable')
@@ -187,7 +189,20 @@ try {
         fence=await beginPoolProvision(instance.id,(await getHostById(host.id))!,client,name)
         assert.ok(fence)
         if(scenario==='valid'){
-          remote=null;const start=actions.length
+          remote=null
+          const foreignPending={running:[{status:'Running',project:'other',resources:{instances:['/1.0/instances/foreign?project=other']}}]}
+          for(const operations of [foreignPending,null,[],{running:'unknown'},{running:[{status:['Success']}]},{running:[null]}]){
+            cacheOperations=operations;const before=actions.length
+            assert.equal(await pruneIsolatedPoolImageVolumes(fence.client,'payincus-pool'),false)
+            assert.ok(!actions.slice(before).some(action=>action.startsWith('DELETE ')), 'pending or unreadable all-project operations retain the image cache')
+            assert.ok(actions.slice(before).includes('GET /1.0/operations?recursion=1&all-projects=true'))
+          }
+          cacheOperationReplies=[{},foreignPending];const beforeRace=actions.length
+          assert.equal(await pruneIsolatedPoolImageVolumes(fence.client,'payincus-pool'),false)
+          assert.equal(cacheOperationReplies.length,0,'all-project operations are checked again before each cache deletion')
+          assert.ok(!actions.slice(beforeRace).some(action=>action.startsWith('DELETE ')), 'a foreign operation arriving before deletion retains the image')
+          cacheOperations={success:[{status:'Success',project:'other'}],failure:[{status:'Failure'}],cancelled:[{status:'Cancelled'}]}
+          const start=actions.length
           await pruneIsolatedPoolImageVolumes(fence.client,'payincus-pool')
           assert.ok(actions.slice(start).includes('DELETE /1.0/storage-pools/payincus-pool/volumes/image/'+'a'.repeat(64)), 'marked image cache can be pruned before the paid guest exists')
           assert.ok(!actions.slice(start).some(a=>a.startsWith('DELETE /1.0/instances/')), 'pre-create pruning never deletes a guest')

@@ -56,6 +56,34 @@ func TestMuslOnlyUsesCompleteEmptyHostRuntimePlan(t *testing.T) {
 	}
 }
 
+func TestSecurityPackageCommandDiagnosticsRetainCauseWithoutPrivateOutput(t *testing.T) {
+	cause := errors.New("private source https://mirror.invalid/token=not-for-logs")
+	for _, test := range []struct{ output, diagnostic string }{
+		{"unrecognized option --private-token=secret", "unsupported-option"},
+		{"ERROR: UNTRUSTED https://mirror.invalid/token=secret", "signature-or-content"},
+		{"unable to select packages: private-host", "package-constraints"},
+		{"temporary error: private-dns-name", "network"},
+		{"sensitive unexpected output", "unknown"},
+	} {
+		err := securityPackageCommandFailure("candidate-fetch", []byte(test.output), cause)
+		if !errors.Is(err, cause) || err.Error() != "security package command failed (stage=candidate-fetch, outcome=rejected, diagnostic="+test.diagnostic+")" {
+			t.Fatal("fixed command diagnostic lost its cause or exposed private bytes")
+		}
+	}
+	for _, test := range []struct {
+		cause   error
+		outcome string
+	}{{context.Canceled, "cancelled"}, {context.DeadlineExceeded, "deadline"}} {
+		err := securityPackageCommandFailure("private-untrusted-stage", nil, test.cause)
+		if !errors.Is(err, test.cause) || err.Error() != "security package command failed (stage=unknown, outcome="+test.outcome+", diagnostic=unknown)" {
+			t.Fatal("unknown stage or context failure produced unsafe diagnostics")
+		}
+	}
+	if securityPackageCommandFailure("candidate-fetch", []byte("UNTRUSTED"), nil) != nil {
+		t.Fatal("successful command acquired a fabricated failure")
+	}
+}
+
 func muslReceiptFixture() securityRuntimeReceipt {
 	before := map[string]string{"musl": "1.2.5-r20", "musl-utils": "1.2.5-r20", "curl": "8.17.0-r0", "linux-virt": "6.12.1-r0"}
 	plan := "Upgrading musl (1.2.5-r20 -> 1.2.6-r2)\nUpgrading musl-utils (1.2.5-r20 -> 1.2.6-r2)\nUpgrading curl (8.17.0-r0 -> 8.17.0-r1)"

@@ -2,6 +2,22 @@
 
 本记录区分源码、工具回归、真实 Linux、完整发行预览及生产部署。Owner 已授权三个子智能体并行工作；主智能体统一整合和操作测试环境、Git、主控热更新。生产程序仍为完整 `v1.8.14-test.a241daf`，本批尚未热更新或正式发行。
 
+## 1ba6cd39 终态与本轮精修
+
+已阶段提交推送 `1ba6cd397b13591b7c1bff05d069a1117c66f969`。完整无 tag 预览 `45468824080` 已终态 success：两架构构建、候选 Agent、两首装／原 root worker 备份恢复及六旧包升级／回滚，共 13 项成功，Release 预期 skipped。Agent `45468787172`、SSH `45468787002`、内存 `45468786936`、sysinfo 构建 `45468786871` 均终态 success。
+
+同来源主 CI `45468786976` 为 **failure（29/30）**：job `138710747881` 的购买交付 fixture 只接受旧 operations 地址，新增所有项目缓存核验第一次请求便失败。完整日志保留于 `logs/security-ci3235-pool3-failure.log`。仅修精确 fixture 响应，补其他项目 pending、异常对象／状态与删除前新任务到达的真实 PostgreSQL 回归；`review-pool-provision` 已自然 exit 0。没有将外项目忙检查加入目标专属到期停删／续费查询。
+
+同来源原生 `45468787284` 为 **failure（12/14）**：AMD job `138714321144`、ARM job `138714321204` 的 musl 回放在 installer 之前返回裸 exit 1，原完整日志保持。原 11/17 cloud root 的 musl 已为 r3，提前安装 Go 又引入 musl-dev r3，不能覆盖真正旧版升级中断；不能据此推断裸 exit 1 的实际 APK 阶段。两个子任务独立核验官方 Alpine 3.24.0 minirootfs：musl／musl-utils 均 r2、apk-tools 3.0.6-r0，无 Go／musl-dev。AMD SHA256 `de9a11c0e0e7e9c94db3ed8af7b450eafc0b13687bd7e9199d55050f20aa0a89`，ARM `4b8cd66a6688b2a87276c39843ed89c3a06d9534fc6a5823c586aff2696c1f2a`。新版固定该来源、明确断言 r2、保 bootstrap 后完整组不变，empty-pool 不安装 Go；cloud Python split 的原起点保持。
+
+APK 准备、确认、原缓存和重装补固定阶段／枚举诊断并保原 error cause，不输出原 stderr／URL／argv。三 Go 文件最新冻结 SHA256：packages `5f942f8032f902341ae9c74366dd3086e1961694f857ecd99d9b7dbfeccf1c53`、musl `df5e1fe53430e9448fa5db5e7aac482f4d99831e6fc3effa3056eeb897202b3c`、test `b2912c2f5408f94d3e40d0cb425e0b2adb51a44752abf99f15eb2d29c1d96f47`。双 Linux 测试编译、AMD vet、server 类型、四守卫 `logs/test-run-20261125-040007`、YAML／两工作流 shell／原生 shell 语法通过；固定 pin 的 Linux 诊断回归 `3240` 自然 exit 0（实际测试 ELF SHA `d73707964c61edbce50e57a4da16821318c505420111be595365b249f8f6da48`）。新的实际 APK 原生中断尚待，不能记 musl 安装回放已通过。
+
+内核八文件仍为独占草稿。B 上首轮 Python 20 项仅 9 通过，10 errors／1 failure 被真实控制节点哨兵先拒；产品保护正确，fixture 未隔离 B 的 `/opt`。仅修私有 fixture 映射、新增五种控制节点哨兵拒绝，新 21 项待验。内核 PG 首轮在种子创建触发 `HOST_CUSTOMER_CPU_EXCEEDED`，未到维护路径；仅按真实 E2／ARM1C 限额修 fixture、将准备阶段纳入精确 finally，新候选待验。保留原失败与历史 DB，不放宽业务触发器。Python test 新 SHA `a8d85a43fe3b4039335915d6897aab2ae8d7fc70445d123baccf951085e35800`，PG test `7b921618b1e193fd511abfb9f6b54f053f22a793aea964475d0bc1a58cef5a27`。模板 83579 字节超过旧单模块 65536 限制，需对固定内核模块明确有界支持，不能截断或冒称已经网关接线。
+
+主控仅两 Python 草稿继续：完整 Before／Expected payload+control、原 fresh 签名 Expected 完整私有缓存及仅原 remaining 本地 deb 离线续接、conffile 预先固定原 Before／认证 vendor 过渡和原子恢复、持久安装意图中原程序文件缺失的有限同版本重装，以及新 boot 派生 nonce／追加 dump／共享 PG 原 PID。Before-only snapshot 仅定位原版本、固定 Debian13 keyring 签名链、规范单次同域跳转和原采集时 expiry；不安装 Before、不从历史 snapshot 获取 Expected、不重签原 proof。尚未冻结，真实 dpkg／libc、Alpine 双架构 boot／回退／丢回复、旧 ELF 字节来源和最终主控新备份隔离恢复仍未通过。
+
+新 Debian 13 ARM 源盘／seed／instance-id 保持。QEMU 9.2 两次 Windows ntdll `0xc00000ff` 事件已核，不能归为 SSH 凭据问题；使用已有 11.1.3 后先因缺 PXE ROM 在启动前退出。只修隔离 VM 输入，不重建原 seed、磁盘或旧 pin。新 VM 首次身份核验尚未成功，Ubuntu B unit 不代替 Debian libc 或 Alpine boot。
+
 ## 03:15 接续：原来源终态与已验证阶段
 
 来源 `259e5e64244bb8d785d8593f05d231bdc2b18641` 的主 CI `45455837072` 为 success（30/30）；Agent `45455837626`、sysinfo `45455837142`、SSH `45455837121`、原生 `45455837366`（14 项）及内存 `45455837481`（6 项）均终态 success。

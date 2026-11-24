@@ -291,7 +291,7 @@ func confirmSecurityRuntimeReceipt(ctx context.Context, receipt securityRuntimeR
 	if err := verifySecurityPackageConstraints(constraints); err != nil {
 		return err
 	}
-	current, err := run(ctx, "apk", "info", "-v")
+	current, err := runSecurityPackageCommand(ctx, "confirm-inventory", "info", "-v")
 	if err != nil {
 		return err
 	}
@@ -518,7 +518,7 @@ func cacheSecurityRuntimePlan(ctx context.Context, base []string, before, expect
 	// APK downloads and signature-checks its own cache filenames. Keep those
 	// exact indexes/artifacts for an offline original-plan replay after a power
 	// loss or interrupted installation, even if the upstream revision vanishes.
-	_, err := run(ctx, "apk", append(append(append([]string(nil), base...), "cache", "download", "--upgrade"), dependencies...)...)
+	_, err := runSecurityPackageCommand(ctx, "original-cache-fetch", append(append(append([]string(nil), base...), "cache", "download", "--upgrade"), dependencies...)...)
 	return err
 }
 
@@ -634,7 +634,7 @@ func fetchSecurityMuslLoader(ctx context.Context, base []string, cache, version 
 	if err := os.Mkdir(directory, 0700); err != nil {
 		return "", err
 	}
-	if _, err := run(ctx, "apk", append(append([]string(nil), base...), "fetch", "--output", directory, "musl="+version)...); err != nil {
+	if _, err := runSecurityPackageCommand(ctx, "candidate-fetch", append(append([]string(nil), base...), "fetch", "--output", directory, "musl="+version)...); err != nil {
 		return "", err
 	}
 	return verifyCachedSecurityMuslLoader(ctx, cache, version)
@@ -659,8 +659,8 @@ func verifyCachedSecurityMuslLoader(ctx context.Context, cache, version string) 
 		return "", fmt.Errorf("musl candidate package size invalid")
 	}
 	// Verify the same open file that the parser reads, not a second pathname.
-	if _, err = runWithFiles(ctx, "apk", []*os.File{file}, "verify", "/proc/self/fd/3"); err != nil {
-		return "", fmt.Errorf("musl candidate package signature not confirmed")
+	if output, err := runWithFiles(ctx, "apk", []*os.File{file}, "verify", "/proc/self/fd/3"); err != nil {
+		return "", securityPackageCommandFailure("candidate-verify", output, err)
 	}
 	if _, err = file.Seek(0, io.SeekStart); err != nil {
 		return "", err
@@ -705,7 +705,7 @@ func repairSecurityRuntimeRegisteredFiles(ctx context.Context, receipt *security
 	// reinstall to the exact originally signed Expected version. No upgrade,
 	// dependency addition or repair of an unrelated package is permitted.
 	for i := 0; i < 2; i++ {
-		output, err := run(ctx, "apk", append(append(append([]string(nil), base...), "--simulate", "fix", "--reinstall"), names...)...)
+		output, err := runSecurityPackageCommand(ctx, "registered-plan", append(append(append([]string(nil), base...), "--simulate", "fix", "--reinstall"), names...)...)
 		if err != nil {
 			return err
 		}
@@ -726,7 +726,7 @@ func repairSecurityRuntimeRegisteredFiles(ctx context.Context, receipt *security
 	if err != nil || loader != loaderBefore {
 		return fmt.Errorf("musl original replay loader changed before dispatch")
 	}
-	current, err := run(ctx, "apk", "info", "-v")
+	current, err := runSecurityPackageCommand(ctx, "registered-inventory", "info", "-v")
 	if err != nil {
 		return err
 	}
@@ -746,7 +746,7 @@ func repairSecurityRuntimeRegisteredFiles(ctx context.Context, receipt *security
 	if err := install(ctx, append(append(append([]string(nil), base...), "fix", "--reinstall"), names...)); err != nil {
 		return err
 	}
-	current, err = run(ctx, "apk", "info", "-v")
+	current, err = runSecurityPackageCommand(ctx, "registered-inventory", "info", "-v")
 	if err != nil {
 		return err
 	}

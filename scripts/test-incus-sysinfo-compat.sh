@@ -11,7 +11,8 @@ cat /proc/self/status | head -n12
 mount | head -n12
 if test "${INCUDAL_COMPAT_RELOAD_SCENARIO:-}" = empty-pool; then
   apk info -v | awk '/^musl(-utils)?-[0-9]/' | sort > /tmp/incudal-old-musl-packages
-  test -s /tmp/incudal-old-musl-packages
+  printf 'musl-1.2.6-r2\nmusl-utils-1.2.6-r2\n' > /tmp/incudal-required-old-musl-packages
+  cmp /tmp/incudal-old-musl-packages /tmp/incudal-required-old-musl-packages
 fi
 apk add --no-cache incus incus-client incus-openrc openrc apparmor apparmor-utils apparmor-profiles-tunables apparmor-profiles-abstractions iproute2 python3
 if test "${INCUDAL_COMPAT_RELOAD_SCENARIO:-}" = empty-pool; then

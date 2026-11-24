@@ -4,8 +4,10 @@ package provisioning
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"reflect"
 	"regexp"
@@ -23,6 +25,57 @@ var securityPackageInstallation = regexp.MustCompile(`(?m)Installing ([a-zA-Z0-9
 var installedSecurityPackage = regexp.MustCompile(`^([a-zA-Z0-9+_.-]+)-([0-9][a-zA-Z0-9+_.~-]*)$`)
 var securityMajorVersion = regexp.MustCompile(`^([0-9]+)(?:\.|-r)`)
 var securityCertificateVersion = regexp.MustCompile(`^[0-9]{8}-r[0-9]+$`)
+
+type securityPackageCommandError struct {
+	stage, outcome, diagnostic string
+	cause                      error
+}
+
+func (e *securityPackageCommandError) Error() string {
+	return fmt.Sprintf("security package command failed (stage=%s, outcome=%s, diagnostic=%s)", e.stage, e.outcome, e.diagnostic)
+}
+func (e *securityPackageCommandError) Unwrap() error { return e.cause }
+
+func securityPackageCommandFailure(stage string, output []byte, cause error) error {
+	if cause == nil {
+		return nil
+	}
+	// The diagnostic names are fixed. Private mirrors, tokens, argv and raw
+	// tool output never become the error text sent to the controller or CI.
+	switch stage {
+	case "installed-inventory", "signed-index-update", "first-plan", "candidate-fetch", "candidate-verify", "original-cache-fetch", "version-order",
+		"pre-install-inventory", "repeat-plan", "latest-inventory", "final-inventory", "confirm-inventory", "registered-plan", "registered-inventory", "install":
+	default:
+		stage = "unknown"
+	}
+	outcome := "rejected"
+	var exit *exec.ExitError
+	switch {
+	case errors.Is(cause, context.DeadlineExceeded):
+		outcome = "deadline"
+	case errors.Is(cause, context.Canceled):
+		outcome = "cancelled"
+	case errors.As(cause, &exit):
+		outcome = fmt.Sprintf("exit-%d", exit.ExitCode())
+	}
+	text, diagnostic := strings.ToLower(string(output)), "unknown"
+	switch {
+	case strings.Contains(text, "unrecognized option"), strings.Contains(text, "unknown option"), strings.Contains(text, "invalid option"), strings.Contains(text, "not an apk command"):
+		diagnostic = "unsupported-option"
+	case strings.Contains(text, "untrusted"), strings.Contains(text, "bad signature"), strings.Contains(text, "bad archive"), strings.Contains(text, "bad checksum"):
+		diagnostic = "signature-or-content"
+	case strings.Contains(text, "unable to select packages"), strings.Contains(text, "breaks: world"), strings.Contains(text, "conflicts:"):
+		diagnostic = "package-constraints"
+	case strings.Contains(text, "temporary error"), strings.Contains(text, "network unreachable"), strings.Contains(text, "dns lookup error"), strings.Contains(text, "connection timed out"):
+		diagnostic = "network"
+	}
+	return &securityPackageCommandError{stage: stage, outcome: outcome, diagnostic: diagnostic, cause: cause}
+}
+
+func runSecurityPackageCommand(ctx context.Context, stage string, args ...string) ([]byte, error) {
+	output, err := run(ctx, "apk", args...)
+	return output, securityPackageCommandFailure(stage, output, err)
+}
 
 func securitySameSeries(name, old, next string) bool {
 	if name == "musl" || name == "musl-utils" {
@@ -159,7 +212,7 @@ func repairSecurityPackageSet(ctx context.Context, targets []string, authorize f
 }
 func repairSecurityPackageTransaction(ctx context.Context, targets []string, authorize func(context.Context) error, runtimeAuthority string) error {
 	return repairSecurityPackageTransactionWithInstaller(ctx, targets, authorize, runtimeAuthority, func(ctx context.Context, args []string) error {
-		_, err := run(ctx, "apk", args...)
+		_, err := runSecurityPackageCommand(ctx, "install", args...)
 		return err
 	})
 }
@@ -196,7 +249,7 @@ func repairSecurityPackageTransactionWithInstaller(ctx context.Context, targets 
 			return err
 		}
 	}
-	installed, err := run(ctx, "apk", "info", "-v")
+	installed, err := runSecurityPackageCommand(ctx, "installed-inventory", "info", "-v")
 	if err != nil {
 		return err
 	}
@@ -326,11 +379,11 @@ func repairSecurityPackageTransactionWithInstaller(ctx context.Context, targets 
 	if resuming {
 		base = append(base, "--no-network")
 	} else {
-		if _, err = run(ctx, "apk", append(append([]string{}, base...), "update")...); err != nil {
+		if _, err = runSecurityPackageCommand(ctx, "signed-index-update", append(append([]string{}, base...), "update")...); err != nil {
 			return err
 		}
 	}
-	output, err := run(ctx, "apk", append(append([]string{}, base...), append([]string{"--simulate", "upgrade"}, requested...)...)...)
+	output, err := runSecurityPackageCommand(ctx, "first-plan", append(append([]string{}, base...), append([]string{"--simulate", "upgrade"}, requested...)...)...)
 	if err != nil {
 		return err
 	}
@@ -355,7 +408,7 @@ func repairSecurityPackageTransactionWithInstaller(ctx context.Context, targets 
 	}
 	pinned := []string{}
 	for _, change := range securityPackageVersionChange.FindAllStringSubmatch(string(output), -1) {
-		order, err := run(ctx, "apk", "version", "--test", change[2], change[3])
+		order, err := runSecurityPackageCommand(ctx, "version-order", "version", "--test", change[2], change[3])
 		if err != nil || strings.TrimSpace(string(order)) != "<" {
 			return fmt.Errorf("security package version order refused")
 		}
@@ -402,7 +455,7 @@ func repairSecurityPackageTransactionWithInstaller(ctx context.Context, targets 
 	// Package names still let apk solve dependencies. Re-simulate the upgrade
 	// transaction and require the original complete installed baseline before
 	// mutation; no extra dependency or unrelated package change is authorized.
-	current, err := run(ctx, "apk", "info", "-v")
+	current, err := runSecurityPackageCommand(ctx, "pre-install-inventory", "info", "-v")
 	if err != nil {
 		return err
 	}
@@ -410,7 +463,7 @@ func repairSecurityPackageTransactionWithInstaller(ctx context.Context, targets 
 	if err != nil || !reflect.DeepEqual(currentPackages, before) {
 		return fmt.Errorf("security package baseline changed")
 	}
-	actualPlan, err := run(ctx, "apk", append(append([]string{}, base...), append([]string{"--simulate", "upgrade"}, pinned...)...)...)
+	actualPlan, err := runSecurityPackageCommand(ctx, "repeat-plan", append(append([]string{}, base...), append([]string{"--simulate", "upgrade"}, pinned...)...)...)
 	if err != nil {
 		return err
 	}
@@ -449,7 +502,7 @@ func repairSecurityPackageTransactionWithInstaller(ctx context.Context, targets 
 	}
 	// Authorization and receipt publication can take time. Recheck the actual
 	// complete database one final time before the installer obtains APK's lock.
-	latest, err := run(ctx, "apk", "info", "-v")
+	latest, err := runSecurityPackageCommand(ctx, "latest-inventory", "info", "-v")
 	if err != nil {
 		return err
 	}
@@ -466,7 +519,7 @@ func repairSecurityPackageTransactionWithInstaller(ctx context.Context, targets 
 	if err = install(ctx, append(append([]string{}, base...), append([]string{"upgrade"}, pinned...)...)); err != nil {
 		return err
 	}
-	after, err := run(ctx, "apk", "info", "-v")
+	after, err := runSecurityPackageCommand(ctx, "final-inventory", "info", "-v")
 	if err != nil {
 		return err
 	}

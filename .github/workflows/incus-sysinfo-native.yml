@@ -78,11 +78,11 @@ jobs:
           if [[ '${{ matrix.scenario }}' == empty-pool ]]; then
             # Preserve the authenticated old runtime until the interruption
             # test runs. A fresh minirootfs already carries the fixed musl.
-            cloud_arch=amd64; cloud_digest=46cfc12d85bc6dd3a2df384f9b1d39ba89528e3d31cbc812265eca23bf2f0a55
-            if [[ '${{ matrix.architecture }}' == arm64 ]]; then cloud_arch=arm64; cloud_digest=0b44571fdbfd9a2179371e06c16dea89e5d57d0407e772685f323f27524d1a78; fi
-            curl --fail --silent --show-error --location --proto '=https' --proto-redir '=https' --retry 2 -o alpine-old-root.tar.xz "https://images.linuxcontainers.org/images/alpine/3.24/$cloud_arch/cloud/20261117_13:00/rootfs.tar.xz"
-            printf '%s  alpine-old-root.tar.xz\n' "$cloud_digest" | sha256sum -c -
-            sudo tar -xJf alpine-old-root.tar.xz -C "$root"
+            old_digest=de9a11c0e0e7e9c94db3ed8af7b450eafc0b13687bd7e9199d55050f20aa0a89
+            if [[ '${{ matrix.architecture }}' == arm64 ]]; then old_digest=4b8cd66a6688b2a87276c39843ed89c3a06d9534fc6a5823c586aff2696c1f2a; fi
+            curl --fail --silent --show-error --location --proto '=https' --proto-redir '=https' --retry 2 -o alpine-old-root.tar.gz "https://dl-cdn.alpinelinux.org/alpine/v3.24/releases/$arch/alpine-minirootfs-3.24.0-$arch.tar.gz"
+            printf '%s  alpine-old-root.tar.gz\n' "$old_digest" | sha256sum -c -
+            sudo tar -xzf alpine-old-root.tar.gz -C "$root"
           else
             curl -fsSLo alpine.tar.gz "https://dl-cdn.alpinelinux.org/alpine/v3.24/releases/$arch/alpine-minirootfs-3.24.4-$arch.tar.gz"
             printf '%s  alpine.tar.gz\n' "$digest" | sha256sum -c -
@@ -124,5 +124,5 @@ jobs:
             cd "$1"
             mkdir .oldroot
             pivot_root . .oldroot
-            exec /bin/sh -ec "umount -l /.oldroot; mount -t proc proc /proc; apk add --no-cache go; sh /test.sh"
+            exec /bin/sh -ec "umount -l /.oldroot; mount -t proc proc /proc; if test \"$INCUDAL_COMPAT_RELOAD_SCENARIO\" != empty-pool; then apk add --no-cache go; fi; sh /test.sh"
           ' -- "$root"
