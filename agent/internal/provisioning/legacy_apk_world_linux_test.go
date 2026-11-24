@@ -140,6 +140,9 @@ func TestLegacyWorldPreparedResumeAndChangedWriter(t *testing.T) {
 
 func TestLegacyWorldFilesRejectUnsafeAndCancelled(t *testing.T) {
 	world, receipt, node, packages := legacyWorldFixture(t)
+	if _, _, err := readLegacyWorldFile(filepath.Join(filepath.Dir(world), "missing", "receipt.json"), true); !os.IsNotExist(err) {
+		t.Fatal("missing optional old maintenance directory must remain distinguishable from unsafe paths")
+	}
 	if err := os.Chmod(world, 0666); err != nil {
 		t.Fatal(err)
 	}

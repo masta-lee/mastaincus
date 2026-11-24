@@ -99,6 +99,9 @@ func legacyWorldPlan(before string, installed map[string]string) (string, error)
 func readLegacyWorldFile(path string, private bool) ([]byte, os.FileMode, error) {
 	for dir := filepath.Dir(path); ; dir = filepath.Dir(dir) {
 		info, err := os.Lstat(dir)
+		if os.IsNotExist(err) {
+			return nil, 0, err // optional old-maintenance directory may be absent
+		}
 		if err != nil || !info.IsDir() || info.Mode()&0022 != 0 || info.Sys().(*syscall.Stat_t).Uid != 0 {
 			return nil, 0, fmt.Errorf("legacy package directory unsafe")
 		}
