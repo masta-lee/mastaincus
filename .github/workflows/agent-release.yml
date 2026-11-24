@@ -66,6 +66,21 @@ jobs:
       - name: Retain original HTTP settings during actual signed HTTPS security update
         run: |
           docker run --rm -v /tmp/incudal-provisioning-tests:/test:ro -e INCUDAL_SYSINFO_COMPAT_TEST=disposable alpine:3.24 sh -ec 'apk add --no-cache openssl curl rsync rsync-openrc python3; mkdir -p /var/lib/incudal-agent; chmod 700 /var/lib/incudal-agent; /test -test.run "TestNativeSecurityPackageInventoryAndUpdate|TestNativeSecurityPythonSplitRecovery|TestSecurityPythonSplitOnlyAdoptsMatchingReviewedCompanion|TestSecurityRepositoriesRetainLegacySettingsWithIndependentHTTPS|TestSecurityPackagePlanRejectsUnrelatedRemovalAndMajorChange" -test.v'
+      - name: Recover the original signed cloud Python split without changing world
+        run: |
+          set -euo pipefail
+          arch=amd64; digest=46cfc12d85bc6dd3a2df384f9b1d39ba89528e3d31cbc812265eca23bf2f0a55
+          if [[ '${{ matrix.runner }}' == ubuntu-24.04-arm ]]; then arch=arm64; digest=0b44571fdbfd9a2179371e06c16dea89e5d57d0407e772685f323f27524d1a78; fi
+          curl --fail --silent --show-error --location --proto '=https' --proto-redir '=https' --retry 2 -o old-root.tar.xz "https://images.linuxcontainers.org/images/alpine/3.24/$arch/cloud/20261117_13:00/rootfs.tar.xz"
+          printf '%s  old-root.tar.xz\n' "$digest" | sha256sum -c -
+          root=$(mktemp -d)
+          sudo tar -xJf old-root.tar.xz -C "$root"
+          sudo cp /etc/resolv.conf "$root/etc/resolv.conf"
+          sudo cp /tmp/incudal-provisioning-tests "$root/security-test"
+          sudo mkdir -p "$root/var/lib/incudal-agent" "$root/dev" "$root/proc"
+          sudo chmod 700 "$root/var/lib/incudal-agent"
+          sudo mknod -m666 "$root/dev/null" c 1 3
+          sudo unshare --pid --fork --mount --mount-proc="$root/proc" env INCUDAL_SECURITY_OLD_PYTHON_TEST=disposable chroot "$root" /security-test -test.run 'TestNativeSecurityOldPythonSplit|TestSecurityPythonOldGroupRequiresCompleteAlignedPlan' -test.v
   incus-compat:
     uses: ./.github/workflows/incus-sysinfo-compat.yml
   version:

@@ -1,5 +1,7 @@
 # 安全修复阶段收尾与未完成清单
 
+12:39纠正并继续：全208直接读取APK已装数据库确认195为Python3.14.10-r1、13为3.14.8-r0，均缺ndbm；先前只读计划显示新ndbm修订而未打印解释器版本，误将计划修订当成已装解释器，`84cfdeb6/security.7`只覆盖已对齐缺伴随包，**不能用于全池修复，未部署**。虽然其签名候选45325727394全部success/Release跳过、原生45325697289 14/14，与此生产覆盖缺口分开。源码补已核历史两修订→3.14.10-r2的Python/pyc整组同步与唯一ndbm新增，完整计划和world仍严格保持，陌生系列/混合原组/额外依赖拒绝。真实原ARM官方root SHA0b4457、独立namespace/chroot与产品完整事务2500/2501通过，旧解释器→全组+模块真实导入/原world/完整库存/重复验收5.62秒；没有修改主控或客户的系统包。TCG旧root事务两次60秒超时留证，最终native ARM实际通过，不把预下载夹具称自然镜像网络成功。当前security.8继续双架构最终来源CI/签名与全池复验，未实购/正式发行。正常Chrome登录、普通用户续费价403/伪角色401及桌面手机无改价入口2484通过；此为当前面板9ae证据。
+
 12:20补记：上述Python拆包源码已审查并通过Go全套/vet、双架构编译、security-hardening/host-provisioning/agent-version守卫。真实隔离Alpine官方root实际APK补拆包后全库存精确一致、world原文保持、重复维护通过（2482；每次产品维护仍60秒，测试多次共用外层预算已修为独立60秒）。隔离准备的旧cloud Python冲突、缺dev/null与共享proc及多次共用60秒失败保留，不算产品修复前通过；最终native四项均自然PASS。下一步保存`security.7`并生成同source签名Agent后自动全池复验。cc89主CI45321383518已终态30/30及五配套全success；不继承为新拆包source全部通过。
 
 2026-11-24 12:05接续：主控原OTA worker任务62于03:45:42.302Z成功，完整面板`v1.8.14-test.9ae84f3`来源`9ae84f38c1c4020d7df3c8f3804724d7fb807b70`，唯一backend3514543/业务ready/无恢复hold/35分钟stop与10分钟start正常。signed Agent`v1.0.17-security.6`同来源原子资产部署后208全自动接收；全208严格原pin只读核验迁移回执completed/root600/原前后hash及world吻合，移除1460项旧程序约束（AMD206/ARM2），无失败。原19组账务、208管理身份与4客户PID/UUID/rootdisk/密码/账期/.env保持，持续客户SSH980次零错误。11:50/55、12:00/05自然巡检均success/failure0，原无过期实例，不能据此称现场停删已实测。

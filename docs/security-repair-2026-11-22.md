@@ -4,6 +4,8 @@
 
 ## 续接实施状态（2026-11-22，尚未完成）
 
+2026-11-24 12:39修正：208APK已装数据库实际195Python3.14.10-r1/13旧3.14.8-r0，均无ndbm；前方案只支持已对齐r2，虽84cfdeb6 CI/native/signedAgent成功，覆盖不完整、未部署。后续源码仅接纳这两历史版本全Python/pyc整组→r2与单一ndbm拆包，拒混合原组/不同系列/部分对齐/其它新增，保两计划/安装后全inventory/world/原源；真实独立ARM原官方旧root2500自然5.62秒事务与模块导入/重复通过，TCG旧root超时与首ARM下载未跟随HTTPSredirect被hash拒绝保留（真实包本机固定SHA后转私有暂存）。最终Agent版本security.8待保存与同source双架构/签名/全池，不复用旧.7来源；实购/最终发行和原安全余项仍未完成。
+
 2026-11-24 12:20：owner授权原worker完整面板9ae/任务62热更新成功，同source signedAgentsecurity.6全208自动接收；208旧APKworld迁移completed/root600/原hash/world/1460约束全部实际只读核验通过。原钱/身份/四客户持续SSH1361次零错误；四轮自然到期巡检无失败。库存验收检出已装Python3.14.10-r2缺官方拆包python3-ndbm，同签名HTTPS计划被严格新增依赖拒绝，导致每五分钟空机prepared循环。源码只接纳该精确同修订缺失伴随包，保持双完整计划/全部安装后库存/world/原源和客户保护；Go/vet/dualcompile、security/hosttools/version守卫及真实独立Alpine缺拆包→完整精确恢复→重复维护2482自然全部通过。测试旧cloud与dev/proc/多次共享预算失败已保留并修fixture，每次产品仍60秒。Agentsecurity.7待保存/同source签名全池部署复验，尚不正式发行/实购。cc89 CI已30/30、五配套success，与新产品来源分开；真实OSS/基础库内核/完整自动NodePG事务等仍未完。
 
 2026-11-24本批迁移产品f472全部验证通过后继续自动runtime测试：真实stop/PGstop2367均success，旧准确包集合不变；旧PG16.15被最低16.16启动守卫拒绝，不放宽安全。2373已恢复最新Node24.22.3/PG16.16/client且唯一业务healthy、原financial/auth核验自然成功。此为隔离测试恢复，非自动有补丁全事务验收；自然timer/双架构实际事务及基础库内核/真实OSS仍未完成。生产无任何写入，历史锁归属owner确认/28项及208全覆盖证据保持，原源码f472/后续仅台账1c972500。

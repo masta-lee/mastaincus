@@ -62,9 +62,14 @@ func securityExpectedPackages(before map[string]string, plan string) map[string]
 }
 
 // Alpine 3.24 split _dbm out of this exact signed Python revision. The
-// installed interpreter already requires the missing companion, so every APK
-// transaction solves it even when only a TLS patch was requested. Adopt only
-// this reviewed split; new packages and arbitrary Python updates stay refused.
+// solver adds the new companion to unrelated transactions before upgrading
+// the old interpreter that owns _dbm. Align only the reviewed Python group;
+// other interpreter series, dependencies and world constraints stay refused.
+var securityPythonGroup = []string{"python3", "python3-ndbm", "pyc", "python3-pyc", "python3-pycache-pyc0"}
+
+func reviewedSecurityPython(version string) bool {
+	return version == "3.14.8-r0" || version == "3.14.10-r1" || version == "3.14.10-r2"
+}
 func securityPythonSplit(before map[string]string, name, version string) bool {
 	return name == "python3-ndbm" && version == "3.14.10-r2" && before["python3"] == version && before[name] == ""
 }
@@ -79,12 +84,21 @@ func safeSecurityPackagePlanFor(output string, before map[string]string, targets
 	if strings.Contains(output, "Reinstalling ") {
 		return fmt.Errorf("unexpected security package installation refused")
 	}
+	expected := securityExpectedPackages(before, output)
+	pythonAligned := reviewedSecurityPython(before["python3"]) && expected["python3"] == "3.14.10-r2"
+	if pythonAligned {
+		for _, name := range securityPythonGroup {
+			if before[name] != "" && (before[name] != before["python3"] || expected[name] != expected["python3"]) {
+				return fmt.Errorf("Python split group not aligned")
+			}
+		}
+	}
 	additions := securityPackageInstallation.FindAllStringSubmatch(output, -1)
 	if strings.Count(output, "Installing ") != len(additions) || len(additions) > 1 {
 		return fmt.Errorf("unexpected security package installation refused")
 	}
 	for _, addition := range additions {
-		if !securityPythonSplit(before, addition[1], addition[2]) {
+		if !pythonAligned || addition[1] != "python3-ndbm" || addition[2] != expected["python3"] || before[addition[1]] != "" {
 			return fmt.Errorf("unexpected security package installation refused")
 		}
 	}
@@ -95,7 +109,13 @@ func safeSecurityPackagePlanFor(output string, before map[string]string, targets
 	}
 	for _, change := range securityPackageVersionChange.FindAllStringSubmatch(output, -1) {
 		old, ok := before[change[1]]
-		if !ok || !allowed[change[1]] || seen[change[1]] || old != change[2] || !securitySameSeries(change[1], old, change[3]) {
+		python := false
+		for _, name := range securityPythonGroup {
+			if name == change[1] {
+				python = pythonAligned && old == before["python3"] && change[3] == "3.14.10-r2"
+			}
+		}
+		if !ok || (!allowed[change[1]] && !python) || seen[change[1]] || old != change[2] || !securitySameSeries(change[1], old, change[3]) {
 			return fmt.Errorf("unreviewed security package change refused")
 		}
 		seen[change[1]] = true
@@ -148,6 +168,13 @@ func repairSecurityPackageSet(ctx context.Context, targets []string, authorize f
 			requested = append(requested, name)
 		}
 	}
+	if strings.HasPrefix(strings.TrimSpace(string(release)), "3.24.") && reviewedSecurityPython(before["python3"]) {
+		for _, name := range securityPythonGroup {
+			if before[name] != "" {
+				requested = append(requested, name)
+			}
+		}
+	}
 	if len(requested) == 0 {
 		return nil
 	}
@@ -190,7 +217,9 @@ func repairSecurityPackageSet(ctx context.Context, targets []string, authorize f
 		// upgrade the already installed world atom; add would persist a new
 		// administrator constraint. The repeated complete plan binds the
 		// companion version and rejects extra dependencies before mutation.
-		pinned = append(pinned, "python3")
+		if before["python3"] == "3.14.10-r2" {
+			pinned = append(pinned, "python3")
+		}
 	}
 	if len(pinned) == 0 {
 		return nil
