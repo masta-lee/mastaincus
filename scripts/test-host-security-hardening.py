@@ -276,7 +276,8 @@ class SecurityTests(unittest.TestCase):
         verify(previous,dict(current),{'fixed':True});self.assertEqual(len(checks),1)
         for phase in ['started','failed']:
             with self.assertRaisesRegex(ValueError,'JOURNAL_CONFLICT'):verify({**previous,'phase':phase},dict(current),{'fixed':True})
-        with self.assertRaisesRegex(ValueError,'JOURNAL_CONFLICT'):verify(previous,dict(current),{'fixed':False})
+        verify(previous,dict(current),{'fixed':False})
+        self.assertNotIn('alpine_ssh_listener_current',checks[-1],'old library mappings cannot block read-only validation before authorized reexec')
         for changed in [{**current,'/etc/shadow':[stat.S_IFREG|0o600,0,0,'changed']},{**current,'/etc/ssh/ssh_host_ed25519_key':[stat.S_IFREG|0o600,0,0,'changed']},{**current,'/etc/ssh/sshd_config':[stat.S_IFREG|0o666,0,0,'policy']},{**current,'/etc/ssh/new.conf':[stat.S_IFREG|0o644,0,0,'new']}]:
             with self.assertRaisesRegex(ValueError,'JOURNAL_CONFLICT'):verify(previous,dict(changed),{'fixed':True})
         scope['shell']=lambda *_:types.SimpleNamespace(returncode=1)

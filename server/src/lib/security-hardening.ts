@@ -1,6 +1,6 @@
 export const SECURITY_HARDENING_REVISION = 'customer-hardening-v4'
 export const SECURITY_HARDENING_ENABLED_KEY = 'automatic_security_hardening'
-export const SSH_JOURNAL_POLICY_REVISION = 'completed-ssh-library-policy-v2'
+export const SSH_JOURNAL_POLICY_REVISION = 'completed-ssh-library-policy-v3'
 export type HardeningPhase = 'authority' | 'inventory' | 'runtime' | 'host-inspection' | 'customer-ssh' | 'receipt' | 'finished'
 export type HardeningDiagnostic = {
   phase: HardeningPhase; reason: string; instanceId?: number; action: 'wait' | 'inspect' | 'blocked'; nextAction: string

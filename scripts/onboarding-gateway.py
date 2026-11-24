@@ -230,7 +230,7 @@ def journal_baseline_matches(previous,current,before):
  # a changed baseline, and arbitrary new/deleted files remain conflicts.
  path='/etc/ssh/sshd_config'
  old=saved.get(path);new=current.get(path)
- if previous.get('phase')!='verified' or not before.get('fixed') or not isinstance(old,list)or not isinstance(new,list)or len(old)!=4 or len(new)!=4:
+ if previous.get('phase')!='verified' or not isinstance(old,list)or not isinstance(new,list)or len(old)!=4 or len(new)!=4:
   raise ValueError('HARDENING_JOURNAL_CONFLICT')
  if old[:3]!=new[:3]or not stat.S_ISREG(new[0])or new[0]&0o022 or new[1]!=0:
   raise ValueError('HARDENING_JOURNAL_CONFLICT')
@@ -239,7 +239,11 @@ def journal_baseline_matches(previous,current,before):
   raise ValueError('HARDENING_JOURNAL_CONFLICT')
  if {key:value for key,value in current.items()if key!=path}!={key:value for key,value in saved.items()if key!=path}:
   raise ValueError('HARDENING_JOURNAL_CONFLICT')
- if shell('alpine_ssh_standard_service && alpine_ssh_assert_fixed && alpine_ssh_listener_current && "$(alpine_ssh_listener_binary)" -t',8).returncode:
+ # Read-only parsing of the same original listener config is safe before a
+ # library reexec. Requiring current mappings here would prevent the very
+ # authorized maintenance that loads the installed patch. Package baseline,
+ # original listener identity and all credentials/keys/other files still bind.
+ if shell('alpine_ssh_standard_service && alpine_ssh_assert_fixed && "$(alpine_ssh_listener_binary)" -t',8).returncode:
   raise ValueError('HARDENING_JOURNAL_CONFLICT')
 
 def journal_readonly(before):
