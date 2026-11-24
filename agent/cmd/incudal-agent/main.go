@@ -236,6 +236,7 @@ func sendHeartbeat(ctx context.Context, client *panel.Client, heartbeatIntervalS
 		provisioningTools.SetPoolHost(*result.PoolHostBBR)
 		provisioningTools.SetGuests(result.ResourceGuests)
 		provisioningTools.SetCompatPermit(result.IncusCompat)
+		provisioningTools.SetLegacyWorldPermit(result.LegacyWorld)
 	}
 	abusePolicy.Sync(ctx, result.AbusePolicy)
 	if result.PortProtocol != nil {

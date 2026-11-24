@@ -38,6 +38,7 @@ import { processAgentInstanceReport } from '../services/agent-instance-report.js
 import { shouldUpgradeAgent } from '../lib/agent-version.js'
 import { poolResourceGuestInstructions } from '../services/pool-resource-reconciliation.js'
 import { incusCompatibilityPermit } from '../services/incus-compatibility.js'
+import { legacyApkWorldPermit } from '../services/legacy-apk-world.js'
 
 interface AgentCredentialsParams {
   hostId: string
@@ -1738,6 +1739,7 @@ export default async function agentRoutes(fastify: FastifyInstance) {
     const hostProtocol = await prisma.host.findUniqueOrThrow({ where: { id: agent.hostId }, select: { portProtocol: true, portProtocolRevision: true, singleTenant: true } })
     return {
       poolHostBbr: hostProtocol.singleTenant,
+      legacyWorld: await legacyApkWorldPermit(agent, normalizeCapabilities(request.body.capabilities)).catch(() => null),
       incusCompat: await incusCompatibilityPermit({...agent,capabilities:normalizeCapabilities(request.body.capabilities),lastReport:buildHeartbeatReport(request.body,Number(readAgentAuthHeaders(request.headers)!.timestamp),now.getTime())}).catch(()=>null),
       resourceGuests: await poolResourceGuestInstructions(agent.hostId),
       portProtocol: { mode: hostProtocol.portProtocol, revision: hostProtocol.portProtocolRevision },

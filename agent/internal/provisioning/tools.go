@@ -14,6 +14,7 @@ import (
 
 type Status struct {
 	SecurityPackages string `json:"securityPackages,omitempty"`
+	LegacyWorld      string `json:"legacyWorld,omitempty"`
 	Version          int    `json:"version"`
 	Ready            bool   `json:"ready"`
 	CheckedAt        string `json:"checkedAt"`
@@ -29,6 +30,7 @@ type Engine struct {
 	status       Status
 	guests       []Guest
 	compatPermit *CompatPermit
+	worldPermit  *LegacyWorldPermit
 }
 type Guest struct {
 	Name      string `json:"name"`
@@ -45,6 +47,17 @@ type CompatGuestPermit struct {
 	Name  string `json:"name"`
 	UUID  string `json:"uuid"`
 	State string `json:"state"`
+}
+type LegacyWorldPermit struct {
+	Node      string `json:"node"`
+	Recipe    string `json:"recipe"`
+	ExpiresAt string `json:"expiresAt"`
+}
+
+func (e *Engine) SetLegacyWorldPermit(p *LegacyWorldPermit) {
+	e.mu.Lock()
+	e.worldPermit = p
+	e.mu.Unlock()
 }
 
 func (e *Engine) SetCompatPermit(p *CompatPermit) { e.mu.Lock(); e.compatPermit = p; e.mu.Unlock() }
@@ -69,13 +82,27 @@ func (e *Engine) Run(ctx context.Context) {
 	securityState := "pending"
 	loadedChecked := time.Time{}
 	lxcfsChecked := time.Time{}
+	worldChecked := time.Time{}
+	worldState := ""
 	for ctx.Err() == nil {
 		e.mu.Lock()
 		enabled := e.enabled != nil && *e.enabled
 		guests := append([]Guest(nil), e.guests...)
 		permit := e.compatPermit
+		worldPermit := e.worldPermit
 		e.mu.Unlock()
 		if enabled {
+			if worldPermit != nil && time.Since(worldChecked) >= 6*time.Hour {
+				worldContext, done := context.WithTimeout(ctx, 30*time.Second)
+				if err := migrateLegacyAlpineWorld(worldContext, worldPermit); err != nil {
+					worldChecked = time.Now().Add(-6*time.Hour + 5*time.Minute)
+					worldState = "retry"
+				} else {
+					worldChecked = time.Now()
+					worldState = "checked"
+				}
+				done()
+			}
 			if time.Since(securityChecked) > 6*time.Hour {
 				securityContext, done := context.WithTimeout(ctx, 60*time.Second)
 				if err := repairSecurityPackages(securityContext); err != nil {
@@ -152,6 +179,7 @@ func (e *Engine) Run(ctx context.Context) {
 				s.Error = "HOST_PROVISIONING_TOOLS_PENDING"
 			}
 			s.SecurityPackages = securityState
+			s.LegacyWorld = worldState
 			e.mu.Lock()
 			e.status = s
 			e.mu.Unlock()

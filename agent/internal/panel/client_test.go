@@ -86,6 +86,26 @@ func TestPoolHostBBRContract(t *testing.T) {
 	}
 }
 func boolPointer(value bool) *bool { return &value }
+func TestLegacyWorldInstructionRequiresResponseSignature(t *testing.T) {
+	response := `{"poolHostBbr":true,"legacyWorld":{"node":"11111111-1111-4111-8111-111111111111","recipe":"legacy-apk-world-owner-20261124-v1","expiresAt":"2026-11-24T00:00:00Z"}}`
+	for _, signed := range []bool{false, true} {
+		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			if signed {
+				signTestResponse(w, r, "legacy-fixture", response)
+			}
+			w.Write([]byte(response))
+		}))
+		client := New(config.Config{PanelURL: server.URL, AgentID: "local-test", AgentSecret: "legacy-fixture", RequestTimeout: time.Second})
+		result, err := client.Heartbeat(context.Background(), map[string]any{})
+		server.Close()
+		if err != nil || (result.LegacyWorld != nil) != signed {
+			t.Fatal("unverified world instruction accepted or verified instruction dropped", signed, err)
+		}
+		if signed && (result.LegacyWorld.Node != "11111111-1111-4111-8111-111111111111" || result.LegacyWorld.Recipe != "legacy-apk-world-owner-20261124-v1") {
+			t.Fatal("world enrollment changed in response")
+		}
+	}
+}
 func signTestResponse(w http.ResponseWriter, r *http.Request, secret, body string) {
 	mac := hmac.New(sha256.New, []byte(secret))
 	mac.Write([]byte("payincus/agent-response/v1\n" + r.Header.Get("x-incudal-nonce") + "\n"))

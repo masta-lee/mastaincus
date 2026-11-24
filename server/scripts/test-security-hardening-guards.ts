@@ -10,6 +10,23 @@ import { hardeningIdentityHash, hardeningReceiptMatches } from '../src/lib/harde
 import { hardeningJournalReadyForRetry, SSH_JOURNAL_POLICY_REVISION, hardeningReceiptRenewalDue, SECURITY_HARDENING_REVISION } from '../src/lib/security-hardening.js'
 import { customerBootIdentity, customerBootRecoveryAction, nextMaintenanceAction, readHostMaintenanceIntent, automaticMaintenanceRecipeAllowed, hardeningAcceptanceReadyForRetry } from '../src/lib/host-maintenance-plan.js'
 import { maintenanceWireOperation, maintenanceWireExpiry } from '../src/services/host-maintenance-channel.js'
+import { legacyApkWorldEligible, legacyApkWorldPermit, LEGACY_APK_WORLD_CAPABILITY } from '../src/services/legacy-apk-world.js'
+import { acceptHostProvisioningStatus } from '../src/lib/host-provisioning-tools.js'
+const legacyHost = { singleTenant: true, status: 'online', installPending: false, createdAt: new Date('2026-11-23T00:00:00Z') }
+const legacyNode = { id: '11111111-1111-4111-8111-111111111111', hostId: 1, createdAt: legacyHost.createdAt }
+assert.equal(legacyApkWorldEligible(legacyHost, legacyNode, 1), true)
+for (const change of [{ singleTenant: false }, { status: 'offline' }, { installPending: true }, { createdAt: new Date('2026-11-25T00:00:00Z') }]) assert.equal(legacyApkWorldEligible({ ...legacyHost, ...change }, legacyNode, 1), false)
+for (const node of [null, { ...legacyNode, id: 'unregistered' }, { ...legacyNode, hostId: 2 }, { ...legacyNode, createdAt: new Date('2026-11-25T00:00:00Z') }]) assert.equal(legacyApkWorldEligible(legacyHost, node, 1), false)
+for (const legacyWorld of ['retry', 'checked', 'unknown']) {
+  const timestamp = Date.now()
+  const accepted = acceptHostProvisioningStatus({ version: 1, ready: true, checkedAt: new Date(timestamp).toISOString(), legacyWorld }, timestamp, timestamp)
+  assert.equal(accepted?.ready, true, 'constraint migration status must never revoke ready host inventory')
+  assert.equal((accepted as { legacyWorld?: string })?.legacyWorld, legacyWorld === 'unknown' ? undefined : legacyWorld)
+}
+await assert.doesNotReject(async () => {
+  const timestamp = Date.now()
+  assert.equal(await legacyApkWorldPermit({ lastReport: { signedAt: timestamp, hostProvisioningStatus: { version: 1, ready: true, checkedAt: new Date(timestamp).toISOString(), legacyWorld: 'checked' } } } as never, [LEGACY_APK_WORLD_CAPABILITY]), null, 'verified completed migration does not open another database transaction')
+})
 const check = { instanceId: 1, pid: 100, uidMap: '0 1000000 1000000000', gidMap: '0 1000000 1000000000', seccomp: 2, apparmor: 'incus-fixture (enforce)' }
 assert.ok(safeCustomerRuntime(check))
 for (const delta of [{ uidMap: '0 0 4294967295' }, { gidMap: '0 0 65536' }, { uidMap: 'invalid' }, { uidMap: null },

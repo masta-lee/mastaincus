@@ -43,6 +43,7 @@ type HeartbeatResult struct {
 	PoolHostBBR    *bool
 	ResourceGuests []provisioning.Guest
 	IncusCompat    *provisioning.CompatPermit
+	LegacyWorld    *provisioning.LegacyWorldPermit
 }
 
 type UpgradeInstruction struct {
@@ -57,12 +58,13 @@ type UpgradeInstruction struct {
 }
 
 type heartbeatResponse struct {
-	AbusePolicy    *abuse.Instruction         `json:"abusePolicy"`
-	PortProtocol   *ingress.Instruction       `json:"portProtocol"`
-	Upgrade        *UpgradeInstruction        `json:"upgrade"`
-	PoolHostBBR    *bool                      `json:"poolHostBbr"`
-	ResourceGuests []provisioning.Guest       `json:"resourceGuests"`
-	IncusCompat    *provisioning.CompatPermit `json:"incusCompat"`
+	AbusePolicy    *abuse.Instruction              `json:"abusePolicy"`
+	PortProtocol   *ingress.Instruction            `json:"portProtocol"`
+	Upgrade        *UpgradeInstruction             `json:"upgrade"`
+	PoolHostBBR    *bool                           `json:"poolHostBbr"`
+	ResourceGuests []provisioning.Guest            `json:"resourceGuests"`
+	IncusCompat    *provisioning.CompatPermit      `json:"incusCompat"`
+	LegacyWorld    *provisioning.LegacyWorldPermit `json:"legacyWorld"`
 }
 
 func New(cfg config.Config) *Client {
@@ -185,6 +187,7 @@ func (client *Client) heartbeatOnce(ctx context.Context, payload map[string]any)
 			result.PoolHostBBR = parsedResponse.PoolHostBBR
 			result.ResourceGuests = parsedResponse.ResourceGuests
 			result.IncusCompat = parsedResponse.IncusCompat
+			result.LegacyWorld = parsedResponse.LegacyWorld
 		}
 	}
 

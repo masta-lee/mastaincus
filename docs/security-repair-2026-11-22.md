@@ -4,6 +4,8 @@
 
 ## 续接实施状态（2026-11-22，尚未完成）
 
+2026-11-24 owner确认旧AppArmor/LVM/LXCFS依赖exact锁没有人工设置，全属旧程序；新增27历史版本/实装版本限定的一次world迁移，原node+签名短许可/登记时间界限、官方源/APK真实flock、原文本/hash/mode/root0600journal、before/after丢回执与并发改动preserve、完成后人工加回不动，旧维护未结束先等。无包升级/服务客户操作，失败不撤销售，心跳固定retry/checked，完成no-op避每heartbeat开PG。Go全套2333、双archcompile/vet、Linux/Alpine最终2334（实际AppArmor原pin迁移/安装集合保持/APK锁竞争/旧preparing拒绝）、真实PG2330 currenthost通过/未来missingcapdisabledhold拒绝与清理2332、types/build2335/security等过。待保存及同source原生/完整包，不生产修改/正式发行；其它基础库内核/NodePG实际事务/真实OSS独立未完成。
+
 2026-11-24新Alpine初始化修复：780cafa83fd460211421df9d790fadf8561ee891已推关闭修复，CI45286102220双Alpine失败完整2306保留；此前1446CI最终cancelled/26success/2failure，不计绿。官方cloud实际SHA2292/2293复现Python3.14.10-r1→ndbm-r2拆包文件冲突，正常网络/APKupdate不代安装成功；先升级已装Python组/按当前组fix，再装必需工具，容器和VM共用helper。官方新root项目实际脚本2302、故意部分失败后自动恢复2305都成功，types/build2300、AlpineSSHguard2301及创建补偿2303通过；未force-overwrite/破world/移除初始化验收。待同source双架构开通/完整预览/实际自动runtime事务，主控本轮未写、不正式发版，基础库内核/历史锁迁移/真实OSS未完成。
 
 2026-11-24自动维护继续实证：systemd入口2270两轮真实成功、activated/pending[]/正常deadline/重复原backendPG不重启；这次无新包，不代完整更新事务。旧runtime起点2281在SIGTERM exit1即停止，NodePG尚未降级/PG7020保持，2284确证Avvio默认10秒覆盖preClose长排空。源码HTTP先停接入/HTTP与后台全settled→Fastify短preClose，保失败/活请求/35分钟预算，备份longhook/type/build2289与真实systemd31秒HTTP+长hook/95秒启动2287过。原隔离候选已33077正常healthy/财务身份2286，关闭修复待保存及最终source包，不能说完整自动更新验收已过。1446完整预览45282424927全success，主CI45282299097双Alpine3.24失败job138069609178/138069609877完整2288卡APK必要初始化，未查明/待修，不计全绿。生产本轮仍未写、正式发行暂停、root密码由owner自行换。

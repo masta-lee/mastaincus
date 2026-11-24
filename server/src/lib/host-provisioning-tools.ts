@@ -10,6 +10,7 @@ export function acceptHostProvisioningStatus(v:unknown,signedAt:number,receivedA
   ...(valid&&['needed','pending','verified'].includes(String(r.incusCompat))&&typeof r.compatHash==='string'&&/^[a-f0-9]{64}$/.test(r.compatHash)?{incusCompat:r.incusCompat,compatHash:r.compatHash,...(typeof r.compatRequest==='string'&&/^[a-f0-9-]{36}$/.test(r.compatRequest)?{compatRequest:r.compatRequest}:{})}:{}),
   ...(valid&&r.ready&&r.diskTools===true?{diskTools:true}:{}),
   ...(valid&&['pending','retry','checked','activation-required','verification-pending'].includes(String(r.securityPackages))?{securityPackages:r.securityPackages}:{}),
+  ...(valid&&['retry','checked'].includes(String(r.legacyWorld))?{legacyWorld:r.legacyWorld}:{}),
   ...(!r.ready||!valid?{error:valid?'HOST_PROVISIONING_TOOLS_PENDING':'HOST_PROVISIONING_CLOCK_INVALID'}:{})}
 }
 export function hostProvisioningToolsReadyWhere(now=new Date()):Prisma.HostAgentWhereInput {

@@ -202,6 +202,9 @@ func TestHeartbeatPayloadIncludesHostMetrics(t *testing.T) {
 	if !containsCapability(capabilities, "traffic-counters") {
 		t.Fatalf("traffic-counters capability missing: %#v", capabilities)
 	}
+	if !containsCapability(capabilities, "legacy-apk-world-v1") {
+		t.Fatal("legacy world migration capability missing")
+	}
 
 	instances, ok := payload["instances"].(map[string]any)
 	if !ok {
