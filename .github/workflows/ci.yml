@@ -173,6 +173,7 @@ jobs:
           node scripts/test-publisher-installer-signatures.mjs
           pnpm --filter server test:smtp-security-transport
           sudo python3 scripts/test-system-security-inventory.py
+          sudo python3 scripts/test-sealed-manifest-order.py
           python3 scripts/test-system-security-inventory.py
           python3 scripts/test-nginx-security.py
           pnpm --filter server test:system-image-transport

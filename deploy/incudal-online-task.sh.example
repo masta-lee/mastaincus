@@ -194,7 +194,12 @@ verify_manifest() {
   observed_links="$(mktemp "${MANIFEST_DIR}/.observed-links.XXXXXX")"
   (cd "$app_dir" && static_files | xargs -0 -r sha256sum) > "$observed"
   (cd "$app_dir" && link_entries) > "$observed_links"
-  if ! cmp -s "$manifest" "$observed" || ! cmp -s "$link_manifest" "$observed_links"; then
+  # Historical manifests inherit the installer's locale. Order is not an
+  # identity field: compare every exact serialized hash/link line, including
+  # duplicate counts, under one canonical byte sort. No record is omitted or
+  # interpreted as shell code, and sha256sum still verifies all file bytes.
+  if ! cmp -s <(LC_ALL=C sort -- "$manifest") <(LC_ALL=C sort -- "$observed") || \
+      ! cmp -s <(LC_ALL=C sort -- "$link_manifest") <(LC_ALL=C sort -- "$observed_links"); then
     rm -f "$observed" "$observed_links"
     fail "release file set or digest differs from trusted manifest"
   fi
