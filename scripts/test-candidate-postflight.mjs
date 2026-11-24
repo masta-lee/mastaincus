@@ -9,11 +9,18 @@ if(process.platform==='linux'&&process.getuid()===0){
  const root=mkdtempSync(join(tmpdir(),'incudal-postflight-'));try{
   const source=join(root,'source'),app=join(root,'app'),archive=join(root,'candidate.tar.gz'),version='v1.8.14-test.abcdef1'
   for(const dir of[source,app]){mkdirSync(dir);writeFileSync(join(dir,'runtime.js'),'exact original code\n');symlinkSync('runtime.js',join(dir,'runtime-link'))}
-  for (const name of ['space link','line\nlink','单引号\'','--option']) symlinkSync('target with\nline and space',join(app,name))
+  const names=['space link','line\nlink','单引号\'','--option','@aws-sdk','agentkeepalive','ajv','Zpackage','apackage']
+  for (const name of names) symlinkSync('target with\nline and space',join(app,name))
   symlinkSync('target\n\n',join(app,'trailing-newline'))
   const originalLinks=execFileSync('/bin/bash',['-c',String.raw`while IFS= read -r -d '' link; do printf '%q -> %q\n' "$link" "$(readlink -- "$link")"; done < <(find . -xdev -type l -print0 | sort -z)`],{cwd:app,encoding:'utf8'})
   assert.equal(sealedRuntimeLinks(app),originalLinks,'bulk read must retain original quoting, ordering and exact targets')
-  for (const name of ['space link','line\nlink','单引号\'','--option']) rmSync(join(app,name))
+  const originalLocale=process.env.LC_ALL
+  try{for(const locale of ['C',...execFileSync('locale',['-a'],{encoding:'utf8'}).split('\n').filter(value=>/^en_US\./i.test(value))]){
+    process.env.LC_ALL=locale
+    const expected=execFileSync('/bin/bash',['-c',String.raw`while IFS= read -r -d '' link; do printf '%q -> %q\n' "$link" "$(readlink -- "$link")"; done < <(find . -xdev -type l -print0 | sort -z)`],{cwd:app,encoding:'utf8'})
+    assert.equal(sealedRuntimeLinks(app),expected,'original scoped package ordering and quoting must match '+locale)
+  }}finally{if(originalLocale===undefined)delete process.env.LC_ALL;else process.env.LC_ALL=originalLocale}
+  for (const name of names) rmSync(join(app,name))
   rmSync(join(app,'trailing-newline'))
   writeFileSync(join(source,'version.json'),JSON.stringify({version,deployedAt:null,gitCommit:'a'.repeat(12)}));writeFileSync(join(app,'version.json'),JSON.stringify({version,deployedAt:new Date().toISOString(),gitCommit:'a'.repeat(12)}))
   for(const dir of[source,app])linkSync(join(dir,'runtime.js'),join(dir,'runtime-hardlink.js'))

@@ -29,6 +29,7 @@ try {
   let stale = 0
   for (const client of ['user', 'admin']) for (const mode of ['account', 'sid', 'role', 'clear', 'aba', 'storage', 'memory']) for (const failure of [false, true]) {
     await fresh(); await run(client => { const h = window.refreshHarness; h.session(1, 'refresh-session', 'user', 60); return h.start(client) }, client)
+    assert.equal(await page.eval(() => window.refreshHarness.refreshes.length), 1, 'proactive request must reach the real synthetic refresh transport before replacing its session')
     await run(mode => { const h = window.refreshHarness; if (mode === 'account') h.session(2); if (mode === 'sid') h.session(1, 'other-session'); if (mode === 'role') h.session(1, 'refresh-session', 'admin'); if (mode === 'clear') h.auth.clearLocalAuth(); if (mode === 'aba') { h.session(2); h.session(1) }; if (mode === 'storage') localStorage.setItem('token', h.token(2)); if (mode === 'memory') h.auth.clearInMemoryAuth() }, mode)
     const before = await page.eval(() => JSON.stringify({ stored: localStorage.getItem('token'), user: window.refreshHarness.auth.user }))
     await run(failure => { const h = window.refreshHarness; h.refreshes[0].resolve(failure ? {} : { token: h.token(1, 'refresh-session', 'user', 7 * 86400, 'old-refresh') }, failure ? 401 : 200) }, failure)

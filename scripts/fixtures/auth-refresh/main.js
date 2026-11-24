@@ -29,8 +29,10 @@ createApp({ setup() {
   session()
   window.refreshHarness = { auth, userApi, adminApi, pending, refreshes, session, token, results: [], errors: [],
     start(client = 'user') {
-      const requests = pending.length + refreshes.length
-      const sessionIdentity = identity()
+      const requests = pending.length + refreshes.length, previousRefreshes = refreshes.length
+      const sessionIdentity = identity(), sourceToken = localStorage.getItem('token')
+      let proactiveRefresh = false
+      try { proactiveRefresh = JSON.parse(atob(sourceToken.split('.')[1])).exp - Math.floor(Date.now() / 1000) < 300 } catch {}
       let settled = false
       void (client === 'user' ? userApi : adminApi).instances.start(1).then(value => this.results.push(value)).catch(error => this.errors.push(error.code || error.message || 'failure')).finally(() => { settled = true })
       // Actual axios adapters run asynchronously. Observe request admission
@@ -41,7 +43,7 @@ createApp({ setup() {
           // A second operation can join the same unresolved refresh without
           // sending another fetch. Observe that gate instead of waiting for
           // transport, which cannot proceed until the test releases refresh.
-          if (pending.length + refreshes.length > requests || settled ||
+          if ((proactiveRefresh ? refreshes.length > previousRefreshes : pending.length + refreshes.length > requests) || settled ||
             refreshes.some(row => !row.settled && row.identity === sessionIdentity)) return resolve()
           if (performance.now() > deadline) return reject(Error('refresh request admission timed out'))
           setTimeout(check, 0)
