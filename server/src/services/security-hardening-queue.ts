@@ -13,7 +13,7 @@ import { managedCleanupEndpointHash } from '../lib/managed-cleanup-identity.js'
 import { SECURITY_HARDENING_ENABLED_KEY, SECURITY_HARDENING_REVISION, hardeningFailure, hardeningReason,
   hardeningSchedule, hardeningUpdateBudget, hardeningDiagnostic, hardeningPhaseLabel, hardeningNeedsReadOnlyRecovery,
   type HardeningCheck, type HardeningState } from '../lib/security-hardening.js'
-import { hardeningJournalReadyForRetry, SSH_JOURNAL_POLICY_REVISION, hardeningReceiptRenewalDue } from '../lib/security-hardening.js'
+import { hardeningJournalReadyForRetry, SSH_JOURNAL_POLICY_REVISION, hardeningReceiptRenewalDue, hardeningListenerPolicyInspectionDue } from '../lib/security-hardening.js'
 import { inspectHostSecurity, safeCustomerRuntime, hardeningPreflightCheck } from './host-security-inspection.js'
 import { maintainAlpineCustomerSsh } from './alpine-ssh-maintenance.js'
 import { recoveryHeld } from './platform-backup-core.js'
@@ -79,7 +79,7 @@ export async function hardenExistingHost(hostId: number, deps = securityHardenin
     if (enrollment ? !ownsOnboardingHardeningLease(host.onboardingNode, enrollment) : onboardingOwnsHardening(host.onboardingNode)) return null
     const previous = currentState(host.securityHardening)
     if(previous.incusCompat && (previous.incusCompat as {phase?:string}).phase!=='verified')return null
-    const renewal = !enrollment && hardeningReceiptRenewalDue(previous) && previous.identityHash === identity(host) && !hostMaintenanceBlocked(host.securityHardening)
+    const renewal = !enrollment && (hardeningReceiptRenewalDue(previous) || hardeningListenerPolicyInspectionDue(previous)) && previous.identityHash === identity(host) && !hostMaintenanceBlocked(host.securityHardening)
     if (previous.revision === SECURITY_HARDENING_REVISION && previous.nextCheckAt && Date.parse(previous.nextCheckAt) > Date.now() &&
         !hardeningAcceptanceReadyForRetry(previous) && !hardeningJournalReadyForRetry(previous) && !renewal) return null
     // Paid pool delivery already owns this host. A periodic inspection cannot
@@ -422,7 +422,7 @@ export async function processSecurityHardeningQueue(deps = securityHardeningDepe
       if(!state.nextCheckAt||Date.parse(state.nextCheckAt)<=Date.now())await resumeAutomaticHostMaintenance(host.id)
       continue
     }
-    if (state.revision !== SECURITY_HARDENING_REVISION || !state.nextCheckAt || Date.parse(state.nextCheckAt) <= Date.now() || hardeningAcceptanceReadyForRetry(state) || hardeningJournalReadyForRetry(state) || hardeningReceiptRenewalDue(state)) {
+    if (state.revision !== SECURITY_HARDENING_REVISION || !state.nextCheckAt || Date.parse(state.nextCheckAt) <= Date.now() || hardeningAcceptanceReadyForRetry(state) || hardeningJournalReadyForRetry(state) || hardeningReceiptRenewalDue(state) || hardeningListenerPolicyInspectionDue(state)) {
       await hardenExistingHost(host.id, deps)
       if(deps===securityHardeningDependencies)await prepareAutomaticHostMaintenance(host.id)
       return

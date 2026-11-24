@@ -1,6 +1,6 @@
 export const SECURITY_HARDENING_REVISION = 'customer-hardening-v4'
 export const SECURITY_HARDENING_ENABLED_KEY = 'automatic_security_hardening'
-export const SSH_JOURNAL_POLICY_REVISION = 'completed-ssh-policy-v1'
+export const SSH_JOURNAL_POLICY_REVISION = 'completed-ssh-library-policy-v2'
 export type HardeningPhase = 'authority' | 'inventory' | 'runtime' | 'host-inspection' | 'customer-ssh' | 'receipt' | 'finished'
 export type HardeningDiagnostic = {
   phase: HardeningPhase; reason: string; instanceId?: number; action: 'wait' | 'inspect' | 'blocked'; nextAction: string
@@ -28,6 +28,15 @@ export function hardeningReceiptRenewalDue(value: Partial<HardeningState>, now =
   const lease = Date.parse(value.leaseUntil || '')
   return value.revision === SECURITY_HARDENING_REVISION && value.status === 'verified' && value.phase === 'finished' &&
     Number.isFinite(expires) && expires > now && expires - now <= 6 * 3600000 &&
+    (!value.leaseToken || Number.isFinite(lease) && lease <= now)
+}
+/** A new verified listener policy gets one read-only inspection. Preserve the
+ * prior receipt until it finishes; neither a version marker nor a lease grants
+ * permission to change host SSH or bypass unknown/expired admission evidence. */
+export function hardeningListenerPolicyInspectionDue(value: Partial<HardeningState>, now = Date.now()): boolean {
+  const expiry = Date.parse(value.nextCheckAt || ''), lease = Date.parse(value.leaseUntil || '')
+  return value.revision === SECURITY_HARDENING_REVISION && value.status === 'verified' && value.phase === 'finished' &&
+    value.journalPolicyRevision !== SSH_JOURNAL_POLICY_REVISION && Number.isFinite(expiry) && expiry > now &&
     (!value.leaseToken || Number.isFinite(lease) && lease <= now)
 }
 /** Recheck the old completed-journal comparison once after its repair ships.

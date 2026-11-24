@@ -7,7 +7,7 @@ import { readAlpineSshPreflight } from '../src/lib/alpine-ssh-preflight.js'
 import { hardeningPublicView } from '../src/lib/hardening-view.js'
 import { hostMaintenanceBlocked, hostRebootMaintenanceBlocked } from '../src/lib/host-maintenance-gate.js'
 import { hardeningIdentityHash, hardeningReceiptMatches } from '../src/lib/hardening-identity.js'
-import { hardeningJournalReadyForRetry, SSH_JOURNAL_POLICY_REVISION, hardeningReceiptRenewalDue, SECURITY_HARDENING_REVISION } from '../src/lib/security-hardening.js'
+import { hardeningJournalReadyForRetry, SSH_JOURNAL_POLICY_REVISION, hardeningReceiptRenewalDue, SECURITY_HARDENING_REVISION, hardeningListenerPolicyInspectionDue } from '../src/lib/security-hardening.js'
 import { customerBootIdentity, customerBootRecoveryAction, nextMaintenanceAction, readHostMaintenanceIntent, automaticMaintenanceRecipeAllowed, hardeningAcceptanceReadyForRetry } from '../src/lib/host-maintenance-plan.js'
 import { maintenanceWireOperation, maintenanceWireExpiry } from '../src/services/host-maintenance-channel.js'
 import { legacyApkWorldEligible, legacyApkWorldPermit, LEGACY_APK_WORLD_CAPABILITY } from '../src/services/legacy-apk-world.js'
@@ -53,6 +53,10 @@ assert.equal(hardeningReceiptRenewalDue({...renewalReceipt,nextCheckAt:new Date(
 assert.equal(hardeningReceiptRenewalDue({...renewalReceipt,leaseToken:'existing',leaseUntil:new Date(now+1000).toISOString()},now),false)
 assert.equal(hardeningReceiptRenewalDue({...renewalReceipt,leaseToken:'existing',leaseUntil:new Date(now-1).toISOString()},now),true)
 assert.equal(hardeningReceiptRenewalDue({...renewalReceipt,status:'retry'},now),false)
+assert.equal(hardeningListenerPolicyInspectionDue({...renewalReceipt,nextCheckAt:new Date(now+86400000).toISOString(),journalPolicyRevision:'completed-ssh-policy-v1'},now),true)
+assert.equal(hardeningListenerPolicyInspectionDue({...renewalReceipt,journalPolicyRevision:SSH_JOURNAL_POLICY_REVISION},now),false)
+for(const change of [{status:'retry' as const},{phase:'receipt' as const},{nextCheckAt:new Date(now).toISOString()},{leaseToken:'live',leaseUntil:new Date(now+1000).toISOString()}])
+  assert.equal(hardeningListenerPolicyInspectionDue({...renewalReceipt,...change},now),false,'policy inspection cannot renew expired or unfinished authority')
 assert.equal(hardeningJournalReadyForRetry({status:'needs-maintenance',error:'HARDENING_JOURNAL_CONFLICT'}),true)
 assert.equal(hardeningJournalReadyForRetry({status:'needs-maintenance',error:'HARDENING_JOURNAL_CONFLICT',journalPolicyRevision:SSH_JOURNAL_POLICY_REVISION}),false)
 assert.equal(hardeningJournalReadyForRetry({status:'needs-maintenance',error:'HARDENING_IDENTITY_CHANGED'}),false)

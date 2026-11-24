@@ -14,7 +14,7 @@ const { prisma, closePrismaDatabase } = await import('../src/db/prisma.js')
 const { hardenExistingHost,processSecurityHardeningQueue } = await import('../src/services/security-hardening-queue.js')
 const { maintainAlpineCustomerSsh } = await import('../src/services/alpine-ssh-maintenance.js')
 const { encryptSensitiveData } = await import('../src/lib/security.js')
-const { SECURITY_HARDENING_ENABLED_KEY, SECURITY_HARDENING_REVISION } = await import('../src/lib/security-hardening.js')
+const { SECURITY_HARDENING_ENABLED_KEY, SECURITY_HARDENING_REVISION, SSH_JOURNAL_POLICY_REVISION } = await import('../src/lib/security-hardening.js')
 const { default: routes } = await import('../src/routes/security-hardening.js')
 const { finishSecureOnboarding } = await import('../src/services/onboarding-security-gate.js')
 const { dedicatedHostReadyWhere } = await import('../src/lib/host-resource-usage.js')
@@ -98,6 +98,33 @@ try {
   assert.equal((await state()).status, 'verified'); assert.ok(!(await state()).leaseToken)
   assert.equal((await state()).phase,'finished'); assert.equal((await state()).environment.architecture,'aarch64')
   const renewalBefore=await state(),renewalExpiry=new Date(Date.now()+3600000).toISOString()
+  await prisma.host.update({where:{id:host.id},data:{securityHardening:{...renewalBefore,nextCheckAt:new Date(Date.now()+86400000).toISOString(),journalPolicyRevision:'completed-ssh-policy-v1'}}})
+  const beforePolicyWrites=guestWrites
+  await hardenExistingHost(host.id,deps)
+  assert.equal(allowHostUpdate,false,'new library policy only schedules a first read-only host inspection')
+  assert.equal(guestWrites,beforePolicyWrites,'new policy cannot write customer SSH')
+  assert.equal((await state()).journalPolicyRevision,SSH_JOURNAL_POLICY_REVISION)
+  const afterPolicyCalls=hostCalls
+  await hardenExistingHost(host.id,deps)
+  assert.equal(hostCalls,afterPolicyCalls,'successful policy migration is checked once')
+  const policyBaseline=await state()
+  await prisma.host.update({where:{id:host.id},data:{securityHardening:{...policyBaseline,nextCheckAt:new Date(Date.now()+86400000).toISOString(),journalPolicyRevision:'completed-ssh-policy-v1'}}})
+  let listenerCurrent=false
+  const libraryDeps={...deps,host:async(...args:Parameters<typeof deps.host>)=>{
+    const report=await deps.host(...args)
+    if(args[2])listenerCurrent=true
+    return {...report,fixed:listenerCurrent}
+  }}
+  const priorLibraryWrites=guestWrites
+  await hardenExistingHost(host.id,libraryDeps)
+  assert.equal(allowHostUpdate,false,'first upgraded-policy inspection does not reload a listener')
+  assert.equal((await state()).host.ssh.reason,'ALPINE_SSH_PATCH_REQUIRED','old mapped code cannot remain verified')
+  assert.equal(guestWrites,priorLibraryWrites)
+  const discovered=await state()
+  await prisma.host.update({where:{id:host.id},data:{securityHardening:{...discovered,nextCheckAt:new Date(0).toISOString()}}})
+  await hardenExistingHost(host.id,libraryDeps)
+  assert.equal(allowHostUpdate,true,'next bounded pass uses original maintenance authority to activate old code')
+  assert.equal((await state()).status,'verified')
   await prisma.host.update({where:{id:host.id},data:{securityHardening:{...renewalBefore,nextCheckAt:renewalExpiry}}})
   const renewalWrites=guestWrites
   const renewalEntered=new Promise<void>(resolve=>{hostEntered=resolve})
