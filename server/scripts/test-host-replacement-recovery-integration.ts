@@ -32,7 +32,7 @@ const connect: any = async (host: { id: number }) => ({ request: async (method: 
   if (path.startsWith('/1.0/instances?')) return [guest]
   if (path === '/1.0/projects?recursion=1') return [{ name: 'default' }]
   if (path === '/1.0/networks?recursion=1') return [{ name: 'incusbr0', managed: true, type: 'bridge' }]
-  if (path === '/1.0/operations?recursion=1') return { running: [] }
+  if (path === '/1.0/operations?recursion=1' || path === '/1.0/operations?recursion=1&all-projects=true') return { running: [] }
   if (path === '/1.0/storage-pools?recursion=1') return [{ name: 'default', status: 'Created' }]
   if (path.includes('/volumes?')) return [{ name: guest.name, type: 'container' }]
   if (path.includes('/forwards?')) return fault === 'missing-forward' ? record.forwards.slice(1) : record.forwards

@@ -1,4 +1,5 @@
 import { randomUUID } from 'node:crypto'
+import { incusOperationsIdle } from '../lib/incus/incus-operations.js'
 import { Prisma } from '@prisma/client'
 import { prisma } from '../db/prisma.js'
 import { getIncusClient } from '../lib/incus/incus-pool.js'
@@ -82,8 +83,8 @@ export async function incusCompatibilityPermit(agent:HostAgentRecord) {
   if(fence.version===1){
    if(fence.hostIdentity!==transferHostIdentity(host))return null
    if(fence.phase==='verified'&&report.incusCompat==='needed'&&report.compatRequest===fence.requestId&&!hostMaintenanceBlocked(state)){
-    const ops=await client.request<Record<string,unknown[]>>('GET','/1.0/operations?recursion=1',null,5000)
-    if(!ops||!Object.values(ops).every(Array.isArray)||Object.values(ops).flat().some(op=>!op||typeof op!=='object'||!['Success','Failure','Cancelled'].includes(String((op as {status?:string}).status))))return null
+    const ops=await client.request<Record<string,unknown[]>>('GET','/1.0/operations?recursion=1&all-projects=true',null,5000)
+    if(!incusOperationsIdle(ops))return null
     const next:Fence={...fence,phase:'prepared',binaryHash:report.compatHash,instances}
     await tx.host.update({where:{id:host.id},data:{securityHardening:{...state,incusCompat:next} as Prisma.InputJsonValue}})
     return {requestId:next.requestId,hostIdentity:next.hostIdentity,guests:next.instances.map(i=>({name:i.name,uuid:i.uuid,state:i.state})),expiresAt:new Date(Date.now()+240000).toISOString()}
@@ -96,8 +97,8 @@ export async function incusCompatibilityPermit(agent:HostAgentRecord) {
    return {requestId:fence.requestId,hostIdentity:fence.hostIdentity,guests:fence.instances.map(i=>({name:i.name,uuid:i.uuid,state:i.state})),expiresAt:new Date(Date.now()+240000).toISOString()}
   }
   if(report.incusCompat!=='needed'||hostMaintenanceBlocked(host.securityHardening))return null
-  const ops=await client.request<Record<string,unknown[]>>('GET','/1.0/operations?recursion=1',null,5000)
-  if(!ops||!Object.values(ops).every(Array.isArray)||Object.values(ops).flat().some(op=>!op||typeof op!=='object'||!['Success','Failure','Cancelled'].includes(String((op as {status?:string}).status))))return null
+  const ops=await client.request<Record<string,unknown[]>>('GET','/1.0/operations?recursion=1&all-projects=true',null,5000)
+  if(!incusOperationsIdle(ops))return null
   const next:Fence={version:1,requestId:randomUUID(),hostIdentity:transferHostIdentity(host),phase:'prepared',binaryHash:report.compatHash,instances}
   await tx.host.update({where:{id:host.id},data:{securityHardening:{...state,incusCompat:next} as Prisma.InputJsonValue}})
   return {requestId:next.requestId,hostIdentity:next.hostIdentity,guests:next.instances.map(i=>({name:i.name,uuid:i.uuid,state:i.state})),expiresAt:new Date(Date.now()+240000).toISOString()}

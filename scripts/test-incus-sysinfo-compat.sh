@@ -9,7 +9,16 @@ test ! -e /var/lib/incus/database
 ls -ld /proc /proc/self
 cat /proc/self/status | head -n12
 mount | head -n12
+if test "${INCUDAL_COMPAT_RELOAD_SCENARIO:-}" = empty-pool; then
+  apk info -v | awk '/^musl(-utils)?-[0-9]/' | sort > /tmp/incudal-old-musl-packages
+  test -s /tmp/incudal-old-musl-packages
+fi
 apk add --no-cache incus incus-client incus-openrc openrc apparmor apparmor-utils apparmor-profiles-tunables apparmor-profiles-abstractions iproute2 python3
+if test "${INCUDAL_COMPAT_RELOAD_SCENARIO:-}" = empty-pool; then
+  apk info -v | awk '/^musl(-utils)?-[0-9]/' | sort > /tmp/incudal-bootstrap-musl-packages
+  cat /tmp/incudal-old-musl-packages /tmp/incudal-bootstrap-musl-packages
+  cmp /tmp/incudal-old-musl-packages /tmp/incudal-bootstrap-musl-packages
+fi
 /out/provisioning-test -test.run '^TestNativeSecurityPackageInventoryAndUpdate$' -test.v
 /out/provisioning-test -test.run '^TestLegacyWorld' -test.v
 INCUDAL_LEGACY_WORLD_NATIVE_TEST=disposable /out/provisioning-test -test.run '^TestNativeLegacyWorld' -test.v
@@ -45,6 +54,8 @@ if test "${INCUDAL_COMPAT_RELOAD_SCENARIO:-}" = empty-pool; then
   printf '%s\n' "$old" > /run/incus/incusd.pid
   /out/provisioning-test -test.run '^(TestCompatibilityStartingDaemonRequiresCurrentExecutable|TestCompatibilityRejectsPublishedBinaryWithOldRunningInode|TestCompatibilityRetiresOnlyExitedPIDReceipt|TestNativeCompatibilityEmptyPoolReload)$' -test.v
   /out/provisioning-test -test.run '^TestNativeCompatibilityStatusAllocations$' -test.v
+  test "$(/out/provisioning-test -test.list '^TestNativeMuslInterruptedOfflineReplay$')" = TestNativeMuslInterruptedOfflineReplay
+  INCUDAL_SECURITY_MUSL_REPLAY_TEST=disposable /out/provisioning-test -test.run '^TestNativeMuslInterruptedOfflineReplay$' -test.v
   /out/provisioning-test -test.run '^TestNativeLxcfsEmptyHostSecurityActivation$' -test.v
   incus network create security-dns0 ipv4.address=10.249.231.1/24 ipv4.nat=true ipv6.address=none
   /out/provisioning-test -test.run '^TestNativeManagedDNSPatchActivation$' -test.v

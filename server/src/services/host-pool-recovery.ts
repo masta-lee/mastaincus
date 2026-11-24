@@ -4,6 +4,7 @@ import { recoveryGuestStateMatches, compareRecoveryIdentities } from './platform
 import { registeredGuestIdentity } from '../lib/registered-guest-identity.js'
 import { hostMaintenanceBlocked } from '../lib/host-maintenance-gate.js'
 import { prisma } from '../db/prisma.js'
+import { incusOperationsIdle } from '../lib/incus/incus-operations.js'
 import { createLog } from '../db/logs.js'
 import { HOST_OCCUPIED_INSTANCE_WHERE } from '../lib/host-resource-usage.js'
 import { poolCapacityReady } from '../lib/pool-stock.js'
@@ -194,12 +195,12 @@ export async function inspectPoolRecovery(db: Db, hostId: number, connect: Conne
         client.request<RemoteInstance[]>('GET', '/1.0/instances?recursion=1&all-projects=true'),
         client.request<Array<{ name: string }>>('GET', '/1.0/projects?recursion=1'),
         client.request<Array<{ name: string; type: string; managed: boolean }>>('GET', '/1.0/networks?recursion=1'),
-        client.request<Record<string, unknown[]>>('GET', '/1.0/operations?recursion=1'),
+        client.request<Record<string, unknown[]>>('GET', '/1.0/operations?recursion=1&all-projects=true'),
         client.request<Array<{ name: string; status: string }>>('GET', '/1.0/storage-pools?recursion=1')
       ])
       instances = remoteInstances
       if (projects.some(project => project.name !== 'default')) blockers.add('projects')
-      if (['running', 'pending', 'cancelling'].some(key => operations[key]?.length)) blockers.add('busy')
+      if (!incusOperationsIdle(operations)) blockers.add('busy')
       if (!networks.some(network => network.name === 'incusbr0' && network.managed && network.type === 'bridge')) blockers.add('network-pending')
       if (host.storagePools.some(pool => pool.purpose === 'instance_data' &&
           !pools.some(remote => remote.name === pool.name && remote.status === 'Created'))) blockers.add('storage-pending')

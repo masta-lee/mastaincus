@@ -10,6 +10,7 @@ import (
 	"reflect"
 	"regexp"
 	"strings"
+	"time"
 )
 
 // Signed same-branch leaf packages only. Kernel, Incus, storage and service
@@ -24,6 +25,9 @@ var securityMajorVersion = regexp.MustCompile(`^([0-9]+)(?:\.|-r)`)
 var securityCertificateVersion = regexp.MustCompile(`^[0-9]{8}-r[0-9]+$`)
 
 func securitySameSeries(name, old, next string) bool {
+	if name == "musl" || name == "musl-utils" {
+		return securityMuslVersion.MatchString(old) && securityMuslVersion.MatchString(next)
+	}
 	// ca-certificates is a signed dated trust-store revision, not a program
 	// major. Ordering is still checked by apk before any mutation.
 	if name == "ca-certificates" {
@@ -88,6 +92,9 @@ func safeSecurityPackagePlanFor(output string, before map[string]string, targets
 		return fmt.Errorf("unexpected security package installation refused")
 	}
 	expected := securityExpectedPackages(before, output)
+	if err := securityMuslPlan(before, expected, targets); err != nil {
+		return err
+	}
 	pythonAligned := reviewedSecurityPython(before["python3"]) && expected["python3"] == "3.14.10-r2"
 	if pythonAligned {
 		for _, name := range securityPythonGroup {
@@ -148,14 +155,30 @@ func repairSecurityPackages(ctx context.Context) error {
 	return repairSecurityPackageSet(ctx, securityLeaves, nil)
 }
 func repairSecurityPackageSet(ctx context.Context, targets []string, authorize func(context.Context) error) error {
+	return repairSecurityPackageTransaction(ctx, targets, authorize, "")
+}
+func repairSecurityPackageTransaction(ctx context.Context, targets []string, authorize func(context.Context) error, runtimeAuthority string) error {
+	return repairSecurityPackageTransactionWithInstaller(ctx, targets, authorize, runtimeAuthority, func(ctx context.Context, args []string) error {
+		_, err := run(ctx, "apk", args...)
+		return err
+	})
+}
+
+func repairSecurityPackageTransactionWithInstaller(ctx context.Context, targets []string, authorize func(context.Context) error, runtimeAuthority string, install func(context.Context, []string) error) error {
+	if install == nil {
+		return fmt.Errorf("security package installer unavailable")
+	}
 	if os.Geteuid() != 0 {
 		return fmt.Errorf("security package update requires root")
 	}
-	release, err := os.ReadFile("/etc/alpine-release")
+	if securityMuslTargets(targets) && (authorize == nil || !securityRuntimeHash.MatchString(runtimeAuthority)) {
+		return fmt.Errorf("musl runtime update requires separate empty-host authority")
+	}
+	release, _, err := readLegacyWorldFile("/etc/alpine-release", false)
 	if err != nil {
 		return fmt.Errorf("security package distribution needs reviewed update")
 	}
-	repositories, err := os.ReadFile("/etc/apk/repositories")
+	repositories, _, err := readLegacyWorldFile("/etc/apk/repositories", false)
 	if err != nil {
 		return err
 	}
@@ -181,6 +204,78 @@ func repairSecurityPackageSet(ctx context.Context, targets []string, authorize f
 	if err != nil {
 		return err
 	}
+	constraints, err := readSecurityPackageConstraints("/etc/alpine-release", "/etc/apk/repositories", "/etc/apk/world")
+	if err != nil {
+		return err
+	}
+	if string(constraints[0].Data) != string(release) || string(constraints[1].Data) != string(repositories) {
+		return fmt.Errorf("security package administrator configuration changed")
+	}
+	var saved *securityRuntimeReceipt
+	var environment securityRuntimeEnvironment
+	loaderBefore := ""
+	if runtimeAuthority != "" {
+		environment, err = securityRuntimeSnapshot(runtimeAuthority, targets, constraints)
+		if err != nil {
+			return err
+		}
+		loaderBefore, err = hashSecurityMuslLoader(ctx)
+		if err != nil {
+			return err
+		}
+		saved, err = readSecurityRuntimeReceipt(securityRuntimeReceiptPath)
+		if err != nil {
+			return err
+		}
+		reuse, err := securityRuntimeReceiptState(saved, environment, before, loaderBefore, time.Now())
+		if err != nil {
+			return err
+		}
+		if reuse {
+			return nil
+		}
+		if saved != nil && saved.Phase == "prepared" {
+			// An installed database entry does not prove all of that package's
+			// files survived a power loss. Repair only already registered original
+			// Expected packages before completing the remaining original upgrade.
+			if err := repairSecurityRuntimeRegisteredFiles(ctx, saved, environment, before, loaderBefore, constraints, authorize, install); err != nil {
+				return err
+			}
+			loaderBefore, err = hashSecurityMuslLoader(ctx)
+			if err != nil {
+				return err
+			}
+		}
+		if saved != nil && saved.Phase == "prepared" && reflect.DeepEqual(before, saved.Expected) {
+			if err := authorize(ctx); err != nil {
+				return err
+			}
+			cache, err := verifySecurityRuntimeCache(ctx, saved)
+			if err != nil {
+				return err
+			}
+			candidate, err := verifyCachedSecurityMuslLoader(ctx, cache, saved.Expected["musl"])
+			if err != nil || candidate != saved.LoaderExpected {
+				return fmt.Errorf("musl original completion candidate changed")
+			}
+			if err := authorize(ctx); err != nil {
+				return err
+			}
+			if err := confirmSecurityRuntimeReceipt(ctx, *saved, environment, before, constraints); err != nil {
+				return err
+			}
+			// The original registered payloads and final complete installation
+			// are now confirmed. Retire only the authenticated retained cache.
+			_ = os.RemoveAll(cache)
+			return nil
+		}
+	}
+	validatePlan := func(output string) error {
+		if saved != nil && saved.Phase == "prepared" {
+			return securityRuntimeResumePlan(output, before, saved)
+		}
+		return safeSecurityPackagePlanFor(output, before, targets)
+	}
 	requested := []string{}
 	for _, name := range targets {
 		if before[name] != "" {
@@ -197,32 +292,66 @@ func repairSecurityPackageSet(ctx context.Context, targets []string, authorize f
 	if len(requested) == 0 {
 		return nil
 	}
-	// All stages reuse one root-private cache and the same signed index. Repeated
-	// --no-cache downloads waste the bounded repair window on slow small hosts.
-	cache, err := os.MkdirTemp("/var/lib/incudal-agent", ".security-packages-*")
+	// A prepared musl transaction retains its original signed indexes and all
+	// package artifacts. It must not resolve a different upstream revision when
+	// retrying a partly installed original plan.
+	cache, keepCache := "", false
+	resuming := saved != nil && saved.Phase == "prepared"
+	if resuming {
+		cache, err = verifySecurityRuntimeCache(ctx, saved)
+		keepCache = true
+	} else {
+		cache, err = os.MkdirTemp("/var/lib/incudal-agent", ".security-packages-*")
+	}
 	if err != nil {
 		return err
 	}
-	defer os.RemoveAll(cache)
+	defer func() {
+		if !keepCache {
+			_ = os.RemoveAll(cache)
+		}
+	}()
 	if filepath.Dir(cache) != "/var/lib/incudal-agent" {
 		return fmt.Errorf("security package cache invalid")
 	}
 	repositoryPath := filepath.Join(cache, "repositories")
-	if err = os.WriteFile(repositoryPath, []byte(reviewedRepositories), 0600); err != nil {
-		return err
+	if !resuming {
+		if err = os.WriteFile(repositoryPath, []byte(reviewedRepositories), 0600); err != nil {
+			return err
+		}
 	}
 	base := []string{"--repositories-file", repositoryPath, "--cache-dir", cache, "--cache-max-age", "60", "--wait", "5", "--timeout", "15"}
 	// apk --simulate intentionally never writes missing indexes, even with
 	// --update-cache. Fetch and verify them explicitly once before simulation.
-	if _, err = run(ctx, "apk", append(append([]string{}, base...), "update")...); err != nil {
-		return err
+	if resuming {
+		base = append(base, "--no-network")
+	} else {
+		if _, err = run(ctx, "apk", append(append([]string{}, base...), "update")...); err != nil {
+			return err
+		}
 	}
 	output, err := run(ctx, "apk", append(append([]string{}, base...), append([]string{"--simulate", "upgrade"}, requested...)...)...)
 	if err != nil {
 		return err
 	}
-	if err = safeSecurityPackagePlanFor(string(output), before, targets); err != nil {
+	if err = validatePlan(string(output)); err != nil {
 		return err
+	}
+	expected := securityExpectedPackages(before, string(output))
+	var transaction *securityRuntimeReceipt
+	if runtimeAuthority != "" {
+		if saved != nil && saved.Phase == "prepared" {
+			transaction = saved
+		} else {
+			loaderExpected, err := fetchSecurityMuslLoader(ctx, base, cache, expected["musl"])
+			if err != nil {
+				return err
+			}
+			if expected["musl"] == before["musl"] && loaderExpected != loaderBefore {
+				return fmt.Errorf("musl installed loader differs from the signed package")
+			}
+			transaction = &securityRuntimeReceipt{Version: 1, Recipe: securityRuntimeRecipe, Phase: "prepared", CheckedAt: time.Now().UTC().Format(time.RFC3339Nano), Environment: environment, Before: before, Expected: expected, Plan: string(output), LoaderBefore: loaderBefore, LoaderExpected: loaderExpected}
+		}
 	}
 	pinned := []string{}
 	for _, change := range securityPackageVersionChange.FindAllStringSubmatch(string(output), -1) {
@@ -244,11 +373,28 @@ func repairSecurityPackageSet(ctx context.Context, targets []string, authorize f
 		}
 	}
 	if len(pinned) == 0 {
+		if transaction != nil {
+			if err := authorize(ctx); err != nil {
+				return err
+			}
+			err := confirmSecurityRuntimeReceipt(ctx, *transaction, environment, before, constraints)
+			if err == nil {
+				keepCache = false
+			}
+			return err
+		}
 		return nil
 	}
-	world, err := os.ReadFile("/etc/apk/world")
-	if err != nil {
-		return err
+	if transaction != nil && !resuming {
+		if err := cacheSecurityRuntimePlan(ctx, base, before, expected); err != nil {
+			return err
+		}
+		transaction.CacheID = filepath.Base(cache)
+		transaction.CacheFiles, err = securityRuntimeCacheSnapshot(ctx, cache)
+		if err != nil {
+			return err
+		}
+		base = append(base, "--no-network")
 	}
 	// Exact add atoms would persist in /etc/apk/world and block the next patch.
 	// upgrade accepts package names. The same verified cached index and complete
@@ -268,10 +414,9 @@ func repairSecurityPackageSet(ctx context.Context, targets []string, authorize f
 	if err != nil {
 		return err
 	}
-	if err = safeSecurityPackagePlanFor(string(actualPlan), before, targets); err != nil {
+	if err = validatePlan(string(actualPlan)); err != nil {
 		return err
 	}
-	expected := securityExpectedPackages(before, string(output))
 	if !reflect.DeepEqual(expected, securityExpectedPackages(before, string(actualPlan))) {
 		return fmt.Errorf("security package install plan changed")
 	}
@@ -280,11 +425,45 @@ func repairSecurityPackageSet(ctx context.Context, targets []string, authorize f
 			return err
 		}
 	}
-	currentRepositories, err := os.ReadFile("/etc/apk/repositories")
-	if err != nil || string(currentRepositories) != string(repositories) {
-		return fmt.Errorf("security package administrator repositories changed")
+	// World and its original permissions must still match after authorization,
+	// before APK can install anything. Detecting this only after installation is
+	// too late to protect a concurrent administrator's constraints.
+	if err := verifySecurityPackageConstraints(constraints); err != nil {
+		return err
 	}
-	if _, err = run(ctx, "apk", append(append([]string{}, base...), append([]string{"upgrade"}, pinned...)...)...); err != nil {
+	if transaction != nil {
+		if _, err := verifySecurityRuntimeCache(ctx, transaction); err != nil {
+			return err
+		}
+		loader, err := hashSecurityMuslLoader(ctx)
+		if err != nil || loader != loaderBefore {
+			return fmt.Errorf("musl loader changed before original package installation")
+		}
+		if err := saveSecurityRuntimeReceipt(securityRuntimeReceiptPath, *transaction); err != nil {
+			return err
+		}
+		keepCache = true
+		if err := verifySecurityPackageConstraints(constraints); err != nil {
+			return err
+		}
+	}
+	// Authorization and receipt publication can take time. Recheck the actual
+	// complete database one final time before the installer obtains APK's lock.
+	latest, err := run(ctx, "apk", "info", "-v")
+	if err != nil {
+		return err
+	}
+	latestPackages, err := securityInstalledPackages(string(latest))
+	if err != nil || !reflect.DeepEqual(latestPackages, before) {
+		return fmt.Errorf("security package baseline changed before installation")
+	}
+	if err := verifySecurityPackageConstraints(constraints); err != nil {
+		return err
+	}
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	if err = install(ctx, append(append([]string{}, base...), append([]string{"upgrade"}, pinned...)...)); err != nil {
 		return err
 	}
 	after, err := run(ctx, "apk", "info", "-v")
@@ -295,13 +474,15 @@ func repairSecurityPackageSet(ctx context.Context, targets []string, authorize f
 	if err != nil || !reflect.DeepEqual(expected, afterPackages) {
 		return fmt.Errorf("security package installation not confirmed")
 	}
-	currentWorld, err := os.ReadFile("/etc/apk/world")
-	if err != nil || string(world) != string(currentWorld) {
-		return fmt.Errorf("security package administrator constraints changed")
+	if err := verifySecurityPackageConstraints(constraints); err != nil {
+		return err
 	}
-	currentRepositories, err = os.ReadFile("/etc/apk/repositories")
-	if err != nil || string(currentRepositories) != string(repositories) {
-		return fmt.Errorf("security package administrator repositories changed")
+	if transaction != nil {
+		err := confirmSecurityRuntimeReceipt(ctx, *transaction, environment, afterPackages, constraints)
+		if err == nil {
+			keepCache = false
+		}
+		return err
 	}
 	return nil
 }

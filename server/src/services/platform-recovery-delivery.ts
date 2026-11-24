@@ -6,6 +6,7 @@ import { join } from 'node:path'
 import { isIPv4 } from 'node:net'
 import { probeGatewayHost } from './onboarding-ssh.js'
 import { IncusClient } from '../lib/incus/incus-client.js'
+import { incusOperationsIdle } from '../lib/incus/incus-operations.js'
 import { managedCleanupEndpointHash } from '../lib/managed-cleanup-identity.js'
 import { assertRecoveryGuestResources, compareRecoveryIdentities, type LiveRecoveryGuest } from './platform-recovery-inventory.js'
 import { readOriginalDedicatedNetwork } from './platform-recovery-network.js'
@@ -85,8 +86,8 @@ async function inspectPendingDelivery(row:Pending,step:(value:DeliveryStep)=>voi
     // identity, disk and persisted networking can be checked without starting it.
     ensure(['Running','Stopped'].includes(live[0].status),'OSS_RECOVERY_DELIVERY_UNVERIFIED',409)
     step('operations')
-    const operations=await client.request<Record<string,unknown[]>>('GET','/1.0/operations?recursion=1',null,12000)
-    ensure(!['running','pending','cancelling'].some(key=>operations[key]?.length),'OSS_REVIEW_RESOURCE_BUSY',409)
+    const operations=await client.request<Record<string,unknown[]>>('GET','/1.0/operations?recursion=1&all-projects=true',null,12000)
+    ensure(incusOperationsIdle(operations),'OSS_REVIEW_RESOURCE_BUSY',409)
     step('network')
     const addresses=publicIpv6State(host.publicIpv6Sync).addresses
     try {
@@ -113,8 +114,8 @@ async function inspectPendingDelivery(row:Pending,step:(value:DeliveryStep)=>voi
       const latest=pendingDeliveryIdentity(row,managedCleanupEndpointHash(client),current[0])
       ensure(latest.uuid===identity.uuid,'OSS_REVIEW_IDENTITY_CHANGED',409)
       pendingDeliveryLocation(row,current[0])
-      const operations=await client.request<Record<string,unknown[]>>('GET','/1.0/operations?recursion=1',null,12000)
-      ensure(!['running','pending','cancelling'].some(key=>operations[key]?.length),'OSS_REVIEW_RESOURCE_BUSY',409)
+      const operations=await client.request<Record<string,unknown[]>>('GET','/1.0/operations?recursion=1&all-projects=true',null,12000)
+      ensure(incusOperationsIdle(operations),'OSS_REVIEW_RESOURCE_BUSY',409)
     },context.record)
     }
     const network=await readOriginalDedicatedNetwork(client,{hostId:row.hostId,originalId:row.id,name:row.incusId,ipv4:row.ipv4!,natBindIp:host.natBindIp},live[0].status==='Running')

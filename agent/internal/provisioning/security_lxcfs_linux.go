@@ -17,7 +17,7 @@ import (
 // musl cannot unload LXCFS's module safely. The original controller fence and
 // a second all-projects local inventory must both prove an empty host before
 // installing or activating these packages. A paid guest is never restarted.
-var securityLxcfsTargets = append(append([]string{}, securityLeaves...), "lxcfs", "lxcfs-openrc", "fuse3-libs", "dnsmasq")
+var securityLxcfsTargets = append(append(append([]string{}, securityLeaves...), "lxcfs", "lxcfs-openrc", "fuse3-libs", "dnsmasq"), securityMuslGroup...)
 
 func localHostMaintenanceEmpty(ctx context.Context) (bool, error) {
 	raw, err := run(ctx, "incus", "query", "/1.0/instances?recursion=1&all-projects=true")
@@ -56,7 +56,7 @@ func authorizeEmptySecurityHost(ctx context.Context, permit *CompatPermit) error
 	if err := verifyEmptySecurityHost(ctx, permit); err != nil {
 		return err
 	}
-	raw, err := run(ctx, "incus", "query", "--raw", "/1.0/operations?recursion=1")
+	raw, err := run(ctx, "incus", "query", "--raw", "/1.0/operations?recursion=1&all-projects=true")
 	if err != nil || !compatOperationsIdle(raw) {
 		return fmt.Errorf("LXCFS security maintenance waits for host operations")
 	}
@@ -64,9 +64,7 @@ func authorizeEmptySecurityHost(ctx context.Context, permit *CompatPermit) error
 }
 
 func repairLxcfsSecurity(ctx context.Context, permit *CompatPermit) error {
-	if err := repairSecurityPackageSet(ctx, securityLxcfsTargets, func(ctx context.Context) error {
-		return authorizeEmptySecurityHost(ctx, permit)
-	}); err != nil {
+	if err := repairEmptyRuntimeSecurityPackages(ctx, permit); err != nil {
 		return err
 	}
 	unlock, err := lock()

@@ -42,7 +42,7 @@ const server=createServer({key:await readFile(key),cert:certificate,ca:certifica
   const path=request.url||'';calls.push(`${request.method} ${path}`)
   if(path==='/1.0')return send({api_version:'1.0'})
   if(path==='/1.0/instances?recursion=1&all-projects=true')return send([{name,status:remoteState,project:'default'}])
-  if(path==='/1.0/operations?recursion=1')return send({})
+  if(path==='/1.0/operations?recursion=1&all-projects=true')return send({})
   if(path===`/1.0/instances/${name}`)return send({name,type:remoteType,ephemeral,status:remoteState,config:remoteConfig(),profiles:[],
     devices:{root:{type:'disk',path:'/',pool:diskPool},eth0:{type:'nic',network:'incusbr0'}},expanded_config:remoteConfig()})
   if(path===`/1.0/instances/${name}/state`&&request.method==='GET')return send({status:remoteState,pid:remoteState==='Running'?123:0})

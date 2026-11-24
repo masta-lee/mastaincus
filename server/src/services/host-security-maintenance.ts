@@ -11,6 +11,7 @@ import { automaticMaintenanceRecipeAllowed, hostMaintenanceRecipe, readHostMaint
   type HostMaintenanceIntent } from '../lib/host-maintenance-plan.js'
 import { SECURITY_HARDENING_ENABLED_KEY, SECURITY_HARDENING_REVISION, hardeningDiagnostic } from '../lib/security-hardening.js'
 import { getIncusClient, removeIncusClient } from '../lib/incus/incus-pool.js'
+import { incusOperationsIdle } from '../lib/incus/incus-operations.js'
 import { captureCustomerBootBaseline, recoverCustomerAfterBoot } from './customer-boot-recovery.js'
 import { INSTANCE_OPERATION_LOCK_NAMESPACE, tryAdvisoryTransactionLock } from '../db/advisory-locks.js'
 import { hasActiveTransferWorkflow } from '../db/transfers.js'
@@ -23,12 +24,16 @@ import { onboardingOwnsHardening, ownsOnboardingHardeningLease } from '../lib/on
 
 const include={onboardingNode:{include:{batch:true}},agent:true} as const
 type Host=Prisma.HostGetPayload<{include:typeof include}>
+export type HostMaintenanceHost=Host
 type Enrollment={nodeId:string;leaseToken:string}
 const record=(value:unknown):Record<string,unknown>=>value&&typeof value==='object'&&!Array.isArray(value)?value as Record<string,unknown>:{}
 const json=(value:unknown)=>value as Prisma.InputJsonValue
 export const hostMaintenanceDependencies={held:recoveryHeld,command:hostMaintenanceCommand,inspect:inspectHostSecurity,
   connect:getIncusClient,invalidate:removeIncusClient,accepted:automaticMaintenanceRecipeAllowed,
   capture: captureCustomerBootBaseline, recover: recoverCustomerAfterBoot}
+
+export {authorized as authorizeHostMaintenance,lockMaintenanceCustomers as lockHostMaintenanceCustomers,
+  noCustomerConflicts as readHostMaintenanceCustomers,assertRemoteBaseline as assertHostMaintenanceRemoteBaseline}
 
 /** Authority is freshly held only for a bounded remote request. No transaction
  * spans a reboot or wait for reconnection, and intents remain durable on error. */
@@ -120,11 +125,9 @@ async function assertRemoteBaseline(host:Host,tx:Prisma.TransactionClient,deps:t
       identity.configurationHash!==before.boot.configurationHash&&!['false','0'].includes(String(record(actual.expanded_config??actual.config)['boot.autostart'])))throw Error('HARDENING_IDENTITY_CHANGED')
     if(!restoring&&remote.status!==(before.state==='running'?'Running':'Stopped'))throw Error('HARDENING_BUSY')
   }
-  const operations=await client.request<Record<string,unknown>>('GET','/1.0/operations?recursion=1',null,8000)
+  const operations=await client.request<Record<string,unknown>>('GET','/1.0/operations?recursion=1&all-projects=true',null,8000)
   // A mutation accepted before a backend crash can still be running in Incus.
-  if(!operations||typeof operations!=='object'||Array.isArray(operations)||Object.values(operations).some(group=>
-    !Array.isArray(group)||group.some(operation=>!operation||typeof operation!=='object'||
-      !['Success','Failure','Cancelled'].includes(String((operation as {status?:unknown}).status)))))throw Error('HARDENING_BUSY')
+  if(!incusOperationsIdle(operations))throw Error('HARDENING_BUSY')
 }
 
 async function assertBootDefense(tx:Prisma.TransactionClient,hostId:number,intent:HostMaintenanceIntent,report:HostSecurityRuntime) {

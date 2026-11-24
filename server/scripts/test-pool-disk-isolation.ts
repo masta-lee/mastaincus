@@ -13,7 +13,7 @@ for(const value of [0,-1,1.5,NaN,10001])assert.throws(()=>isolatedPoolCreate(val
 assert.equal(isolatedSystemPoolWhere.driver,'lvm')
 
 const path='/1.0/storage-pools/payincus-pool'
-for(const scenario of ['new','legacy','existing','incomplete','occupied','malformed-guests','busy','custom-volume','profile-used','unregistered','other-device','delete-lost','create-lost','held']){
+for(const scenario of ['new','legacy','existing','incomplete','occupied','malformed-guests','busy','project-busy','custom-volume','profile-used','unregistered','other-device','delete-lost','create-lost','held']){
  let pool:any=scenario==='new'?null:scenario==='existing'?{driver:'lvm',status:'Created',config:{'volume.block.filesystem':'btrfs'}}:
   {driver:'btrfs',status:'Created',config:{source:scenario==='other-device'?'/dev/sda':'/var/lib/incus/disks/payincus-pool.img'},used_by:scenario==='profile-used'?['/1.0/profiles/custom']:[]}
  if(scenario==='incomplete')pool={...isolatedPoolCreate(34),status:'Errored',used_by:[]}
@@ -21,7 +21,9 @@ for(const scenario of ['new','legacy','existing','incomplete','occupied','malfor
  const client:any={request:async(method:string,url:string,body:any)=>{
   if(method==='GET'&&url===path){if(!pool)throw new IncusApiError('missing',404,path);return structuredClone(pool)}
   if(url.startsWith('/1.0/instances?'))return scenario==='occupied'?[{name:'customer'}]:scenario==='malformed-guests'?null:[]
-  if(url.startsWith('/1.0/operations?'))return scenario==='busy'?{running:[{status:'Running'}]}:{}
+  if(url.startsWith('/1.0/operations?'))return scenario==='busy'?{running:[{status:'Running'}]}:
+   scenario==='project-busy'&&new URL(url,'https://incus.invalid').searchParams.get('all-projects')==='true'?
+    {pending:[{status:'Pending',resources:{images:['/1.0/images/foreign?project=other']}}]}:{}
   if(url.startsWith(path+'/volumes?'))return scenario==='custom-volume'?[{type:'custom'}]:[{type:'image'}]
   writes.push(method)
   if(method==='DELETE'){pool=null;if(scenario==='delete-lost'&&!failed){failed=true;throw Error('connection lost')}return}
@@ -43,14 +45,16 @@ assert.ok(worker.includes('HOST_OCCUPIED_INSTANCE_WHERE')&&worker.includes('chec
 assert.ok(!/request\('DELETE',.*instances/.test(worker),'pool preparation never deletes a customer instance')
 console.log('PASS independent disk layout: new/legacy/idempotency, lost responses, live guests, custom volumes and held operation guards')
 
-for (const scenario of ['ready', 'busy', 'other-pool', 'legacy', 'changed', 'malformed', 'held', 'many']) {
+for (const scenario of ['ready', 'busy', 'project-busy', 'other-pool', 'legacy', 'changed', 'malformed', 'held', 'many']) {
   const fingerprint = 'a'.repeat(64), deletes: string[] = []
   const config = { ...isolatedPoolCreate(34).config, source: '/var/lib/incus/disks/payincus-pool.img' }
   let reads = 0
   const client: any = { request: async (method: string, url: string) => {
     if (url === path) return { driver: scenario === 'legacy' ? 'btrfs' : 'lvm', status: 'Created',
       config: scenario === 'changed' && reads++ ? { ...config, source: '/dev/other' } : config }
-    if (url.includes('/operations?')) return scenario === 'busy' ? { running: [{ status: 'Running' }] } : {}
+    if (url.includes('/operations?')) return scenario === 'busy' ? { running: [{ status: 'Running' }] } :
+      scenario === 'project-busy' && new URL(url,'https://incus.invalid').searchParams.get('all-projects') === 'true' ?
+        { pending: [{ status: 'Pending', resources: { images: ['/1.0/images/foreign?project=other'] } }] } : {}
     if (url.includes('/volumes?')) return scenario === 'many' ? Array.from({length:8},(_,i)=>({name:String(i).repeat(64),type:'image'})) : [{ name: 'customer', type: 'container' }, { name: 'customer/saved', type: 'container' },
       { name: 'customer-data', type: 'custom' }, { name: scenario === 'malformed' ? 'unknown' : fingerprint, type: 'image' }]
     if (method === 'DELETE') { deletes.push(url); return {} }

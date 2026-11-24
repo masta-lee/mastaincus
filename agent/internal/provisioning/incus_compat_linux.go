@@ -568,7 +568,7 @@ func prepareIncusCompatibility(ctx context.Context, permit *CompatPermit) error 
 		}
 		return saveCompatJournal(compatJournal{Version: 1, OldHash: installedHash, NewHash: manifest.SHA256, PID: pid, ProcessStart: start, RequestID: permit.RequestID, HostIdentity: permit.HostIdentity, Phase: "verified", Guests: rows})
 	}
-	operations, e := run(ctx, "incus", "query", "--raw", "/1.0/operations?recursion=1")
+	operations, e := run(ctx, "incus", "query", "--raw", "/1.0/operations?recursion=1&all-projects=true")
 	if e != nil {
 		return e
 	}

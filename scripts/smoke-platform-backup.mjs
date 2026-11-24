@@ -78,7 +78,31 @@ AliyunOssClient.prototype.upload = async function (settings, source, metadata, v
 }
 AliyunOssClient.prototype.index = async prefix => { assert.ok(records.has(prefix)); return records.get(prefix) }
 AliyunOssClient.prototype.download = async (record, destination) => { await copyFile(record.path, destination) }
+// One bounded observation of the original worker in these empty CI fixtures.
+// The installed worker has its own production limit and service budgets.
+const recoveryObservationTimeout=15*60*1000
+async function recoveryTaskDiagnostics(kind,id,startedAt,error=null) {
+  const statuses=['pending','running','success','failed','warning']
+  const stages=['accepted','preflight','verifying','checking_database','checking_compatibility','stopping','restoring_database',
+    'protected_start','awaiting_review','rolled_back','waiting_agent_heartbeats','resumed','complete']
+  const journalStages=['prepared','switching','database_switched','files_switched','protected_start','awaiting_review',
+    'rolling_back','rollback_prepared','rolled_back_review']
+  let result=null,hold=null,journal=null,readError=false
+  try {
+    result=await core.readJson(core.statePath('results',`${id}.json`))
+    hold=await core.readJson(join(core.backupRoot(),'recovery-hold.json'))
+    if(hold?.taskId)journal=await core.readJson(join(core.statePath('private',core.validateId(hold.taskId)),'journal.json'))
+  } catch { readError=true }
+  console.error('Backup drill recovery state',JSON.stringify({kind,held:hold?true:readError?'unknown':false,readError,
+    status:statuses.includes(result?.status)?result.status:'unknown',
+    stage:stages.includes(result?.stage)?result.stage:'unknown',
+    journalStage:journalStages.includes(journal?.stage)?journal.stage:'unknown',
+    code:/^OSS_[A-Z0-9_]{1,96}$/.test(result?.error||'')?result.error:null,
+    elapsedMs:Math.max(0,Date.now()-startedAt),exitCode:Number.isInteger(error?.code)?error.code:null,
+    signal:['SIGTERM','SIGKILL'].includes(error?.signal)?error.signal:null}))
+}
 async function task(kind, extras = {}) {
+  const startedAt=Date.now()
   config = await core.readBackupConfig()
   const id = randomUUID()
   const held=core.recoveryHeld()
@@ -91,19 +115,19 @@ async function task(kind, extras = {}) {
     // Startup recovery must recognize the live owner, not mistake this smoke
     // process for an interrupted restore and roll its activation back.
     await core.writeJson(core.statePath('inbox', `${id}.json`), request)
-    await exec('/usr/local/libexec/incudal/incudal-online-task', ['platform-backup', id], { timeout: 180000 })
+    try {
+      await exec('/usr/local/libexec/incudal/incudal-online-task', ['platform-backup', id], { timeout: recoveryObservationTimeout })
+    } catch(error) {
+      await recoveryTaskDiagnostics(kind,id,startedAt,error)
+      throw Error('BACKUP_DRILL_WORKER_FAILED')
+    }
     Object.assign(process.env, require('dotenv').parse(await readFile('/opt/incudal/.env')))
   } else {
     await runPlatformBackupTask(request)
   }
   const result = await core.readJson(core.statePath('results', `${id}.json`))
-  if (result?.status !== 'success') {
-    const hold = await core.readJson(join(core.backupRoot(), 'recovery-hold.json'))
-    const journal = hold?.taskId && await core.readJson(core.statePath('private', `${core.validateId(hold.taskId)}/journal.json`))
-    const stage = ['prepared', 'switching', 'database_switched', 'files_switched', 'awaiting_review', 'rolled_back_review'].includes(journal?.stage) ? journal.stage : 'unknown'
-    console.error('Backup drill recovery state', JSON.stringify({ kind, held: Boolean(hold), journalStage: stage }))
-  }
-  assert.equal(result?.status, 'success', `${kind}: ${result?.stage} ${result?.error || ''}`)
+  if (result?.status !== 'success')await recoveryTaskDiagnostics(kind,id,startedAt)
+  assert.equal(result?.status, 'success', `${kind}: BACKUP_DRILL_RESULT_FAILED`)
   console.log(`Platform backup drill: ${kind} passed`)
   return result
 }
@@ -271,7 +295,7 @@ try {
   const automaticPreview = await task('preview', { sourcePrefix: backup.objectPrefix, password: core.sealSecret(password) })
   const automaticRestore = await task('restore', { previewId: automaticPreview.id,
     confirmation: `RESTORE ${automaticPreview.id}`, restorePolicy: 'snapshot-v1' })
-  const until = Date.now() + 120000
+  const until = Date.now() + recoveryObservationTimeout
   let complete = false
   while (Date.now() < until) {
     const [batch] = await pgQuery('SELECT completed_at FROM platform_recovery_batches WHERE id=$1', [automaticRestore.id])

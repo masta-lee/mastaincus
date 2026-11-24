@@ -1,4 +1,5 @@
 import { ensure } from './platform-backup-core.js'
+import { incusOperationsIdle } from '../lib/incus/incus-operations.js'
 import { ProxyStrategyFactory } from '../lib/proxy/index.js'
 import { allowanceToCores } from '../lib/cpu-allowance.js'
 
@@ -75,11 +76,11 @@ export async function verifyRecoveryResources(client: { request<T>(method: strin
 }>, live: LiveRecoveryGuest[], host: { natBindIp: string | null; natPublicIp: string | null; natBindIpv6: string | null; natPublicIpv6: string | null }) {
   const [projects, operations, pools, networks] = await Promise.all([
     client.request<Array<{ name: string }>>('GET','/1.0/projects?recursion=1'),
-    client.request<Record<string, unknown[]>>('GET','/1.0/operations?recursion=1'),
+    client.request<Record<string, unknown[]>>('GET','/1.0/operations?recursion=1&all-projects=true'),
     client.request<Array<{ name: string }>>('GET','/1.0/storage-pools?recursion=1'),
     client.request<Array<{ name: string; managed: boolean; type: string }>>('GET','/1.0/networks?recursion=1')
   ])
-  ensure(projects.every(project => project.name === 'default') && !['running','pending','cancelling'].some(key => operations[key]?.length), 'OSS_REVIEW_RESOURCE_BUSY', 409)
+  ensure(projects.every(project => project.name === 'default') && incusOperationsIdle(operations), 'OSS_REVIEW_RESOURCE_BUSY', 409)
   for (const pool of pools) {
     const volumes = await client.request<Array<{ name: string; type: string; project?: string }>>('GET',`/1.0/storage-pools/${encodeURIComponent(pool.name)}/volumes?recursion=1&all-projects=true`)
     ensure(volumes.every(volume => (volume.project || 'default') === 'default' && (volume.type === 'image' ||

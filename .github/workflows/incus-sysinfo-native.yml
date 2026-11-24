@@ -75,9 +75,19 @@ jobs:
           arch=x86_64; digest=cdaa38cb8de3537967ee5b6c9b6cd00cc962da2b018e6eea48696bb274923012
           if [[ '${{ matrix.architecture }}' == arm64 ]]; then arch=aarch64; digest=4b14c18f7e90a063b61462ea1462a5732c154bf6adad594974fe6487cd98a8de; fi
           root=$(mktemp -d)
-          curl -fsSLo alpine.tar.gz "https://dl-cdn.alpinelinux.org/alpine/v3.24/releases/$arch/alpine-minirootfs-3.24.4-$arch.tar.gz"
-          printf '%s  alpine.tar.gz\n' "$digest" | sha256sum -c -
-          sudo tar -xzf alpine.tar.gz -C "$root"
+          if [[ '${{ matrix.scenario }}' == empty-pool ]]; then
+            # Preserve the authenticated old runtime until the interruption
+            # test runs. A fresh minirootfs already carries the fixed musl.
+            cloud_arch=amd64; cloud_digest=46cfc12d85bc6dd3a2df384f9b1d39ba89528e3d31cbc812265eca23bf2f0a55
+            if [[ '${{ matrix.architecture }}' == arm64 ]]; then cloud_arch=arm64; cloud_digest=0b44571fdbfd9a2179371e06c16dea89e5d57d0407e772685f323f27524d1a78; fi
+            curl --fail --silent --show-error --location --proto '=https' --proto-redir '=https' --retry 2 -o alpine-old-root.tar.xz "https://images.linuxcontainers.org/images/alpine/3.24/$cloud_arch/cloud/20261117_13:00/rootfs.tar.xz"
+            printf '%s  alpine-old-root.tar.xz\n' "$cloud_digest" | sha256sum -c -
+            sudo tar -xJf alpine-old-root.tar.xz -C "$root"
+          else
+            curl -fsSLo alpine.tar.gz "https://dl-cdn.alpinelinux.org/alpine/v3.24/releases/$arch/alpine-minirootfs-3.24.4-$arch.tar.gz"
+            printf '%s  alpine.tar.gz\n' "$digest" | sha256sum -c -
+            sudo tar -xzf alpine.tar.gz -C "$root"
+          fi
           sudo cp /etc/resolv.conf "$root/etc/resolv.conf"
           sudo mkdir -p "$root/out"
           sudo cp output/incusd "$root/out/incusd"

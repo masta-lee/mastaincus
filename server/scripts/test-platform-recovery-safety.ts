@@ -377,14 +377,25 @@ for (const type of ['container','virtual-machine'] as const) for (const networkM
   const proxy=ProxyStrategyFactory.getStrategy(type).createProxyDevice(host.natBindIp,host.natBindIpv6,networkMode,'tcp',2200,22)
   const devices:Record<string,Record<string,string>>={root:{type:'disk',path:'/',pool:'customer'}}
   for(const entry of proxy.deviceConfigs || [{deviceConfig:proxy.deviceConfig!}]) devices['proxy-tcp-2200'+(entry.nameSuffix||'')]={...entry.deviceConfig}
-  let volumes=[{name:'original',type}], forwards:unknown[]=[]
+  let volumes=[{name:'original',type}], forwards:unknown[]=[],foreignOperation=false,invalidOperations:unknown=undefined
   const client={request:async<T>(_method:string,path:string):Promise<T>=>{
-    const reply=path.startsWith('/1.0/projects')?[{name:'default'}]:path.startsWith('/1.0/operations')?{}:
+    const reply=path.startsWith('/1.0/projects')?[{name:'default'}]:path.startsWith('/1.0/operations')?
+      invalidOperations!==undefined?invalidOperations:
+      foreignOperation&&new URL(path,'https://incus.invalid').searchParams.get('all-projects')==='true'?
+        {pending:[{status:'Pending',resources:{images:['/1.0/images/foreign?project=other']}}]}:{}:
       path.includes('/volumes?')?volumes:path.startsWith('/1.0/storage-pools?')?[{name:'customer'}]:path.includes('/forwards?')?forwards:[{name:'incusbr0',managed:true,type:'bridge'}]
     return reply as T
   }}
   const actual={...live,type,expanded_devices:devices}
   await verifyRecoveryResources(client,[expected],[actual],host)
+  foreignOperation=true
+  await assert.rejects(verifyRecoveryResources(client,[expected],[actual],host),/RESOURCE_BUSY/,'restore must wait for an operation in another project')
+  foreignOperation=false
+  for(const malformed of [[],null,{running:null},{running:['opaque']},{success:[{status:['Success']}]},{future:[{}]}]){
+    invalidOperations=malformed
+    await assert.rejects(verifyRecoveryResources(client,[expected],[actual],host),/RESOURCE_BUSY/,'unknown operations payload must keep recovery protected')
+  }
+  invalidOperations=undefined
   for(const key of ['listen','connect','nat']) {
     const changed=structuredClone(actual);changed.expanded_devices['proxy-tcp-2200'][key]='changed'
     await assert.rejects(verifyRecoveryResources(client,[expected],[changed],host),/FORWARD_MISMATCH/)

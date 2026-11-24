@@ -23,7 +23,8 @@ const policy=await prisma.systemConfig.findUnique({where:{key:SECURITY_HARDENING
 const admin=await prisma.user.create({data:{username:prefix,passwordHash:'fixture',role:'admin'}})
 const batch=await prisma.hostOnboardingBatch.create({data:{id:randomUUID(),name:prefix,accountLabel:prefix,createdById:admin.id,defaults:{}}})
 const hosts:number[]=[]
-let held=false,losePrepare=false,loseReboot=false,loseRollback=false,loseRestore=false,failBeforeDispatch=false,mutateInventory=false,reportApparmor=true,dependencyInstall=false
+let held=false,losePrepare=false,loseReboot=false,loseRollback=false,loseRestore=false,failBeforeDispatch=false,mutateInventory=false,reportApparmor=true,dependencyInstall=false,foreignOperation=false
+let invalidOperations:unknown=undefined
 let commands:string[]=[],reboots=0,currentBoot=randomUUID(),remotePhase='prepared'
 const originalBoot=currentBoot,prepareHash='d'.repeat(64)
 const preflight=(architecture:string)=>({architecture,bootId:currentBoot,pageSize:architecture==='aarch64'?65536:4096,
@@ -78,7 +79,9 @@ const deps={...hostMaintenanceDependencies,held:()=>held,accepted:(name:string,a
       bootId:currentBoot,architecture:wire.architecture,recipe,phase:remotePhase} as any
   },connect:async()=>({request:async(method:string,path:string)=>{
     assert.equal(method,'GET','empty-host maintenance makes no customer Incus mutation')
-    if(path.startsWith('/1.0/operations'))return {}
+    if(path.startsWith('/1.0/operations'))return invalidOperations!==undefined?invalidOperations:
+      foreignOperation&&new URL(path,'https://incus.invalid').searchParams.get('all-projects')==='true'?
+      {pending:[{status:'Pending',resources:{images:['/1.0/images/foreign?project=other']}}]}:{}
     assert.match(path,/instances/)
     return mutateInventory?[{name:'unknown-customer'}]:[]
   }} as any),inspect:async(target:any,_guests:any,allowUpdate:boolean,allowed:()=>Promise<void>)=>{
@@ -103,6 +106,19 @@ try {
   assert.equal((await state(arm.id)).maintenance,undefined,'active API work blocks maintenance registration')
   assert.equal((await state(arm.id)).diagnostic.reason,'HARDENING_BUSY','pre-intent failure is durable and visible')
   release();release()
+  foreignOperation=true
+  await prepareAutomaticHostMaintenance(arm.id,deps)
+  assert.equal((await state(arm.id)).maintenance.error,'HARDENING_BUSY','an operation in another project prohibits remote preparation and persists its wait reason')
+  assert.equal(commands.length,0);assert.equal(reboots,0)
+  foreignOperation=false;await reset(arm.id,'aarch64')
+  for(const malformed of [[],null,{running:null},{success:[{status:['Success']}]},{future:[{}]}]){
+    invalidOperations=malformed
+    await prepareAutomaticHostMaintenance(arm.id,deps)
+    assert.equal((await state(arm.id)).maintenance.error,'HARDENING_BUSY','malformed responses cannot authorize remote maintenance')
+    assert.equal(commands.length,0);assert.equal(reboots,0)
+    await reset(arm.id,'aarch64')
+  }
+  invalidOperations=undefined
   await withHostMaintenanceLane(arm.id,async()=>{
     assert.throws(()=>beginHostMutation(arm.id),/安全维护/)
     await assert.rejects(withHostMaintenanceLane(arm.id,async()=>{}),/HARDENING_BUSY/)

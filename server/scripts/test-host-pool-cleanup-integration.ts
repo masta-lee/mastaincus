@@ -35,7 +35,7 @@ const connect = async (host: { id: number }) => {
   if (path.startsWith('/1.0/instances?')) return structuredClone(remote)
   if (path === '/1.0/projects?recursion=1') return [{ name: 'default' }]
   if (path === '/1.0/networks?recursion=1') return [{ name: 'incusbr0', type: 'bridge', managed: true }]
-  if (path === '/1.0/operations?recursion=1') return { running: mode === 'busy' ? [{ id: 'busy' }] : [] }
+  if (path === '/1.0/operations?recursion=1' || path === '/1.0/operations?recursion=1&all-projects=true') return { running: mode === 'busy' ? [{ id: 'busy' }] : [] }
   if (path === '/1.0/storage-pools?recursion=1') return [{ name: 'default', status: mode === 'storage-pending' ? 'Pending' : 'Created' }]
   if (path.includes('/volumes?')) return structuredClone(volumes)
   if (path.includes('/forwards?')) return structuredClone(forwards)

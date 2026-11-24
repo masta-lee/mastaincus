@@ -4,13 +4,17 @@ package provisioning
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
+	"net/http"
+	"net/http/httptest"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"strconv"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 )
@@ -169,6 +173,9 @@ func TestNativeLxcfsEmptyHostSecurityActivation(t *testing.T) {
 		t.Fatal(err)
 	}
 	t.Log("fixture original LXCFS active")
+	t.Run("pending-other-project-operation-before-instance", func(t *testing.T) {
+		verifyNativeEmptyHostAllProjectOperations(t, ctx, p)
+	})
 	path := "/usr/bin/lxcfs"
 	data, err := os.ReadFile(path)
 	if err != nil {
@@ -187,11 +194,102 @@ func TestNativeLxcfsEmptyHostSecurityActivation(t *testing.T) {
 		t.Fatal("activate original empty-host FUSE service after executable replacement", err)
 	}
 	t.Log("fixture replaced original LXCFS activated within product deadline")
+	receiptData, err := os.ReadFile(securityRuntimeReceiptPath)
+	if err != nil {
+		t.Fatal("runtime installation receipt unavailable", err)
+	}
+	receipt, err := readSecurityRuntimeReceipt(securityRuntimeReceiptPath)
+	if err != nil || receipt == nil || receipt.Phase != "installed" {
+		t.Fatal("signed runtime installation not durably confirmed", err)
+	}
+	loader, err := hashSecurityMuslLoader(ctx)
+	if err != nil || loader != receipt.LoaderExpected {
+		t.Fatal("actual loader differs from signature-verified candidate", err)
+	}
 	activate, done = context.WithTimeout(ctx, 60*time.Second)
 	err = repairLxcfsSecurity(activate, p)
 	done()
 	if err != nil {
 		t.Fatal("idempotent activation", err)
 	}
-	t.Log("PASS Alpine LXCFS: exact empty-host authority, signed package transaction, replaced original executable activation and idempotency")
+	again, err := os.ReadFile(securityRuntimeReceiptPath)
+	if err != nil || string(again) != string(receiptData) {
+		t.Fatal("same-boot identical installation repeated its package transaction", err)
+	}
+	t.Log("PASS Alpine LXCFS/musl: exact empty-host authority, signed candidate loader, private installation receipt, original service activation and unchanged repeated receipt")
+}
+
+func verifyNativeEmptyHostAllProjectOperations(t *testing.T, ctx context.Context, permit *CompatPermit) {
+	t.Helper()
+	project := fmt.Sprintf("incudal-security-operation-%d", os.Getpid())
+	if _, err := run(ctx, "incus", "project", "create", project, "-c", "features.profiles=false"); err != nil {
+		t.Fatal("disposable nondefault project could not be created", err)
+	}
+	entered, release := make(chan struct{}), make(chan struct{})
+	var enteredOnce, releaseOnce sync.Once
+	finish := func() { releaseOnce.Do(func() { close(release) }) }
+	fixture := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		enteredOnce.Do(func() { close(entered) })
+		<-release
+		w.WriteHeader(http.StatusBadGateway)
+	}))
+	defer func() {
+		finish()
+		cleanup, cancel := context.WithTimeout(context.Background(), 20*time.Second)
+		defer cancel()
+		for {
+			operations, err := run(cleanup, "incus", "query", "--raw", "/1.0/operations?recursion=1&all-projects=true")
+			if err == nil && compatOperationsIdle(operations) {
+				break
+			}
+			select {
+			case <-cleanup.Done():
+				t.Error("disposable other-project image operation did not finish")
+				fixture.Close()
+				return
+			case <-time.After(100 * time.Millisecond):
+			}
+		}
+		if _, err := run(cleanup, "incus", "project", "delete", project); err != nil {
+			t.Error("disposable other-project operation cleanup failed", err)
+		}
+		fixture.Close()
+	}()
+	data, _ := json.Marshal(map[string]any{"public": false, "source": map[string]string{"type": "url", "mode": "pull", "url": fixture.URL + "/deliberately-pending-image"}})
+	if _, err := run(ctx, "incus", "query", "--raw", "-X", "POST", "--data", string(data), "/1.0/images?project="+project); err != nil {
+		t.Fatal("actual nondefault image download operation was not created", err)
+	}
+	select {
+	case <-entered:
+	case <-ctx.Done():
+		t.Fatal("actual nondefault operation did not reach its bounded pending source")
+	case <-time.After(10 * time.Second):
+		t.Fatal("actual nondefault operation did not reach its pending source")
+	}
+	if err := verifyEmptySecurityHost(ctx, permit); err != nil {
+		t.Fatal("image operation unexpectedly created an instance", err)
+	}
+	defaultOnly, err := run(ctx, "incus", "query", "--raw", "/1.0/operations?recursion=1")
+	if err != nil || !compatOperationsIdle(defaultOnly) {
+		t.Fatal("default-project fixture does not reproduce the missing-operation boundary", err)
+	}
+	allProjects, err := run(ctx, "incus", "query", "--raw", "/1.0/operations?recursion=1&all-projects=true")
+	if err != nil || compatOperationsIdle(allProjects) {
+		t.Fatal("actual pending other-project operation was not visible in all-projects", err)
+	}
+	before, err := os.ReadFile("/run/lxcfs.pid")
+	if err != nil {
+		t.Fatal("original FUSE process receipt unavailable", err)
+	}
+	if err := authorizeEmptySecurityHost(ctx, permit); err == nil {
+		t.Fatal("all-projects image operation granted runtime maintenance authority")
+	}
+	if err := repairLxcfsSecurity(ctx, permit); err == nil {
+		t.Fatal("runtime maintenance continued before an other-project operation finished")
+	}
+	after, err := os.ReadFile("/run/lxcfs.pid")
+	if err != nil || string(after) != string(before) {
+		t.Fatal("pending other-project operation interrupted the original FUSE service", err)
+	}
+	t.Log("PASS actual Incus nondefault operation: all-projects empty instance list, default task list idle, other project pending, runtime maintenance refused and original FUSE process retained")
 }

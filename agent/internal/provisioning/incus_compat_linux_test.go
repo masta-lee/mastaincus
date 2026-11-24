@@ -354,7 +354,7 @@ func TestNativeCompatibilityAutomaticReload(t *testing.T) {
 		select {
 		case <-ctx.Done():
 			diagnosticCtx, stop := context.WithTimeout(context.Background(), 5*time.Second)
-			operations, _ := run(diagnosticCtx, "incus", "query", "/1.0/operations?recursion=1")
+			operations, _ := run(diagnosticCtx, "incus", "query", "/1.0/operations?recursion=1&all-projects=true")
 			stop()
 			t.Log("disposable operations", string(operations))
 			t.Fatal("automatic reload did not become idle", ctx.Err())
@@ -393,7 +393,7 @@ func TestNativeCompatibilityEmptyPoolReload(t *testing.T) {
 		t.Fatal("pool not empty", err)
 	}
 	for {
-		raw, queryErr := run(ctx, "incus", "query", "--raw", "/1.0/operations?recursion=1")
+		raw, queryErr := run(ctx, "incus", "query", "--raw", "/1.0/operations?recursion=1&all-projects=true")
 		if queryErr != nil {
 			t.Fatal(queryErr)
 		}
@@ -407,7 +407,7 @@ func TestNativeCompatibilityEmptyPoolReload(t *testing.T) {
 			if !compatOperationsIdle(raw) {
 				t.Fatal("real empty envelope rejected")
 			}
-			plain, queryErr := run(ctx, "incus", "query", "/1.0/operations?recursion=1")
+			plain, queryErr := run(ctx, "incus", "query", "/1.0/operations?recursion=1&all-projects=true")
 			if queryErr != nil || len(strings.TrimSpace(string(plain))) != 0 {
 				t.Fatal("real suppressed empty query response", queryErr)
 			}

@@ -59,6 +59,49 @@ for (const scenario of ['verified', 'invalid', 'missing', 'timeout']) {
 }
 console.log('PASS backup controller verification: low-resource budget, original sealed helper and bounded trust failures')
 
+// Exercise the real CI launcher boundary. A four-minute valid restore must
+// retain the same worker; errors expose only its fixed recovery classifications.
+{
+  const smoke=await readFile(new URL('../../scripts/smoke-platform-backup.mjs',import.meta.url),'utf8')
+  const start=smoke.indexOf('const recoveryObservationTimeout='),end=smoke.indexOf('async function health(',start)
+  assert.ok(start>=0&&end>start,'the original worker observation boundary must exist')
+  const code=smoke.slice(start,end).replace("await (await import('/opt/incudal/server/dist/lib/authentication-integrity.js')).verifyRecoveryAuthenticationActor",
+    'await verifyRecoveryAuthenticationActor')
+  for(const scenario of ['completed','terminated','terminated-unreadable','failed-result']){
+    let calls=0,request:any
+    const messages:string[]=[],secret='PRIVATE_RECOVERY_TRACE_MUST_NOT_LEAVE_VM'
+    const task=load<(kind:string)=>Promise<unknown>>('let config={};'+code+'\nreturn task',{
+      assert,randomUUID,join,Date,process:{env:{}},
+      require:()=>({parse:()=>({})}),readFile:async()=>'',verifyRecoveryAuthenticationActor:async()=>{},
+      runPlatformBackupTask:async()=>{throw Error('launcher must use the original root worker')},
+      pgQuery:async()=>[{id:1}],
+      console:{log:()=>{},error:(...args:unknown[])=>messages.push(args.join(' '))},
+      core:{readBackupConfig:async()=>({}),recoveryHeld:()=>false,backupRoot:()=>'/fixture',
+        statePath:(...args:string[])=>join('/fixture',...args),validateId:(id:string)=>id,
+        writeJson:async(_path:string,value:unknown)=>{request=value},
+        readJson:async(path:string)=>{if(scenario==='terminated-unreadable')throw Error(secret);return path.endsWith('recovery-hold.json')?{taskId:request.id}:
+          path.endsWith('journal.json')?{stage:'protected_start',privateTrace:secret}:
+          {status:scenario==='completed'?'success':scenario==='terminated'?'running':'failed',stage:'protected_start',error:'OSS_PROTECTED_START_FAILED',privateTrace:secret}},
+      },
+      exec:async(program:string,args:string[],options:{timeout:number})=>{
+        calls++;assert.equal(program,'/usr/local/libexec/incudal/incudal-online-task')
+        assert.deepEqual(args,['platform-backup',request.id])
+        assert.ok(options.timeout>=4*60*1000&&options.timeout<=15*60*1000,'valid restore duration and a bounded CI observation are both preserved')
+        if(scenario.startsWith('terminated'))throw Object.assign(Error(secret),{stderr:secret,stdout:secret,signal:'SIGTERM',killed:true})
+        return {stdout:''}
+      }
+    })
+    if(scenario==='completed')await task('restore')
+    else await assert.rejects(task('restore'),error=>!String(error).includes(secret)&&/BACKUP_DRILL_(WORKER|RESULT)_FAILED/.test(String(error)))
+    assert.equal(calls,1,'the observer never retries the original task')
+    assert.ok(messages.every(message=>!message.includes(secret)),'private OS and journal text remain inside the isolated machine')
+    if(scenario==='terminated-unreadable')assert.ok(messages.some(message=>message.includes('"held":"unknown"')&&message.includes('"readError":true')))
+    else if(scenario!=='completed')assert.ok(messages.some(message=>message.includes('protected_start')&&message.includes('OSS_PROTECTED_START_FAILED')))
+  }
+  assert.ok(smoke.includes('const until = Date.now() + recoveryObservationTimeout'),'automatic root continuation uses the same bounded observation')
+}
+console.log('PASS original restore observer: slow completion, one worker, fixed timeout/result diagnostics and no private trace output')
+
 // Root proof of an empty-target rollback must survive a lost DB/write/unlink
 // response. It never clears another hold or accepts a missing rollback batch.
 for(const point of ['database','receipt','unlink','missing-batch','occupied','wrong-hold','none']) {

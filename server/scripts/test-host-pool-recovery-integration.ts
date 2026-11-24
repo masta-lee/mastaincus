@@ -55,6 +55,8 @@ try {
   let forwards = [{ listen_address: '10.0.0.1', description: `payincus-dedicated:${oldName}`, config: { target_address: '10.10.1.4' }, ports: [] }]
   let extraVolume = false
   let busy = false
+  let foreignOperation = false
+  let invalidOperations:unknown=undefined
   let failForward = false
   const deletions: string[] = []
   const fakeClient = {
@@ -65,6 +67,8 @@ try {
         if (path === '/1.0/projects?recursion=1') return [{ name: 'default' }]
         if (path === '/1.0/networks?recursion=1') return [{ name: 'incusbr0', type: 'bridge', managed: true }]
         if (path === '/1.0/operations?recursion=1') return { running: busy ? [{ id: 'busy' }] : [] }
+        if (path === '/1.0/operations?recursion=1&all-projects=true') return invalidOperations!==undefined?invalidOperations:{ running: busy ? [{ id: 'busy' }] : [],
+          pending: foreignOperation ? [{ id: 'foreign', status: 'Pending', resources: { images: ['/1.0/images/foreign?project=other'] } }] : [] }
         if (path === '/1.0/storage-pools?recursion=1') return [{ name: 'default', status: 'Created' }]
         if (path.includes('/volumes?')) return [...remote.map(row => ({ name: row.name, type: 'container' })), ...(extraVolume ? [{ name: 'important-data', type: 'custom' }] : [])]
         if (path === '/1.0/networks/incusbr0/forwards?recursion=1') return structuredClone(forwards)
@@ -107,6 +111,8 @@ try {
     [() => { remote[0].created_at = '2099-01-01T00:00:00Z' }, () => { remote[0].created_at = oldCreated }, 'unknown-instance'],
     [() => { extraVolume = true }, () => { extraVolume = false }, 'volumes'],
     [() => { busy = true }, () => { busy = false }, 'busy'],
+    [() => { foreignOperation = true }, () => { foreignOperation = false }, 'busy'],
+    ...[[],null,{pending:null},{future:[{}]}].map(value=>[()=>{invalidOperations=value},()=>{invalidOperations=undefined},'busy'] as const),
     [() => { forwards[0].description = 'manual-forward' }, () => { forwards[0].description = `payincus-dedicated:${oldName}` }, 'unknown-forward']
   ] as const) {
     change()

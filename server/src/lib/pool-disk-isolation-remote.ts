@@ -1,4 +1,5 @@
 import { IncusApiError, type IncusClient } from './incus/incus-client.js'
+import { incusOperationsIdle } from './incus/incus-operations.js'
 import { isolatedPoolConfiguration, isolatedPoolCreate, POOL_DISK_NAME } from './pool-disk-isolation.js'
 
 type Pool = { driver: string; config: Record<string,string>; status?: string; used_by?: string[] }
@@ -18,9 +19,8 @@ export async function ensureIsolatedPool(client: Pick<IncusClient,'request'>, si
   }
   const guests = await client.request<unknown>('GET', '/1.0/instances?recursion=1&all-projects=true', null, 5000)
   if (!Array.isArray(guests) || guests.length !== 0) throw Error('POOL_DISK_HAS_INSTANCES')
-  const operations = await client.request<Record<string, Array<{ status?: string }>>>('GET', '/1.0/operations?recursion=1', null, 5000)
-  if (!operations || typeof operations !== 'object' || Array.isArray(operations) ||
-    Object.values(operations).some(rows => !Array.isArray(rows) || rows.some(op => !op || !['Success','Failure','Cancelled'].includes(op.status || '')))) throw Error('POOL_DISK_OPERATIONS_PENDING')
+  const operations = await client.request<Record<string, Array<{ status?: string }>>>('GET', '/1.0/operations?recursion=1&all-projects=true', null, 5000)
+  if (!incusOperationsIdle(operations)) throw Error('POOL_DISK_OPERATIONS_PENDING')
   if (pool) {
     const expectedSource = pool.config?.source === `/var/lib/incus/disks/${POOL_DISK_NAME}.img`
     const oldManaged = registeredLegacy && pool.driver === 'btrfs' && expectedSource
@@ -52,10 +52,8 @@ export async function pruneIsolatedPoolImageVolumes(client: Pick<IncusClient, 'r
   if (!isolatedPoolConfiguration(original) || original.status !== 'Created' ||
     original.config['user.payincus.disk-isolation'] !== 'lvm-btrfs-v1') return false
   const idle = async () => {
-    const operations = await client.request<unknown>('GET', '/1.0/operations?recursion=1', null, 5000)
-    return !!operations && typeof operations === 'object' && !Array.isArray(operations) &&
-      Object.values(operations).every(rows => Array.isArray(rows) && rows.every(op =>
-        op && ['Success', 'Failure', 'Cancelled'].includes(op.status)))
+    const operations = await client.request<unknown>('GET', '/1.0/operations?recursion=1&all-projects=true', null, 5000)
+    return incusOperationsIdle(operations)
   }
   if (!await idle()) return false
   const volumes = await client.request<unknown>('GET', `${path}/volumes?recursion=1&all-projects=true`, null, 5000)

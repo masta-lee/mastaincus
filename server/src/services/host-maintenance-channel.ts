@@ -22,17 +22,25 @@ export function maintenanceWireOperation(operation:MaintenanceOperation,nodeId:s
     architecture:operation.architecture,expiresAt,customers:(operation.customers||[]).map(customer=>({
       name:customer.incusId,uuid:customer.uuid,attempt:customer.attempt,state:customer.state,autostart:customer.boot?.autostart??null}))}
 }
-export async function hostMaintenanceCommand(target:HostSecurityTarget,operation:MaintenanceOperation):Promise<MaintenanceReceipt> {
+export async function hostMaintenanceGatewayExchange(target:HostSecurityTarget,wire:Record<string,unknown>):Promise<unknown> {
   const node=target.onboardingNode
   if(!gatewayConfigured()||!node?.managementIp||!node.nodePublicKey||!node.sshFingerprint||target.managementSshHost!==node.managementIp||
-    target.managementSshPort!==node.sshPort||target.managementSshUser!=='root')throw Error('HARDENING_IDENTITY_MISSING')
+    target.managementSshPort!==node.sshPort||target.managementSshUser!=='root'||wire.nodeId!==node.id)throw Error('HARDENING_IDENTITY_MISSING')
+  const input=JSON.stringify({managementIp:node.managementIp,sshPort:node.sshPort,sshFingerprint:node.sshFingerprint,nodePublicKey:node.nodePublicKey,
+    operation:wire})
+  if(Buffer.byteLength(input,'utf8')>8192)throw Error('HARDENING_REMOTE_RESULT_UNKNOWN')
   const key=await readFile(process.env.ONBOARDING_GATEWAY_KEY_PATH!)
   const client=await connectOnboardingSsh({host:process.env.ONBOARDING_GATEWAY_HOST!,port:Number(process.env.ONBOARDING_GATEWAY_PORT||22),privateKey:key},
     async fingerprint=>fingerprint===process.env.ONBOARDING_GATEWAY_FINGERPRINT)
   try{
-    const input={managementIp:node.managementIp,sshPort:node.sshPort,sshFingerprint:node.sshFingerprint,nodePublicKey:node.nodePublicKey,
-      operation:maintenanceWireOperation(operation,node.id,maintenanceWireExpiry(operation))}
-    const receipt=JSON.parse(await sshExec(client,`security-maintenance ${node.id}`,JSON.stringify(input),60000,8192))
+    const reply=await sshExec(client,`security-maintenance ${node.id}`,input,60000,8192)
+    try{return JSON.parse(reply) as unknown}catch{throw Error('HARDENING_REMOTE_RESULT_UNKNOWN')}
+  }finally{client.destroy()}
+}
+export async function hostMaintenanceCommand(target:HostSecurityTarget,operation:MaintenanceOperation):Promise<MaintenanceReceipt> {
+    const node=target.onboardingNode
+    if(!node)throw Error('HARDENING_IDENTITY_MISSING')
+    const receipt=await hostMaintenanceGatewayExchange(target,maintenanceWireOperation(operation,node.id,maintenanceWireExpiry(operation))) as MaintenanceReceipt
     if(!receipt||Object.keys(receipt).sort().join(',')!=='architecture,bootId,identityHash,nodeId,originalBootId,phase,prepareHash,recipe,requestId'||
       receipt.nodeId!==node.id||receipt.requestId!==operation.requestId||receipt.identityHash!==operation.identityHash||
       receipt.originalBootId!==operation.bootId||receipt.architecture!==operation.architecture||receipt.recipe!==operation.recipe||
@@ -41,5 +49,4 @@ export async function hostMaintenanceCommand(target:HostSecurityTarget,operation
       receipt.phase==='absent'&&(operation.action!=='status'||operation.prepareHash!=='0'.repeat(64)||receipt.prepareHash!=='0'.repeat(64))||
       operation.action!=='prepare'&&!(operation.action==='status'&&operation.prepareHash==='0'.repeat(64))&&receipt.prepareHash!==operation.prepareHash)throw Error('HARDENING_REMOTE_RESULT_UNKNOWN')
     return receipt
-  }finally{client.destroy()}
 }
