@@ -1,5 +1,7 @@
 # 安全修复阶段收尾与未完成清单
 
+13:45新增验收阻碍：主控独立`incudal-system-security.timer`自然触发失败，root-only回执错误SYSTEM_SECURITY_UNTRUSTED_PATH；已读主控metadata确证原平台空锁文件root:incudal/0640/0byte/单link，而新维护器只收0600，未进入package写入或停止任何业务。源码新增仅该精确历史元数据持有fd原inode收紧0600（不换锁文件、不分裂flock），其它owner/mode/nonempty/symlink仍拒绝；rootlauncher新增umask077防新创建。Windows38测试（12Linuxskip）、真实Linux38/38与securityrepair通过，实际heldflock原inode/并发阻断/未知内容保持过，system-update守卫在途。**未直接改主控锁或程序**。此新修复意味着fe1候选预览虽11success/2在途仍不是最终源码，需新同source完整包验证后更新；.9Agent已签名暂存，面板仍9ae+.8，镜像矩阵已停在AMD2/24及ARM0/24（维护误判待新.9）。完整独立PG/mTLS重装106场景2607已自然exit0，含新维护拒绝原因/双架构身份/账务/恢复与原失败清理。原四客户持续连接保持，真实OSS/基础库内核等余项仍未完，不发行。
+
 13:23续接：两新测试#62/#63实际一次购买49元、Alpine开通/SSH/IPv6/resource与停启重启、Debian13双架构重装新密码全部通过；ARM真实Chrome点击重装Alpine3.24，**不刷新/不导航**当前页自动换新密码2569通过。全24+24真实矩阵开始，AMD已两镜像全操作，随后两架构均因间歇TASK_IN_PROGRESS拒绝停止，未绕门禁或重复购买。深读取证**纠正“Incus加载旧文件”判断**：当前pidfile/UnixSO_PEERCRED/实际exehash/元数据PID/loadedMaps全部正常，旧僵尸与老journal PID不是当前进程。真正触发是资源指令只包含Running，Stopped或busy会返回[]，Agent误当空机每轮请求独占maintenance，制造prepared和操作拒绝。
 
 已源码补请求空机维护之前真实all-projects只读实例清单，含Stopped/foreign/busy仍有实例就不申请空机fence，unknown/null/错误不当空；实际维护保原短签名许可和再次空机核验。独立Go守卫/双archcompile/vet、真实Linux2589、servertypes/build/security/hosttools/taskguards过；真实独立本机PG/mTLS2591双架构重装身份/原账务与维护正确拒绝通过。后台task admission现抛专用HostMaintenanceError/409 HOST_SECURITY_MAINTENANCE，保活任务冲突单独代码，不再误称实例有任务。Agentsecurity.9待保存/同source双原生/signed候选并原worker完整面板部署后复测。当前生产仍9ae+.8，原钱/身份/四客户观察保持；.8已208完整Python/ndbm r2并无APKretry，但完整已加载Python/sshd与原安全余项仍未完。faa340主CI45330514607目前25success/5在途，69主因文档push取消25success/5cancelled，不能写全绿/正式发版。

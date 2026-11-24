@@ -4,6 +4,8 @@
 
 ## 续接实施状态（2026-11-22，尚未完成）
 
+2026-11-24 13:45继续：新安全timer线上root-only失败确证旧平台锁root:incudal0640空文件与strict0600冲突，源码只持fd原inode收紧该已知metadata，拒未知内容/owner/link/mode且不换inode，原launcherumask077防新建。真实Linux38/38/WindowsLinuxskip与security守卫过，新最终source包待；没有主控手改锁/清失败。fe1原生14/14、signedAgent45333241331success、双包独立source/signature2601/2602和目标只读preflight2603过，完整预览45333293267已11success/2在途、新补修不能继承。完整独立PG/mTLS106重装identity场景2607exit0；实际全镜像两个进程因旧占用误判409停止，后新源码签名部署再从原进度继续，无重复支付。所有原安全未验项保持。
+
 2026-11-24 13:23：.8全208已装Python/ndbm对齐r2、安全包retry消失；两个测试实例实际创建一次49元及初轮操作/双Debian13重装/真实浏览器密码不刷新已通过。完整24+24矩阵又暴露Stopped/忙时资源指令=[]被Agent当空机申请maintenance，操作间歇409 TASK_IN_PROGRESS。已实际exe/Unixpeer/PID/hash/原生status证实Incus当前正确，前“旧binary”猜测纠正；源码新增真实all-projects empty读取后才请求exclusivefence，保Stopped/其它project/失败不空。后端维护专用409原因；Go/vet/dualcompile/真实Linux2589/types/build/guards及真实PG/mTLS2591 dualrebuild identity through scope过。最终新Agentsecurity.9/面板包/全池自动回归待，未部署源码片段/未正式发行，Python持续网关DNS和sshd旧库加载等后续自动激活仍待；原CI取消不计通过。
 
 2026-11-24 12:39修正：208APK已装数据库实际195Python3.14.10-r1/13旧3.14.8-r0，均无ndbm；前方案只支持已对齐r2，虽84cfdeb6 CI/native/signedAgent成功，覆盖不完整、未部署。后续源码仅接纳这两历史版本全Python/pyc整组→r2与单一ndbm拆包，拒混合原组/不同系列/部分对齐/其它新增，保两计划/安装后全inventory/world/原源；真实独立ARM原官方旧root2500自然5.62秒事务与模块导入/重复通过，TCG旧root超时与首ARM下载未跟随HTTPSredirect被hash拒绝保留（真实包本机固定SHA后转私有暂存）。最终Agent版本security.8待保存与同source双架构/签名/全池，不复用旧.7来源；实购/最终发行和原安全余项仍未完成。

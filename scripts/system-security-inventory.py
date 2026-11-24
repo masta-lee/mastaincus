@@ -4,6 +4,28 @@ import json,os,pathlib,subprocess,sys,time,tempfile,re,fcntl,signal,uuid,stat
 import hashlib
 import calendar
 
+def open_platform_operation_lock(create=True,path='/var/lib/incudal-platform-operation.lock'):
+    # Earlier root launchers created this empty lock as root:incudal 0640.
+    # Tighten only that exact historical metadata, through the held inode;
+    # replacing a lock file would split flock authority between two writers.
+    flags=os.O_RDWR|os.O_NOFOLLOW|os.O_NONBLOCK|(os.O_CREAT if create else 0)
+    fd=os.open(path,flags,0o600)
+    try:
+        info=os.fstat(fd)
+        if not stat.S_ISREG(info.st_mode)or info.st_uid!=0 or info.st_nlink!=1:raise ValueError('SYSTEM_SECURITY_UNTRUSTED_PATH')
+        mode=stat.S_IMODE(info.st_mode)
+        if mode==0o640:
+            import grp
+            if info.st_size!=0 or info.st_gid!=grp.getgrnam('incudal').gr_gid:raise ValueError('SYSTEM_SECURITY_UNTRUSTED_PATH')
+            current=os.lstat(path)
+            if (current.st_dev,current.st_ino)!=(info.st_dev,info.st_ino):raise ValueError('SYSTEM_SECURITY_UNTRUSTED_PATH')
+            os.fchmod(fd,0o600)
+            info=os.fstat(fd)
+        if info.st_mode&0o077:raise ValueError('SYSTEM_SECURITY_UNTRUSTED_PATH')
+        return fd
+    except BaseException:
+        os.close(fd);raise
+
 ALPINE=['openssl','libssl3','libcrypto3','curl','libcurl','openssh','openssh-server','openssh-client-default','dnsmasq','lxc','lxc-libs','lxcfs','lxcfs-openrc','lvm2','device-mapper','btrfs-progs','wireguard-tools','qemu-system-x86_64','qemu-system-aarch64','sqlite-libs','libseccomp','libcap2','acl-libs','libattr','libuv','lz4-libs','zstd-libs','xz-libs','libintl','libgcc','dbus-libs','eudev-libs','raft-cowsql','cowsql']
 DEBIAN=['openssl','libssl3','libssl3t64','curl','libcurl4','libcurl4t64','openssh-server','openssh-client','dnsmasq','lxc','liblxc1','liblxc-common','lxcfs','lvm2','libdevmapper1.02.1','libdevmapper-event1.02.1','btrfs-progs','wireguard-tools','nginx','nginx-common','nodejs','qemu-system-x86','qemu-system-arm','qemu-system-common','qemu-utils','systemd','systemd-dev','systemd-sysv','systemd-timesyncd','systemd-resolved','libsystemd0','libsystemd-shared','libpam-systemd','udev','libudev1','chrony','nftables','ca-certificates','libsqlite3-0','libseccomp2','libcap2','libacl1','libattr1','libuv1','libuv1t64','liblz4-1','libzstd1','liblzma5','libdbus-1-3','libgcc-s1']
 
@@ -458,7 +480,7 @@ def clean_service_policy(policy=POLICY,receipt=POLICY_RECEIPT):
 
 def recover_service_policy():
     if not POLICY_RECEIPT.exists() and not POLICY_RECEIPT.is_symlink():return
-    fd=os.open('/var/lib/incudal-platform-operation.lock',os.O_RDWR|os.O_NOFOLLOW)
+    fd=open_platform_operation_lock(False)
     try:
         info=os.fstat(fd)
         if info.st_uid!=0 or info.st_nlink!=1 or info.st_mode&0o077:raise ValueError('SYSTEM_SECURITY_UNTRUSTED_PATH')
@@ -496,7 +518,7 @@ def apply_patches(automatic=False):
         if re.search(r'trusted\s*=\s*yes|Trusted:\s*yes|Allow-Insecure:\s*yes',source.read_text(),re.I):raise ValueError('SYSTEM_SECURITY_REPOSITORY_UNTRUSTED')
     lock=pathlib.Path('/var/lib/incudal-system-security');lock.mkdir(mode=0o700,exist_ok=True)
     if lock.is_symlink() or lock.stat().st_uid!=0 or lock.stat().st_mode&0o077:raise ValueError('SYSTEM_SECURITY_UNTRUSTED_PATH')
-    fd=os.open('/var/lib/incudal-platform-operation.lock',os.O_CREAT|os.O_NOFOLLOW|os.O_RDWR,0o600)
+    fd=open_platform_operation_lock()
     info=os.fstat(fd)
     if not stat.S_ISREG(info.st_mode)or info.st_uid!=0 or info.st_nlink!=1 or info.st_mode&0o077:os.close(fd);raise ValueError('SYSTEM_SECURITY_UNTRUSTED_PATH')
     try:
@@ -1061,7 +1083,7 @@ def record_inventory():
     # not overwrite a still-active patch plan with an incomplete observation.
     if os.geteuid()!=0:raise ValueError('SYSTEM_SECURITY_ROOT_REQUIRED')
     if pathlib.Path('/var/lib/incudal-backup/recovery-hold.json').exists():return
-    fd=os.open('/var/lib/incudal-platform-operation.lock',os.O_CREAT|os.O_RDWR|os.O_NOFOLLOW,0o600)
+    fd=open_platform_operation_lock()
     try:
         info=os.fstat(fd)
         if not stat.S_ISREG(info.st_mode)or info.st_uid!=0 or info.st_nlink!=1 or info.st_mode&0o077:raise ValueError('SYSTEM_SECURITY_UNTRUSTED_PATH')
@@ -1138,7 +1160,7 @@ if __name__=='__main__':
             # separately reviewed maintenance has loaded the installed code.
             if os.geteuid()!=0:raise ValueError('SYSTEM_SECURITY_ROOT_REQUIRED')
             if pathlib.Path('/var/lib/incudal-backup/recovery-hold.json').exists():raise ValueError('SYSTEM_SECURITY_RECOVERY_HELD')
-            fd=os.open('/var/lib/incudal-platform-operation.lock',os.O_RDWR|os.O_NOFOLLOW)
+            fd=open_platform_operation_lock(False)
             try:
                 info=os.fstat(fd)
                 if not stat.S_ISREG(info.st_mode)or info.st_uid!=0 or info.st_nlink!=1 or info.st_mode&0o077:raise ValueError('SYSTEM_SECURITY_UNTRUSTED_PATH')

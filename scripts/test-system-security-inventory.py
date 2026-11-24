@@ -6,6 +6,24 @@ spec=importlib.util.spec_from_file_location('inventory',pathlib.Path(__file__).w
 module=importlib.util.module_from_spec(spec);spec.loader.exec_module(module)
 
 class Plans(unittest.TestCase):
+    @unittest.skipUnless(hasattr(os,'geteuid') and os.geteuid()==0,'real root-owned Linux flock metadata')
+    def test_legacy_empty_platform_lock_tightens_same_inode_without_splitting_flock(self):
+        import grp,stat
+        with tempfile.TemporaryDirectory(dir='/root')as folder:
+            p=pathlib.Path(folder)/'lock';p.touch(mode=0o600);os.chmod(p,0o640)
+            os.chown(p,0,grp.getgrnam('incudal').gr_gid)
+            held=os.open(p,os.O_RDWR);module.fcntl.flock(held,module.fcntl.LOCK_EX|module.fcntl.LOCK_NB)
+            before=os.fstat(held);fd=module.open_platform_operation_lock(path=str(p))
+            try:
+                after=os.fstat(fd);self.assertEqual((before.st_dev,before.st_ino),(after.st_dev,after.st_ino));self.assertEqual(stat.S_IMODE(after.st_mode),0o600)
+                with self.assertRaises(BlockingIOError):module.fcntl.flock(fd,module.fcntl.LOCK_EX|module.fcntl.LOCK_NB)
+            finally:os.close(fd);os.close(held)
+            for mode,content,gid in [(0o640,'unexpected',grp.getgrnam('incudal').gr_gid),(0o644,'',0),(0o640,'',0)]:
+                p.write_text(content);os.chmod(p,mode);os.chown(p,0,gid)
+                with self.assertRaises(ValueError):module.open_platform_operation_lock(path=str(p))
+                self.assertEqual(p.read_text(),content);self.assertEqual(stat.S_IMODE(p.stat().st_mode),mode)
+            p.unlink();p.symlink_to('/dev/null')
+            with self.assertRaises(OSError):module.open_platform_operation_lock(path=str(p))
     @unittest.skipUnless(hasattr(os,'geteuid')and os.geteuid()==0,'root private evidence permissions required')
     def test_completed_runtime_evidence_retention_preserves_recent_incomplete_and_changed(self):
         import json,time
