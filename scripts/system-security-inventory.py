@@ -555,9 +555,19 @@ def apply_patches(automatic=False):
         database_before=None;database_error=None
         if automatic and any(name.startswith('postgresql-')and name.removeprefix('postgresql-').isdigit()for name in value['packages']):
             try:database_before=database_runtime_proof()
-            except (ValueError,OSError):database_error='SYSTEM_SECURITY_DATABASE_UNREVIEWED'
+            except (ValueError,OSError)as error:
+                database_error='SYSTEM_SECURITY_DATABASE_UNREVIEWED'
+                # A verified local application DB still supports a Node-only
+                # patch. Shared databases/clients prohibit restarting PG, not
+                # draining this application's sole backend. No shared data or
+                # service is stopped or included in our database dumps.
+                if isinstance(error,ValueError)and str(error)=='SYSTEM_SECURITY_DATABASE_SHARED_OR_REPLICATED':
+                    try:database_before=database_runtime_proof(shared_read_only=True)
+                    except (ValueError,OSError):pass
             if runtime_before is not None and database_before is not None:
-                allowed|={'nodejs','postgresql-'+str(database_before['major']),'postgresql-client-'+str(database_before['major']),'libpq5','postgresql-common','postgresql-client-common'}
+                allowed.add('nodejs')
+                if not database_before.get('sharedReadOnly'):
+                    allowed|={'postgresql-'+str(database_before['major']),'postgresql-client-'+str(database_before['major']),'libpq5','postgresql-common','postgresql-client-common'}
         ssh_before=None;ssh_error=None
         if automatic and 'openssh-server'in value['packages']:
             try:ssh_before=ssh_listener_proof()
@@ -704,13 +714,14 @@ def backend_runtime_proof():
         # attested separately by /proc start time, exe and command line.
         'serviceHash':service_hash}
 
-def database_runtime_proof():
+def database_runtime_proof(shared_read_only=False):
     sql="SELECT json_build_object('major',current_setting('server_version_num')::int/10000,'version',current_setting('server_version_num'),'data',current_setting('data_directory'),'config',current_setting('config_file'),'hba',current_setting('hba_file'),'recovery',pg_is_in_recovery(),'replication',(SELECT count(*) FROM pg_stat_replication),'otherDatabases',(SELECT count(*)FROM pg_database WHERE NOT datistemplate AND datname NOT IN('incudal','postgres')),'otherClients',(SELECT count(*) FROM pg_stat_activity WHERE backend_type='client backend'AND pid<>pg_backend_pid()AND(coalesce(datname,'')<>'incudal'OR usename NOT IN('incudal','incudal_migrate'))))"
     value=json.loads(command(['runuser','-u','postgres','--','psql','-X','-At','-v','ON_ERROR_STOP=1','-d','incudal','-c',sql],20))
     environment=pathlib.Path('/opt/incudal/.env').read_text()
     matches=re.findall(r'^DATABASE_URL=(.+)$',environment,re.M)
     if len(matches)!=1 or not re.fullmatch(r"['\"]?postgres(?:ql)?://incudal:[^\s]+@(?:127\.0\.0\.1|localhost):5432/incudal(?:\?[^'\"\s]*)?['\"]?",matches[0]):raise ValueError('SYSTEM_SECURITY_DATABASE_IDENTITY_UNREVIEWED')
-    if value['recovery']or value['replication']or value['otherDatabases']or value['otherClients']or value['major']not in [14,15,16,17,18]:raise ValueError('SYSTEM_SECURITY_DATABASE_SHARED_OR_REPLICATED')
+    if value['recovery']or value['replication']or value['major']not in [14,15,16,17,18]or not shared_read_only and (value['otherDatabases']or value['otherClients']):raise ValueError('SYSTEM_SECURITY_DATABASE_SHARED_OR_REPLICATED')
+    if shared_read_only:value['sharedReadOnly']=True
     major=value['major'];expected='/var/lib/postgresql/'+str(major)+'/main'
     if value['data']!=expected or value['config']!='/etc/postgresql/'+str(major)+'/main/postgresql.conf'or value['hba']!='/etc/postgresql/'+str(major)+'/main/pg_hba.conf':raise ValueError('SYSTEM_SECURITY_DATABASE_CLUSTER_UNREVIEWED')
     value['configHash']=protected_hash(value['config'],(0,pathlib.Path(expected).stat().st_uid));value['hbaHash']=protected_hash(value['hba'],(0,pathlib.Path(expected).stat().st_uid))
@@ -743,7 +754,10 @@ def database_runtime_proof():
 def install_runtime_patches(changes,backend,database,value,expected):
     if backend is None or backend_runtime_proof()!=backend:raise ValueError('SYSTEM_SECURITY_BACKEND_PROCESS_CHANGED')
     need_database=any(item.split('=',1)[0].startswith('postgresql-')or item.split('=',1)[0]in ['libpq5','postgresql-common']for item in changes)
-    if database is None or database_runtime_proof()!=database:raise ValueError('SYSTEM_SECURITY_DATABASE_CHANGED')
+    if database is None or need_database and database.get('sharedReadOnly'):raise ValueError('SYSTEM_SECURITY_DATABASE_CHANGED')
+    def database_proof():
+        return database_runtime_proof(shared_read_only=True)if database.get('sharedReadOnly')else database_runtime_proof()
+    if database_proof()!=database:raise ValueError('SYSTEM_SECURITY_DATABASE_CHANGED')
     if command(['dpkg','--audit'],30):raise ValueError('SYSTEM_SECURITY_PACKAGE_CONFIGURATION_PENDING')
     baseline=debian_installed_packages()
     # Acquire authenticated exact archives while the existing backend is live.
@@ -756,7 +770,7 @@ def install_runtime_patches(changes,backend,database,value,expected):
     dump_runtime_database(backup/'database.dump')
     originals={key:protected_hash(key,private=False)for key in ['/opt/incudal/.env',backend['app']+'/server/dist/app.js',*backend['unitHashes']]}
     verify_runtime_financial_integrity(backend['app'])
-    if backend_runtime_proof()!=backend or database_runtime_proof()!=database or debian_installed_packages()!=baseline:raise ValueError('SYSTEM_SECURITY_RUNTIME_BASELINE_CHANGED')
+    if backend_runtime_proof()!=backend or database_proof()!=database or debian_installed_packages()!=baseline:raise ValueError('SYSTEM_SECURITY_RUNTIME_BASELINE_CHANGED')
     stopped=False
     journal={'version':1,'phase':'prepared','backend':backend,'database':database if need_database else None,'backup':backup.name,'packages':changes,'expectedPackages':expected,'baselinePackages':baseline}
     write_runtime_maintenance(journal)
@@ -837,6 +851,7 @@ def recover_runtime_maintenance(path=pathlib.Path('/var/lib/incudal-system-secur
     elif command(['dpkg','--audit'],30):raise ValueError('SYSTEM_SECURITY_PACKAGE_CONFIGURATION_PENDING')
     if database is not None:
         major=database.get('major')
+        if database.get('sharedReadOnly'):raise ValueError('SYSTEM_SECURITY_RUNTIME_JOURNAL_INVALID')
         if major not in [14,15,16,17,18]or database.get('unit')!='postgresql@'+str(major)+'-main.service':raise ValueError('SYSTEM_SECURITY_RUNTIME_JOURNAL_INVALID')
         if database.get('data')!='/var/lib/postgresql/'+str(major)+'/main'or database.get('config')!='/etc/postgresql/'+str(major)+'/main/postgresql.conf'or database.get('hba')!='/etc/postgresql/'+str(major)+'/main/pg_hba.conf':raise ValueError('SYSTEM_SECURITY_RUNTIME_JOURNAL_INVALID')
         owner=pathlib.Path(database['data']).stat().st_uid

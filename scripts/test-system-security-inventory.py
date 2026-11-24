@@ -56,6 +56,19 @@ class Plans(unittest.TestCase):
         with patch.object(module,'backend_runtime_proof',return_value=b),patch.object(module,'database_runtime_proof',return_value=d),patch.object(module,'debian_installed_packages',return_value={}),patch.object(module,'command',side_effect=execute)as command,self.assertRaisesRegex(ValueError,'DOWNLOAD_UNAVAILABLE'):
             module.install_runtime_patches(['nodejs=24.22.3'],b,d,{}, {})
         self.assertFalse(any('systemctl'in c.args[0]for c in command.call_args_list))
+    def test_shared_database_allows_only_node_download_without_database_restart(self):
+        b={'pid':12};d={'major':16,'sharedReadOnly':True}
+        def execute(args,*_):
+            if args==['dpkg','--audit']:return ''
+            self.assertIn('--download-only',args);raise ValueError('SYSTEM_SECURITY_DOWNLOAD_UNAVAILABLE')
+        with patch.object(module,'backend_runtime_proof',return_value=b),patch.object(module,'database_runtime_proof',return_value=d)as proof,patch.object(module,'debian_installed_packages',return_value={}),patch.object(module,'command',side_effect=execute)as command,self.assertRaisesRegex(ValueError,'DOWNLOAD_UNAVAILABLE'):
+            module.install_runtime_patches(['nodejs=24.22.3'],b,d,{}, {})
+        proof.assert_called_once_with(shared_read_only=True)
+        self.assertFalse(any('systemctl'in c.args[0]for c in command.call_args_list))
+        for change in ['postgresql-16=16.17','postgresql-client-16=16.17','libpq5=17.13','postgresql-common=280']:
+            with patch.object(module,'backend_runtime_proof',return_value=b),patch.object(module,'database_runtime_proof')as proof,patch.object(module,'command')as command,self.assertRaisesRegex(ValueError,'DATABASE_CHANGED'):
+                module.install_runtime_patches(['nodejs=24.22.3',change],b,d,{}, {})
+            proof.assert_not_called();command.assert_not_called()
     def test_runtime_half_installed_exact_version_requires_reinstall(self):
         journal={'baselinePackages':{'zstd:amd64':'1.5.5-1'},'expectedPackages':{'zstd:amd64':'1.5.5-2'},'packages':['zstd=1.5.5-2']}
         states={'zstd:amd64':{'version':'1.5.5-2','status':'half-installed'}}

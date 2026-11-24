@@ -1,5 +1,13 @@
 # 安全修复阶段收尾与未完成清单
 
+16:50进度：完整f5b1455fd75adc0001636b29cac25d7454510f4e已主CI45352440138终态30/30、双原生45352440194 14/14、完整preview45352434847双首装/rootrestore六旧worker13success/Release跳过、其余五配套全success。signedAgent45352439384已测试预发布agent-v1.0.17-security.10（面板正式版未发），双实际asset2787签名/原publisher/ELF/source核过，原子资产2799部署后208全自动接收.10。升级间库存曾74～79不可售，09?以脚本UTC为准，全部维护收尾后实际203可售/5分配/0不可售；新版helper自动DNS实读#53/#78 oldPython消失，#16刚升级尚待新回执，全loaded库存与自然稳定观察继续。原四客户第三观察当前3032/0，既有2h3500/0自然过。
+
+原worker任务65于08:37:31Z成功→完整v1.8.14-test.f5b1455、backend3678674唯一业务ready/NRestarts0。前后sealed exact tar/postflight、19财务208authority五运行客户严格PID/UUID/rootconfig及test#63真实删除absence通过；源码原worker完整包，没有现场main补丁。实际双tar2796/2797 unique/root权限/OpenSSLprovider/最新busy代码source通过（ARM220454775 SHA17fa0120aa9d723a95553de344029c5d4ec9b35fc186b45ec2b7eb7892bcdfa8，AMD221273779 SHAb3bc942a7e1fde1745653f781e813d6e92c0785a290384817935b1e973199455）。包刻意不含agent源码/VERSION；其独立signed发布核验，不把误加VERSION资产断言失败称产品漏包。升级后自然systemtimer08:43与08:49均实际success，真实7项签名APT更新安装，SSHlistener/nginx activated；仍有systemd/其它/PG旧映射及11项基础库/新kernel/PGcommon/libpq19major等待，activation-required保留，未称全生效。
+
+全24AMD+24ARM镜像矩阵已全部自然pass；历史AMD6/ARM5错误保留，其中30min复用Incus客户端被正常pool过期关闭是测试脚本生命周期错误，已每次读取重新getIncusClient后续接，未改产品连接池。到期/手自动续费/宽限Incus全空/原价通过；真正续费账单89/90金额+1.23各绑定余额110/111 consume-1.23，original全财务不变，仅test用户2减2.46、唯一手动幂等receipt和test#63日期/price/授权重装密码变化；严格2790比对旧记录不变并私密归档，无扩大资金豁免。原四客户runtime严格保持，test#62最终重装基线另存、#63墓碑空确认。
+
+后续源码未部署：shared PG只读原应用证明允许Node-only安全维护，不授予shared PG restart或任意PG/client/libpq修改，40本机（12Linuxskip）/真实Linux40/40及主控仓库外仅读完整proof2777过；主控另有6旧数据库不自动删除。SSH模板旧binary inode比较漏已替换libcrypto，补同PIDnamespace/root和真实exe maps，保原HUP既有路径/密钥/密码配置；相关Alpine/security/OTA守卫和实际隔离ARM2826/2828 oldlibrary reexec/原持续SSH bytes及新login过，完整七branch原生/同source候选仍待，typecheck当前在途。暂未提交这一批，所有基础库kernel/完整NodePG事务/真实OSS及外部项仍未完，不正式发版。
+
 16:00继续：b077主CI45347479611终态30/30、完整preview45347492601全13success/Release跳过，SSH/sysinfo/memory配套success；Agent/原生失败仍保留不计全绿。Python r3合法组合源码及Go全套/vet、双架构编译/agentversion/hosttools/security守卫已过；真实ARM官方旧组2751及缺模块/重复2758通过，TCG AMD初轮60s超时但最终已装r2/r3/gdbm，独立完整重复2762两实际native检查自然PASS，TCG耗时69/102s明确仅夹具较慢，不扩产品60s预算。全池仍旧Agent.9；下一签名Agent.10及完整候选待生成部署。
 
 原安全activation缺口实读：受管incudal-gateway-dns Python3.14进程exe已deleted，helperhash/原OpenRC单位及监督args双架构取证2744一致。新Agent仅针对这段固定受管服务、原父监督PID/start/args/exe/namespace/root、完整原helper/hash与私有身份/原WireGuard config，绑定Linux pidfd后复读身份，SIGTERM该Python子进程让原supervise-daemon自动加载已装Python；不操作wg/Incus/SSH/客户，不下载未知脚本、不改原配置。新Linux实际OpenRC测试2775在隔离ARM+netnamespace完成新PID/同监督/当前maps/配置保持、重复及自定义unit拒绝，自然退出0；初2770正文成功但无init回收的测试cleanup卡住，已仅定向终止该独立namespace测试、补10s fixture teardown后最终过，保旧137失败，不把卡住测试算完成。Agent版本.10同批待源码保存/双原生CI/全池实证。

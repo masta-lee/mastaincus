@@ -132,6 +132,17 @@ fi
   const fixed = docker(['exec', name, 'apk', 'info', '-v']).split('\n').find(x => /^openssh-server-[0-9]/.test(x))
   assert.equal(fixed, `openssh-server-${fixedRevision}`)
   const newConnection = await connect(password); newConnection.end()
+  // Replaced libcrypto with an unchanged sshd executable must trigger reexec.
+  const crypto = docker(['exec', name, 'sh', '-c', 'awk \'$2 ~ /x/ && $6 ~ /libcrypto/ { print $6; exit }\' /proc/$(cat /run/sshd.pid)/maps']).trim()
+  assert.match(crypto, /^\/usr\/lib\/libcrypto\.so\.[0-9]+$/)
+  docker(['exec', name, 'sh', '-c', 'set -e; file="$1"; cp -p "$file" "$file.security-test"; mv "$file.security-test" "$file"', 'sh', crypto])
+  assert.equal(docker(['exec', name, 'sh', '-c', '. /opt/alpine-ssh-security.sh; if alpine_ssh_listener_current; then echo stale-wrongly-current; else echo stale-detected; fi']).trim(), 'stale-detected')
+  await new Promise((resolve, reject) => execFile('docker', ['exec', name, 'sh', '-c', '. /opt/alpine-ssh-security.sh; alpine_ssh_security_update update'], { timeout: 90000 }, (error, stdout) => {
+    if (error) { reject(error); return }
+    try { assert.match(stdout, /^INCUDAL_ALPINE_SSH_ALREADY_FIXED$/m); resolve() } catch (error) { reject(error) }
+  }))
+  docker(['exec', name, 'sh', '-c', '. /opt/alpine-ssh-security.sh; alpine_ssh_listener_current'])
+  const libraryReloaded = await connect(password); libraryReloaded.end()
   for (const candidate of ['wrong-original-password', 'x'.repeat(300), 'x'.repeat(1024), '']) {
     await assert.rejects(connect(candidate), 'invalid credentials must be refused after patch')
   }

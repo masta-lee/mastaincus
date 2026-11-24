@@ -79,7 +79,14 @@ alpine_ssh_listener_current() {
   alpine_ssh_pid=$(cat /run/sshd.pid) || return 1
   alpine_ssh_running_inode=$(stat -Lc '%d:%i' "/proc/$alpine_ssh_pid/exe") || return 1
   alpine_ssh_package_inode=$(stat -Lc '%d:%i' "$alpine_ssh_binary") || return 1
-  [ "$alpine_ssh_running_inode" = "$alpine_ssh_package_inode" ]
+  [ "$alpine_ssh_running_inode" = "$alpine_ssh_package_inode" ] || return 1
+  [ "$(readlink "/proc/$alpine_ssh_pid/ns/pid")" = "$(readlink /proc/self/ns/pid)" ] || return 1
+  alpine_ssh_root_inode=$(stat -Lc '%d:%i' /) || return 1
+  [ "$(stat -Lc '%d:%i' "/proc/$alpine_ssh_pid/root")" = "$alpine_ssh_root_inode" ] || return 1
+  # A same-inode sshd can still map a replaced libcrypto/libc. A HUP reexec
+  # loads those installed libraries without dropping authenticated children.
+  # Ignore deliberate shared-memory/JIT mappings; inspect executable files.
+  awk '$2 ~ /x/ && $6 ~ /^\// && $6 !~ /^\/dev\// && $6 !~ /^\/memfd:/ && $6 !~ /^\/SYSV/ && $NF == "(deleted)" { stale=1 } END { exit stale ? 1 : 0 }' "/proc/$alpine_ssh_pid/maps"
 }
 
 alpine_ssh_standard_service() (
