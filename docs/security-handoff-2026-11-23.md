@@ -1,5 +1,7 @@
 # 安全修复阶段收尾与未完成清单
 
+本轮重试2436已正常排空旧backend，task61在原worker早期git global fatal:$HOME not set拒绝（systemd transient无登录HOME）；未下载/切代码/迁移，原sealed994与客户/财务保持，手工仅启动原service恢复3512101、持续客户SSH508零错误。源码ownerlauncher固定rootHOME并补beforeExit早期失败仅同app+完整原seal/links后启动原service，OTAguards2439通过；准备保存工具精修后继续原worker，不绕签名/DB检查。此失败不计热更成功，正式发版未执行。
+
 主控首次本轮更新2422在旧backend直接SIGTERM排空时失败，未创建OTA任务/未切代码/原服务自动恢复3508596；原4客户持续SSH360次零错误/原账目身份保持。完整journal2432确证old994 sourceAvvio timedpreClose（13:19? 时间以记录UTC为准）exit1。新仓库工具仅固定原sealed994/原PID退出/唯一FastifyError+原avviostack匹配时保错误、停止原重启并要求无pending客户任务和原financial/authority/Incusbaseline全部一致后继续原worker；其它错误恢复原service拒绝更新，不清状态/不重seal。纯测试/原生2435与OTA24034通过；此为部署兼容工具修复，运行代码候选仍完整9ae签名包。9aeCI此时29/30无fail，完整45317196728全部success、双原生14/14和actualdual签名source过。后续执行仍须记录最终生产目标而非称已更新，正式发行仍全部测试后。
 
 本次热更必要前置已源码补：旧主控stop30s/new包后才改预算，原候选工具现在先验证systemdMainPID/uid/argv/currentexe/hostPIDnamespace，正常SIGTERM主进程排空后交原worker；失败只启动原服务保原code/data，不写unit、不强杀客户。纯失败/超时/换PID守卫、OTA2403通过；真实旧30s单位31sHTTP+长preClose正常exit0/idle收尾2403通过，95秒启动验证仍在途。新依赖已加旧worker候选工具暂存清单，后续同source保存/完整预览再部署。当前主控原客户/财务/身份保持，未执行update；8b候选完整预览45315218721在途，CI45315182374无failure。基础库内核/真实OSS等未完成，条件式发行不提前触发。

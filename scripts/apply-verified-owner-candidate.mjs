@@ -12,6 +12,9 @@ import {drainLegacyOwnerBackend} from './drain-legacy-owner-backend.mjs'
 
 assert.equal(process.platform,'linux');assert.equal(process.getuid(),0)
 assert.equal(process.env.INCUDAL_OWNER_CANDIDATE_DEPLOY,'authorized-test')
+// systemd-run's root transient task need not inherit a login environment.
+// The installed original worker runs git --global and needs its real root HOME.
+process.env.HOME='/root'
 const archive=resolve(process.argv[2]||''),version=String(process.argv[3]||'')
 assert.ok(process.argv.length===4||process.argv.length===5&&process.argv[4]==='--preflight')
 const finalizeTool=join(import.meta.dirname,'finalize-verified-owner-candidate.mjs')
@@ -85,6 +88,17 @@ await import(join(app,'server/dist/scripts/run-system-update-task.js'))
 // The installed worker starts its asynchronous main without exporting it.
 // Match the root wrapper's postflight on natural successful worker completion.
 process.once('beforeExit',()=>{
- if(process.exitCode)return
+ if(process.exitCode){
+  // A fatal original-worker preflight can happen before its rollback block.
+  // Restart only the same completely sealed original app, never an unknown
+  // partially applied tree or a replacement current release.
+  const current=realpathSync(existsSync('/opt/incudal/current')?'/opt/incudal/current':'/opt/incudal')
+  if(current===app){
+   execFileSync('sha256sum',['--check','--strict','--quiet',sourceManifest],{cwd:app,stdio:'pipe'})
+   assert.equal(sealedRuntimeLinks(app),readFileSync(sourceManifest+'.links','utf8'))
+   execFileSync('/usr/bin/systemctl',['start','incudal-backend.service'],{stdio:'pipe',timeout:600000})
+  }
+  return
+ }
  execFileSync(process.execPath,[finalizeTool,archive,version,String(task.id)],{stdio:'inherit',timeout:180000})
 })
