@@ -1,5 +1,9 @@
 # 安全修复阶段收尾与未完成清单
 
+13:01最新：最终旧Python组修复`69d94fead430e614f775faea62b8e32007f81897`已提交推送；signedAgentsecurity.8运行45328003410八success/Release预期skipped、双原生45328009994 14/14。两真实AMD/ARM官方旧rootCI拆包回归通过，独立ARM2500实证通过。实际双Agent2507原publisher/source/ELF/完整hash核验后，主控原工具原子资产交换2509于约12:48成功；第一次tar含Windows`.`目录mode0777被原protectedPath拒绝，仅候选私有目录元数据精确整理2512后成功，未放宽守卫/修改产品目录。最终208全接收.8，208已装数据库Python与ndbm均r2（2543）、world回执原1460迁移不变；12:59库存202可售/6分配/0不可售、安全包retry消失，仍待两自然周期及长期回归。全池activation-required实读包含旧受管后台Python/sshd库，不能称全部补丁已加载；后续具体自动激活继续。
+
+指定账户id2真实checkout一次扣49元（余额日志109、两新测试实例#62/host16与#63/host53），订单completed、两台Alpine实际公网SSH/IPv6guestprobe/memory正确，ARM stop/start/restart/再次stop任务1196～1199均真Incus确认。重装初三次409确认为宿主升级维护prepared拦，无其他实例任务，未绕门禁；续接脚本第一次无body却json header收到400已修测试脚本。现在AMD重装Debian13任务1201执行中，ARM下一步，未新重复付款。全24+24镜像、浏览器无刷新密码、到期/续费/删除回池及其它安全验收未完，暂不发行。原四真实客户只读SSH原轮1737/0错误达到60min被systemd时限停止，第二轮只读observer8另起（130min外预算/120min内观察）当前548/0错误/原后台3514543 NRestarts0；不把旧observer timeout称客户断线或自然成功退出。69主CI45328009622为25success/5在途无failure，继续核终态。
+
 12:39纠正并继续：全208直接读取APK已装数据库确认195为Python3.14.10-r1、13为3.14.8-r0，均缺ndbm；先前只读计划显示新ndbm修订而未打印解释器版本，误将计划修订当成已装解释器，`84cfdeb6/security.7`只覆盖已对齐缺伴随包，**不能用于全池修复，未部署**。虽然其签名候选45325727394全部success/Release跳过、原生45325697289 14/14，与此生产覆盖缺口分开。源码补已核历史两修订→3.14.10-r2的Python/pyc整组同步与唯一ndbm新增，完整计划和world仍严格保持，陌生系列/混合原组/额外依赖拒绝。真实原ARM官方root SHA0b4457、独立namespace/chroot与产品完整事务2500/2501通过，旧解释器→全组+模块真实导入/原world/完整库存/重复验收5.62秒；没有修改主控或客户的系统包。TCG旧root事务两次60秒超时留证，最终native ARM实际通过，不把预下载夹具称自然镜像网络成功。当前security.8继续双架构最终来源CI/签名与全池复验，未实购/正式发行。正常Chrome登录、普通用户续费价403/伪角色401及桌面手机无改价入口2484通过；此为当前面板9ae证据。
 
 12:20补记：上述Python拆包源码已审查并通过Go全套/vet、双架构编译、security-hardening/host-provisioning/agent-version守卫。真实隔离Alpine官方root实际APK补拆包后全库存精确一致、world原文保持、重复维护通过（2482；每次产品维护仍60秒，测试多次共用外层预算已修为独立60秒）。隔离准备的旧cloud Python冲突、缺dev/null与共享proc及多次共用60秒失败保留，不算产品修复前通过；最终native四项均自然PASS。下一步保存`security.7`并生成同source签名Agent后自动全池复验。cc89主CI45321383518已终态30/30及五配套全success；不继承为新拆包source全部通过。
