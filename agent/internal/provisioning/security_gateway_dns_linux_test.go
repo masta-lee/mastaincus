@@ -4,6 +4,8 @@ package provisioning
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -12,13 +14,36 @@ import (
 	"time"
 )
 
+func TestGatewayDNSOnlyReviewedHistoricalSources(t *testing.T) {
+	for _, hash := range []string{gatewayDNSSecurityHelperHash, gatewayDNSLegacyHelperHash} {
+		if !reviewedGatewayDNSHelper(hash) {
+			t.Fatal("original reviewed source refused")
+		}
+	}
+	for _, hash := range []string{"", gatewayDNSLegacyHelperHash[:63], "f" + gatewayDNSLegacyHelperHash[1:]} {
+		if reviewedGatewayDNSHelper(hash) {
+			t.Fatal("unknown or tampered helper accepted")
+		}
+	}
+}
+
 func TestNativeGatewayDNSPythonSecurityActivation(t *testing.T) {
 	if os.Getenv("INCUDAL_SYSINFO_COMPAT_TEST") != "disposable" || os.Getenv("INCUDAL_COMPAT_RELOAD_SCENARIO") != "empty-pool" {
 		t.Skip("disposable original OpenRC gateway DNS service only")
 	}
-	helper, err := os.ReadFile("/out/gateway-dns-helper")
+	helperPath := "/out/gateway-dns-helper"
+	expectedHelperHash := gatewayDNSSecurityHelperHash
+	if os.Getenv("INCUDAL_GATEWAY_DNS_LEGACY_TEST") == "1" {
+		helperPath = "/out/gateway-dns-legacy-helper"
+		expectedHelperHash = gatewayDNSLegacyHelperHash
+	}
+	helper, err := os.ReadFile(helperPath)
 	if err != nil {
 		t.Fatal(err)
+	}
+	helperHash := sha256.Sum256(helper)
+	if hex.EncodeToString(helperHash[:]) != expectedHelperHash {
+		t.Fatal("native fixture is not the exact selected historical source")
 	}
 	for _, dir := range []string{"/usr/local/libexec", "/etc/wireguard"} {
 		if err = os.MkdirAll(dir, 0755); err != nil {
@@ -83,6 +108,19 @@ func TestNativeGatewayDNSPythonSecurityActivation(t *testing.T) {
 	if err = repairGatewayDNSPythonSecurity(ctx); err != nil {
 		t.Fatal("idempotent current service", err)
 	}
+	if err = os.WriteFile("/usr/local/libexec/incudal-gateway-dns", append(append([]byte{}, helper...), []byte("# custom\n")...), 0755); err != nil {
+		t.Fatal(err)
+	}
+	if err = repairGatewayDNSPythonSecurity(ctx); err == nil {
+		t.Fatal("unknown helper source accepted")
+	}
+	if err = os.WriteFile("/usr/local/libexec/incudal-gateway-dns", helper, 0755); err != nil {
+		t.Fatal(err)
+	}
+	unchanged, err := managedGatewayDNSProcess(ctx)
+	if err != nil || unchanged.pid != after.pid {
+		t.Fatal("refused helper touched running child", err)
+	}
 	unit, err := os.ReadFile("/etc/init.d/incudal-gateway-dns")
 	if err != nil {
 		t.Fatal(err)
@@ -100,5 +138,5 @@ func TestNativeGatewayDNSPythonSecurityActivation(t *testing.T) {
 	if err != nil || final.pid != after.pid {
 		t.Fatal("refused custom service touched running child", err)
 	}
-	t.Log("PASS actual OpenRC supervised DNS: same supervisor, installed Python, fixed source and original identity/network configuration, idempotency and custom-unit rejection")
+	t.Log("PASS actual OpenRC supervised DNS: exact source", expectedHelperHash, "same supervisor, installed Python, original identity/network configuration, idempotency, unknown-helper and custom-unit rejection")
 }

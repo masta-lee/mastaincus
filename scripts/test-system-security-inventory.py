@@ -6,6 +6,38 @@ spec=importlib.util.spec_from_file_location('inventory',pathlib.Path(__file__).w
 module=importlib.util.module_from_spec(spec);spec.loader.exec_module(module)
 
 class Plans(unittest.TestCase):
+    @unittest.skipUnless(hasattr(os,'geteuid')and os.geteuid()==0,'real root inventory receipt metadata')
+    def test_automatic_runtime_upgrade_preserves_both_activation_receipts(self):
+        import json
+        real_path=pathlib.Path
+        with tempfile.TemporaryDirectory()as folder:
+            root=real_path(folder);(root/'security').mkdir(mode=0o700)
+            (root/'os-release').write_text('ID=debian\n')
+            (root/'sources.list').write_text('')
+            (root/'sources.list.d').mkdir()
+            mapping={'/etc/os-release':root/'os-release','/etc/apt/sources.list':root/'sources.list','/etc/apt/sources.list.d':root/'sources.list.d','/var/lib/incudal-system-security':root/'security','/var/lib/incudal-backup/recovery-hold.json':root/'absent-hold'}
+            def fixture_path(value,*parts):return mapping.get(str(value),real_path(value)).joinpath(*parts)
+            before={'nodejs:amd64':'24.22.3-1~safe1','postgresql-16:amd64':'16.16-1~safe1'}
+            after={'nodejs:amd64':'24.22.3-1','postgresql-16:amd64':'16.16-1'}
+            initial={'packages':{k.split(':')[0]:v for k,v in before.items()}}
+            updated={'packages':{k.split(':')[0]:v for k,v in after.items()}}
+            backend={'pid':10};database={'major':16};planned=['nodejs=24.22.3-1','postgresql-16=16.16-1']
+            backend_receipt={'state':'activated','pid':20,'backup':'runtime-backup-'+'a'*32}
+            database_receipt={'state':'activated','pid':21}
+            def upgrade(changes,b,d,value,expected):
+                self.assertEqual(changes,planned);self.assertEqual(expected,after)
+                value['backendActivation']=backend_receipt;value['databaseActivation']=database_receipt
+            fd=os.open(root/'operation.lock',os.O_RDWR|os.O_CREAT,0o600)
+            try:
+                with patch.object(module.pathlib,'Path',side_effect=fixture_path),patch.object(module,'open_platform_operation_lock',return_value=fd),patch.object(module,'verify_runtime_integrity'),patch.object(module,'recover_runtime_maintenance',return_value=None),patch.object(module,'inventory',side_effect=[initial,updated]),patch.object(module,'backend_runtime_proof',return_value=backend),patch.object(module,'database_runtime_proof',return_value=database),patch.object(module,'clean_service_policy'),patch.object(module,'command',return_value=''),patch.object(module,'patch_plan',return_value=planned),patch.object(module,'debian_installed_packages',side_effect=[before,after]),patch.object(module,'install_runtime_patches',side_effect=upgrade),patch.object(module,'persist')as persist:
+                    result=module.apply_patches(automatic=True)
+                self.assertEqual(result['backendActivation'],backend_receipt)
+                self.assertEqual(result['databaseActivation'],database_receipt)
+                self.assertEqual(persist.call_args.args[0]['databaseActivation'],database_receipt)
+                self.assertTrue(persist.call_args.kwargs['verify_activation'])
+            finally:
+                try:os.close(fd)
+                except OSError:pass
     @unittest.skipUnless(hasattr(os,'geteuid') and os.geteuid()==0,'real root-owned Linux flock metadata')
     def test_legacy_empty_platform_lock_tightens_same_inode_without_splitting_flock(self):
         import grp,stat

@@ -609,7 +609,8 @@ def apply_patches(automatic=False):
                     clean_service_policy()
             if debian_installed_packages()!=expected:raise ValueError('SYSTEM_SECURITY_PATCH_NOT_CONFIRMED')
         after=inventory(all_loaded_code=True)
-        if value.get('backendActivation'):after['backendActivation']=value['backendActivation']
+        for receipt in ['backendActivation','databaseActivation']:
+            if value.get(receipt):after[receipt]=value[receipt]
         if runtime_error:after['backendActivation']={'state':'pending','error':runtime_error}
         if database_error:after['databaseActivation']={'state':'pending','error':database_error}
         for package in changes:

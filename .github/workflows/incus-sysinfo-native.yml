@@ -83,6 +83,14 @@ jobs:
           sudo cp output/incusd "$root/out/incusd"
           sudo cp output/provisioning-test "$root/out/provisioning-test"
           sudo cp scripts/refresh-host-gateway-endpoint.py "$root/out/gateway-dns-helper"
+          if [[ '${{ matrix.scenario }}' == empty-pool ]]; then
+            # checkout is shallow; explicitly fetch only the reviewed historic
+            # commit, then require the original helper bytes before testing it.
+            timeout 90 git fetch --no-tags --depth=1 origin 3327fc3b50207cf80d4920a1df28e4ab942877ab
+            git show 3327fc3b50207cf80d4920a1df28e4ab942877ab:scripts/refresh-host-gateway-endpoint.py > output/gateway-dns-legacy-helper
+            printf '%s  %s\n' 2f7833ff7547903eba679bf4a6c99745d1648a7dcd5f1328d5fc7831fc6f32e1 output/gateway-dns-legacy-helper | sha256sum -c -
+            sudo cp output/gateway-dns-legacy-helper "$root/out/gateway-dns-legacy-helper"
+          fi
           sudo cp output/memory-budget-test "$root/out/memory-budget-test"
           sudo chmod 755 "$root/out/provisioning-test"
           sudo cp scripts/test-incus-sysinfo-compat.sh "$root/test.sh"

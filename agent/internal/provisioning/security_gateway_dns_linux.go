@@ -23,6 +23,15 @@ import (
 const gatewayDNSSecurityUnit = "#!/sbin/openrc-run\n# payincus-host-gateway-dns-v1\ndescription=\"Refresh enrolled PayIncus gateway DNS endpoint\"\ncommand=\"/usr/bin/python3\"\ncommand_args=\"-I -B /usr/local/libexec/incudal-gateway-dns --serve\"\nsupervisor=\"supervise-daemon\"\nrespawn_delay=10\nrespawn_max=0\npidfile=\"/run/incudal-gateway-dns.pid\"\noutput_log=\"/var/log/incudal-gateway-dns.log\"\nerror_log=\"/var/log/incudal-gateway-dns.log\"\ndepend() { need net; after wg-quick.incudal-mgmt; }\n"
 const gatewayDNSSecurityHelperHash = "f3dbe6d0f91dab12dce0572c8da72d2339e7ba1054ba8c7b2c162bf3fb88272e"
 
+// Original enrolled service from repository commit 3327fc3b. Its refresh-only
+// process uses the same supervisor and private identity/network files. Loading
+// installed Python changes no helper bytes or endpoint migration authority.
+const gatewayDNSLegacyHelperHash = "2f7833ff7547903eba679bf4a6c99745d1648a7dcd5f1328d5fc7831fc6f32e1"
+
+func reviewedGatewayDNSHelper(hash string) bool {
+	return hash == gatewayDNSSecurityHelperHash || hash == gatewayDNSLegacyHelperHash
+}
+
 type gatewayDNSProcess struct {
 	pid, supervisor int
 	start           string
@@ -40,7 +49,7 @@ func gatewayDNSFileProof() (map[string]string, error) {
 		}
 		hash := sha256.Sum256(data)
 		files[path] = hex.EncodeToString(hash[:])
-		if path == "/etc/init.d/incudal-gateway-dns" && string(data) != gatewayDNSSecurityUnit || path == "/usr/local/libexec/incudal-gateway-dns" && files[path] != gatewayDNSSecurityHelperHash {
+		if path == "/etc/init.d/incudal-gateway-dns" && string(data) != gatewayDNSSecurityUnit || path == "/usr/local/libexec/incudal-gateway-dns" && !reviewedGatewayDNSHelper(files[path]) {
 			return nil, fmt.Errorf("gateway DNS service source is not reviewed")
 		}
 		if strings.HasPrefix(path, "/etc/") && path != "/etc/init.d/incudal-gateway-dns" {
