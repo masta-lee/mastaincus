@@ -11,16 +11,22 @@ class Plans(unittest.TestCase):
         import grp,stat
         with tempfile.TemporaryDirectory(dir='/root')as folder:
             p=pathlib.Path(folder)/'lock';p.touch(mode=0o600);os.chmod(p,0o640)
-            os.chown(p,0,grp.getgrnam('incudal').gr_gid)
+            # CI runs before platform install, so no incudal group exists yet.
+            # Use a numeric fixture group and keep the product identity lookup
+            # covered without adding users or changing the runner's groups.
+            fixture_gid=54321
+            os.chown(p,0,fixture_gid)
             held=os.open(p,os.O_RDWR);module.fcntl.flock(held,module.fcntl.LOCK_EX|module.fcntl.LOCK_NB)
-            before=os.fstat(held);fd=module.open_platform_operation_lock(path=str(p))
+            before=os.fstat(held)
+            with patch.object(grp,'getgrnam',return_value=types.SimpleNamespace(gr_gid=fixture_gid)):
+                fd=module.open_platform_operation_lock(path=str(p))
             try:
                 after=os.fstat(fd);self.assertEqual((before.st_dev,before.st_ino),(after.st_dev,after.st_ino));self.assertEqual(stat.S_IMODE(after.st_mode),0o600)
                 with self.assertRaises(BlockingIOError):module.fcntl.flock(fd,module.fcntl.LOCK_EX|module.fcntl.LOCK_NB)
             finally:os.close(fd);os.close(held)
-            for mode,content,gid in [(0o640,'unexpected',grp.getgrnam('incudal').gr_gid),(0o644,'',0),(0o640,'',0)]:
+            for mode,content,gid in [(0o640,'unexpected',fixture_gid),(0o644,'',0),(0o640,'',0)]:
                 p.write_text(content);os.chmod(p,mode);os.chown(p,0,gid)
-                with self.assertRaises(ValueError):module.open_platform_operation_lock(path=str(p))
+                with patch.object(grp,'getgrnam',return_value=types.SimpleNamespace(gr_gid=fixture_gid)),self.assertRaises(ValueError):module.open_platform_operation_lock(path=str(p))
                 self.assertEqual(p.read_text(),content);self.assertEqual(stat.S_IMODE(p.stat().st_mode),mode)
             p.unlink();p.symlink_to('/dev/null')
             with self.assertRaises(OSError):module.open_platform_operation_lock(path=str(p))
