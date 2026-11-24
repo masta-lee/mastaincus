@@ -21,3 +21,6 @@ func migrateLegacyAlpineWorld(context.Context, *LegacyWorldPermit) error  { retu
 func repairLxcfsSecurity(context.Context, *CompatPermit) error            { return nil }
 func repairEmptyHostServiceSecurity(context.Context, *CompatPermit) error { return nil }
 func securityLoadedState(context.Context, string) (string, error)         { return "verification-pending", nil }
+func localHostMaintenanceEmpty(context.Context) (bool, error) {
+	return false, fmt.Errorf("Linux host required")
+}

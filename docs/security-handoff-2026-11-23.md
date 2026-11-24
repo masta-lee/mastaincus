@@ -1,5 +1,9 @@
 # 安全修复阶段收尾与未完成清单
 
+13:23续接：两新测试#62/#63实际一次购买49元、Alpine开通/SSH/IPv6/resource与停启重启、Debian13双架构重装新密码全部通过；ARM真实Chrome点击重装Alpine3.24，**不刷新/不导航**当前页自动换新密码2569通过。全24+24真实矩阵开始，AMD已两镜像全操作，随后两架构均因间歇TASK_IN_PROGRESS拒绝停止，未绕门禁或重复购买。深读取证**纠正“Incus加载旧文件”判断**：当前pidfile/UnixSO_PEERCRED/实际exehash/元数据PID/loadedMaps全部正常，旧僵尸与老journal PID不是当前进程。真正触发是资源指令只包含Running，Stopped或busy会返回[]，Agent误当空机每轮请求独占maintenance，制造prepared和操作拒绝。
+
+已源码补请求空机维护之前真实all-projects只读实例清单，含Stopped/foreign/busy仍有实例就不申请空机fence，unknown/null/错误不当空；实际维护保原短签名许可和再次空机核验。独立Go守卫/双archcompile/vet、真实Linux2589、servertypes/build/security/hosttools/taskguards过；真实独立本机PG/mTLS2591双架构重装身份/原账务与维护正确拒绝通过。后台task admission现抛专用HostMaintenanceError/409 HOST_SECURITY_MAINTENANCE，保活任务冲突单独代码，不再误称实例有任务。Agentsecurity.9待保存/同source双原生/signed候选并原worker完整面板部署后复测。当前生产仍9ae+.8，原钱/身份/四客户观察保持；.8已208完整Python/ndbm r2并无APKretry，但完整已加载Python/sshd与原安全余项仍未完。faa340主CI45330514607目前25success/5在途，69主因文档push取消25success/5cancelled，不能写全绿/正式发版。
+
 13:01最新：最终旧Python组修复`69d94fead430e614f775faea62b8e32007f81897`已提交推送；signedAgentsecurity.8运行45328003410八success/Release预期skipped、双原生45328009994 14/14。两真实AMD/ARM官方旧rootCI拆包回归通过，独立ARM2500实证通过。实际双Agent2507原publisher/source/ELF/完整hash核验后，主控原工具原子资产交换2509于约12:48成功；第一次tar含Windows`.`目录mode0777被原protectedPath拒绝，仅候选私有目录元数据精确整理2512后成功，未放宽守卫/修改产品目录。最终208全接收.8，208已装数据库Python与ndbm均r2（2543）、world回执原1460迁移不变；12:59库存202可售/6分配/0不可售、安全包retry消失，仍待两自然周期及长期回归。全池activation-required实读包含旧受管后台Python/sshd库，不能称全部补丁已加载；后续具体自动激活继续。
 
 指定账户id2真实checkout一次扣49元（余额日志109、两新测试实例#62/host16与#63/host53），订单completed、两台Alpine实际公网SSH/IPv6guestprobe/memory正确，ARM stop/start/restart/再次stop任务1196～1199均真Incus确认。重装初三次409确认为宿主升级维护prepared拦，无其他实例任务，未绕门禁；续接脚本第一次无body却json header收到400已修测试脚本。现在AMD重装Debian13任务1201执行中，ARM下一步，未新重复付款。全24+24镜像、浏览器无刷新密码、到期/续费/删除回池及其它安全验收未完，暂不发行。原四真实客户只读SSH原轮1737/0错误达到60min被systemd时限停止，第二轮只读observer8另起（130min外预算/120min内观察）当前548/0错误/原后台3514543 NRestarts0；不把旧observer timeout称客户断线或自然成功退出。69主CI45328009622为25success/5在途无failure，继续核终态。

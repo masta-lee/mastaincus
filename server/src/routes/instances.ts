@@ -41,6 +41,7 @@ import {
 } from '../lib/operation-verification.js'
 import { claimDestroyEmailVerification } from '../lib/instance-destroy-verification.js'
 import type { WriteActor } from '../db/user-write-authorization.js'
+import { HostMaintenanceError } from '../lib/host-maintenance-gate.js'
 import {
   detectCloudInitStatus,
   getCachedCloudInitStatus,
@@ -337,6 +338,10 @@ async function createInstanceTaskOrConflict(
   } catch (error) {
     if (error instanceof InstanceTaskAuthorizationError) {
       reply.code(error.statusCode).send({ code: error.code, error: error.message, ...(error.code === 'VERIFICATION_REQUIRED' ? { required: true } : {}) })
+      return null
+    }
+    if (error instanceof HostMaintenanceError) {
+      reply.code(409).send({ code: error.code, error: error.message })
       return null
     }
     if ((error instanceof ProxySiteOperationPendingError || error instanceof SnapshotOperationPendingError)) {

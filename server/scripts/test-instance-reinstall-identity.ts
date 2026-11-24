@@ -179,7 +179,8 @@ try {
       const permit=await incusCompatibilityPermit(rawAgent)
       assert.ok(permit,'idle original guest receives daemon reload permit')
       assert.equal(hostMaintenanceBlocked((await prisma.host.findUniqueOrThrow({where:{id:host.id}})).securityHardening),true)
-      await assert.rejects(createInstanceTask({instanceId:instance.id,hostId:host.id,userId:owner.id,taskType:'start'}))
+      await assert.rejects(createInstanceTask({instanceId:instance.id,hostId:host.id,userId:owner.id,taskType:'start'}),
+        error => error instanceof HostMaintenanceError && error.code === 'HOST_SECURITY_MAINTENANCE', 'host maintenance has its own cause, not a fictitious active instance task')
       const repeat=await incusCompatibilityPermit(rawAgent)
       assert.equal(repeat?.requestId,permit.requestId,'same fence is resumed')
       const remoteReads=calls.length

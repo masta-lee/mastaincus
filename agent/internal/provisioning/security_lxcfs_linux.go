@@ -19,6 +19,21 @@ import (
 // installing or activating these packages. A paid guest is never restarted.
 var securityLxcfsTargets = append(append([]string{}, securityLeaves...), "lxcfs", "lxcfs-openrc", "fuse3-libs", "dnsmasq")
 
+func localHostMaintenanceEmpty(ctx context.Context) (bool, error) {
+	raw, err := run(ctx, "incus", "query", "/1.0/instances?recursion=1&all-projects=true")
+	if err != nil {
+		return false, err
+	}
+	return confirmedEmptyHostInventory(raw)
+}
+func confirmedEmptyHostInventory(raw []byte) (bool, error) {
+	var guests []json.RawMessage
+	if json.Unmarshal(raw, &guests) != nil || guests == nil {
+		return false, fmt.Errorf("host maintenance inventory unavailable")
+	}
+	return len(guests) == 0, nil
+}
+
 func verifyEmptySecurityHost(ctx context.Context, permit *CompatPermit) error {
 	if !validCompatPermit(permit) || len(permit.Guests) != 0 {
 		return fmt.Errorf("LXCFS security maintenance waits for empty host authority")

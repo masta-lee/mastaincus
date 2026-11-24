@@ -227,6 +227,9 @@ func TestNativeCompatibilityAutomaticReload(t *testing.T) {
 	if e != nil || len(before) != 1 || before[0].Name != "native-sysinfo" {
 		t.Fatal("disposable guest scope", e)
 	}
+	if empty, err := localHostMaintenanceEmpty(ctx); err != nil || empty {
+		t.Fatal("actual occupied all-project inventory cannot request empty-host maintenance", err)
+	}
 	// The fixture launched a real original daemon rather than OpenRC. Record
 	// that actual PID as an installed service would, without replacing the guest.
 	raw, e := os.ReadFile("/run/incus/incusd.pid")
@@ -453,6 +456,9 @@ func TestNativeCompatibilityEmptyPoolReload(t *testing.T) {
 	status, request, _ := incusCompatibilityStatus(ctx)
 	if status != "verified" || request != p.RequestID {
 		t.Fatal("empty pool receipt missing")
+	}
+	if empty, err := localHostMaintenanceEmpty(ctx); err != nil || !empty {
+		t.Fatal("actual all-projects empty inventory", err)
 	}
 	manifest, err := compatibilityMetadata()
 	if err != nil {

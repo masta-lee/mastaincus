@@ -15,6 +15,22 @@ import (
 	"time"
 )
 
+func TestStoppedAndHiddenGuestsCannotRequestEmptyHostMaintenance(t *testing.T) {
+	if empty, err := confirmedEmptyHostInventory([]byte(`[]`)); err != nil || !empty {
+		t.Fatal("confirmed empty inventory rejected", err)
+	}
+	for _, raw := range []string{`[{"name":"original","status":"Stopped"}]`, `[{"name":"original","status":"Running"}]`, `[{"name":"foreign","project":"another"}]`} {
+		if empty, err := confirmedEmptyHostInventory([]byte(raw)); err != nil || empty {
+			t.Fatal("occupied inventory became empty", raw, err)
+		}
+	}
+	for _, raw := range []string{"", `null`, `{}`, `{"error":"unavailable"}`, `invalid`} {
+		if empty, err := confirmedEmptyHostInventory([]byte(raw)); err == nil || empty {
+			t.Fatal("unknown inventory became empty", raw)
+		}
+	}
+}
+
 func TestEmptyHostSecurityContinuesIndependentStages(t *testing.T) {
 	first, third := errors.New("first failed"), errors.New("third failed")
 	permit := &CompatPermit{}

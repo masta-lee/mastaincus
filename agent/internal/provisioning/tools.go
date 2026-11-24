@@ -134,25 +134,33 @@ func (e *Engine) Run(ctx context.Context) {
 				}
 			}
 			if compatStatus == "verified" && emptyHostServiceCandidate(guests, permit) && time.Since(lxcfsChecked) >= 6*time.Hour {
-				// Ask for the existing durable host fence even for a same-binary
-				// maintenance pass. The Agent's guest list alone cannot authorize
-				// interrupting a host service while a checkout is in flight.
-				if validCompatPermit(permit) && len(permit.Guests) == 0 {
-					// Package/service activation and DNS reload have independent
-					// sixty-second deadlines inside the original maintenance lane.
-					lxcfsError := repairEmptyHostServiceSecurity(c, permit)
-					if lxcfsError == nil {
-						lxcfsChecked = time.Now()
-						loadedChecked = time.Time{}
+				// Resource instructions omit stopped guests and busy workflows.
+				// They cannot prove vacancy. A read-only all-project inventory
+				// must confirm empty before requesting an exclusive host fence.
+				empty, inventoryErr := localHostMaintenanceEmpty(c)
+				if inventoryErr != nil {
+					securityState = "verification-pending"
+				} else if empty {
+					// Ask for the existing durable host fence even for a same-binary
+					// maintenance pass. The Agent's guest list alone cannot authorize
+					// interrupting a host service while a checkout is in flight.
+					if validCompatPermit(permit) && len(permit.Guests) == 0 {
+						// Package/service activation and DNS reload have independent
+						// sixty-second deadlines inside the original maintenance lane.
+						lxcfsError := repairEmptyHostServiceSecurity(c, permit)
+						if lxcfsError == nil {
+							lxcfsChecked = time.Now()
+							loadedChecked = time.Time{}
+						} else {
+							// Release this bounded maintenance pass on a mirror/service
+							// failure. Keep sales independent and retry in five minutes.
+							lxcfsChecked = time.Now().Add(-6*time.Hour + 5*time.Minute)
+							securityState = "retry"
+						}
+						compatStatus, compatRequest, compatHashValue = incusCompatibilityStatus(c)
 					} else {
-						// Release this bounded maintenance pass on a mirror/service
-						// failure. Keep sales independent and retry in five minutes.
-						lxcfsChecked = time.Now().Add(-6*time.Hour + 5*time.Minute)
-						securityState = "retry"
+						compatStatus = "needed"
 					}
-					compatStatus, compatRequest, compatHashValue = incusCompatibilityStatus(c)
-				} else {
-					compatStatus = "needed"
 				}
 			}
 			if compatStatus == "verified" {
