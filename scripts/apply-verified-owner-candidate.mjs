@@ -8,6 +8,7 @@ import {execFileSync} from 'node:child_process'
 import {Readable} from 'node:stream'
 import {resolve,basename,join} from 'node:path'
 import {sealedRuntimeLinks} from './sealed-runtime-links.mjs'
+import {drainLegacyOwnerBackend} from './drain-legacy-owner-backend.mjs'
 
 assert.equal(process.platform,'linux');assert.equal(process.getuid(),0)
 assert.equal(process.env.INCUDAL_OWNER_CANDIDATE_DEPLOY,'authorized-test')
@@ -41,6 +42,16 @@ assert.equal(await prisma.restoreTask.count({where:{status:{in:['PENDING','PROCE
 assert.equal(await prisma.backupUploadTask.count({where:{status:{in:['PENDING','PROCESSING']}}}),0)
 const admin=await prisma.user.findFirstOrThrow({where:{role:'admin',status:'active'},orderBy:{id:'asc'},select:{id:true}})
 if(process.argv[4]==='--preflight'){await closePrismaDatabase();console.log('OWNER_SIGNED_CANDIDATE_PREFLIGHT_PASSED');process.exit(0)}
+// Legacy systemd policy may still have a 30-second stop timeout. Our exact
+// sealed current process drains before the original worker's no-op stop call.
+try { await drainLegacyOwnerBackend(app) }
+catch(error) {
+  await closePrismaDatabase()
+  // No candidate files or database migrations have been applied. Start the
+  // original supported service if graceful drain failed before its worker.
+  execFileSync('/usr/bin/systemctl',['start','incudal-backend.service'],{stdio:'pipe',timeout:600000})
+  throw error
+}
 const task=await prisma.systemUpdateTask.create({data:{targetVersion:version,status:'pending',startedByUserId:admin.id}})
 const url=`https://github.com/mastalee928/payincus/releases/download/${version}/${name}`,manifestUrl=`https://github.com/mastalee928/payincus/releases/download/${version}/ota-manifest.json`
 const manifest={artifacts:[{name,platform:'linux',arch,url,sha256,size:bytes.length,version,signature}]}

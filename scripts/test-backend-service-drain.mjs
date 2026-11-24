@@ -1,13 +1,14 @@
 // Disposable Linux service only: never stops or modifies the real backend.
 import assert from 'node:assert/strict'
 import { readFile, writeFile, mkdtemp, rm } from 'node:fs/promises'
-import { execFile } from 'node:child_process'
+import { execFile,execFileSync } from 'node:child_process'
 import { promisify } from 'node:util'
 import { join, resolve } from 'node:path'
 import { tmpdir } from 'node:os'
 import { createRequire } from 'node:module'
 import { fileURLToPath } from 'node:url'
 import http from 'node:http'
+import {drainOwnedBackend} from './drain-legacy-owner-backend.mjs'
 const exec=promisify(execFile)
 assert.equal(process.platform,'linux');assert.equal(process.getuid(),0)
 assert.equal(process.env.INCUDAL_DRAIN_NATIVE_TEST,'disposable')
@@ -33,19 +34,21 @@ process.on('SIGTERM',()=>{if(stopped)return;stopped=true;void(async()=>{await cl
 `)
 let active,idleAgent,activeAgent
 try{
- await exec('systemd-run',['--unit='+unit,'--property=Type=exec','--property=User=root','--property=TimeoutStopSec='+timeout,'--property=TimeoutStartSec=10min',process.execPath,fixture],{timeout:20000})
+ await exec('systemd-run',['--unit='+unit,'--property=Type=exec','--property=User=root','--property=TimeoutStopSec=30s','--property=TimeoutStartSec=10min',process.execPath,fixture],{timeout:20000})
  let metadata;for(let n=0;n<100;n++){try{metadata=JSON.parse(await readFile(ready));break}catch{}await new Promise(r=>setTimeout(r,100))}
  assert.ok(metadata)
  const get=(path,agent)=>new Promise((resolve,reject)=>{http.get({host:'127.0.0.1',port:metadata.port,path,agent},r=>{let body='';r.on('data',b=>body+=b);r.on('end',()=>resolve(JSON.parse(body)))}).on('error',reject)})
  idleAgent=new http.Agent({keepAlive:true});activeAgent=new http.Agent({keepAlive:true})
  await get('/idle',idleAgent);active=get('/active',activeAgent)
  await new Promise(r=>setTimeout(r,200))
- const started=Date.now();await exec('systemctl',['stop',unit],{timeout:50000})
+ const started=Date.now()
+ const show=()=>Object.fromEntries(execFileSync('systemctl',['show',unit,'--property=MainPID,ActiveState,Result'],{encoding:'utf8'}).trim().split('\n').map(line=>line.split('=')))
+ await drainOwnedBackend(show,()=>execFileSync('systemctl',['kill','--kill-whom=main','--signal=SIGTERM',unit],{stdio:'pipe'}))
  assert.ok(Date.now()-started>30000,'in-flight work exceeding old stop budget must finish')
  assert.deepEqual(await active,{finished:true});assert.deepEqual(JSON.parse(await readFile(receipt)),{workDone:true})
  const{stdout}=await exec('journalctl',['-u',unit,'--no-pager'],{timeout:10000})
  assert.ok(!/timed out|signal SIGKILL|code=killed/.test(stdout))
- console.log('PASS real systemd: original 35min budget, 31sec HTTP and preClose resource work complete beyond plugin timeout, idle HTTP drains, no forced kill')
+ console.log('PASS real systemd: legacy 30sec unit drains 31sec HTTP and preClose resource work with direct main-process signal, idle HTTP drains, no forced kill')
  const startupStarted=Date.now()
  await exec('systemd-run',['--unit='+startupUnit,'--wait','--property=Type=oneshot','--property=TimeoutStartSec=10min',
    '--property=ExecStartPre=/usr/bin/sleep 95','/usr/bin/true'],{timeout:125000})

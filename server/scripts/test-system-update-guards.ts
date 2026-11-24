@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict'
+import {spawnSync} from 'node:child_process'
 import { readFileSync } from 'node:fs'
 import { cp, mkdir, mkdtemp, readFile, readlink, rm, symlink, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
@@ -55,6 +56,10 @@ const serverPackage = read('server/package.json')
 const freshInstall = read('scripts/smoke-fresh-install.sh')
 const legacyUpgrade=read('scripts/smoke-legacy-online-upgrade.sh')
 const ownerCandidate=read('scripts/apply-verified-owner-candidate.mjs')
+const drain=read('scripts/drain-legacy-owner-backend.mjs')
+assert.ok(ownerCandidate.includes('await drainLegacyOwnerBackend(app)') && drain.includes("'--kill-whom=main'") && drain.includes("current.Result, 'success'") && !drain.includes('SIGKILL') && !drain.includes('writeFile'), 'owner deployment drains only the existing authenticated main process before the original legacy stop, with no unit/code rewrite or forced kill')
+const drainTest=spawnSync(process.execPath,['scripts/test-drain-legacy-owner-backend.mjs'],{cwd:repoRoot,encoding:'utf8',windowsHide:true})
+assert.equal(drainTest.status,0,drainTest.stdout+drainTest.stderr)
 assert.ok(ownerCandidate.includes("verify(null,Buffer.from('payincus/panel-package/v1")&&ownerCandidate.includes("INCUDAL_OWNER_CANDIDATE_DEPLOY,'authorized-test'")&&ownerCandidate.includes("server/dist/scripts/run-system-update-task.js")&&ownerCandidate.includes("assert.notEqual(process.env.RUN_DB_CHECKS,'0')")&&!ownerCandidate.includes("writeFileSync('/opt/incudal"),'owner test candidate must verify publisher and use the genuine installed worker without direct live-file edits or DB check bypass')
 assert.ok(ownerCandidate.includes("sha256sum',['--check','--strict','--quiet',sourceManifest]")&&ownerCandidate.includes('const links=sealedRuntimeLinks(app)')&&ownerCandidate.includes("links===readFileSync(sourceManifest+'.links','utf8')"),'candidate deployment must check the sealed installed worker and literal link set before importing it')
 const candidatePostflight=read('scripts/finalize-verified-owner-candidate.mjs')

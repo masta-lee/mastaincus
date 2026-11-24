@@ -1,5 +1,7 @@
 # 安全修复阶段收尾与未完成清单
 
+本次热更必要前置已源码补：旧主控stop30s/new包后才改预算，原候选工具现在先验证systemdMainPID/uid/argv/currentexe/hostPIDnamespace，正常SIGTERM主进程排空后交原worker；失败只启动原服务保原code/data，不写unit、不强杀客户。纯失败/超时/换PID守卫、OTA2403通过；真实旧30s单位31sHTTP+长preClose正常exit0/idle收尾2403通过，95秒启动验证仍在途。新依赖已加旧worker候选工具暂存清单，后续同source保存/完整预览再部署。当前主控原客户/财务/身份保持，未执行update；8b候选完整预览45315218721在途，CI45315182374无failure。基础库内核/真实OSS等未完成，条件式发行不提前触发。
+
 2026-11-24 owner恢复本次主控候选热更新与条件式发行：已推Agent版本security.6/sourcef90c0002，完整signed测试包45312197627双首装/root恢复/六旧worker全部success，双包签名/source/权限2388通过；主CI45312169772出现authrefresh异步夹具失败138170422901，完整2395日志取回且实Chrome2396修复过，不能计全绿。主控只读2378/库存2382：208/204可售/4分配/0不可售，原4客户#58～61运行、无在途任务；19财务表/208原identity/4IncusPIDUUIDroot/config/env基线2381已私密保存。首次候选预检2390链接字节排序与原en_USlocale排序不一致而拒绝，1180项链接内容完全相同；源码sealedRuntimeLinks改系统sort-z保原locale与%q、原seal不改，Linux全locale/postflight2395与OTAguards通过，主控仅新预检2397全通过。真实Chrome测试账户poolbuyer登录2386正常、已下架系统未重现。当前排序/夹具修复待最终source保存/完整预览后热更，不直接改主控程序，不清事件证据、不换root密码；本轮剩余基础库内核/完整自动事务/真实OSS目标尚未完成，正式发行仍须全部要求通过。
 
 2373恢复已自然成功：隔离Node24.22.3/PG16.16及客户端恢复，唯一业务healthy与原financial/auth验签通过；PG最低补丁守卫保持。旧world迁移产品来源仍f472，源码/231/双原生/主CI/完整预览/实包/全池仅读证据已全部通过，本轮未现场部署主控或全池。最新脱敏台账提交1c972500已推；后续完整自动NodePG事务仍缺符合最低门槛的安全旧起点、自然timer及双架构真实事务，不能据手工fixture恢复称完成。继续基础库内核/真实OSS等原清单，不正式发版，root密码owner自行换。
