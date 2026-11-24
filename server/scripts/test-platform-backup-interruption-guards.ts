@@ -6,7 +6,7 @@ import { join } from 'node:path'
 import { isIP } from 'node:net'
 import { randomUUID } from 'node:crypto'
 import ts from 'typescript'
-import { ensure, statePath } from '../src/services/platform-backup-core.js'
+import { BackupError, ensure, statePath } from '../src/services/platform-backup-core.js'
 import { validateRestoreJournal, rollbackDatabasePlan } from '../src/services/platform-recovery-restore-journal.js'
 import { verifyRecoveryOneshotExit } from './fixtures/recovery-oneshot.js'
 
@@ -32,6 +32,32 @@ function load<T>(code: string, bindings: Record<string, unknown>): T {
   const compiled = ts.transpileModule(code, { compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.None } }).outputText
   return new Function(...Object.keys(bindings), compiled)(...Object.values(bindings)) as T
 }
+
+// A timeout must not make valid signed enrollment look like a different
+// identity. Execute the actual worker boundary with the original fixed helper;
+// invalid enrollment, missing helper and an exhausted budget still fail once.
+for (const scenario of ['verified', 'invalid', 'missing', 'timeout']) {
+  let checks = 0
+  const verify = load<() => Promise<void>>(
+    section('async function verifyControllerEnrollment(', 'interface RestorePlan ') + '\nreturn verifyControllerEnrollment', {
+      INSTALL: '/opt/incudal', process: { env: { INCUDAL_APP_DIR: '/opt/incudal/releases/verified-fixture' } },
+      existsSync: () => true, join, BackupError,
+      exec: async (program: string, args: string[], options: { timeout: number }) => {
+        checks++
+        assert.equal(program, '/usr/bin/python3')
+        assert.deepEqual(args, ['-I', '-B', join('/opt/incudal/releases/verified-fixture', 'scripts/enroll-gateway-controller.py'), '--verify'])
+        assert.equal(options.timeout, 120000, 'original dual signed-catalog verification can exceed 30 seconds on a low-resource machine')
+        if (scenario !== 'verified') throw Object.assign(new Error('discarded private verification details'), {
+          code: scenario === 'missing' ? 'ENOENT' : 1, killed: scenario === 'timeout'
+        })
+        return { stdout: '{}' }
+      }
+    })
+  if (scenario === 'verified') await verify()
+  else await assert.rejects(verify(), error => error instanceof BackupError && error.code === 'OSS_CONTROLLER_IDENTITY_INVALID')
+  assert.equal(checks, 1, 'verification failure never retries, regenerates identity or bypasses the original helper')
+}
+console.log('PASS backup controller verification: low-resource budget, original sealed helper and bounded trust failures')
 
 // Root proof of an empty-target rollback must survive a lost DB/write/unlink
 // response. It never clears another hold or accepts a missing rollback batch.

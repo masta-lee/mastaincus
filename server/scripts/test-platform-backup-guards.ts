@@ -39,6 +39,15 @@ try {
   await ensureBackupLocales(['en_US.UTF-8','en_US.UTF-8','C'],localeRuntime)
   await ensureBackupLocales(['en_US.UTF-8'],localeRuntime)
   assert.deepEqual(generatedLocales,['en_US.UTF-8'],'fresh B generates the source locale once, then reuses it')
+  let standaloneReady=false
+  const archiveOnlyGenerations:string[]=[]
+  const archiveOnlyRuntime={list:async()=>['C','en_US.utf8'],standalone:async()=>standaloneReady,
+    generate:async(source:string,name:string)=>{assert.equal(source,'en_US');archiveOnlyGenerations.push(name);standaloneReady=true}}
+  await ensureBackupLocales(['en_US.UTF-8','en_US.UTF-8'],archiveOnlyRuntime)
+  await ensureBackupLocales(['en_US.UTF-8'],archiveOnlyRuntime)
+  assert.deepEqual(archiveOnlyGenerations,['en_US.UTF-8'],'locale -a alone cannot prove a running postmaster can see a newly grown archive; standalone data is prepared once')
+  await assert.rejects(ensureBackupLocales(['en_US.UTF-8'],{list:async()=>['en_US.utf8'],standalone:async()=>false,generate:async()=>{}}),
+    /LOCALE_UNAVAILABLE/,'reported installation without readable standalone data cannot pass')
   for(const name of ['../../private','--prefix=private','en_US.UTF-8;evil','en_US.UTF-8\n','en_US.ISO-8859-1'])
     await assert.rejects(ensureBackupLocales([name],localeRuntime),/LOCALE_UNSUPPORTED/)
   await assert.rejects(ensureBackupLocales(['de_DE.UTF-8'],{list:async()=>['C'],generate:async()=>{}}),/LOCALE_UNAVAILABLE/,'localedef success must be read back')
@@ -611,6 +620,9 @@ try {
   const freshInstall = await readFile(resolve(import.meta.dirname, '../../scripts/smoke-fresh-install.sh'), 'utf8')
   assert.ok(freshInstall.includes('RUN_BACKUP_COMPATIBILITY_DRILL=1') && freshInstall.includes('smoke-platform-backup-compatibility.mjs'), 'both release architectures must run isolated migration compatibility acceptance')
   const recoveryDrill = await readFile(resolve(import.meta.dirname, '../../scripts/smoke-platform-backup.mjs'), 'utf8')
+  assert.ok(recoveryDrill.includes('await verifyBackupLocaleDrill()') && recoveryDrill.includes('await ensureBackupLocales([name])') &&
+    recoveryDrill.includes('archiveRejected') && recoveryDrill.includes('noRestart:true'),
+    'both release architectures must exercise archive-only new locales against the unchanged real postmaster')
   assert.ok(recoveryDrill.includes('CREATE DATABASE incudal OWNER incudal_migrate TEMPLATE template0') &&
     recoveryDrill.includes("'/opt/incudal/scripts/harden-database.py'") && recoveryDrill.includes("'/opt/incudal/scripts/migrate-database.sh'") &&
     recoveryDrill.includes("verifyFinancialDatabaseSeals('incudal', initialEnv.ENCRYPTION_KEY, false, true)"),

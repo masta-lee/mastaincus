@@ -47,6 +47,7 @@ const { AliyunOssClient } = await import('/opt/incudal/server/dist/services/aliy
 const { runPlatformBackupTask } = await import('/opt/incudal/server/dist/services/platform-backup-worker.js')
 const { pgQuery, localDatabaseAdmin, quoteIdentifier } = await import('/opt/incudal/server/dist/services/platform-backup-database.js')
 const { controlRecoveryBackend, waitForProtectedBackendHealth } = await import('/opt/incudal/server/dist/services/platform-backup-health.js')
+const { ensureBackupLocales } = await import('/opt/incudal/server/dist/services/platform-backup-locale.js')
 const secured=await import('/opt/incudal/server/dist/db/prisma.js')
 await secured.initializeFinancialDatabaseIntegrity()
 const controllerRoot = '/var/lib/incudal-gateway-controller'
@@ -122,6 +123,37 @@ async function gatewayState() {
     peers: (await exec('/usr/bin/wg', ['show', 'incudal-mgmt', 'allowed-ips'])).stdout.trim()
   }
 }
+async function verifyBackupLocaleDrill() {
+  const before = (await exec('/usr/bin/systemctl', ['show', 'incudal-backend', 'postgresql@16-main', '-p', 'MainPID', '-p', 'NRestarts'])).stdout
+  const installed = (await exec('/usr/bin/locale', ['-a'])).stdout.toLowerCase().replaceAll('utf-8', 'utf8').split(/\r?\n/)
+  const name = ['fr_FR.UTF-8','de_DE.UTF-8','it_IT.UTF-8','ja_JP.UTF-8','ko_KR.UTF-8'].find(value => !installed.includes(value.toLowerCase().replace('utf-8','utf8')))
+  assert.ok(name, 'disposable VM must have one unused UTF-8 locale for the running-postmaster regression')
+  const umask = process.umask()
+  // Reproduce the archive-only form on this disposable runner. The product
+  // must also fix names that locale -a already lists, without restarting PG.
+  await exec('/usr/bin/localedef', ['-i',name.split('.')[0],'-f','UTF-8',name], { timeout:120000 })
+  const archiveHash = createHash('sha256').update(await readFile('/usr/lib/locale/locale-archive')).digest('hex')
+  const database = `incudal_verify_${randomUUID().replaceAll('-','')}`, quoted = quoteIdentifier(database)
+  const create = `CREATE DATABASE ${quoted} OWNER incudal_migrate TEMPLATE template0 ENCODING 'UTF8' LC_COLLATE '${name}' LC_CTYPE '${name}';`
+  let exists = false, archiveRejected = false
+  try {
+    try { await localDatabaseAdmin(create); exists=true }
+    catch (error) { assert.ok(['OSS_DATABASE_ADMIN_FAILED','OSS_DATABASE_LOCALE_UNAVAILABLE'].includes(error.code)); archiveRejected=true }
+    if (exists) { await localDatabaseAdmin(`DROP DATABASE ${quoted};`); exists=false }
+    await ensureBackupLocales([name])
+    await localDatabaseAdmin(create); exists=true
+    const [actual] = await pgQuery('SELECT datcollate,datctype FROM pg_database WHERE datname=$1',[database])
+    assert.equal(actual.datcollate,name);assert.equal(actual.datctype,name)
+    const category = `/usr/lib/locale/${name.replace('UTF-8','utf8')}/LC_COLLATE`
+    const created = await stat(category)
+    await ensureBackupLocales([name])
+    assert.equal((await stat(category)).mtimeMs,created.mtimeMs,'repeated locale validation must not regenerate valid data')
+    assert.equal(process.umask(),umask,'the worker private-file umask stays intact')
+    assert.equal(createHash('sha256').update(await readFile('/usr/lib/locale/locale-archive')).digest('hex'),archiveHash)
+    assert.equal((await exec('/usr/bin/systemctl', ['show', 'incudal-backend', 'postgresql@16-main', '-p', 'MainPID', '-p', 'NRestarts'])).stdout,before)
+    console.log('Backup locale running-postmaster regression passed',JSON.stringify({archiveRejected,standalone:true,exactCollation:true,noRestart:true,idempotent:true}))
+  } finally { if(exists)await localDatabaseAdmin(`DROP DATABASE ${quoted};`) }
+}
 try {
   for (const entry of ['user', 'admin']) {
     assert.equal(await readFile(`/opt/incudal/client/dist/${entry}/recovery/payincus-recovery.py`, 'utf8'), await readFile('/opt/incudal/scripts/platform-backup-recovery.py', 'utf8'))
@@ -131,6 +163,7 @@ try {
   for (const path of ['/etc/systemd/system/incudal-platform-backup@.service', '/etc/systemd/system/incudal-backend.service.d/platform-backup.conf']) assert.ok((await stat(path)).isFile())
   await exec('/usr/bin/sudo', ['-u', 'incudal', 'test', '-w', '/var/lib/incudal-backup/inbox'])
   await assert.rejects(exec('/usr/bin/sudo', ['-u', 'incudal', 'test', '-r', '/var/lib/incudal-backup/private']))
+  await verifyBackupLocaleDrill()
   const key = `backup_drill_${randomUUID()}`
   await secured.prisma.systemConfig.create({data:{key,value:'snapshot',type:'string'}})
   const backup = await task('backup')

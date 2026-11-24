@@ -146,6 +146,9 @@ for(const modern of [false,true]) {
 for(const [code,expected] of [['57P03','OSS_DATABASE_UNAVAILABLE'],['55P03','OSS_DATABASE_BUSY'],['53100','OSS_DATABASE_STORAGE_FULL'],['28P01','OSS_DATABASE_ADMIN_FAILED']])
   assert.equal(databaseAdminFailure(`FATAL:  ${code}: discarded private text`,false),expected)
 assert.equal(databaseAdminFailure('arbitrary network wording',false),'OSS_DATABASE_ADMIN_FAILED')
+for(const category of ['COLLATE','CTYPE'])
+  assert.equal(databaseAdminFailure(`ERROR:  22023: invalid LC_${category} locale name: "private-locale"`,false),'OSS_DATABASE_LOCALE_UNAVAILABLE')
+assert.equal(databaseAdminFailure('ERROR:  22023: unrelated private parameter',false),'OSS_DATABASE_ADMIN_FAILED')
 assert.equal(databaseAdminFailure('',true),'OSS_DATABASE_ADMIN_TIMEOUT')
 
 assert.equal(recoveryOrderQuantity([{quantity:2},{quantity:1}]),3)

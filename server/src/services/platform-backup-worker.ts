@@ -45,7 +45,10 @@ const INSTALL = '/opt/incudal'
 const CONTROLLER_ROOT = '/var/lib/incudal-gateway-controller'
 async function verifyControllerEnrollment() {
   const app = process.env.INCUDAL_APP_DIR || (existsSync(`${INSTALL}/current`) ? `${INSTALL}/current` : INSTALL)
-  try { await exec('/usr/bin/python3', ['-I', '-B', join(app, 'scripts/enroll-gateway-controller.py'), '--verify'], { timeout: 30000 }) }
+  // The original enrollment helper verifies both signed architecture catalogs
+  // twice. Low-resource machines can exceed 30 seconds with valid identities;
+  // wait for that same read-only check without retrying or relaxing its trust.
+  try { await exec('/usr/bin/python3', ['-I', '-B', join(app, 'scripts/enroll-gateway-controller.py'), '--verify'], { timeout: 120000 }) }
   catch { throw new BackupError('OSS_CONTROLLER_IDENTITY_INVALID', 409) }
 }
 interface RestorePlan { id: string; createdBy: number; expiresAt: string; manifest: BackupManifest; prefix: string; files: Array<[string, string]>; gatewayEndpoint?:string; compatibility?: { targetVersion: string; postgresMajor: number; migrationHash: string; releaseHash: string; schemaHash: string } }

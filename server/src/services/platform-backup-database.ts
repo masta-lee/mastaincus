@@ -443,6 +443,7 @@ export function databaseAdminFailure(stderr: string, timedOut: boolean): string 
   if(states.some(code=>['57P01','57P02','57P03','53300','53400','08000','08001','08003','08004','08006'].includes(code)))return 'OSS_DATABASE_UNAVAILABLE'
   if(states.some(code=>['55P03','40P01','40001'].includes(code)))return 'OSS_DATABASE_BUSY'
   if(states.includes('53100'))return 'OSS_DATABASE_STORAGE_FULL'
+  if(states.includes('22023') && /invalid LC_(?:COLLATE|CTYPE) locale name/i.test(stderr))return 'OSS_DATABASE_LOCALE_UNAVAILABLE'
   return 'OSS_DATABASE_ADMIN_FAILED'
 }
 export async function localDatabaseAdmin(sql: string) {
