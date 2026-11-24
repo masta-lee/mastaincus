@@ -4,9 +4,17 @@ import { execFile } from 'node:child_process'
 import { promisify } from 'node:util'
 
 type ServiceCommand = (program: string, args: string[], options: {timeout:number}) => Promise<{stdout:string}>
+// The shipped service allows 35 minutes to drain accepted work and 10 minutes
+// for startup. Recovery must wait for that same job instead of timing out
+// first and attempting rollback while the service manager is still stopping.
+const recoveryServiceTimeout = {
+  stop: 36 * 60 * 1000,
+  start: 11 * 60 * 1000,
+  restart: 46 * 60 * 1000
+} as const
 export async function controlRecoveryBackend(action: 'stop' | 'start' | 'restart', execute: ServiceCommand = promisify(execFile)) {
-  const command = (args: string[], timeout = 90000) => execute('/usr/bin/systemctl', args, {timeout})
-  try { await command([action, 'incudal-backend.service']); return }
+  const command = (args: string[], timeout = 10000) => execute('/usr/bin/systemctl', args, {timeout})
+  try { await command([action, 'incudal-backend.service'], recoveryServiceTimeout[action]); return }
   catch { /* Distinguish systemd's rate limit from a real startup failure. */ }
   try {
     if (action === 'stop') throw new Error('stop failed')
@@ -15,7 +23,7 @@ export async function controlRecoveryBackend(action: 'stop' | 'start' | 'restart
     // Several authorized restore/rollback stages can consume the normal burst.
     // Reset only this exact refusal, once; a crashing service remains throttled.
     await command(['reset-failed', 'incudal-backend.service'], 10000)
-    await command([action, 'incudal-backend.service'])
+    await command([action, 'incudal-backend.service'], recoveryServiceTimeout[action])
   } catch { throw new BackupError('OSS_BACKEND_SERVICE_FAILED', 503) }
 }
 
@@ -30,7 +38,7 @@ export async function waitForProtectedBackendHealth(expectedHeld = true, runtime
   now: Date.now,
   sleep: milliseconds => new Promise(resolve => setTimeout(resolve, milliseconds))
 }) {
-  const deadline = runtime.now() + 90000
+  const deadline = runtime.now() + 10 * 60 * 1000
   while (runtime.now() < deadline) {
     try {
       const response = await runtime.fetch('http://127.0.0.1:3001/api/health', {

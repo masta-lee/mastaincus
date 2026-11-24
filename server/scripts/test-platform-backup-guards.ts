@@ -291,9 +291,17 @@ try {
   }
   await waitForProtectedBackendHealth(false, healthRuntime)
   assert.equal(healthClock, 45000, 'a healthy startup slower than 30 seconds must be allowed before resume is rolled back')
+  for (const expectedHeld of [true,false]) for (const readyAt of [95000,590000]) {
+    healthClock=0
+    await waitForProtectedBackendHealth(expectedHeld,{...healthRuntime,fetch:async(url,options)=>{
+      assert.equal(url,'http://127.0.0.1:3001/api/health');assert.equal(options?.redirect,'error')
+      return new Response(JSON.stringify({recoveryHeld:expectedHeld,businessStartupReady:healthClock>=readyAt}),{status:healthClock>=readyAt?200:503})
+    }})
+    assert.equal(healthClock,readyAt,'both protected restore and resumed business allow valid startup within the actual ten-minute service budget')
+  }
   healthClock = 0
   await assert.rejects(waitForProtectedBackendHealth(false, { ...healthRuntime, fetch: async () => new Response(JSON.stringify({ recoveryHeld: true })) }), /OSS_PROTECTED_START_FAILED/)
-  assert.equal(healthClock, 90000, 'HTTP success with the wrong protection state must fail within the startup deadline')
+  assert.equal(healthClock, 10*60*1000, 'HTTP success with the wrong protection state must still fail within the bounded startup deadline')
   healthClock=0
   const heartbeatRuntime={now:()=>healthClock,sleep:async(ms:number)=>{healthClock+=ms},
     query:(async()=>[{activated:true,pending:healthClock<30000?'1':'0'}]) as any}
