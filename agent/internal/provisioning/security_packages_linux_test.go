@@ -4,6 +4,7 @@ package provisioning
 
 import (
 	"context"
+	"fmt"
 	"os"
 	"reflect"
 	"strings"
@@ -15,7 +16,7 @@ func TestNativeSecurityPackageInventoryAndUpdate(t *testing.T) {
 	if os.Getenv("INCUDAL_SYSINFO_COMPAT_TEST") != "disposable" {
 		t.Skip("disposable Alpine root only")
 	}
-	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), 180*time.Second)
 	defer cancel()
 	world, err := os.ReadFile("/etc/apk/world")
 	if err != nil {
@@ -29,7 +30,7 @@ func TestNativeSecurityPackageInventoryAndUpdate(t *testing.T) {
 	if err != nil || len(before) == 0 {
 		t.Fatal("actual apk inventory invalid", err)
 	}
-	if err = repairSecurityPackages(ctx); err != nil {
+	if err = nativeSecurityPackagePass(ctx); err != nil {
 		t.Fatal("signed bounded leaf update", err)
 	}
 	repositories, err := os.ReadFile("/etc/apk/repositories")
@@ -41,7 +42,7 @@ func TestNativeSecurityPackageInventoryAndUpdate(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer os.WriteFile("/etc/apk/repositories", repositories, 0644)
-	if err = repairSecurityPackages(ctx); err != nil {
+	if err = nativeSecurityPackagePass(ctx); err != nil {
 		t.Fatal("legacy official HTTP settings must use independent signed HTTPS transaction", err)
 	}
 	retained, err := os.ReadFile("/etc/apk/repositories")
@@ -60,8 +61,8 @@ func TestNativeSecurityPackageInventoryAndUpdate(t *testing.T) {
 	for _, name := range securityLeaves {
 		allowed[name] = true
 	}
-	if len(before) != len(after) {
-		t.Fatal("leaf update added or removed a package")
+	if len(after) != len(before) && !(len(after) == len(before)+1 && securityPythonSplit(before, "python3-ndbm", after["python3-ndbm"])) {
+		t.Fatal("leaf update added an unreviewed package or removed a package")
 	}
 	for name, version := range before {
 		if after[name] != version && !allowed[name] {
@@ -73,6 +74,102 @@ func TestNativeSecurityPackageInventoryAndUpdate(t *testing.T) {
 		t.Fatal("administrator world constraints changed", err)
 	}
 	t.Log("PASS actual Alpine apk: complete installed inventory, signed leaf update and unrelated package preservation")
+}
+
+func nativeSecurityPackagePass(ctx context.Context) error {
+	pass, done := context.WithTimeout(ctx, 60*time.Second)
+	defer done()
+	return repairSecurityPackages(pass)
+}
+
+func TestSecurityPythonSplitOnlyAdoptsMatchingReviewedCompanion(t *testing.T) {
+	before := map[string]string{"python3": "3.14.10-r2", "openssl": "3.5.7-r0", "linux-virt": "6.12.1-r0"}
+	plan := "(1/2) Upgrading openssl (3.5.7-r0 -> 3.5.9-r0)\n(2/2) Installing python3-ndbm (3.14.10-r2)\nOK: 220 packages"
+	if err := safeSecurityPackagePlan(plan, before); err != nil {
+		t.Fatal(err)
+	}
+	expected := securityExpectedPackages(before, plan)
+	if expected["python3-ndbm"] != before["python3"] || expected["linux-virt"] != before["linux-virt"] || len(expected) != len(before)+1 || before["python3-ndbm"] != "" {
+		t.Fatal("split must preserve complete original inventory")
+	}
+	for _, change := range []string{"Installing python3-ndbm (3.14.10-r1)", "Installing python3-ndbm (3.14.11-r0)", "Installing python3-pyc (3.14.10-r2)", "Installing python3-ndbm (3.14.10-r2)\nInstalling python3-ndbm (3.14.10-r2)", plan + "\nInstalling gdbm (1.26-r0)", plan + "\nUpgrading python3 (3.14.10-r2 -> 3.14.11-r0)", plan + "\nRemoving linux-virt"} {
+		if safeSecurityPackagePlan(change, before) == nil {
+			t.Fatal("unreviewed dependency accepted", change)
+		}
+	}
+	for _, version := range []string{"", "3.14.10-r1", "3.14.11-r0"} {
+		if safeSecurityPackagePlan(plan, map[string]string{"python3": version, "openssl": "3.5.7-r0"}) == nil {
+			t.Fatal("different interpreter accepted", version)
+		}
+	}
+	if safeSecurityPackagePlan(plan, map[string]string{"python3": "3.14.10-r2", "python3-ndbm": "3.14.10-r2", "openssl": "3.5.7-r0"}) == nil {
+		t.Fatal("existing companion reinstall accepted")
+	}
+}
+
+func TestNativeSecurityPythonSplitRecovery(t *testing.T) {
+	if os.Getenv("INCUDAL_SYSINFO_COMPAT_TEST") != "disposable" {
+		t.Skip("disposable Alpine root only")
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 180*time.Second)
+	defer cancel()
+	output, err := run(ctx, "apk", "info", "-v")
+	before, parseErr := securityInstalledPackages(string(output))
+	if err != nil || parseErr != nil || before["python3"] != "3.14.10-r2" || before["python3-ndbm"] != before["python3"] {
+		t.Fatal("native split fixture requires exact signed Python group", err, parseErr)
+	}
+	world, err := os.ReadFile("/etc/apk/world")
+	if err != nil {
+		t.Fatal(err)
+	}
+	// Reproduce the observed installed DB after an interrupted dependency
+	// split in this throwaway root. Product code never edits APK's database.
+	database := "/lib/apk/db/installed"
+	data, err := os.ReadFile(database)
+	if err != nil {
+		t.Fatal(err)
+	}
+	info, err := os.Stat(database)
+	if err != nil {
+		t.Fatal(err)
+	}
+	entries := strings.Split(string(data), "\n\n")
+	kept := []string{}
+	removed := 0
+	for _, entry := range entries {
+		if strings.Contains("\n"+entry+"\n", "\nP:python3-ndbm\n") {
+			removed++
+			continue
+		}
+		kept = append(kept, entry)
+	}
+	if removed != 1 {
+		t.Fatal("ambiguous split fixture")
+	}
+	if err = os.WriteFile(database, []byte(strings.Join(kept, "\n\n")), info.Mode().Perm()); err != nil {
+		t.Fatal(err)
+	}
+	output, err = run(ctx, "apk", "info", "-v")
+	missing, parseErr := securityInstalledPackages(string(output))
+	if err != nil || parseErr != nil || missing["python3-ndbm"] != "" || len(missing) != len(before)-1 {
+		t.Fatal("split fixture not established")
+	}
+	if err = nativeSecurityPackagePass(ctx); err != nil {
+		t.Fatal("reviewed split recovery failed", err)
+	}
+	output, err = run(ctx, "apk", "info", "-v")
+	after, parseErr := securityInstalledPackages(string(output))
+	if err != nil || parseErr != nil || !reflect.DeepEqual(before, after) {
+		t.Fatal("split must restore exact complete inventory", err, parseErr)
+	}
+	current, err := os.ReadFile("/etc/apk/world")
+	if err != nil || string(current) != string(world) {
+		t.Fatal("split changed original world")
+	}
+	if err = nativeSecurityPackagePass(ctx); err != nil {
+		t.Fatal("repeated repaired transaction", err)
+	}
+	fmt.Println("PASS real signed APK split recovery and repeated maintenance preserve world and complete inventory")
 }
 
 func TestSecurityPackageCompleteInventoryAndPinnedInstall(t *testing.T) {

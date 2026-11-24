@@ -1,5 +1,11 @@
 # 安全修复阶段收尾与未完成清单
 
+12:20补记：上述Python拆包源码已审查并通过Go全套/vet、双架构编译、security-hardening/host-provisioning/agent-version守卫。真实隔离Alpine官方root实际APK补拆包后全库存精确一致、world原文保持、重复维护通过（2482；每次产品维护仍60秒，测试多次共用外层预算已修为独立60秒）。隔离准备的旧cloud Python冲突、缺dev/null与共享proc及多次共用60秒失败保留，不算产品修复前通过；最终native四项均自然PASS。下一步保存`security.7`并生成同source签名Agent后自动全池复验。cc89主CI45321383518已终态30/30及五配套全success；不继承为新拆包source全部通过。
+
+2026-11-24 12:05接续：主控原OTA worker任务62于03:45:42.302Z成功，完整面板`v1.8.14-test.9ae84f3`来源`9ae84f38c1c4020d7df3c8f3804724d7fb807b70`，唯一backend3514543/业务ready/无恢复hold/35分钟stop与10分钟start正常。signed Agent`v1.0.17-security.6`同来源原子资产部署后208全自动接收；全208严格原pin只读核验迁移回执completed/root600/原前后hash及world吻合，移除1460项旧程序约束（AMD206/ARM2），无失败。原19组账务、208管理身份与4客户PID/UUID/rootdisk/密码/账期/.env保持，持续客户SSH980次零错误。11:50/55、12:00/05自然巡检均success/failure0，原无过期实例，不能据此称现场停删已实测。
+
+**本次更新后库存回归未通过，仍不能发行。** Agent分批升级与首次核验曾使暂不可售升至91台，随后回落但仍每五分钟反复。实际AMD/ARM只读原生probe确认Incus/LXCFS/DNS与空机库存正常；新HTTPS签名APK真实simulate在#78要求`Installing python3-ndbm (3.14.10-r2)`，已装Python恰同修订但拆包缺失，旧严格leaf守卫拒绝新增依赖，使空机维护一直retry与重复prepared。源码正在增加仅该精确同修订拆包的完整计划/重复计划/安装后全库存核验，world不变；未直接修改生产APK或故障标记。新增本机Go/双架构编译通过，真实隔离APK复现验收运行中，同source signed新Agent、全池回归、实购/全镜像操作尚未完成。当前cc89主CI45321383518为28success/2在途无failure；500主45320898649已cancelled（8success/22cancelled），不计通过。基础库内核/完整自动NodePG事务/真实OSS等旧余项仍保持，root密码由owner自行换。
+
 本轮重试2436已正常排空旧backend，task61在原worker早期git global fatal:$HOME not set拒绝（systemd transient无登录HOME）；未下载/切代码/迁移，原sealed994与客户/财务保持，手工仅启动原service恢复3512101、持续客户SSH508零错误。源码ownerlauncher固定rootHOME并补beforeExit早期失败仅同app+完整原seal/links后启动原service，OTAguards2439通过；准备保存工具精修后继续原worker，不绕签名/DB检查。此失败不计热更成功，正式发版未执行。
 
 主控首次本轮更新2422在旧backend直接SIGTERM排空时失败，未创建OTA任务/未切代码/原服务自动恢复3508596；原4客户持续SSH360次零错误/原账目身份保持。完整journal2432确证old994 sourceAvvio timedpreClose（13:19? 时间以记录UTC为准）exit1。新仓库工具仅固定原sealed994/原PID退出/唯一FastifyError+原avviostack匹配时保错误、停止原重启并要求无pending客户任务和原financial/authority/Incusbaseline全部一致后继续原worker；其它错误恢复原service拒绝更新，不清状态/不重seal。纯测试/原生2435与OTA24034通过；此为部署兼容工具修复，运行代码候选仍完整9ae签名包。9aeCI此时29/30无fail，完整45317196728全部success、双原生14/14和actualdual签名source过。后续执行仍须记录最终生产目标而非称已更新，正式发行仍全部测试后。

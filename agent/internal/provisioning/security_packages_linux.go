@@ -18,6 +18,7 @@ var securityLeaves = []string{"openssl", "libssl3", "libcrypto3", "curl", "libcu
 	"lxc", "lxc-libs", "sqlite-libs", "libseccomp", "libcap2", "acl-libs", "libattr", "libuv", "lz4-libs", "zstd-libs", "xz-libs", "libintl", "libgcc",
 	"tar", "gzip", "xz", "squashfs-tools", "rsync", "rsync-openrc", "libpsl", "libidn2", "libunistring", "c-ares", "brotli-libs", "nghttp2-libs"}
 var securityPackageVersionChange = regexp.MustCompile(`(?m)Upgrading ([a-zA-Z0-9+_.-]+) \(([0-9][a-zA-Z0-9+_.~-]*) -> ([0-9][a-zA-Z0-9+_.~-]*)\)`)
+var securityPackageInstallation = regexp.MustCompile(`(?m)Installing ([a-zA-Z0-9+_.-]+) \(([0-9][a-zA-Z0-9+_.~-]*)\)`)
 var installedSecurityPackage = regexp.MustCompile(`^([a-zA-Z0-9+_.-]+)-([0-9][a-zA-Z0-9+_.~-]*)$`)
 var securityMajorVersion = regexp.MustCompile(`^([0-9]+)(?:\.|-r)`)
 var securityCertificateVersion = regexp.MustCompile(`^[0-9]{8}-r[0-9]+$`)
@@ -54,7 +55,18 @@ func securityExpectedPackages(before map[string]string, plan string) map[string]
 	for _, change := range securityPackageVersionChange.FindAllStringSubmatch(plan, -1) {
 		expected[change[1]] = change[3]
 	}
+	for _, addition := range securityPackageInstallation.FindAllStringSubmatch(plan, -1) {
+		expected[addition[1]] = addition[2]
+	}
 	return expected
+}
+
+// Alpine 3.24 split _dbm out of this exact signed Python revision. The
+// installed interpreter already requires the missing companion, so every APK
+// transaction solves it even when only a TLS patch was requested. Adopt only
+// this reviewed split; new packages and arbitrary Python updates stay refused.
+func securityPythonSplit(before map[string]string, name, version string) bool {
+	return name == "python3-ndbm" && version == "3.14.10-r2" && before["python3"] == version && before[name] == ""
 }
 
 func safeSecurityPackagePlan(output string, before map[string]string) error {
@@ -64,8 +76,17 @@ func safeSecurityPackagePlanFor(output string, before map[string]string, targets
 	if strings.Contains(output, "Removing ") || strings.Contains(output, "Downgrading ") || strings.Contains(output, "UNTRUSTED") {
 		return fmt.Errorf("security package plan refused")
 	}
-	if strings.Contains(output, "Installing ") || strings.Contains(output, "Reinstalling ") {
+	if strings.Contains(output, "Reinstalling ") {
 		return fmt.Errorf("unexpected security package installation refused")
+	}
+	additions := securityPackageInstallation.FindAllStringSubmatch(output, -1)
+	if strings.Count(output, "Installing ") != len(additions) || len(additions) > 1 {
+		return fmt.Errorf("unexpected security package installation refused")
+	}
+	for _, addition := range additions {
+		if !securityPythonSplit(before, addition[1], addition[2]) {
+			return fmt.Errorf("unexpected security package installation refused")
+		}
 	}
 	allowed := map[string]bool{}
 	seen := map[string]bool{}
@@ -164,6 +185,12 @@ func repairSecurityPackageSet(ctx context.Context, targets []string, authorize f
 			return fmt.Errorf("security package version order refused")
 		}
 		pinned = append(pinned, change[1])
+	}
+	if len(securityPackageInstallation.FindAllStringSubmatch(string(output), -1)) > 0 {
+		// upgrade the already installed world atom; add would persist a new
+		// administrator constraint. The repeated complete plan binds the
+		// companion version and rejects extra dependencies before mutation.
+		pinned = append(pinned, "python3")
 	}
 	if len(pinned) == 0 {
 		return nil
