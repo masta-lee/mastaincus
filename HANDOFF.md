@@ -1,3 +1,5 @@
+2026-11-24迁移后续隔离恢复2373已成功：完整f472候选原installer23727/seal/唯一health保持；新shutdown实际stop2367 success，旧NodePG准确fixture组不变，但PG16.15被最低16.16守卫拒绝，已恢复Node24.22.3/PG16.16/client、原财务认证验签和业务healthy。自动有补丁全事务/自然timer/双架构真实事务/基础库内核/真实OSS未完成；原迁移f472主CI30/30/231/双原生14/完整预览/dual包及208只读world与installed证据全通过，未生产迁移/部署，正式发行暂停、root密码owner自行换。
+
 2026-11-24旧APK迁移最终阶段：f4726f6bbd260cbbf45ebd459f071679c2fb60cf已主CI45302622533 30/30、五配套（原生14/14）、完整预览45302616739双首装/rootrestore/六旧worker全success/Release跳过；全量2340 231/23116m33和actual dualsignature/tar2342/2347通过。owner明确旧锁全属程序，208宿主两次read-only原pin/world及实装全部核对，目录实际28项；无全池现场改world。完整候选仅隔离原installer2348/23727文件/原seal/唯一健康backendPG/env/财务认证成功。旧runtime起点2367及后续完整自动事务在途，基础库内核/真实OSS未完，不正式发行/生产写/root密码owner自行换。
 
 2026-11-24旧APK锁迁移：owner确认全部由旧程序写入，无人工pin。通用27历史版本目录/实装匹配一次迁移已源码实现，原node+短签名许可/登记cutoff/官方分支源/APKflock，worldBeforeAfter/hash/mode/root600回执、后续人工pin与并发改动保护，失败不影响销售/五分钟重试，旧AppArmorpreparing先等待。Go2333/双archcompile-vet/最终真实Linux与Alpine2334/真实独立PG许可2330及临时PG停2332/类型build2335security通过。当前待保存/同source双原生与完整包/实际部署，不称全pool迁移；3861前轮CI45288725515 30/30+五配套+完整预览45288739980全success。主控未改，正式发行暂停，root密码owner自行换，基础库内核/有补丁NodePG事务/真实OSS仍未完成。
