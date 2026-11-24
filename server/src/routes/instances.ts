@@ -42,6 +42,7 @@ import {
 import { claimDestroyEmailVerification } from '../lib/instance-destroy-verification.js'
 import type { WriteActor } from '../db/user-write-authorization.js'
 import { HostMaintenanceError } from '../lib/host-maintenance-gate.js'
+import { InstanceTaskAdmissionBusyError } from '../db/instance-tasks.js'
 import {
   detectCloudInitStatus,
   getCachedCloudInitStatus,
@@ -341,6 +342,10 @@ async function createInstanceTaskOrConflict(
       return null
     }
     if (error instanceof HostMaintenanceError) {
+      reply.code(409).send({ code: error.code, error: error.message })
+      return null
+    }
+    if (error instanceof InstanceTaskAdmissionBusyError) {
       reply.code(409).send({ code: error.code, error: error.message })
       return null
     }

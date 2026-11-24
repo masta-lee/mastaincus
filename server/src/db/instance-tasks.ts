@@ -311,6 +311,10 @@ export class InstanceTaskConflictError extends Error {
     this.activeTask = activeTask
   }
 }
+export class InstanceTaskAdmissionBusyError extends Error {
+  readonly code = 'INSTANCE_OPERATION_BUSY'
+  constructor() { super('实例正在核验，请稍后重试') }
+}
 
 const INSTANCE_TASK_STATUSES = new Set<InstanceTaskStatus>([
   'PENDING',
@@ -347,7 +351,7 @@ export async function createInstanceTask(data: CreateInstanceTaskData): Promise<
   const result = await prisma.$transaction(async tx => {
     const locked = await tryAdvisoryTransactionLock(tx, INSTANCE_OPERATION_LOCK_NAMESPACE, data.instanceId)
     if (!locked) {
-      throw new InstanceTaskConflictError()
+      throw new InstanceTaskAdmissionBusyError()
     }
     await tx.$queryRaw`SELECT id FROM instances WHERE id = ${data.instanceId} FOR UPDATE`
     await tx.$queryRaw`SELECT id FROM hosts WHERE id = ${data.hostId} FOR SHARE`

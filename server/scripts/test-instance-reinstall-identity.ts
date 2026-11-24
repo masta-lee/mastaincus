@@ -10,7 +10,7 @@ import { join, resolve, sep } from 'node:path'
 const database = new URL(process.env.DATABASE_URL || '')
 assert.ok(['127.0.0.1', 'localhost'].includes(database.hostname) && database.pathname.endsWith('_pool_test'))
 const { prisma, closePrismaDatabase } = await import('../src/db/prisma.js')
-const { createInstanceTask, getInstanceTaskById } = await import('../src/db/instance-tasks.js')
+const { createInstanceTask, getInstanceTaskById, InstanceTaskAdmissionBusyError } = await import('../src/db/instance-tasks.js')
 const { selectAndReserveHostWithLock } = await import('../src/db/hosts.js')
 const { executeTask, reconcileInterruptedRebuilds } = await import('../src/workers/instanceTaskWorker.js')
 const { allocateAndReserveNatIpv4, createIpAddress, isIpAddressExists, reserveInstanceTaskIpv6 } = await import('../src/db/ip-addresses.js')
@@ -26,6 +26,7 @@ const { incusCompatibilityPermit }=await import('../src/services/incus-compatibi
 const { closeAllClients } = await import('../src/lib/incus/incus-pool.js')
 const { IncusClient } = await import('../src/lib/incus/incus-client.js')
 const { HostMaintenanceError } = await import('../src/lib/host-maintenance-gate.js')
+const { INSTANCE_OPERATION_LOCK_NAMESPACE, advisoryTransactionLock } = await import('../src/db/advisory-locks.js')
 const tag = 'reinstall-' + randomUUID().slice(0, 8), root = await mkdtemp(join(tmpdir(), tag))
 const keyPath = join(root, 'key.pem'), certPath = join(root, 'cert.pem')
 execFileSync(process.env.REVIEW_OPENSSL || 'openssl', ['req', '-x509', '-newkey', 'rsa:2048', '-nodes', '-days', '1', '-subj', '/CN=fixture',
@@ -171,6 +172,15 @@ try {
         ...(scenario === 'legacy-marker' ? {} : { managedCleanup: { uuid, attempt, endpointHash: createHash('sha256').update(host.url).digest('hex') } }), recoveryIdentity: { uuid, createdAt } } } })
     ids.push(instance.id)
     if (taskType === 'rebuild' && scenario === 'success') {
+      let releaseLock!: () => void, locked!: () => void
+      const acceptedLock = new Promise<void>(resolve => { locked = resolve })
+      const hold = new Promise<void>(resolve => { releaseLock = resolve })
+      const holder = prisma.$transaction(async tx => { await advisoryTransactionLock(tx,INSTANCE_OPERATION_LOCK_NAMESPACE,instance.id); locked(); await hold }, {timeout:10000})
+      await acceptedLock
+      try {
+        await assert.rejects(createInstanceTask({instanceId:instance.id,hostId:host.id,userId:owner.id,taskType:'start'}),
+          error => error instanceof InstanceTaskAdmissionBusyError && error.code === 'INSTANCE_OPERATION_BUSY', 'short resource verification lock must not invent an active task')
+      } finally { releaseLock(); await holder }
       const {hostMaintenanceBlocked}=await import('../src/lib/host-maintenance-gate.js')
       const cleanHost=await prisma.host.findUniqueOrThrow({where:{id:host.id}})
       const hash='a'.repeat(64)

@@ -1,5 +1,9 @@
 # 安全修复阶段收尾与未完成清单
 
+14:36继续：locale源码934c025已推，对应完整预览45340070594同source双包/双Incus/Agent准备5success，双首装六原worker在途；signedAgent45340075643仍build最后，主CI45340035171在途。一次版本号输入写错`b8d0000`的无tag运行45340027007已立即取消，正确target934c025，不计通过。当前生产仍完整ea8/任务63、Agent.9全208；没有现场改helper。真实fullseal候选verify-only在C2674通过，仍待原worker将此最终验证实现部署/自然timer通过。
+
+全镜像已AMD10/24、ARM5/24，后续又遇短锁409；只读反复确认无active task和maintenance，在实际PG资源/DNS核验持实例4106锁时admission立即非阻塞拒绝，原InstanceTaskConflictError把短核验误报为active task。源码只将领取不到锁改专用409 INSTANCE_OPERATION_BUSY/“实例正在核验，请稍后重试”，保真实活task代码及原非阻塞/身份/到期门禁，不改付款或自动重复客户操作。独立PG/mTLS锁持有并发拒绝＋双rebuild身份成功2686、类型/任务query/cancel/securityguard/backendbuild通过。新最终源码待保存/完整候选，其新提示未部署，测试脚本仅在409明确无task且确认无accepted请求后最多一次有界重试，不以跳校验或重复任务洗绿；停止的两矩阵已原进度续接。全部镜像、到期续费停删回池、已加载服务/NodePG完整自动事务与真实OSS仍未完，正式发行未执行。
+
 14:21进度：主控原worker任务63已06:11:28Z success→完整`v1.8.14-test.ea8d331`、backend3564948 businessready/NRestarts0；源码ea8完整预览45335675994双首装root恢复六旧worker13success/Release跳过、signedAgent45335679632全success与双实际panel2601～2625原pin/signature/source通过。候选工具暂存遗漏agent-package-signature依赖导致postflight工具先失败（不是OTA失败），已从仓库上传缺依赖，只读精确25742文件核/原launcherseal与财务208identity/六实例最终2662全部过。原.9与ea8签名Agent二进制和签名双架构逐hash相同，208全自动.9，Python/ndbm迁移全过，原4客户持续观察2689/0错误；全部镜像继续AMD5/24、ARM3/24，未完成，不发行。
 
 独立timer下一轮确证锁已程序自动收紧0600，但新检查错误RUNTIME_INTEGRITY_MISMATCH：原完整sha256核exit0、登录locale原helperverify通过，clean LC_ALL=C原helper错误“release file set or digest differs”，确证相同完整清单排序不同。源码改按C字节sort比较**所有原序列化hash/link记录**（保重复计数、原sha256全量核、原literal目标校验），不重seal异常/不跳文件；真实Linux完整Bash同record reorder通过、重复/缺失/链接替换/文件修改全部拒绝2672，主控仓库外候选verify-only完整原seal在clean C2674通过。system-update守卫过，新CI登记root真实测试；待保存/同source新完整候选再原worker部署，不能现场替换主控helper。9ab主CI45336103818此时29success/1在途、全部失败需终态核，rootfixture缺incudalgroup已用数值隔离fixture与38Linux/Windows通过；不重跑未变产品守卫。安全全部已加载/自然NodePG事务/真实OSS等余项保持。
