@@ -2,6 +2,16 @@
 
 Owner确认原仓库已退出，masta-lee/mastaincus 是今后唯一维护、安装和发行仓库。2026-11-27 owner明确批准公开，沿用无需token的安装和更新。仓库已公开；GitHub回读为PUBLIC，main及工作分支均为迁移提交ed39a3746c203e3c544dd9c400f1d3dacd249da6。匿名下载已通过，双架构安装／升级／回滚预览尚未通过，不能据公开和下载成功宣布整条迁移验收完成。
 
+2026-11-27 06:18+08:00接续：22文件迁移补丁已在6be2429921fe4ae1e2106a3ecae69b71d232157a提交推送，两远端分支一致；最终本机更新守卫r3自然0。其完整预览45887885319已自然failure：双包、双Incus、候选Agent五job成功；双首装和十旧升级十二job失败；正式Release预期skipped。两实际候选tar已独立验证保留Ed25519、完整SHA、路径／属主、gzip尾和各321份Git运行文件，原14/Agent资产不变；这不代表首装成功。Docs同来源45887892705的build/deploy均success，匿名首页及中英文版本日志HTTP200、无退休有效链接；最终raw/main安装脚本完整SHA与6be相等。所有旧失败分别保留。
+
+该轮失败已经分清两条源码根因。第一，原13/14四个已核完整SHA的真实包均没有harden-database.py/migrate-database.sh，当前installer却无条件调用，Python exit2又被原报告过滤漏掉。现仅在本次完整包验证及精确历史SHA标记同时成立、两脚本真正不存在时，使用原包ORM并以incudal身份迁移，固定env-i/PATH/HOME/ENV_FILE；第一启动的base unit也生成同一无特权／无profile命令。现代包缺失、部分缺失、链接或历史包额外工具都拒绝，验证失败先清标记；不改旧包、凭据、原DB归属或root现代迁移路径。四实际旧包发布者／标记、篡改原包拒绝、初次启动命令和迁移模式正负例本机通过。
+
+第二，GitHub runner的系统Git LFS安装留下filter.lfs配置；原normalizer把只读元数据查询也套成全局执行配置拒绝。真实原VM的映射私有模型已重现同一origin拒绝；修复仅将filter执行设置检查限定本仓库，仍全局拒绝core hooks/fsmonitor及未跟踪include，保护global文件FD／字节与raw/effective URL。原生还发现Linux规范化键需小写hookspath/includeif，旧混合大小写漏拒两项；normalizer与实际root launcher已精确修正。新shell97b6d0cf054b136ff222db62520f71a8d11645cfd54f260bfdb9c71e9548f040的13/13真实Linux正负例自然0，LFS和globalfilter marker不执行、localfilter／URLrewrite／include／core／0666拒绝，原PG88982／服务／包库／隔离与源seal保持。root Git/迁移对应本机守卫通过，完整新来源双架构预览尚待。
+
+单job手动诊断另保存原6be reproducer／原6be实际包／当前trace driver三个明确来源，固定旧normalizer2745eafd…；不修改或重seal原包、也不将旧失败后来trace成功改成首装通过。该诊断与新修复完整预览须分别跟进终态；本阶段仍无生产／客户／密码操作或新正式发行。
+
+追加真实root Git门禁8/8自然通过：提取当前完整deploy helper的原verify_git_control函数，仅外层映射隔离INSTALL_DIR/fail，global LFS及filter marker不执行，local hooks/include/includeIf/filter/fsmonitor/diff均拒绝；原B/PG88982及源seal/服务/配置保持。日志为logs/mastaincus-root-git-gate-native-20261127-r1-result.log。此前错误的Windows大小写排除与将root门禁误读为global查询已在独审记录中撤回；最终以真实Linux13+8场景为准。
+
 原源码备份 d6c0a04d675af0061d21276b947e3638e116346c 已推送并回读：22分支、206原标签共228 refs与本机一致；本轮另迁移配套 agent-v1.0.16 标签至原来源 ced7c10cd17de34107b7281f8846702609ab4f32。迁移补丁已在ed39a374提交推送，原Git历史和v1.8.14 tag提交不变。
 
 原正式 [v1.8.14](https://github.com/masta-lee/mastaincus/releases/tag/v1.8.14) 已在新仓库正式/latest。两架构安装包和两份SHA256校验文件保持原字节；两份OTA清单仅改 artifacts.url，完整版本、来源、大小和包hash保持。新清单SHA256为605ec85f3329ced07a8c5ea1e7a790043a1d8eb074e57c2d9678274a11a323cd。原包没有重建、重新seal或加入未发布修复。

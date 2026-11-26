@@ -76,6 +76,17 @@ assert.ok(workflow.includes('- fresh-install'), 'Release must wait for fresh ins
 assert.ok(workflow.includes("if: always() && startsWith(github.ref, 'refs/tags/v') && needs.build.result == 'success' && needs.fresh-install.result == 'success' && needs.legacy-upgrade.result == 'success'"),
   'formal publication must survive the intentionally skipped preview-agent dependency but reject any failed build/install/upgrade gate')
 const installer = read('scripts/install-panel.sh')
+assert.ok(installer.includes('VERIFIED_LEGACY_DATABASE_PACKAGE=""') &&
+  installer.includes('RELEASE_VERIFIED_THIS_RUN=false\n    VERIFIED_LEGACY_DATABASE_PACKAGE=""') &&
+  installer.includes('database_migration_mode()') &&
+  installer.includes('/usr/sbin/runuser -u "$RUN_USER" -- /usr/bin/env -i "PATH=$INSTALLER_SYSTEM_PATH" "ENV_FILE=$ENV_FILE" "HOME=$INSTALL_DIR" pnpm exec prisma migrate deploy') &&
+  installer.includes('ExecStartPre=/usr/bin/env -i PATH=${INSTALLER_SYSTEM_PATH} HOME=${INSTALL_DIR} ENV_FILE=${ENV_FILE} /usr/bin/bash --noprofile --norc -c'),
+  'only independently verified retained legacy archives may use their original unprivileged ORM during installation and the first startup, with fixed clean environment')
+assert.ok(installer.includes("git_query(['config', '--local', '--get-regexp', dangerous]") &&
+  installer.includes("git_query(['config', '--get-regexp', global_dangerous]") &&
+  installer.includes("git_query(['remote', 'get-url', 'origin']) != raw") &&
+  rootHelper.includes("config --local --get-regexp"),
+  'metadata-only normalization must tolerate protected global LFS filters while rejecting repository execution settings, global includes/core settings and URL rewriting; root task execution keeps its own gate')
 const backupInstaller = read('scripts/install-platform-backup.sh')
 const legacyDrill = read('scripts/smoke-legacy-online-upgrade.sh')
 const legacyWorkerDrill = read('scripts/smoke-legacy-online-upgrade.mjs')

@@ -165,7 +165,7 @@ verify_git_control() {
   [[ "$origin" == "$raw_origin" ]] || fail "Git origin URL rewriting is forbidden"
   [[ "$(/usr/bin/git -C "$INSTALL_DIR" ls-remote --get-url https://github.com/masta-lee/mastaincus.git)" == "https://github.com/masta-lee/mastaincus.git" ]] || fail "Git source URL rewriting is forbidden"
   if /usr/bin/git -C "$INSTALL_DIR" config --local --get-regexp \
-      '^(core\.hooksPath|core\.fsmonitor|filter\..*\.(clean|smudge|process)|diff\..*\.command)$' \
+      '^(core\.hookspath|core\.fsmonitor|filter\..*\.(clean|smudge|process)|diff\..*\.command|include\.path|includeif\..*\.path)$' \
       >/dev/null 2>&1; then
     fail "executable Git configuration is forbidden for root OTA"
   fi

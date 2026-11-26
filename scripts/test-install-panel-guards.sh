@@ -59,6 +59,13 @@ bash -s -- "$WORK_DIR" <<'GIT_ORIGIN_GUARD'
     git -C "$INSTALL_DIR" config remote.origin.url "$retired_origin"
     git -C "$INSTALL_DIR" config 'url.https://untrusted.invalid/source.git.insteadOf' "$current_origin"
     if (verify_git_control) > /dev/null 2>&1; then echo 'source fetch URL rewrite accepted' >&2; exit 1; fi
+    git -C "$INSTALL_DIR" config --unset "url.https://untrusted.invalid/source.git.insteadOf"
+    : > "$test_work/forbidden-config"
+    for forbidden_key in core.hooksPath core.fsmonitor filter.fixture.clean filter.fixture.smudge filter.fixture.process diff.fixture.command include.path 'includeIf.gitdir:/fixture/.path'; do
+        git -C "$INSTALL_DIR" config "$forbidden_key" "$test_work/forbidden-config"
+        if (verify_git_control) > /dev/null 2>&1; then echo 'executable or untracked repository configuration accepted' >&2; exit 1; fi
+        git -C "$INSTALL_DIR" config --unset "$forbidden_key"
+    done
 GIT_ORIGIN_GUARD
 if declare -f start_service | grep -q 'journalctl'; then
     echo 'startup diagnostics cannot publish raw secret-bearing journal output' >&2; exit 1
@@ -87,9 +94,11 @@ trap '[[ -z "$HTTP_FIXTURE_PID" ]] || kill "$HTTP_FIXTURE_PID" 2>/dev/null || tr
 
 # Real Bash readonly assignment semantics differ from an ordinary fixture
 # variable. Pass the fixed path only to the two children, never reassign it.
-declare -f run_migrations > "$WORK_DIR/migration-function.sh"
+declare -f database_migration_mode run_migrations > "$WORK_DIR/migration-function.sh"
 mkdir "$WORK_DIR/migration-bin"
-mkdir -p "$WORK_DIR/install/server"
+mkdir -p "$WORK_DIR/install/server" "$WORK_DIR/install/scripts"
+: > "$WORK_DIR/install/scripts/harden-database.py"
+: > "$WORK_DIR/install/scripts/migrate-database.sh"
 for migration_program in python3 bash; do
     cat > "$WORK_DIR/migration-bin/$migration_program" <<'MIGRATION_PROGRAM'
 #!/bin/sh
@@ -105,11 +114,29 @@ bash -s -- "$WORK_DIR" <<'MIGRATION_ENV_GUARD'
     readonly INSTALL_DIR="$migration_work/install"
     export MIGRATION_CALLS="$migration_work/migration-calls"
     export PATH="$migration_work/migration-bin:$PATH"
-    step() { :; }; log() { :; }
+    RELEASE_VERIFIED_THIS_RUN=true
+    VERIFIED_LEGACY_DATABASE_PACKAGE=""
+    step() { :; }; log() { :; }; error() { printf '%s\n' "$*" >&2; }
     run_migrations
     [[ "$(wc -l < "$MIGRATION_CALLS")" == 2 ]]
     grep -Fxq "$ENV_FILE|$INSTALL_DIR/scripts/harden-database.py" "$MIGRATION_CALLS"
     grep -Fxq "$ENV_FILE|$INSTALL_DIR/scripts/migrate-database.sh" "$MIGRATION_CALLS"
+    [[ "$(database_migration_mode "$INSTALL_DIR")" == modern ]]
+    RELEASE_VERIFIED_THIS_RUN=false
+    if (database_migration_mode "$INSTALL_DIR") > /dev/null 2>&1; then echo 'unverified migrations accepted' >&2; exit 1; fi
+    RELEASE_VERIFIED_THIS_RUN=true
+    VERIFIED_LEGACY_DATABASE_PACKAGE=v1.8.14
+    if (database_migration_mode "$INSTALL_DIR") > /dev/null 2>&1; then echo 'extra legacy migration tools accepted' >&2; exit 1; fi
+    rm -f "$INSTALL_DIR/scripts/harden-database.py"
+    VERIFIED_LEGACY_DATABASE_PACKAGE=""
+    if (database_migration_mode "$INSTALL_DIR") > /dev/null 2>&1; then echo 'partial modern migration tools accepted' >&2; exit 1; fi
+    rm -f "$INSTALL_DIR/scripts/migrate-database.sh"
+    VERIFIED_LEGACY_DATABASE_PACKAGE=v1.8.14
+    [[ "$(database_migration_mode "$INSTALL_DIR")" == legacy ]]
+    VERIFIED_LEGACY_DATABASE_PACKAGE=v1.8.13
+    [[ "$(database_migration_mode "$INSTALL_DIR")" == legacy ]]
+    VERIFIED_LEGACY_DATABASE_PACKAGE=""
+    if (database_migration_mode "$INSTALL_DIR") > /dev/null 2>&1; then echo 'missing modern tools treated as legacy' >&2; exit 1; fi
 MIGRATION_ENV_GUARD
 
 if [[ "$(uname -s)" == Linux ]]; then

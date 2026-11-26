@@ -30,7 +30,9 @@ readonly DEFAULT_PORT=3001
 readonly NODE_MAJOR=24
 readonly PNPM_VERSION="9.14.2"
 readonly PG_VERSION=16
+readonly INSTALLER_SYSTEM_PATH="/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
 RELEASE_VERIFIED_THIS_RUN=false
+VERIFIED_LEGACY_DATABASE_PACKAGE=""
 CF_TUNNEL_SELECTED=false
 CF_TUNNEL_VERIFIED=false
 
@@ -231,8 +233,14 @@ def git_query(args, missing=False):
     return result.stdout
 
 def origin():
-    dangerous = r'^(core\.hooksPath|core\.fsmonitor|filter\..*\.(clean|smudge|process)|diff\..*\.command|include\.path|includeIf\..*\.path)$'
-    if git_query(['config', '--get-regexp', dangerous], missing=True) is not None: refuse()
+    dangerous = r'^(core\.hookspath|core\.fsmonitor|filter\..*\.(clean|smudge|process)|diff\..*\.command|include\.path|includeif\..*\.path)$'
+    # Repository-controlled executable settings remain forbidden. These fixed
+    # metadata-only Git commands never run filters; a root-protected system
+    # Git LFS installation must not block normal startup. Keep global includes
+    # and core execution settings closed, and check effective URLs unchanged.
+    global_dangerous = r'^(core\.hookspath|core\.fsmonitor|include\.path|includeif\..*\.path)$'
+    if git_query(['config', '--local', '--get-regexp', dangerous], missing=True) is not None or \
+       git_query(['config', '--get-regexp', global_dangerous], missing=True) is not None: refuse()
     raw = git_query(['config', '--local', '--get-all', 'remote.origin.url'])
     if raw not in (OLD + b'\n', NEW + b'\n'): refuse()
     if git_query(['remote', 'get-url', 'origin']) != raw: refuse()
@@ -1231,7 +1239,8 @@ validate_release_archive() {
 }
 
 verify_release_publisher() {
-    local file="$1" name version architecture signature work actual
+    local file="$1" name version architecture signature work actual legacy_version=""
+    VERIFIED_LEGACY_DATABASE_PACKAGE=""
     name=$(basename "$file")
     [[ "$name" =~ ^incudal-(.+)-linux-(amd64|arm64)\.tar\.gz$ ]] || return 1
     version="${BASH_REMATCH[1]}"; architecture="${BASH_REMATCH[2]}"
@@ -1239,7 +1248,7 @@ verify_release_publisher() {
     actual=$(sha256sum "$file" | awk '{print $1}')
     # Only these exact public legacy bytes remain eligible without a signature.
     case "$name:$actual" in
-        incudal-v1.8.13-linux-amd64.tar.gz:f4b1e4274d7d9d3beeff775346bac900a540d47eb57d6a9c4d24cefed7bd6d84|incudal-v1.8.13-linux-arm64.tar.gz:d9114de77354731f8385a302ddb3c549a7617c738eaa85f2705326e0c37e072b|incudal-v1.8.14-linux-amd64.tar.gz:9cfd05408aa6ddd0ec0d7872099c2a0b550d96bce2beb2a063f220f55dd85ee4|incudal-v1.8.14-linux-arm64.tar.gz:03bfb27d636d628048761a44e3bdca8f5d55b1f33183e2466465dfdd98657eaf) [[ ! -f "$file.sig" ]] && return 0 ;;
+        incudal-v1.8.13-linux-amd64.tar.gz:f4b1e4274d7d9d3beeff775346bac900a540d47eb57d6a9c4d24cefed7bd6d84|incudal-v1.8.13-linux-arm64.tar.gz:d9114de77354731f8385a302ddb3c549a7617c738eaa85f2705326e0c37e072b|incudal-v1.8.14-linux-amd64.tar.gz:9cfd05408aa6ddd0ec0d7872099c2a0b550d96bce2beb2a063f220f55dd85ee4|incudal-v1.8.14-linux-arm64.tar.gz:03bfb27d636d628048761a44e3bdca8f5d55b1f33183e2466465dfdd98657eaf) legacy_version="$version"; if [[ ! -f "$file.sig" ]]; then VERIFIED_LEGACY_DATABASE_PACKAGE="$legacy_version"; return 0; fi ;;
     esac
     [[ -f "$file.sig" ]] || { error '缺少独立发布签名'; return 1; }
     signature=$(tr -d '\n\r' < "$file.sig")
@@ -1252,7 +1261,8 @@ verify_release_publisher() {
     local status=0
     openssl pkeyutl -verify -pubin -keyform DER -rawin -inkey "$work/public.der" -sigfile "$work/signature" -in "$work/message" >/dev/null 2>&1 || status=$?
     rm -rf -- "$work"
-    [[ $status -eq 0 ]]
+    [[ $status -eq 0 ]] || return 1
+    VERIFIED_LEGACY_DATABASE_PACKAGE="$legacy_version"
 }
 
 # ========================== 扫描手动放置的产物包 ==========================
@@ -1446,6 +1456,8 @@ obtain_release() {
 install_release() {
     local tar_file="$1"
     local is_upgrade="${2:-false}"
+    RELEASE_VERIFIED_THIS_RUN=false
+    VERIFIED_LEGACY_DATABASE_PACKAGE=""
 
     step "安装产物包..."
 
@@ -1783,13 +1795,32 @@ setup_redis() {
 }
 
 # ========================== 运行数据库迁移 ==========================
+database_migration_mode() {
+    local app_dir="$1"
+    [[ "$RELEASE_VERIFIED_THIS_RUN" == true ]] || { error '本次安装尚未完成完整产物验证，拒绝执行数据库迁移'; return 1; }
+    if [[ "$VERIFIED_LEGACY_DATABASE_PACKAGE" == v1.8.13 || "$VERIFIED_LEGACY_DATABASE_PACKAGE" == v1.8.14 ]]; then
+        [[ ! -e "$app_dir/scripts/harden-database.py" && ! -L "$app_dir/scripts/harden-database.py" && ! -e "$app_dir/scripts/migrate-database.sh" && ! -L "$app_dir/scripts/migrate-database.sh" ]] || { error '原历史产物中出现额外数据库迁移工具，拒绝执行'; return 1; }
+        printf '%s\n' legacy
+    else
+        [[ -f "$app_dir/scripts/harden-database.py" && ! -L "$app_dir/scripts/harden-database.py" && -f "$app_dir/scripts/migrate-database.sh" && ! -L "$app_dir/scripts/migrate-database.sh" ]] || { error '当前产物的数据库迁移工具缺失或不是普通文件'; return 1; }
+        printf '%s\n' modern
+    fi
+}
+
 run_migrations() {
     step "执行数据库迁移..."
 
     cd "${INSTALL_DIR}/server"
-
-    env "ENV_FILE=$ENV_FILE" python3 "$INSTALL_DIR/scripts/harden-database.py"
-    env "ENV_FILE=$ENV_FILE" bash "$INSTALL_DIR/scripts/migrate-database.sh"
+    local migration_mode
+    migration_mode="$(database_migration_mode "$INSTALL_DIR")" || return 1
+    if [[ "$migration_mode" == legacy ]]; then
+        # The retained original archives predate the root-only migration tools.
+        # Keep their original database owner and run their ORM as that user.
+        /usr/sbin/runuser -u "$RUN_USER" -- /usr/bin/env -i "PATH=$INSTALLER_SYSTEM_PATH" "ENV_FILE=$ENV_FILE" "HOME=$INSTALL_DIR" pnpm exec prisma migrate deploy
+    else
+        env "ENV_FILE=$ENV_FILE" python3 "$INSTALL_DIR/scripts/harden-database.py"
+        env "ENV_FILE=$ENV_FILE" bash "$INSTALL_DIR/scripts/migrate-database.sh"
+    fi
 
     log "数据库迁移完成"
 }
@@ -1801,6 +1832,12 @@ create_service() {
     local app_dir="${INSTALL_DIR}"
     if [[ -L "${INSTALL_DIR}/current" ]]; then
         app_dir="${INSTALL_DIR}/current"
+    fi
+    local migration_mode migration_start
+    migration_mode="$(database_migration_mode "$app_dir")" || return 1
+    migration_start="ExecStartPre=+/usr/bin/bash ${app_dir}/scripts/migrate-database.sh"
+    if [[ "$migration_mode" == legacy ]]; then
+        migration_start="ExecStartPre=/usr/bin/env -i PATH=${INSTALLER_SYSTEM_PATH} HOME=${INSTALL_DIR} ENV_FILE=${ENV_FILE} /usr/bin/bash --noprofile --norc -c 'cd ${app_dir}/server && exec pnpm exec prisma migrate deploy'"
     fi
     cat > "$SERVICE_FILE" << EOF
 [Unit]
@@ -1826,7 +1863,7 @@ Environment=PATH=/usr/local/libexec/incudal:/usr/local/sbin:/usr/local/bin:/usr/
 
 # 启动前自动执行数据库迁移
 ExecStartPre=+/usr/bin/bash -c 'if [ -f ${app_dir}/scripts/install-platform-backup.sh ]; then bash ${app_dir}/scripts/install-platform-backup.sh; fi'
-ExecStartPre=+/usr/bin/bash ${app_dir}/scripts/migrate-database.sh
+${migration_start}
 
 # 启动主程序
 ExecStart=/usr/bin/node ${app_dir}/server/dist/app.js

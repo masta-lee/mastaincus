@@ -1,0 +1,150 @@
+name: Repository migration diagnostics
+
+# One manual disposable runner reproduces the fixed old smoke/installer and
+# old artifact. The current checkout only supplies the workflow/trace wrapper;
+# this does not build, sign, publish or validate the current product fixes.
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  normalizer-native-trace:
+    if: github.repository == 'masta-lee/mastaincus'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      DIAGNOSTIC_DRIVER_SOURCE: ${{ github.sha }}
+      REPRODUCTION_SOURCE: '6be2429921fe4ae1e2106a3ecae69b71d232157a'
+      FIXED_ARTIFACT_SOURCE: '6be2429921fe4ae1e2106a3ecae69b71d232157a'
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - name: Check out the fixed original smoke and installer without modifying them
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          ref: '6be2429921fe4ae1e2106a3ecae69b71d232157a'
+          path: reproduction-source
+          persist-credentials: false
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: '24'
+      - name: Download the exact previously audited AMD artifact
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          repository: masta-lee/mastaincus
+          run-id: '45887885319'
+          artifact-ids: '15150727057'
+          github-token: ${{ github.token }}
+          merge-multiple: true
+          path: diagnostic-artifact
+      - name: Verify the pinned package, retained publisher and three distinct sources
+        shell: bash
+        run: |
+          set -euo pipefail
+          umask 077
+          test "$(git rev-parse HEAD)" = "$DIAGNOSTIC_DRIVER_SOURCE"
+          test "$(git -C reproduction-source rev-parse HEAD)" = "$REPRODUCTION_SOURCE"
+          node -e 'if(process.versions.node.split(".")[0]!=="24")throw Error("NODE_24_REQUIRED")'
+          mkdir -p diagnostic-results
+          python3 - <<'PY'
+          import hashlib, json, os, pathlib, tarfile
+          root = pathlib.Path.cwd()
+          source = '6be2429921fe4ae1e2106a3ecae69b71d232157a'
+          normalizer_sha = '2745eafdbde9feb8879411a67a26c0d6666bd093f7eddf822d31ccd9976c8c78'
+          package = root / 'diagnostic-artifact/incudal-preview-6be2429-linux-amd64.tar.gz'
+          assert os.environ['REPRODUCTION_SOURCE'] == source, 'REPRODUCTION_SOURCE_REFUSED'
+          assert os.environ['FIXED_ARTIFACT_SOURCE'] == source, 'ARTIFACT_SOURCE_REFUSED'
+          assert sorted(path.name for path in package.parent.iterdir()) == [package.name, package.name + '.sig'], 'ARTIFACT_ASSETS_REFUSED'
+          assert package.is_file() and not package.is_symlink() and package.stat().st_size == 221409806, 'ARTIFACT_SIZE_REFUSED'
+          with package.open('rb') as stream:
+              package_sha = hashlib.file_digest(stream, 'sha256').hexdigest()
+          assert package_sha == '250612e99dde3f053f6ddbbcae92ef629fbe603d24e8b6932a41d5b88c38dff9', 'ARTIFACT_DIGEST_REFUSED'
+          publisher = (root / 'scripts/agent-package-signature.mjs').read_bytes()
+          blob = hashlib.sha1(b'blob ' + str(len(publisher)).encode() + b'\0' + publisher).hexdigest()
+          assert blob == 'ed3877b83c74661e85a5bf9da762b7bb26c9cce5', 'RETAINED_PUBLISHER_REFUSED'
+          with tarfile.open(package, 'r:gz') as archive:
+              selected = {}
+              for member in archive.getmembers():
+                  name = member.name.removeprefix('./')
+                  if name in ('version.json', 'vendor/gateway/catalog.json'):
+                      assert name not in selected and member.isfile() and 0 < member.size <= 65536, 'ARTIFACT_METADATA_REFUSED'
+                      selected[name] = json.loads(archive.extractfile(member).read())
+          version, catalog = selected['version.json'], selected['vendor/gateway/catalog.json']
+          assert version['version'] == 'preview-6be2429' and version['gitCommit'] == source[:12] and version['gitTag'] is None, 'ARTIFACT_VERSION_REFUSED'
+          assert catalog['sourceCommit'] == source, 'ARTIFACT_CATALOG_SOURCE_REFUSED'
+          installer = (root / 'reproduction-source/scripts/install-panel.sh').read_text()
+          marker, end = "<<'INCUDAL_REPOSITORY_SOURCE_SCRIPT'\n", '\nINCUDAL_REPOSITORY_SOURCE_SCRIPT'
+          assert installer.count(marker) == 1 and installer.count(end) == 1, 'REPRODUCTION_NORMALIZER_MARKER_REFUSED'
+          helper = (installer.split(marker, 1)[1].split(end, 1)[0] + '\n').encode()
+          assert len(helper) == 11695 and hashlib.sha256(helper).hexdigest() == normalizer_sha, 'REPRODUCTION_NORMALIZER_DIGEST_REFUSED'
+          report = {'scope': 'current-trace-wrapper-reproducing-fixed-old-installer-and-artifact',
+                    'workflowTraceDriverSource': os.environ['DIAGNOSTIC_DRIVER_SOURCE'],
+                    'reproducerSource': source,
+                    'artifactSource': source, 'artifactRun': 45887885319, 'artifactId': 15150727057,
+                    'artifactName': 'incudal-preview-6be2429-linux-amd64', 'artifactTarSha256': package_sha,
+                    'normalizerSha256': normalizer_sha, 'normalizerBytes': len(helper),
+                    'reproducerSmokeSha256': hashlib.sha256((root / 'reproduction-source/scripts/smoke-fresh-install.sh').read_bytes()).hexdigest(),
+                    'traceScriptSha256': hashlib.sha256((root / 'scripts/test-repository-normalizer-native-trace.py').read_bytes()).hexdigest()}
+          (root / 'diagnostic-results/sources.json').write_text(json.dumps(report, indent=2) + '\n')
+          print('Verified fixed prior candidate and original normalizer; current workflow/trace, old reproducer and old artifact sources are recorded separately.')
+          PY
+          node --input-type=module - <<'JS'
+          import assert from 'node:assert/strict'
+          import { readFile } from 'node:fs/promises'
+          import { verifyPanelDigest } from './scripts/panel-package-signature.mjs'
+          const signature = (await readFile('diagnostic-artifact/incudal-preview-6be2429-linux-amd64.tar.gz.sig', 'ascii')).trim()
+          assert.ok(verifyPanelDigest('preview-6be2429', 'amd64', '250612e99dde3f053f6ddbbcae92ef629fbe603d24e8b6932a41d5b88c38dff9', signature), 'PINNED_CANDIDATE_SIGNATURE_REFUSED')
+          console.log('Verified exact prior candidate signature with retained publisher identity.')
+          JS
+      - name: Reproduce the fixed old fresh installation and trace only after failure
+        shell: bash
+        run: |
+          set -euo pipefail
+          umask 077
+          report_dir="$PWD/diagnostic-results"
+          package="$PWD/diagnostic-artifact/incudal-preview-6be2429-linux-amd64.tar.gz"
+          set +e
+          sudo env GITHUB_ACTIONS=true GITHUB_SHA="$REPRODUCTION_SOURCE" RUNNER_ENVIRONMENT=github-hosted \
+            bash reproduction-source/scripts/smoke-fresh-install.sh "$package"
+          install_status=$?
+          trap 'exit "$install_status"' EXIT
+          set -e
+          printf '{"phase":"fixed-old-fresh-install-reproduction","exitCode":%d}\n' "$install_status" > "$report_dir/install-status.json"
+          if [[ "$install_status" -ne 0 ]]; then
+            set +e
+            sudo systemctl stop incudal-backend.service >/dev/null 2>&1
+            stop_status=$?
+            backend_pid=$(sudo systemctl show incudal-backend.service -p MainPID --value 2>/dev/null)
+            backend_state=$(sudo systemctl show incudal-backend.service -p ActiveState --value 2>/dev/null)
+            set -e
+            trace_status=1
+            if [[ "$stop_status" -eq 0 && "$backend_pid" == 0 && ( "$backend_state" == inactive || "$backend_state" == failed ) ]]; then
+              set +e
+              sudo /usr/bin/env -i PATH=/usr/sbin:/usr/bin:/sbin:/bin LC_ALL=C HOME=/var/cache/incudal-ota \
+                GITHUB_ACTIONS=true RUNNER_ENVIRONMENT=github-hosted \
+                /usr/bin/python3 -I -B "$PWD/scripts/test-repository-normalizer-native-trace.py" \
+                > "$report_dir/normalizer-trace.json" 2>/dev/null
+              trace_status=$?
+              set -e
+            else
+              printf '{"phase":"fixed-repository-startup-native-trace","code":"BACKEND_NOT_STOPPED"}\n' > "$report_dir/normalizer-trace.json"
+            fi
+            printf '{"backendStopExitCode":%d,"traceExitCode":%d}\n' "$stop_status" "$trace_status" > "$report_dir/trace-status.json"
+            cat "$report_dir/normalizer-trace.json"
+          fi
+          # A later trace can succeed or perform the original correction. It
+          # must never turn the failed original installation into a green job.
+          exit "$install_status"
+      - name: Preserve only credential-free diagnostic JSON
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: repository-normalizer-native-diagnostics
+          path: diagnostic-results/*.json
+          if-no-files-found: ignore
+          retention-days: 3
