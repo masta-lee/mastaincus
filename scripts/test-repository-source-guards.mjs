@@ -2,14 +2,57 @@ import assert from 'node:assert/strict'
 import { readFileSync, existsSync } from 'node:fs'
 import { resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
+import { runInNewContext } from 'node:vm'
 
 const root = fileURLToPath(new URL('../', import.meta.url))
 const read = path => readFileSync(resolve(root, path), 'utf8')
-const repository = 'mastalee928/payincus'
+const repository = 'masta-lee/mastaincus'
+const retiredRepository = 'mastalee928/payincus'
 for (const path of ['README.md', 'scripts/install-panel.sh', 'scripts/init-env.sh', 'deploy/incudal-online-task.sh.example', 'server/src/lib/system-version.ts', 'server/src/routes/agent.ts', 'docs/fork-release.md']) {
   const content = read(path)
   assert.ok(content.includes(repository), `${path} must use the maintained repository`)
   assert.ok(!/VipMaxxxx\/payincus/i.test(content), `${path} must not direct installations or updates to the upstream repository`)
+}
+// Run the actual dependency-free repository selectors with isolated env data.
+// Existing persisted defaults must migrate; explicit forks keep precedence.
+function selectedRepository(path, name, env) {
+  const declaration = read(path).match(new RegExp(`^function ${name}\\(\\): string \\{[\\s\\S]*?^\\}`, 'm'))?.[0]
+  assert.ok(declaration, `${name} must retain a testable source selector`)
+  return runInNewContext(`(${declaration.replace('(): string', '()')})()`, {
+    process: { env: Object.freeze({ ...env }) }, defaultAgentReleaseRepository: repository
+  }, { timeout: 1000 })
+}
+for (const [env, expected] of [
+  [{}, repository],
+  [{ SYSTEM_UPDATE_RELEASE_REPOSITORY: retiredRepository }, repository],
+  [{ SYSTEM_UPDATE_RELEASE_REPOSITORY: `  ${retiredRepository.toUpperCase()}  ` }, repository],
+  [{ GITHUB_REPO: retiredRepository }, repository],
+  [{ SYSTEM_UPDATE_RELEASE_REPOSITORY: 'custom/panel', GITHUB_REPO: retiredRepository }, 'custom/panel'],
+  [{ SYSTEM_UPDATE_RELEASE_REPOSITORY: '  ', GITHUB_REPO: 'custom/panel' }, 'custom/panel'],
+  [{ SYSTEM_UPDATE_RELEASE_REPOSITORY: `${retiredRepository}-fork` }, `${retiredRepository}-fork`]
+]) assert.equal(selectedRepository('server/src/lib/system-version.ts', 'getReleaseRepository', env), expected)
+for (const [env, expected] of [
+  [{}, repository],
+  [{ INCUDAL_AGENT_RELEASE_REPOSITORY: retiredRepository }, repository],
+  [{ INCUDAL_AGENT_RELEASE_REPOSITORY: ` ${retiredRepository.toUpperCase()} ` }, repository],
+  [{ GITHUB_REPOSITORY: retiredRepository }, repository],
+  [{ INCUDAL_AGENT_RELEASE_REPOSITORY: 'custom/agent', GITHUB_REPOSITORY: retiredRepository }, 'custom/agent'],
+  [{ GITHUB_REPOSITORY: 'custom/agent' }, 'custom/agent'],
+  [{ INCUDAL_AGENT_RELEASE_REPOSITORY: 'https://untrusted.invalid/source' }, repository],
+  [{ INCUDAL_AGENT_RELEASE_REPOSITORY: `${retiredRepository}-fork` }, `${retiredRepository}-fork`]
+]) assert.equal(selectedRepository('server/src/routes/agent.ts', 'getAgentReleaseRepository', env), expected)
+const rootHelper = read('deploy/incudal-online-task.sh.example')
+assert.ok(rootHelper.includes('verify_manifest\n  verify_git_control\n') &&
+  rootHelper.includes('if [[ "$status" -eq 0 ]]; then\n    verify_git_control migrate-retired-origin\n    write_manifest'),
+  'root OTA must preserve the original seal during work and migrate its exact retired Git origin only after success')
+assert.ok(rootHelper.includes('config --local --get-all remote.origin.url') && rootHelper.includes('Git origin URL rewriting is forbidden'),
+  'root OTA must verify the unique raw origin rather than accepting a rewritten custom URL')
+assert.ok(rootHelper.includes('executable Git configuration is forbidden for root OTA') &&
+  rootHelper.indexOf('executable Git configuration is forbidden for root OTA') < rootHelper.indexOf('remote set-url origin'),
+  'origin migration must retain the root Git executable-configuration gate')
+for (const path of ['scripts/apply-verified-owner-candidate.mjs', 'scripts/smoke-legacy-online-upgrade.mjs']) {
+  assert.match(read(path), /process\.env\.SYSTEM_UPDATE_RELEASE_REPOSITORY\s*=\s*'masta-lee\/mastaincus'/,
+    `${path} must send the original worker to the replacement repository`)
 }
 const readme = read('README.md')
 assert.ok(!/https:\/\/(?:[a-z]+\.)?payincus\.com|t\.me\/Payincus/.test(readme), 'README links must belong to this project')
@@ -36,4 +79,4 @@ const keyMode = gatewayInstaller.indexOf('chmod 600 "$app_key_path"')
 const keyRead = gatewayInstaller.indexOf('app_public_key=$(ssh-keygen -y -f "$app_key_path")')
 assert.ok(keyMode >= 0 && keyRead > keyMode, 'gateway installer must restrict the application key before OpenSSH reads it')
 assert.ok(!existsSync(resolve(root, 'docs-site/docs/public/CNAME')), 'do not claim an upstream domain')
-console.log('Repository source and fresh installation guards passed')
+console.log('Repository source, retired-default migration and fresh installation guards passed')

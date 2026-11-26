@@ -1,10 +1,10 @@
 # v1.8.13 同批修复及发行验收
 
-产品源码`629dca1f6c70c9c9b497f36b8862b15bea0610c3`，PR17精确快进合入main，注释tag v1.8.13指向同源码，tag对象`8e2b317a47b35e335cfffe3de2f28d5c3bc72f99`。正式[43688994863](https://github.com/mastalee928/payincus/actions/runs/43688994863)双构建/双首装/六v1.8.12原worker/Release全部success，preview-agent预期skipped；main重复CI43688988825终态30/30 success。[公开v1.8.13](https://github.com/mastalee928/payincus/releases/tag/v1.8.13)于2026-11-15 15:31:34北京时间发布，非draft/非prerelease、latest已指向本版。
+产品源码`629dca1f6c70c9c9b497f36b8862b15bea0610c3`，PR17精确快进合入main，注释tag v1.8.13指向同源码，tag对象`8e2b317a47b35e335cfffe3de2f28d5c3bc72f99`。正式43688994863（原仓库 Actions 运行 #43688994863；未迁移）双构建/双首装/六v1.8.12原worker/Release全部success，preview-agent预期skipped；main重复CI43688988825终态30/30 success。[公开v1.8.13](https://github.com/masta-lee/mastaincus/tree/v1.8.13)（旧版发行资产未迁移，仅链接标签源码）于2026-11-15 15:31:34北京时间发布，非draft/非prerelease、latest已指向本版。
 
 本批包含手动单台/批量/PAT/自动续费恢复原到期封停客机、连续付款延长同一意图、详情页系统到期仍可续费；用户和管理员IPv4/IPv6同款排版、移除建站；管理员删除用户图标与悬停“删除用户”、后台列表刷新避免骨架闪烁，末页删除/旧会话回执保护。Agent保持v1.0.15，没有新增Agent发行。
 
-本地225全量自然exit0；后续新增UI与详情入口的相关types/route/i18n和最终双build/产物边界均过。18组Chrome图标/慢刷新原行保持/原生确认/错误重试/末页修正/旧回执与完整余额登录弹窗、详情密码和生命周期均过。最终完整CI[43684128355](https://github.com/mastalee928/payincus/actions/runs/43684128355)全部30job success、Alpine43684128416 success；原生AMD/ARM实际Incus到期Stopped→手动付款→同UUID Running/一笔扣款→删除回池通过。最终预览[43684126456](https://github.com/mastalee928/payincus/actions/runs/43684126456)双首装/六v1.8.12原worker正常/已迁移/故障回滚再升级全部success，Release预期skipped。两实际候选tar原pin签名/来源/244迁移/对应编译模块/无内置镜像库/用户边界已独立核过。
+本地225全量自然exit0；后续新增UI与详情入口的相关types/route/i18n和最终双build/产物边界均过。18组Chrome图标/慢刷新原行保持/原生确认/错误重试/末页修正/旧回执与完整余额登录弹窗、详情密码和生命周期均过。最终完整CI43684128355（原仓库 Actions 运行 #43684128355；未迁移）全部30job success、Alpine43684128416 success；原生AMD/ARM实际Incus到期Stopped→手动付款→同UUID Running/一笔扣款→删除回池通过。最终预览43684126456（原仓库 Actions 运行 #43684126456；未迁移）双首装/六v1.8.12原worker正常/已迁移/故障回滚再升级全部success，Release预期skipped。两实际候选tar原pin签名/来源/244迁移/对应编译模块/无内置镜像库/用户边界已独立核过。
 
 主控原worker热更新任务56于2026-11-15 14:41:36北京时间success，当前`preview-629dca1`同源码，备份`/opt/incudal.bak.20261115063950`，原签名/DB支付检查和自动回滚保持。最后/api/health HTTP200。升级前后原49–52四实例UUID相关规格hash/密码hash/账期/价格/IPv4/IPv6/账目及所有13账户余额摘要一致，34host在线无隔离。原#51/#52被owner手动启动及改价/续费的变化保留。
 

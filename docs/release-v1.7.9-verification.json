@@ -1,12 +1,12 @@
 {
   "verifiedAt": "2026-11-01T11:28:43.7130485Z",
   "panelVersion": "v1.7.9",
-  "panelRelease": "https://github.com/mastalee928/payincus/releases/tag/v1.7.9",
+  "panelRelease": "https://github.com/masta-lee/mastaincus/tree/v1.7.9",
   "panelSourceCommit": "4c24d4fd9ecdbc68b78f869862a53acc849ef2ab",
   "panelTagObject": "ad3e7864603b3a4ec8a1fb95002817dd08147869",
   "panelLatest": "v1.7.9",
   "agentVersion": "v1.0.4",
-  "agentRelease": "https://github.com/mastalee928/payincus/releases/tag/agent-v1.0.4",
+  "agentRelease": "https://github.com/masta-lee/mastaincus/tree/agent-v1.0.4",
   "agentTagSource": "76e779df77e52cbe96ee2e103d57dd951dba4e1e",
   "agentTree": "359dcf6657f8666e1274a2b21bc556c2dbf28270",
   "allReleaseSourceRuns": [
@@ -16,7 +16,7 @@
       "event": "push",
       "head_sha": "4c24d4fd9ecdbc68b78f869862a53acc849ef2ab",
       "conclusion": "success",
-      "html_url": "https://github.com/mastalee928/payincus/actions/runs/41293344545"
+      "html_url": "原仓库 Actions 运行 41293344545（历史记录，未迁移）"
     },
     {
       "id": 41293280496,
@@ -24,7 +24,7 @@
       "event": "push",
       "head_sha": "4c24d4fd9ecdbc68b78f869862a53acc849ef2ab",
       "conclusion": "success",
-      "html_url": "https://github.com/mastalee928/payincus/actions/runs/41293280496"
+      "html_url": "原仓库 Actions 运行 41293280496（历史记录，未迁移）"
     },
     {
       "id": 41293280568,
@@ -32,7 +32,7 @@
       "event": "push",
       "head_sha": "4c24d4fd9ecdbc68b78f869862a53acc849ef2ab",
       "conclusion": "success",
-      "html_url": "https://github.com/mastalee928/payincus/actions/runs/41293280568"
+      "html_url": "原仓库 Actions 运行 41293280568（历史记录，未迁移）"
     },
     {
       "id": 41284539776,
@@ -40,7 +40,7 @@
       "event": "pull_request",
       "head_sha": "4c24d4fd9ecdbc68b78f869862a53acc849ef2ab",
       "conclusion": "success",
-      "html_url": "https://github.com/mastalee928/payincus/actions/runs/41284539776"
+      "html_url": "原仓库 Actions 运行 41284539776（历史记录，未迁移）"
     },
     {
       "id": 41284539779,
@@ -48,7 +48,7 @@
       "event": "pull_request",
       "head_sha": "4c24d4fd9ecdbc68b78f869862a53acc849ef2ab",
       "conclusion": "success",
-      "html_url": "https://github.com/mastalee928/payincus/actions/runs/41284539779"
+      "html_url": "原仓库 Actions 运行 41284539779（历史记录，未迁移）"
     },
     {
       "id": 41284537389,
@@ -56,7 +56,7 @@
       "event": "workflow_dispatch",
       "head_sha": "4c24d4fd9ecdbc68b78f869862a53acc849ef2ab",
       "conclusion": "success",
-      "html_url": "https://github.com/mastalee928/payincus/actions/runs/41284537389"
+      "html_url": "原仓库 Actions 运行 41284537389（历史记录，未迁移）"
     }
   ],
   "candidateAndMainCi": [
@@ -249,5 +249,13 @@
     "Thousand-host and 72-hour operation"
   ],
   "unresolvedFailures": [],
-  "pendingRuns": []
+  "pendingRuns": [],
+  "repositoryMigration": {
+    "date": "2026-11-26",
+    "currentRepository": "masta-lee/mastaincus",
+    "originalRepositoryIdentifier": "mastalee928/payincus",
+    "presentationOnly": true,
+    "historicalActionsAndPrIdsNotMigrated": true,
+    "historicalReleaseAssetsNotMigrated": true
+  }
 }

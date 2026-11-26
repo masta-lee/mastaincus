@@ -1,6 +1,6 @@
 # v1.8.3 网页升级与检查
 
-本版已[正式发行](https://github.com/mastalee928/payincus/releases/tag/v1.8.3)，同来源完整CI、双架构正式首装和六资产核验通过，见[验证记录](release-v1.8.3-validation.md)。本次由 owner 自行网页升级；维护 agent 没有执行生产 OTA、改隔离标记或操作客户实例。以下全部使用网页，涉及购买/转移时使用专用测试账户和已授权测试实例。
+本版已[正式发行](https://github.com/masta-lee/mastaincus/tree/v1.8.3)（旧版发行资产未迁移，仅链接标签源码），同来源完整CI、双架构正式首装和六资产核验通过，见[验证记录](release-v1.8.3-validation.md)。本次由 owner 自行网页升级；维护 agent 没有执行生产 OTA、改隔离标记或操作客户实例。以下全部使用网页，涉及购买/转移时使用专用测试账户和已授权测试实例。
 
 ## 网页升级
 

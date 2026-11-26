@@ -14,13 +14,13 @@
 #   升级：  sudo bash install-panel.sh --upgrade
 #   卸载：  sudo bash install-panel.sh --uninstall
 #
-# 项目地址: https://github.com/mastalee928/payincus
+# 项目地址: https://github.com/masta-lee/mastaincus
 # ============================================================================
 set -euo pipefail
 
 # ========================== 全局常量 ==========================
 readonly SCRIPT_VERSION="3.1.0"
-readonly GITHUB_REPO="mastalee928/payincus"
+readonly GITHUB_REPO="masta-lee/mastaincus"
 readonly INSTALL_DIR="/opt/incudal"
 readonly SERVICE_NAME="incudal-backend"
 readonly SERVICE_FILE="/etc/systemd/system/${SERVICE_NAME}.service"
@@ -33,6 +33,22 @@ readonly PG_VERSION=16
 RELEASE_VERIFIED_THIS_RUN=false
 CF_TUNNEL_SELECTED=false
 CF_TUNNEL_VERIFIED=false
+
+normalize_legacy_online_task_helper() {
+    local helper_file="$1" normalized
+    # Original v1.8.13/v1.8.14 archives keep their exact signed/pinned bytes.
+    # Only the extracted deployment helper's old origin constant is generated
+    # for this installation; a current helper keeps its legacy identity gate.
+    if grep -Fq 'https://github.com/mastalee928/payincus.git' "$helper_file" &&
+        ! grep -Fq "https://github.com/${GITHUB_REPO}.git" "$helper_file"; then
+        normalized="$(mktemp)" || return 1
+        if ! sed "s#https://github[.]com/mastalee928/payincus[.]git#https://github.com/${GITHUB_REPO}.git#g" "$helper_file" > "$normalized" ||
+            ! bash -n "$normalized" || ! mv -f -- "$normalized" "$helper_file"; then
+            rm -f -- "$normalized"
+            return 1
+        fi
+    fi
+}
 
 install_verified_root_helpers_from_archive() {
     local tar_file="$1"
@@ -49,7 +65,11 @@ install_verified_root_helpers_from_archive() {
             return 1
         fi
         tmp="$(mktemp)"
-        tar -xOzf "$tar_file" "$entry" > "$tmp"
+        if ! tar -xOzf "$tar_file" "$entry" > "$tmp"; then rm -f -- "$tmp"; return 1; fi
+        if [[ "$helper" == incudal-online-task.sh.example ]] && ! normalize_legacy_online_task_helper "$tmp"; then
+            rm -f -- "$tmp"
+            return 1
+        fi
         if [[ ! -s "$tmp" ]] || ! bash -n "$tmp"; then
             rm -f "$tmp"
             error "已验证产物中的 root helper 无效: deploy/${helper}"
@@ -133,6 +153,32 @@ get_env_value() {
     grep -E "^${key}=" "$ENV_FILE" 2>/dev/null | tail -n 1 | cut -d'=' -f2- || true
 }
 
+env_file_identity() {
+    local metadata digest
+    [[ -f "$ENV_FILE" && ! -L "$ENV_FILE" ]] || return 1
+    metadata="$(stat -c '%d:%i:%u:%g:%a:%h' "$ENV_FILE")" || return 1
+    [[ "${metadata##*:}" == 1 ]] || return 1
+    digest="$(sha256sum "$ENV_FILE" | awk '{print $1}')" || return 1
+    [[ "$digest" =~ ^[a-f0-9]{64}$ ]] || return 1
+    printf '%s:%s' "$metadata" "$digest"
+}
+
+write_env_atomically() {
+    local candidate="$1" expected="$2"
+    # The candidate is created beside the original, so rename cannot degrade
+    # into a cross-filesystem copy. Failure never truncates the credential file.
+    if [[ "$(env_file_identity)" != "$expected" ]] ||
+        ! chown --reference="$ENV_FILE" "$candidate" ||
+        ! chmod --reference="$ENV_FILE" "$candidate" ||
+        { [[ "$(uname -s)" == Linux ]] && ! sync -f "$candidate"; } ||
+        [[ "$(env_file_identity)" != "$expected" ]] ||
+        ! mv -T -- "$candidate" "$ENV_FILE"; then
+        rm -f -- "$candidate"
+        printf 'Environment update failed; original configuration retained.\n' >&2
+        return 1
+    fi
+}
+
 set_env_if_missing() {
     local key="$1"
     local value="$2"
@@ -144,10 +190,11 @@ set_env_if_missing() {
         return 0
     fi
 
+    local tmp_file original_state
+    original_state="$(env_file_identity)" || return 1
+    tmp_file="$(mktemp "${ENV_FILE}.incudal-env.XXXXXX")" || return 1
     if grep -qE "^${key}=" "$ENV_FILE" 2>/dev/null; then
-        local tmp_file
-        tmp_file="$(mktemp)"
-        awk -v key="$key" -v value="$value" '
+        if ! awk -v key="$key" -v value="$value" '
             BEGIN { replaced = 0 }
             $0 ~ "^" key "=" && replaced == 0 {
                 print key "=" value
@@ -155,12 +202,11 @@ set_env_if_missing() {
                 next
             }
             { print }
-        ' "$ENV_FILE" > "$tmp_file"
-        cat "$tmp_file" > "$ENV_FILE"
-        rm -f "$tmp_file"
+        ' "$ENV_FILE" > "$tmp_file"; then rm -f -- "$tmp_file"; return 1; fi
     else
-        printf '\n%s=%s\n' "$key" "$value" >> "$ENV_FILE"
+        if ! { cat "$ENV_FILE" && printf '\n%s=%s\n' "$key" "$value"; } > "$tmp_file"; then rm -f -- "$tmp_file"; return 1; fi
     fi
+    write_env_atomically "$tmp_file" "$original_state" || return 1
 
     log "已自动补充 ${label}: ${key}"
 }
@@ -170,10 +216,11 @@ set_env_value() {
     local value="$2"
     local label="$3"
 
+    local tmp_file original_state
+    original_state="$(env_file_identity)" || return 1
+    tmp_file="$(mktemp "${ENV_FILE}.incudal-env.XXXXXX")" || return 1
     if grep -qE "^${key}=" "$ENV_FILE" 2>/dev/null; then
-        local tmp_file
-        tmp_file="$(mktemp)"
-        awk -v key="$key" -v value="$value" '
+        if ! awk -v key="$key" -v value="$value" '
             BEGIN { replaced = 0 }
             $0 ~ "^" key "=" && replaced == 0 {
                 print key "=" value
@@ -181,14 +228,61 @@ set_env_value() {
                 next
             }
             { print }
-        ' "$ENV_FILE" > "$tmp_file"
-        cat "$tmp_file" > "$ENV_FILE"
-        rm -f "$tmp_file"
+        ' "$ENV_FILE" > "$tmp_file"; then rm -f -- "$tmp_file"; return 1; fi
     else
-        printf '\n%s=%s\n' "$key" "$value" >> "$ENV_FILE"
+        if ! { cat "$ENV_FILE" && printf '\n%s=%s\n' "$key" "$value"; } > "$tmp_file"; then rm -f -- "$tmp_file"; return 1; fi
     fi
+    write_env_atomically "$tmp_file" "$original_state" || return 1
 
     log "已更新 ${label}: ${key}"
+}
+
+get_release_repository_default() {
+    # A missing primary setting must inherit its existing alias, rather than
+    # silently changing an administrator's custom Release source.
+    get_env_value "$1" | awk -v fallback="$GITHUB_REPO" '
+        { value = $0 }
+        END {
+            sub(/#.*/, "", value)
+            gsub(/^[[:space:]]+|[[:space:]]+$/, "", value)
+            quote = substr(value, 1, 1)
+            if ((quote == "\"" || quote == "\047") && substr(value, length(value), 1) == quote)
+                value = substr(value, 2, length(value) - 2)
+            gsub(/^[[:space:]]+|[[:space:]]+$/, "", value)
+            if (value == "") print fallback
+            else if (value ~ /^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/) print value
+        }
+    '
+}
+
+migrate_release_repository() {
+    local key="$1" tmp_file original_state
+    [[ -f "$ENV_FILE" ]] || return 0
+    original_state="$(env_file_identity)" || return 1
+    tmp_file="$(mktemp "${ENV_FILE}.incudal-env.XXXXXX")" || return 1
+    # Treat the old default as data, including quoted dotenv values. Never source
+    # the file or rewrite custom repositories, tokens or any other setting.
+    if ! awk -v key="$key" -v repository="$GITHUB_REPO" '
+        index($0, key "=") == 1 {
+            value = substr($0, length(key) + 2)
+            sub(/#.*/, "", value)
+            gsub(/^[[:space:]]+|[[:space:]]+$/, "", value)
+            quote = substr(value, 1, 1)
+            if ((quote == "\"" || quote == "\047") && substr(value, length(value), 1) == quote)
+                value = substr(value, 2, length(value) - 2)
+            gsub(/^[[:space:]]+|[[:space:]]+$/, "", value)
+            if (tolower(value) == "mastalee928/payincus") {
+                print key "=" repository
+                next
+            }
+        }
+        { print }
+    ' "$ENV_FILE" > "$tmp_file"; then rm -f -- "$tmp_file"; return 1; fi
+    if ! cmp -s "$ENV_FILE" "$tmp_file"; then
+        write_env_atomically "$tmp_file" "$original_state" || return 1
+        log "已迁移退役的 Release 仓库: ${key}"
+    fi
+    rm -f "$tmp_file"
 }
 
 set_env_if_value() {
@@ -231,10 +325,14 @@ ensure_env_keys() {
     set_env_if_missing "SYSTEM_UPDATE_ALLOWED_ADMIN_IDS" "" "允许执行在线更新的管理员 ID"
     set_env_if_missing "SYSTEM_UPDATE_LOG_DIR" "${INSTALL_DIR}/update-logs" "在线更新日志目录"
     set_env_if_missing "SYSTEM_UPDATE_STARTED_BY_USER_ID" "" "命令行更新任务发起管理员 ID"
-    set_env_if_missing "SYSTEM_UPDATE_RELEASE_REPOSITORY" "${GITHUB_REPO}" "在线更新 GitHub Release 仓库"
+    set_env_if_missing "SYSTEM_UPDATE_RELEASE_REPOSITORY" "$(get_release_repository_default GITHUB_REPO)" "在线更新 GitHub Release 仓库"
     set_env_if_missing "SYSTEM_UPDATE_RELEASE_TOKEN" "" "在线更新私有 Release Token"
     set_env_if_missing "SYSTEM_UPDATE_APPLY_MODE" "auto" "在线更新应用模式"
-    set_env_if_missing "INCUDAL_AGENT_RELEASE_REPOSITORY" "${GITHUB_REPO}" "Agent GitHub Release 仓库"
+    set_env_if_missing "INCUDAL_AGENT_RELEASE_REPOSITORY" "$(get_release_repository_default GITHUB_REPOSITORY)" "Agent GitHub Release 仓库"
+    local repository_key
+    for repository_key in SYSTEM_UPDATE_RELEASE_REPOSITORY INCUDAL_AGENT_RELEASE_REPOSITORY GITHUB_REPO GITHUB_REPOSITORY; do
+        migrate_release_repository "$repository_key"
+    done
     set_env_if_missing "INCUDAL_AGENT_RELEASE_TOKEN" "${INCUDAL_AGENT_RELEASE_TOKEN:-}" "Agent GitHub Release Token"
     set_env_if_missing "INCUDAL_AGENT_RELEASE_DIR" "" "Agent 本地 Release 目录"
     set_env_if_missing "INCUDAL_AGENT_BINARY_URL" "" "Agent 自定义二进制地址"
@@ -1047,6 +1145,8 @@ generate_env() {
     local encryption_key
     encryption_key=$(openssl rand -base64 32)
 
+    (
+    umask 077
     cat > "$ENV_FILE" << EOF
 # ============================================================================
 # PayIncus 环境配置
@@ -1118,6 +1218,7 @@ COOKIE_DOMAIN=
 # ============ 监控告警（可选）============
 # ALERT_WEBHOOK_URL=https://your-webhook-url
 EOF
+    )
 
     chown "root:${RUN_USER}" "$ENV_FILE"
     chmod 640 "$ENV_FILE"
@@ -1338,6 +1439,15 @@ EOF
     if [[ -f "${app_dir}/scripts/install-platform-backup.sh" ]]; then
         bash "${app_dir}/scripts/install-platform-backup.sh"
     fi
+    # Legacy backup installers copy their original helper again. Generate the
+    # same repository constant after that hook, without changing the archive or
+    # its sealed runtime template; current helpers remain byte-identical.
+    local repository_helper
+    repository_helper="$(mktemp)"
+    cp "${app_dir}/deploy/incudal-online-task.sh.example" "$repository_helper"
+    normalize_legacy_online_task_helper "$repository_helper"
+    install -o root -g root -m 0755 "$repository_helper" /usr/local/libexec/incudal/incudal-online-task
+    rm -f -- "$repository_helper"
 
     systemctl daemon-reload
 
@@ -2279,6 +2389,13 @@ main() {
     check_root
 
     case "${1:-}" in
+        --migrate-release-repository)
+            [[ $# -eq 1 && -f "$ENV_FILE" && ! -L "$ENV_FILE" ]] || { error "需要现有受管环境配置"; return 1; }
+            local repository_key
+            for repository_key in SYSTEM_UPDATE_RELEASE_REPOSITORY INCUDAL_AGENT_RELEASE_REPOSITORY GITHUB_REPO GITHUB_REPOSITORY; do
+                migrate_release_repository "$repository_key"
+            done
+            ;;
         --upgrade|-u)
             do_upgrade
             ;;
@@ -2323,6 +2440,7 @@ main() {
             echo "选项:"
             echo "  (无参数)      全新安装"
             echo "  --upgrade     升级已有安装"
+            echo "  --migrate-release-repository  仅迁移退役的默认发行源，保留密钥和自定义来源"
             echo "  --uninstall   卸载 PayIncus"
             echo "  --configure-host-pool  配置机器池管理网关"
             echo "  --configure-gateway-controller --initialize|--refresh|--verify  显式登记或核验独立网关控制身份（JSON 从 stdin 读取）"

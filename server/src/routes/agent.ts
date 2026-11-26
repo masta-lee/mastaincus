@@ -136,7 +136,7 @@ const __filename = fileURLToPath(import.meta.url)
 const __dirname = dirname(__filename)
 const agentBinaryNamePattern = /^incudal-agent-linux-(amd64|arm64)(?:\.gz)?$/
 const agentReleaseBinaryNamePattern = /^incudal-agent-(x86_64|aarch64)-v[0-9]+\.[0-9]+\.[0-9]+(?:-[0-9A-Za-z.-]+)?$/
-const defaultAgentReleaseRepository = 'mastalee928/payincus'
+const defaultAgentReleaseRepository = 'masta-lee/mastaincus'
 const githubApiBaseUrl = 'https://api.github.com'
 const githubDownloadBaseUrl = 'https://github.com'
 const agentReleaseCacheTtlMs = 5 * 60 * 1000
@@ -425,6 +425,7 @@ function buildAgentInstallConfig(input: {
 function getAgentReleaseRepository(): string {
   const configured = process.env.INCUDAL_AGENT_RELEASE_REPOSITORY?.trim() || process.env.GITHUB_REPOSITORY?.trim()
   const repository = configured || defaultAgentReleaseRepository
+  if (repository.toLowerCase() === 'mastalee928/payincus') return defaultAgentReleaseRepository
   return /^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/.test(repository) ? repository : defaultAgentReleaseRepository
 }
 
@@ -687,7 +688,7 @@ async function fetchLatestAgentRelease(): Promise<GitHubRelease | null> {
     }
     const version = normalizeAgentReleaseVersion(sanitizeShortString(release.tag_name, 128) ?? undefined)
     const assets = Array.isArray(release.assets) ? release.assets : []
-    if (version && assets.length > 0) {
+    if (version && assets.length > 0 && release.draft !== true) {
       return release as GitHubRelease
     }
   }
@@ -772,9 +773,12 @@ async function refreshAgentUpgradeManifest(): Promise<AgentUpgradeManifest | nul
   }
   const assets = new Map<string, GitHubReleaseAsset>()
   const publisherAsset=release.assets.find(asset=>isRecord(asset)&&asset.name==='publisher-manifest.json')
-  if(!publisherAsset?.browser_download_url)return null
-  assertTrustedAgentReleaseDownloadUrl(publisherAsset.browser_download_url)
-  const publisherResponse=await fetchGitHubWithRetry(publisherAsset.browser_download_url,'application/json','agent publisher manifest')
+  // Private repositories require the authenticated asset API. It returns the
+  // original JSON bytes only with octet-stream, rather than asset metadata.
+  const publisherUrl=sanitizeShortString(publisherAsset?.url,2048)??sanitizeShortString(publisherAsset?.browser_download_url,2048)
+  if(!publisherUrl)return null
+  assertTrustedAgentReleaseDownloadUrl(publisherUrl)
+  const publisherResponse=await fetchGitHubWithRetry(publisherUrl,'application/octet-stream','agent publisher manifest')
   const publisher=JSON.parse(await readAgentMetadata(publisherResponse))
   if(publisher.version!==version||!/^[a-f0-9]{40}$/.test(publisher.sourceCommit))return null
 

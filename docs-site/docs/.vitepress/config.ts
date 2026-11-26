@@ -1,6 +1,6 @@
 import { defineConfig } from 'vitepress'
 
-const siteOrigin = 'https://mastalee928.github.io/payincus'
+const siteOrigin = 'https://masta-lee.github.io/mastaincus'
 
 function routeFromRelativePath(relativePath: string) {
   let route = relativePath.replace(/\\/g, '/').replace(/\.md$/, '')
@@ -28,8 +28,8 @@ const zhNav = [
     items: [
       { text: '在线 Demo', link: '/demo' },
       { text: '版本日志', link: '/release/version-log' },
-      { text: '问题反馈', link: 'https://github.com/mastalee928/payincus/issues' },
-      { text: 'GitHub', link: 'https://github.com/mastalee928/payincus' }
+      { text: '问题反馈', link: 'https://github.com/masta-lee/mastaincus/issues' },
+      { text: 'GitHub', link: 'https://github.com/masta-lee/mastaincus' }
     ]
   }
 ]
@@ -43,8 +43,8 @@ const enNav = [
     items: [
       { text: 'Demo', link: '/en/demo' },
       { text: 'Version Log', link: '/en/release/version-log' },
-      { text: 'Issues', link: 'https://github.com/mastalee928/payincus/issues' },
-      { text: 'GitHub', link: 'https://github.com/mastalee928/payincus' }
+      { text: 'Issues', link: 'https://github.com/masta-lee/mastaincus/issues' },
+      { text: 'GitHub', link: 'https://github.com/masta-lee/mastaincus' }
     ]
   }
 ]
@@ -307,7 +307,7 @@ const enApiSidebar = [
 ]
 
 export default defineConfig({
-  base: '/payincus/',
+  base: '/mastaincus/',
   vite: {
     resolve: {
       preserveSymlinks: true
@@ -333,7 +333,7 @@ export default defineConfig({
     ]
   },
   head: [
-    ['link', { rel: 'icon', href: '/payincus/incudal_logo.webp' }],
+    ['link', { rel: 'icon', href: '/mastaincus/incudal_logo.webp' }],
     ['meta', { name: 'theme-color', content: '#111827' }]
   ],
   locales: {
@@ -345,7 +345,7 @@ export default defineConfig({
       themeConfig: {
         nav: zhNav,
         editLink: {
-          pattern: 'https://github.com/mastalee928/payincus/edit/main/docs-site/docs/:path',
+          pattern: 'https://github.com/masta-lee/mastaincus/edit/main/docs-site/docs/:path',
           text: '在 GitHub 上编辑此页'
         },
         lastUpdated: {
@@ -373,7 +373,7 @@ export default defineConfig({
       themeConfig: {
         nav: enNav,
         editLink: {
-          pattern: 'https://github.com/mastalee928/payincus/edit/main/docs-site/docs/:path',
+          pattern: 'https://github.com/masta-lee/mastaincus/edit/main/docs-site/docs/:path',
           text: 'Edit this page on GitHub'
         },
         lastUpdated: {
@@ -401,7 +401,7 @@ export default defineConfig({
       provider: 'local'
     },
     socialLinks: [
-      { icon: 'github', link: 'https://github.com/mastalee928/payincus' }
+      { icon: 'github', link: 'https://github.com/masta-lee/mastaincus' }
     ],
     footer: {
       message: 'PayIncus documentation',

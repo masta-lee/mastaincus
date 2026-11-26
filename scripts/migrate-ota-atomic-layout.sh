@@ -4,7 +4,8 @@ set -Eeuo pipefail
 INSTALL_DIR="${INSTALL_DIR:-/opt/incudal}"
 SERVICE_NAME="${SERVICE_NAME:-incudal-backend}"
 RUN_USER="${RUN_USER:-incudal}"
-GITHUB_REPO="${GITHUB_REPO:-mastalee928/payincus}"
+GITHUB_REPO="${GITHUB_REPO:-masta-lee/mastaincus}"
+if [[ "${GITHUB_REPO,,}" == mastalee928/payincus ]]; then GITHUB_REPO=masta-lee/mastaincus; fi
 VERIFIED_RELEASE_ARCHIVE="${VERIFIED_RELEASE_ARCHIVE:-}"
 
 log() {
@@ -37,13 +38,21 @@ verify_release_archive() {
 }
 
 install_root_helpers_from_archive() {
-  local helper entry tmp
+  local helper entry tmp normalized
   install -d -o root -g root -m 0755 /usr/local/libexec/incudal /usr/local/libexec/incudal/ota-path
   for helper in incudal-online-task.sh.example incudal-systemctl-wrapper.sh.example incudal-ota-chown-wrapper.sh.example; do
     entry="$(tar -tzf "$VERIFIED_RELEASE_ARCHIVE" | grep -E "^(\./)?deploy/${helper}$" || true)"
     [[ "$(printf '%s\n' "$entry" | sed '/^$/d' | wc -l)" -eq 1 ]] || fail "verified release is missing a unique root helper: deploy/$helper"
     tmp="$(mktemp)"
-    tar -xOzf "$VERIFIED_RELEASE_ARCHIVE" "$entry" > "$tmp"
+    tar -xOzf "$VERIFIED_RELEASE_ARCHIVE" "$entry" > "$tmp" || fail "verified root helper extraction failed"
+    if [[ "$helper" == incudal-online-task.sh.example ]] &&
+        grep -Fq 'https://github.com/mastalee928/payincus.git' "$tmp" &&
+        ! grep -Fq 'https://github.com/masta-lee/mastaincus.git' "$tmp"; then
+      normalized="$(mktemp)"
+      sed 's#https://github[.]com/mastalee928/payincus[.]git#https://github.com/masta-lee/mastaincus.git#g' "$tmp" > "$normalized"
+      bash -n "$normalized" || fail "legacy root helper repository migration is invalid"
+      mv -f -- "$normalized" "$tmp"
+    fi
     [[ -s "$tmp" ]] && bash -n "$tmp" || fail "verified root helper is invalid: deploy/$helper"
     case "$helper" in
       incudal-online-task.sh.example) install -o root -g root -m 0755 "$tmp" /usr/local/libexec/incudal/incudal-online-task ;;
@@ -53,6 +62,44 @@ install_root_helpers_from_archive() {
     rm -f "$tmp"
   done
   install -d -o root -g root -m 0755 /var/cache/incudal-ota /var/lib/incudal-ota/manifests
+}
+
+migrate_repository_settings() {
+  local raw_origins=() raw_origin target_origin
+  target_origin=https://github.com/masta-lee/mastaincus.git
+  [[ -d "$INSTALL_DIR/.git" ]] || fail "trusted Git metadata is missing"
+  mapfile -t raw_origins < <(git -C "$INSTALL_DIR" config --local --get-all remote.origin.url)
+  [[ ${#raw_origins[@]} -eq 1 ]] || fail "Git origin must have exactly one configured URL"
+  raw_origin="${raw_origins[0]}"
+  [[ "$raw_origin" == https://github.com/mastalee928/payincus.git || "$raw_origin" == "$target_origin" ]] || fail "Git origin is not the trusted repository"
+  [[ "$(git -C "$INSTALL_DIR" remote get-url origin)" == "$raw_origin" && "$(git -C "$INSTALL_DIR" ls-remote --get-url "$target_origin")" == "$target_origin" ]] || fail "Git URL rewriting is forbidden"
+  git -C "$INSTALL_DIR" remote set-url origin "$target_origin"
+  [[ "$(git -C "$INSTALL_DIR" remote get-url origin)" == "$target_origin" ]] || fail "Git origin migration failed"
+  /usr/bin/python3 -I -B - "$INSTALL_DIR/.env" <<'REPOSITORY_ENV'
+import os,re,stat,sys,tempfile
+path=sys.argv[1];before=os.lstat(path)
+assert stat.S_ISREG(before.st_mode) and before.st_nlink==1
+original=open(path,'rb').read()
+def migrate(match):
+    value=match[2].split(b'#')[0].strip()
+    if len(value)>=2 and value[:1] in [b'"',b"'"] and value[-1:]==value[:1]:value=value[1:-1].strip()
+    return match[1]+b'=masta-lee/mastaincus' if value.lower()==b'mastalee928/payincus' else match[0]
+changed=re.sub(rb'^(SYSTEM_UPDATE_RELEASE_REPOSITORY|INCUDAL_AGENT_RELEASE_REPOSITORY|GITHUB_REPO|GITHUB_REPOSITORY)=([^\r\n]*)(\r?)$',migrate,original,flags=re.M)
+if changed!=original:
+    fd,temporary=tempfile.mkstemp(prefix='.incudal-repository-',dir=os.path.dirname(path))
+    try:
+        with os.fdopen(fd,'wb') as stream:
+            stream.write(changed);os.fchown(stream.fileno(),before.st_uid,before.st_gid);os.fchmod(stream.fileno(),stat.S_IMODE(before.st_mode));stream.flush();os.fsync(stream.fileno())
+        current=os.lstat(path)
+        assert (current.st_dev,current.st_ino,current.st_uid,current.st_gid,current.st_mode,current.st_nlink)==(before.st_dev,before.st_ino,before.st_uid,before.st_gid,before.st_mode,before.st_nlink)
+        assert open(path,'rb').read()==original
+        os.replace(temporary,path)
+        directory=os.open(os.path.dirname(path),os.O_RDONLY|os.O_DIRECTORY)
+        try:os.fsync(directory)
+        finally:os.close(directory)
+    finally:
+        if os.path.exists(temporary):os.unlink(temporary)
+REPOSITORY_ENV
 }
 
 write_systemd_units() {
@@ -163,6 +210,7 @@ main() {
   verify_release_archive
   install_root_helpers_from_archive
   /usr/local/libexec/incudal/incudal-online-task harden
+  migrate_repository_settings
 
   local version timestamp releases_dir release_dir current_link
   version="$(node -e "try { console.log(require('${INSTALL_DIR}/version.json').version || 'local') } catch { console.log('local') }" 2>/dev/null || echo local)"

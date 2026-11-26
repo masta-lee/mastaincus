@@ -34,7 +34,13 @@ for(const file of[sourceManifest,sourceManifest+'.links']){const s=lstatSync(fil
 execFileSync('sha256sum',['--check','--strict','--quiet',sourceManifest],{cwd:app,stdio:'pipe'})
 const links=sealedRuntimeLinks(app)
 assert.ok(links===readFileSync(sourceManifest+'.links','utf8'),'SEALED_RUNTIME_LINKS_MISMATCH')
-assert.equal(execFileSync('git',['-C','/opt/incudal','remote','get-url','origin'],{encoding:'utf8'}).trim(),'https://github.com/mastalee928/payincus.git')
+const originalOrigins=execFileSync('git',['-C','/opt/incudal','config','--local','--get-all','remote.origin.url'],{encoding:'utf8'}).trim().split(/\r?\n/)
+assert.ok(originalOrigins.length===1&&['https://github.com/masta-lee/mastaincus.git','https://github.com/mastalee928/payincus.git'].includes(originalOrigins[0]),'OWNER_CANDIDATE_ORIGIN_UNTRUSTED')
+assert.ok(execFileSync('git',['-C','/opt/incudal','remote','get-url','origin'],{encoding:'utf8'}).trim()===originalOrigins[0],'OWNER_CANDIDATE_ORIGIN_REWRITTEN')
+assert.ok(execFileSync('git',['-C','/opt/incudal','ls-remote','--get-url','https://github.com/masta-lee/mastaincus.git'],{encoding:'utf8'}).trim()==='https://github.com/masta-lee/mastaincus.git','OWNER_CANDIDATE_SOURCE_REWRITTEN')
+// The original sealed worker may predate repository migration. Override only
+// its HTTP source, without editing the old runtime, .env or Git metadata.
+process.env.SYSTEM_UPDATE_RELEASE_REPOSITORY='masta-lee/mastaincus'
 process.env.INCUDAL_APP_DIR=app;process.env.INSTALL_DIR='/opt/incudal';process.env.SYSTEM_UPDATE_APPLY_MODE='artifact';process.env.SERVICE_NAME='incudal-backend'
 assert.notEqual(process.env.RUN_DB_CHECKS,'0')
 await import(app+'/server/dist/config/env.js')
@@ -45,6 +51,8 @@ assert.equal(await prisma.restoreTask.count({where:{status:{in:['PENDING','PROCE
 assert.equal(await prisma.backupUploadTask.count({where:{status:{in:['PENDING','PROCESSING']}}}),0)
 const admin=await prisma.user.findFirstOrThrow({where:{role:'admin',status:'active'},orderBy:{id:'asc'},select:{id:true}})
 if(process.argv[4]==='--preflight'){await closePrismaDatabase();console.log('OWNER_SIGNED_CANDIDATE_PREFLIGHT_PASSED');process.exit(0)}
+const{migrateCandidateRepositoryConfiguration}=await import(finalizeTool)
+migrateCandidateRepositoryConfiguration(archive,version)
 // Legacy systemd policy may still have a 30-second stop timeout. Our exact
 // sealed current process drains before the original worker's no-op stop call.
 try {
@@ -70,15 +78,15 @@ catch(error) {
   throw error
 }
 const task=await prisma.systemUpdateTask.create({data:{targetVersion:version,status:'pending',startedByUserId:admin.id}})
-const url=`https://github.com/mastalee928/payincus/releases/download/${version}/${name}`,manifestUrl=`https://github.com/mastalee928/payincus/releases/download/${version}/ota-manifest.json`
+const url=`https://github.com/masta-lee/mastaincus/releases/download/${version}/${name}`,manifestUrl=`https://github.com/masta-lee/mastaincus/releases/download/${version}/ota-manifest.json`
 const manifest={artifacts:[{name,platform:'linux',arch,url,sha256,size:bytes.length,version,signature}]}
 const release={tag_name:version,draft:false,prerelease:true,assets:[{id:1,name:'ota-manifest.json',browser_download_url:manifestUrl},{id:2,name,browser_download_url:url,size:bytes.length,digest:'sha256:'+sha256}]}
 const original=globalThis.fetch
 globalThis.fetch=async(input,options)=>{
  const address=String(input)
- if(address===`https://api.github.com/repos/mastalee928/payincus/releases/tags/${version}`)return Response.json(release)
- if(address===manifestUrl||address==='https://api.github.com/repos/mastalee928/payincus/releases/assets/1')return Response.json(manifest)
- if(address===url||address==='https://api.github.com/repos/mastalee928/payincus/releases/assets/2')return new Response(Readable.toWeb(createReadStream(archive)),{headers:{'content-length':String(bytes.length)}})
+ if(address===`https://api.github.com/repos/masta-lee/mastaincus/releases/tags/${version}`)return Response.json(release)
+ if(address===manifestUrl||address==='https://api.github.com/repos/masta-lee/mastaincus/releases/assets/1')return Response.json(manifest)
+ if(address===url||address==='https://api.github.com/repos/masta-lee/mastaincus/releases/assets/2')return new Response(Readable.toWeb(createReadStream(archive)),{headers:{'content-length':String(bytes.length)}})
  return original(input,options)
 }
 process.env.PATH='/usr/local/libexec/incudal/ota-path:'+process.env.PATH

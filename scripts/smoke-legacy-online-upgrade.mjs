@@ -11,6 +11,7 @@ import { execFile } from 'node:child_process'
 import { promisify } from 'node:util'
 import { resolve } from 'node:path'
 import { verifyPanelDigest } from './panel-package-signature.mjs'
+import { migrateCandidateRepositoryConfiguration } from './finalize-verified-owner-candidate.mjs'
 
 assert.equal(process.env.GITHUB_ACTIONS, 'true')
 assert.equal(process.env.RUNNER_ENVIRONMENT, 'github-hosted')
@@ -49,6 +50,7 @@ if (mode === 'migrate') {
     const candidateVersion = JSON.parse(metadataText).version
     assert.ok(verifyPanelDigest(candidateVersion, process.arch === 'arm64' ? 'arm64' : 'amd64',
       hash(await readFile(archive)), (await readFile(archive + '.sig', 'utf8')).trim()), 'exact candidate publisher/version must verify before the old worker runs')
+    migrateCandidateRepositoryConfiguration(archive,candidateVersion)
     // Unpublished semver candidates must exercise their actual signed target.
     // Plain previews retain the stable target supported by the published old worker.
     const target = /^v\d+\.\d+\.\d+(?:[-+][0-9A-Za-z.-]+)?$/.test(candidateVersion) ? candidateVersion : 'v' + applicationVersion
@@ -72,8 +74,8 @@ if (mode === 'migrate') {
   const state = JSON.parse(await readFile(stateFile))
   const bytes = await readFile(archive), sha256 = hash(bytes), arch = process.arch === 'arm64' ? 'arm64' : 'amd64'
   const name = `incudal-${state.target}-linux-${arch}.tar.gz`
-  const url = `https://github.com/mastalee928/payincus/releases/download/${state.target}/${name}`
-  const manifestUrl = `https://github.com/mastalee928/payincus/releases/download/${state.target}/ota-manifest.json`
+  const url = `https://github.com/masta-lee/mastaincus/releases/download/${state.target}/${name}`
+  const manifestUrl = `https://github.com/masta-lee/mastaincus/releases/download/${state.target}/ota-manifest.json`
   const signature=(await readFile(archive+'.sig','utf8')).trim()
   const manifest = { artifacts: [{ name, platform: 'linux', arch, url, sha256, size: bytes.length,version:state.target,signature }] }
   const metadata = { tag_name: state.target, draft: false, assets: [
@@ -83,14 +85,17 @@ if (mode === 'migrate') {
   const fetchOriginal = globalThis.fetch
   globalThis.fetch = async (input, options) => {
     const address = String(input)
-    if (address === `https://api.github.com/repos/mastalee928/payincus/releases/tags/${state.target}`) return Response.json(metadata)
-    if (address === manifestUrl || address === 'https://api.github.com/repos/mastalee928/payincus/releases/assets/1') return Response.json(manifest)
-    if (address === url || address === 'https://api.github.com/repos/mastalee928/payincus/releases/assets/2') {
+    if (address === `https://api.github.com/repos/masta-lee/mastaincus/releases/tags/${state.target}`) return Response.json(metadata)
+    if (address === manifestUrl || address === 'https://api.github.com/repos/masta-lee/mastaincus/releases/assets/1') return Response.json(manifest)
+    if (address === url || address === 'https://api.github.com/repos/masta-lee/mastaincus/releases/assets/2') {
       return new Response(Readable.toWeb(createReadStream(archive)), { headers: { 'content-length': String(bytes.length) } })
     }
     return fetchOriginal(input, options)
   }
   for (const [key, value] of Object.entries(env)) process.env[key] = value
+  // Exercise the unchanged historical worker against the new repository.
+  // Credentials and the on-disk identity remain those of the original install.
+  process.env.SYSTEM_UPDATE_RELEASE_REPOSITORY = 'masta-lee/mastaincus'
   process.env.LC_ALL = 'C'
   process.env.INCUDAL_APP_DIR = app; process.env.INSTALL_DIR = '/opt/incudal'
   process.env.SYSTEM_UPDATE_APPLY_MODE = 'artifact'; process.env.SERVICE_NAME = 'incudal-backend'

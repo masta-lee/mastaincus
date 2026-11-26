@@ -559,7 +559,9 @@ async function applyArtifactUpdate(artifact: OtaArtifactInfo, backupDir: string,
 }
 
 async function applyGitUpdate(backupDir: string): Promise<string> {
-  await run('git', ['fetch', '--tags', '--quiet'], { timeoutMs: 120000 })
+  // A retired origin remains an identity until a successful update. Source
+  // fallback must still fetch only the maintained repository during this run.
+  await run('git', ['fetch', '--tags', '--quiet', 'https://github.com/masta-lee/mastaincus.git'], { timeoutMs: 120000 })
   await run('git', ['rev-parse', '--verify', `${targetVersion}^{commit}`], { timeoutMs: 30000 })
 
   await log(`Backup directory: ${backupDir}`)
@@ -739,6 +741,9 @@ async function main(): Promise<void> {
   let databaseMigrationAttempted = false
 
   try {
+    // Persist the approved repository change before backup, so an old runtime
+    // restored by rollback continues to use the maintained Release source.
+    await run('bash', [join(appDir, 'scripts/install-panel.sh'), '--migrate-release-repository'], { timeoutMs: 120000 })
     const artifact = await getRuntimeArtifact(targetVersion)
     await ensureSystemUpdateEnvironmentDefaults(join(installDir, '.env'))
     if (artifact) {

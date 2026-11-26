@@ -2,13 +2,42 @@
 // Rebuild the seal only after every shipped file still equals that exact package
 // and the real update task has completed successfully.
 import assert from 'node:assert/strict'
-import { readFileSync, lstatSync, realpathSync, existsSync } from 'node:fs'
+import { readFileSync, lstatSync, realpathSync, existsSync, mkdtempSync, writeFileSync, rmSync } from 'node:fs'
 import { createHash } from 'node:crypto'
 import { execFileSync } from 'node:child_process'
 import { resolve, join } from 'node:path'
 import { pathToFileURL } from 'node:url'
 import { createRequire } from 'node:module'
 import { verifyPanelDigest } from './panel-package-signature.mjs'
+export function assertRepositoryConfigurationMigration(before,after){
+const original=before.toString('utf8');assert.ok(Buffer.from(original).equals(before),'REPOSITORY_CONFIG_ENCODING_INVALID')
+const expected=original.replace(/^(SYSTEM_UPDATE_RELEASE_REPOSITORY|INCUDAL_AGENT_RELEASE_REPOSITORY|GITHUB_REPO|GITHUB_REPOSITORY)=([^\r\n]*)(\r?)$/gm,(line,key,raw)=>{
+ let value=raw.split('#')[0].trim();if(value.length>=2&&['"',"'"].includes(value[0])&&value.at(-1)===value[0])value=value.slice(1,-1).trim()
+ return value.toLowerCase()==='mastalee928/payincus'?key+'=masta-lee/mastaincus':line
+})
+assert.ok(Buffer.from(expected).equals(after),'REPOSITORY_MIGRATION_CHANGED_UNRELATED_CONFIGURATION')
+}
+export function migrateCandidateRepositoryConfiguration(archive,version){
+assert.ok(process.platform==='linux'&&process.getuid()===0)
+assert.ok(process.env.INCUDAL_OWNER_CANDIDATE_DEPLOY==='authorized-test'||process.env.GITHUB_ACTIONS==='true'&&process.env.RUNNER_ENVIRONMENT==='github-hosted')
+const arch=process.arch==='arm64'?'arm64':'amd64',bytes=readFileSync(archive),sha=createHash('sha256').update(bytes).digest('hex')
+assert.ok(verifyPanelDigest(version,arch,sha,readFileSync(archive+'.sig','utf8').trim()),'REPOSITORY_MIGRATION_CANDIDATE_SIGNATURE_INVALID')
+const entries=execFileSync('/usr/bin/tar',['-tzf',archive],{encoding:'utf8',maxBuffer:64*1024*1024}).split('\n').filter(name=>name==='./scripts/install-panel.sh'||name==='scripts/install-panel.sh')
+assert.equal(entries.length,1)
+const installer=execFileSync('/usr/bin/tar',['-xOzf',archive,entries[0]],{maxBuffer:4*1024*1024})
+assert.ok(installer.includes(Buffer.from('--migrate-release-repository)')),'CANDIDATE_REPOSITORY_MIGRATION_UNAVAILABLE')
+const envPath='/opt/incudal/.env',before=readFileSync(envPath),metadata=lstatSync(envPath)
+assert.ok(metadata.isFile()&&!metadata.isSymbolicLink()&&metadata.nlink===1&&metadata.uid===0)
+const tools=mkdtempSync('/root/incudal-repository-source-'),script=join(tools,'install-panel.sh')
+try{
+ writeFileSync(script,installer,{mode:0o700,flag:'wx'})
+ const childEnv=Object.fromEntries(Object.entries(process.env).filter(([key])=>!['BASH_ENV','ENV','SHELLOPTS','BASHOPTS','LD_PRELOAD','NODE_OPTIONS','NODE_PATH'].includes(key)))
+ execFileSync('/usr/bin/bash',[script,'--migrate-release-repository'],{env:{...childEnv,PATH:'/usr/sbin:/usr/bin:/sbin:/bin'},stdio:'pipe',timeout:120000})
+ assertRepositoryConfigurationMigration(before,readFileSync(envPath))
+ const after=lstatSync(envPath);assert.ok(after.isFile()&&!after.isSymbolicLink()&&after.nlink===1&&after.uid===metadata.uid&&after.gid===metadata.gid&&after.mode===metadata.mode,'REPOSITORY_CONFIG_METADATA_CHANGED')
+}finally{assert.ok(tools.startsWith('/root/incudal-repository-source-'));rmSync(tools,{recursive:true,force:true})}
+console.log('REPOSITORY_SOURCES_MIGRATED_WITH_CREDENTIALS_PRESERVED')
+}
 export function verifyInstalledCandidate(archive,app,version,priorSeal='',generatedCache=''){
 const script=String.raw`import pathlib,tarfile,hashlib,json,sys
 archive,app,version,priorseal,generatedcache=sys.argv[1:];root=pathlib.Path(app);seen=set();count=0;previous={};digests={}
@@ -73,7 +102,15 @@ assert.deepEqual(readFileSync(helper),readFileSync(join(app,'deploy/incudal-onli
 process.env.INCUDAL_APP_DIR=app;await import(join(app,'server/dist/config/env.js'))
 const{prisma,closePrismaDatabase}=await import(join(app,'server/dist/db/prisma.js'))
 try{const task=await prisma.systemUpdateTask.findUniqueOrThrow({where:{id:taskId}});assert.equal(task.status,'success');assert.equal(task.targetVersion,version);assert.ok(task.finishedAt)}finally{await closePrismaDatabase()}
+const origins=execFileSync('git',['-C','/opt/incudal','config','--local','--get-all','remote.origin.url'],{encoding:'utf8'}).trim().split(/\r?\n/)
+assert.ok(origins.length===1&&['https://github.com/masta-lee/mastaincus.git','https://github.com/mastalee928/payincus.git'].includes(origins[0]),'CANDIDATE_POSTFLIGHT_ORIGIN_UNTRUSTED')
+assert.ok(execFileSync('git',['-C','/opt/incudal','remote','get-url','origin'],{encoding:'utf8'}).trim()===origins[0],'CANDIDATE_POSTFLIGHT_ORIGIN_REWRITTEN')
+assert.ok(execFileSync('git',['-C','/opt/incudal','ls-remote','--get-url','https://github.com/masta-lee/mastaincus.git'],{encoding:'utf8'}).trim()==='https://github.com/masta-lee/mastaincus.git','CANDIDATE_POSTFLIGHT_SOURCE_REWRITTEN')
 if(process.argv[5]==='--check'){console.log('SIGNED_CANDIDATE_POSTFLIGHT_CHECK_PASSED');return}
+// This follows exact package and successful-task verification. The original
+// worker's failed/rolled-back runtime and read-only check never change origin.
+if(origins[0]==='https://github.com/mastalee928/payincus.git')execFileSync('git',['-C','/opt/incudal','remote','set-url','origin','https://github.com/masta-lee/mastaincus.git'],{stdio:'pipe'})
+assert.ok(execFileSync('git',['-C','/opt/incudal','remote','get-url','origin'],{encoding:'utf8'}).trim()==='https://github.com/masta-lee/mastaincus.git','CANDIDATE_POSTFLIGHT_ORIGIN_MIGRATION_FAILED')
 execFileSync('/usr/local/libexec/incudal/incudal-online-task',['seal'],{stdio:'pipe',timeout:120000})
 execFileSync('sha256sum',['--check','--strict','--quiet',seal],{cwd:app,stdio:'pipe'})
 console.log('ORIGINAL_LAUNCHER_SIGNED_CANDIDATE_POSTFLIGHT_COMPLETE')

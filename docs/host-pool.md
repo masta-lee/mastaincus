@@ -88,7 +88,7 @@ Agent 只删除自己记录过且已被云平台撤回的地址，保留无关�
 以下 CLI 仅作为维护者故障兜底，常规网页配置无需运行：
 
 ```sh
-curl -fsSL https://raw.githubusercontent.com/mastalee928/payincus/main/scripts/install-panel.sh -o install-panel.sh
+curl -fsSL https://raw.githubusercontent.com/masta-lee/mastaincus/main/scripts/install-panel.sh -o install-panel.sh
 sudo bash install-panel.sh --configure-host-pool
 ```
 

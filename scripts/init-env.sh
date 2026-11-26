@@ -8,11 +8,13 @@
 # 行为：
 #   - 如果 .env 不存在，创建 .env
 #   - 如果 .env 已存在，只补齐缺失或空值的关键变量
-#   - 不覆盖已有非空配置，避免破坏已部署实例
+#   - 保留已有配置；仅将退役的默认 Release 仓库迁至当前仓库
 # ============================================================================
 set -euo pipefail
+umask 077
 
 ENV_FILE="${ENV_FILE:-.env}"
+readonly GITHUB_REPO="masta-lee/mastaincus"
 
 log() {
     echo "[✓] $1" >&2
@@ -38,6 +40,30 @@ get_env_value() {
     grep -E "^${key}=" "$ENV_FILE" 2>/dev/null | tail -n 1 | cut -d'=' -f2- || true
 }
 
+env_file_identity() {
+    local metadata digest
+    [[ -f "$ENV_FILE" && ! -L "$ENV_FILE" ]] || return 1
+    metadata="$(stat -c '%d:%i:%u:%g:%a:%h' "$ENV_FILE")" || return 1
+    [[ "${metadata##*:}" == 1 ]] || return 1
+    digest="$(sha256sum "$ENV_FILE" | awk '{print $1}')" || return 1
+    [[ "$digest" =~ ^[a-f0-9]{64}$ ]] || return 1
+    printf '%s:%s' "$metadata" "$digest"
+}
+
+write_env_atomically() {
+    local candidate="$1" expected="$2"
+    if [[ "$(env_file_identity)" != "$expected" ]] ||
+        ! chown --reference="$ENV_FILE" "$candidate" ||
+        ! chmod --reference="$ENV_FILE" "$candidate" ||
+        { [[ "$(uname -s)" == Linux ]] && ! sync -f "$candidate"; } ||
+        [[ "$(env_file_identity)" != "$expected" ]] ||
+        ! mv -T -- "$candidate" "$ENV_FILE"; then
+        rm -f -- "$candidate"
+        printf 'Environment update failed; original configuration retained.\n' >&2
+        return 1
+    fi
+}
+
 set_env_if_missing() {
     local key="$1"
     local value="$2"
@@ -49,10 +75,11 @@ set_env_if_missing() {
         return 0
     fi
 
+    local tmp_file original_state
+    original_state="$(env_file_identity)" || return 1
+    tmp_file="$(mktemp "${ENV_FILE}.incudal-env.XXXXXX")" || return 1
     if grep -qE "^${key}=" "$ENV_FILE" 2>/dev/null; then
-        local tmp_file
-        tmp_file="$(mktemp)"
-        awk -v key="$key" -v value="$value" '
+        if ! awk -v key="$key" -v value="$value" '
             BEGIN { replaced = 0 }
             $0 ~ "^" key "=" {
                 if (replaced == 0) print key "=" value
@@ -60,14 +87,58 @@ set_env_if_missing() {
                 next
             }
             { print }
-        ' "$ENV_FILE" > "$tmp_file"
-        cat "$tmp_file" > "$ENV_FILE"
-        rm -f "$tmp_file"
+        ' "$ENV_FILE" > "$tmp_file"; then rm -f -- "$tmp_file"; return 1; fi
     else
-        printf '\n%s=%s\n' "$key" "$value" >> "$ENV_FILE"
+        if ! { cat "$ENV_FILE" && printf '\n%s=%s\n' "$key" "$value"; } > "$tmp_file"; then rm -f -- "$tmp_file"; return 1; fi
     fi
+    write_env_atomically "$tmp_file" "$original_state" || return 1
 
     log "已自动补充 ${label}: ${key}"
+}
+
+get_release_repository_default() {
+    get_env_value "$1" | awk -v fallback="$GITHUB_REPO" '
+        { value = $0 }
+        END {
+            sub(/#.*/, "", value)
+            gsub(/^[[:space:]]+|[[:space:]]+$/, "", value)
+            quote = substr(value, 1, 1)
+            if ((quote == "\"" || quote == "\047") && substr(value, length(value), 1) == quote)
+                value = substr(value, 2, length(value) - 2)
+            gsub(/^[[:space:]]+|[[:space:]]+$/, "", value)
+            if (value == "") print fallback
+            else if (value ~ /^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/) print value
+        }
+    '
+}
+
+migrate_release_repository() {
+    local key="$1" tmp_file original_state
+    [[ -f "$ENV_FILE" ]] || return 0
+    original_state="$(env_file_identity)" || return 1
+    tmp_file="$(mktemp "${ENV_FILE}.incudal-env.XXXXXX")" || return 1
+    # Read dotenv values as data; retain custom sources and every credential.
+    if ! awk -v key="$key" -v repository="$GITHUB_REPO" '
+        index($0, key "=") == 1 {
+            value = substr($0, length(key) + 2)
+            sub(/#.*/, "", value)
+            gsub(/^[[:space:]]+|[[:space:]]+$/, "", value)
+            quote = substr(value, 1, 1)
+            if ((quote == "\"" || quote == "\047") && substr(value, length(value), 1) == quote)
+                value = substr(value, 2, length(value) - 2)
+            gsub(/^[[:space:]]+|[[:space:]]+$/, "", value)
+            if (tolower(value) == "mastalee928/payincus") {
+                print key "=" repository
+                next
+            }
+        }
+        { print }
+    ' "$ENV_FILE" > "$tmp_file"; then rm -f -- "$tmp_file"; return 1; fi
+    if ! cmp -s "$ENV_FILE" "$tmp_file"; then
+        write_env_atomically "$tmp_file" "$original_state" || return 1
+        log "已迁移退役的 Release 仓库: ${key}"
+    fi
+    rm -f "$tmp_file"
 }
 
 if [[ ! -f "$ENV_FILE" ]]; then
@@ -98,8 +169,11 @@ set_env_if_missing "SERVE_STATIC_CLIENT" "false" "后端静态文件服务开关
 set_env_if_missing "VITE_API_BASE_URL" "/api" "前端 API 基础路径"
 set_env_if_missing "VITE_CUSTOMER_BASE_URL" "" "管理后台生成客户链接的前端地址"
 set_env_if_missing "VITE_ADMIN_BASE_URL" "" "客户前端管理后台地址"
-set_env_if_missing "SYSTEM_UPDATE_RELEASE_REPOSITORY" "mastalee928/payincus" "在线更新 GitHub Release 仓库"
-set_env_if_missing "INCUDAL_AGENT_RELEASE_REPOSITORY" "mastalee928/payincus" "Agent GitHub Release 仓库"
+set_env_if_missing "SYSTEM_UPDATE_RELEASE_REPOSITORY" "$(get_release_repository_default GITHUB_REPO)" "在线更新 GitHub Release 仓库"
+set_env_if_missing "INCUDAL_AGENT_RELEASE_REPOSITORY" "$(get_release_repository_default GITHUB_REPOSITORY)" "Agent GitHub Release 仓库"
+for repository_key in SYSTEM_UPDATE_RELEASE_REPOSITORY INCUDAL_AGENT_RELEASE_REPOSITORY GITHUB_REPO GITHUB_REPOSITORY; do
+    migrate_release_repository "$repository_key"
+done
 set_env_if_missing "INCUDAL_AGENT_RELEASE_TOKEN" "${INCUDAL_AGENT_RELEASE_TOKEN:-}" "Agent GitHub Release Token"
 set_env_if_missing "INCUDAL_AGENT_RELEASE_DIR" "" "Agent 本地 Release 目录"
 set_env_if_missing "INCUDAL_AGENT_BINARY_URL" "" "Agent 自定义二进制地址"

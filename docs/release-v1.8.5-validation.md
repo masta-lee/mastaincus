@@ -12,17 +12,17 @@
 ## 正式发行证据
 
 - 正式源码：`e7faf22a03f920532ee0a35466f06597921767bb`；tree：`64aa7d4a309be4d266fab92a3a499a993ea8026d`。
-- 候选PR实际checkout：`b6d0b062c5a6dd71f306ac709841c8d10a5d2611`，独立核tree相同；[PR #7](https://github.com/mastalee928/payincus/pull/7)合入main的提交与正式源码一致。
+- 候选PR实际checkout：`b6d0b062c5a6dd71f306ac709841c8d10a5d2611`，独立核tree相同；PR #7（原仓库 PR #7；未迁移）合入main的提交与正式源码一致。
 - 注释稳定tag对象：`4bf4a6644c1451d15eebbe745c5b20b469c87dba`，解引用到上述源码；后续文档提交不移动tag。
-- [v1.8.5 Release](https://github.com/mastalee928/payincus/releases/tag/v1.8.5)公开时间：`2026-11-09T11:27:19Z`，非draft、非prerelease，latest=v1.8.5，说明已回读一致。
+- [v1.8.5 Release](https://github.com/masta-lee/mastaincus/tree/v1.8.5)（旧版发行资产未迁移，仅链接标签源码）公开时间：`2026-11-09T11:27:19Z`，非draft、非prerelease，latest=v1.8.5，说明已回读一致。
 
 | 工作流 | 事件 | 运行 | 结果 |
 |---|---|---|---|
-| Alpine SSH security | pull_request | [42577102536](https://github.com/mastalee928/payincus/actions/runs/42577102536) | success |
-| CI | pull_request | [42577102595](https://github.com/mastalee928/payincus/actions/runs/42577102595) | success |
-| Build & Release | workflow_dispatch | [42577106537](https://github.com/mastalee928/payincus/actions/runs/42577106537) | success |
-| CI | push | [42590910672](https://github.com/mastalee928/payincus/actions/runs/42590910672) | success |
-| Build & Release | push | [42607390425](https://github.com/mastalee928/payincus/actions/runs/42607390425) | success |
+| Alpine SSH security | pull_request | 42577102536（原仓库 Actions 运行 #42577102536；未迁移） | success |
+| CI | pull_request | 42577102595（原仓库 Actions 运行 #42577102595；未迁移） | success |
+| Build & Release | workflow_dispatch | 42577106537（原仓库 Actions 运行 #42577106537；未迁移） | success |
+| CI | push | 42590910672（原仓库 Actions 运行 #42590910672；未迁移） | success |
+| Build & Release | push | 42607390425（原仓库 Actions 运行 #42607390425；未迁移） | success |
 
 候选与main CI各十job全部终态成功并逐job核实际checkout。Alpine关联运行九job成功，原密码/持续SSH与SFTP及双架构维护专项通过。预览四必需job成功、发布步骤skipped；正式五job全部成功。213守卫、241迁移、AMD64/ARM64原生首装、唯一后台、双前端、公开Agent、完整备份/预检/恢复/改变后回退续接、SQL ZIP完整性及旧CRLF历史/错误来源拒绝均核实际日志。下载器504官方API备用、断流/超时、凭据和元数据回归出现在实际构建日志；选中地区卡20尺寸与触摸/键盘回归出现在候选/main CI。
 

@@ -39,7 +39,7 @@ assert.ok(
 )
 
 assert.ok(
-  agentRouteSource.includes("const defaultAgentReleaseRepository = 'mastalee928/payincus'"),
+  agentRouteSource.includes("const defaultAgentReleaseRepository = 'masta-lee/mastaincus'"),
   'Agent release proxy must default to the current repository'
 )
 assert.ok(

@@ -1,3 +1,5 @@
+2026-11-27 00:05+08:00仓库替代接续：新唯一masta-lee/mastaincus，d6c0a04d原22分支/206tag已备份；原v1.8.14六正式资产/latest和配套Agent16四资产已迁移，原包/校验/二进制字节不变，两OTA清单只改URL（605ec85f…），Agent仅补原身份签名元数据。新源码已精修旧默认/alias-only/原子env失败保护、raw/effective Git、成功后origin、旧worker备份前source迁移和原包新装helper；实际生产下载代码新私有repo两完整原包+真实CDN无token、Agent公共路由两完整原二进制/签名均自然0，未接数据库/主控/客户。相关3/3、front2/2、Bash r4、前后端/文档build自然0；233全量仍在途，原6+新4双架构旧worker/新installer预览待跑。owner已明确批准公开，仍待已知历史候选复核/本轮提交推送main/实际公开和匿名回读，不把批准记完成。原kernel真实boot/回退/补丁、旧组件来源、双PG矩阵/新完整包与主控新备份本机模拟恢复/最终热更新发行未完；本轮无生产/客户/密码/新正式版本。报告docs/github-backup-mastaincus-2026-11-26.md，以下为阶段历史。
+
 2026-11-26 15:52+08:00最新实证：恢复r6d产品已落盘f2693318…，r6e测试b43922f6…，修复先native PG launch后受信psql/每次SQL前后单工具认证、原unit无override/标准argv/最终journal调用及uint64文件身份。53候选专项自然0；首轮Linux206/0skip自然1、8个新fixture错误由/tmp01777正确拒绝，只改测试/root优先，旧1eff与失败保持。根任务最终本机206/45skip、对应security-hardening守卫、原B9专项及完整Linux206/0skip/0fail/275.895s均自然0，原B/PG88982/出站隔离前后保持；代码已冻结，完整守卫不代双PG真实恢复矩阵。项目已清3.336GB、仓库外Go5.760GB及旧B17.47GB全SHA通过保持。真实kernel boot/回退/后续补丁、旧组件来源、双PG矩阵、当前完整包/主控新备份本机完整模拟恢复/热更/发行仍未完；无新生产/客户/密码/Git提交推送/发行，jimmasta仅申诉不上传。报告docs/local-cleanup-and-security-progress-2026-11-26.md，最终日志logs/security-controller-r6-final-20261126-r2-linux-root.log；以下为阶段历史。
 
 2026-11-26 14:54+08:00当前实证更新：恢复r5c已实际写入两产品Python，SHA07b172b1…/753881d0…，覆盖缺启动回执/有限失败重试/备份中断/客户端故障及自管PG未完成新dump时退出；原7子例失败和旧基线保留。独立Windows44自然0；本机完整197/45skip自然0；专用Linux3420完整197/0skip/0fail自然0，原B状态及PG88982保持；当前r5c全量233计划/执行/通过、0fail、18m2s自然0。新独审确认PG start后psql缺失使launch尚未持久，下轮不能自动续接，最小修订及真实单工具回归在修，不能称全部恢复已完成。AMD3394b仍cloud-init exit2/degraded，3412只读debugfs因inode bitmap checksum未打开分区，具体初始化原因未取得，不放宽失败或重启旧盘。双PG矩阵/实际内核启动回退/当前完整包/新主控备份本机完整模拟恢复/热更新和发行未完。项目已清3.336GB，另仓库外Go5.760GB；14:54C空闲15.67GiB、在用本机PG11036保持。未生产/客户/密码/Git提交推送/发行，jimmasta仅申诉不上传。完整报告docs/local-cleanup-and-security-progress-2026-11-26.md；以下条目为阶段历史。
@@ -159,13 +161,13 @@
 
 较新自然终态：源码`7802ab1d`已推、第四预览45055789848现failure，其中双完整包/双Incus/候选Agent与**全部六个公开v1.8.14原worker升级、已迁移再升、故障回滚再升成功**；只剩双首装helper拒绝目录权限，日志明确DATABASE_MIGRATION_RUNTIME_UNTRUSTED，current不存在/原root/迁移私密文件正确。新固定metadata诊断已保存推送`fe05c5a5`，第五无tag预览45057633656已启动，必须跟终态。原source PR第二轮56success/11failure/1skipped全部11日志已读：四内存缺openssl、state缺baseline、renewal/auth/terminal旧会话及通知plaintext夹具（push/upload/verification）逐项精修，测试守卫不放宽。最新本机626价格/PUSH/upload、632terminal部分、638auth42请求/完整TLS验证码、633完整instance/order恢复、624gateway/631replacement都自然通过；完整state637仍在途，历史Dockerrestore待，新CI待。正式Release/生产仍未执行。
 
-2026-11-23最新接续：当前已推源码`2bcb2dc5`，草稿[PR19](https://github.com/mastalee928/payincus/pull/19)。第三预览[45049591755](https://github.com/mastalee928/payincus/actions/runs/45049591755)已自然failure，全部8失败job日志查清：双首装在DB角色准备后启动助手exit1，具体根因仍待新增分类/运行目录诊断；六旧升级实际到了生产Agent清单检查，未发布候选Agent输入404，原回退日志成功。新预览补同source signed Agent输入，不放宽验签。认证事务代理覆盖导致递归已修，真实PG Agent/snapshot/auth559、批量/托管600、管理员到期/资金592、正常认证/OAuth590、真实TLS销毁邮件576及进程提升冷mTLS/三90秒超时605全部自然通过；三类型/六相关专项609共9/9与后端build614、Go兼容binary616过。原生HTTP测试夹具改HTTPS/CA/nonce响应签名，Go模块网络获取补有界重试/预算并同步固定脚本hash，相关测试过。准备阶段保存；恢复state/instance及历史Docker恢复未全部过、双首装/六旧worker仍待，正式Release/生产不执行。
+2026-11-23最新接续：当前已推源码`2bcb2dc5`，草稿PR19（原仓库 PR #19（历史记录，未迁移））。第三预览45049591755（原仓库 Actions 运行 45049591755（历史记录，未迁移））已自然failure，全部8失败job日志查清：双首装在DB角色准备后启动助手exit1，具体根因仍待新增分类/运行目录诊断；六旧升级实际到了生产Agent清单检查，未发布候选Agent输入404，原回退日志成功。新预览补同source signed Agent输入，不放宽验签。认证事务代理覆盖导致递归已修，真实PG Agent/snapshot/auth559、批量/托管600、管理员到期/资金592、正常认证/OAuth590、真实TLS销毁邮件576及进程提升冷mTLS/三90秒超时605全部自然通过；三类型/六相关专项609共9/9与后端build614、Go兼容binary616过。原生HTTP测试夹具改HTTPS/CA/nonce响应签名，Go模块网络获取补有界重试/预算并同步固定脚本hash，相关测试过。准备阶段保存；恢复state/instance及历史Docker恢复未全部过、双首装/六旧worker仍待，正式Release/生产不执行。
 
 本轮环境/测试错误也保留：临时PG库名超过63字节导致OSS_DATABASE_INVALID，改短名后真实资金592过；旧到期JWT未建立真实session被正确拒绝，改真实refresh会话并加未登记session拒绝后过。空current目录猜测没有复现，不能认定首装已修；Linux私有挂载中的helper仅验到缺迁移身份被正确拒绝604，原服务606健康。Go测试本身过但Windows临时exe删除拒绝两次，改固定本机test binary并运行616自然0，不把工具清理失败写为整体绿。恢复旧夹具直接改余额/批量流水/改历史退款被资金守卫拒绝，改真实记账和拒绝断言中；不能删除保护或把夹具适配当成完整OSS灾备通过。
 
 基准a5251f0／codex/financial-integrity-audit，版本1.8.14／Agent1.0.16保持。本轮已按owner指令修源码、锁图、Incus7.6及Go安全基线，不再是“仅报告未修”的阶段；准备按既有阶段保存授权提交推送并运行无tag双架构发行预览，暂不Release/生产OTA。较新实施和证据见[安全修复台账](docs/security-repair-2026-11-22.md)首节，下面审计历史保留。
 
-阶段已保存：`aec5f0f8d10d80454511ebd54a2ccae9d2bfb2e8`已推`origin/codex/financial-integrity-audit`并核远端相同，187文件只含源码/测试/脱敏文档；本地凭据扫描通过，无logs/私有档案。无tag发行预览[45045980526](https://github.com/mastalee928/payincus/actions/runs/45045980526)刚启动，须继续核全部job和失败日志，尚未CI/签名双包/六旧升级通过。版本仍1.8.14/Agent1.0.16；没有正式Release/生产OTA。
+阶段已保存：`aec5f0f8d10d80454511ebd54a2ccae9d2bfb2e8`已推`origin/codex/financial-integrity-audit`并核远端相同，187文件只含源码/测试/脱敏文档；本地凭据扫描通过，无logs/私有档案。无tag发行预览45045980526（原仓库 Actions 运行 45045980526（历史记录，未迁移））刚启动，须继续核全部job和失败日志，尚未CI/签名双包/六旧升级通过。版本仍1.8.14/Agent1.0.16；没有正式Release/生产OTA。
 
 该预览终态failure已完整查因：双构建/Incus/Agent准备和原生230/230、双签名实包关键内容/source校验过；双首装readonly ENV_FILE赋值失败、六旧worker新安装钩子裸chown被旧PATH包装器exit64拒绝。已逐job读失败日志，修env子进程传递与保留runtime使用/usr/bin/chown，不放宽受限wrapper，Bash readonly回归及对应守卫复验。下一轮新源码预览继续，不发正式版；本机TCG任务2降权前封存/回退超时failed，原目录原helper复原、旧服务已自然五分钟巡查，迁移246保持，DB连接30秒仅fixture。
 
@@ -303,7 +305,7 @@
 
 - 最终收尾：六公开资产与两实际正式tar逐文件独立核验全部通过（原pin签名、来源92829310、243迁移、DNS/SSH/重装/心跳修复、用户无改价入口、无镜像图库随包）；本轮上线目标完成。正式v1.8.10/Agent1.0.14已公开；主控已候选同源码实测，客户#27/#41原PID/boot/密码/文件/UUID/价格/账期及SSH/IPv6/768MiB保持，两架构各24镜像通过，34在线/BBR、23可售、零在途与图库保持。完整OSS新B灾备等长期目标仍独立未验，不由本次发行代替。
 
-- 2026-11-14 07:18:48 UTC [v1.8.10](https://github.com/mastalee928/payincus/releases/tag/v1.8.10)已正式公开并为latest，Agent v1.0.14已公开。六公开资产重新下载后size/API digest/sha/OTA逐项核过，两正式tar原签名/source/243迁移/本批修复独立核验收尾；公开包就是正式run43568813210原包，稳定tag指向92829310未移动。后续发版skip修复与台账f5dec0b2已推main/原分支，产品代码未改。完整镜像两架构24/24、主控候选更新49与真实客户/库存/账务验收前文已闭环；目标主控仍preview-9282931，同产品源码已运行，不宣称已正式包OTA。
+- 2026-11-14 07:18:48 UTC [v1.8.10](https://github.com/masta-lee/mastaincus/tree/v1.8.10)（旧版资产未迁移）已正式公开并为latest，Agent v1.0.14已公开。六公开资产重新下载后size/API digest/sha/OTA逐项核过，两正式tar原签名/source/243迁移/本批修复独立核验收尾；公开包就是正式run43568813210原包，稳定tag指向92829310未移动。后续发版skip修复与台账f5dec0b2已推main/原分支，产品代码未改。完整镜像两架构24/24、主控候选更新49与真实客户/库存/账务验收前文已闭环；目标主控仍preview-9282931，同产品源码已运行，不宣称已正式包OTA。
 
 - v1.8.10正式43568813210全部双包/双首装/六旧worker升级成功，main43568136335也29/29成功；但末尾publish被间接preview-agent skipped隐式success拦住。已修workflow release条件为always()+三个必需needs.result精确success并加守卫。未移动稳定tag、未改正式tar，逐job核成功来源后使用本run原包按同OTA格式创建正式v1.8.10，六资产重新下载核验中。正式amd64 214572932B SHAb8b19d7a94ef5ae057bf25c1b1851656cab2c518989e4f86fd915fa87bc54dec；arm64 213798038B SHAdc154e9a58509f2b7c0a0f31f626ae99e054f457efe26dc6eb71a2a3de0076c0。主控仍同产品候选preview-9282931，不能称已安装正式tar。
 
@@ -494,7 +496,7 @@
 - 最终五类缓存检查自然exit0，全部initializationVerified=false，不能视验收通过；观察结束两测试残留Ubuntu/Alma均Stopped、forward=0，操作/卷/清理未确认范围及完整测试磁盘保留私有档。实际PID10976/8116核父进程和启动路径后定向停止，无活动本次QEMU；后续从本报告继续修与验收，不沿用“完整初始化已通过”。
 - 已推expiry源码CI43241386494终态failure：15job/12success，失败131262413524/131262413618/131262413526；Alpine SSH43241386488终态failure，两maintenance131262406690/131262407472失败，其余native分项不代表整轮。原22:50queued记录为历史，接续须以本条失败及固定job日志修后新来源闭环。
 
-2026-11-12 22:50 owner已明确授权提交推送，本批 E01–E21 修复、守卫与五轮／两遍／原生验收记录69文件已提交 `5b13db743e7b3b779fc1130f5cd631f2d10f708a` 并推送origin/main，`ls-remote`核远端同SHA。CI [43241386494](https://github.com/mastalee928/payincus/actions/runs/43241386494) queued、Alpine SSH [43241386488](https://github.com/mastalee928/payincus/actions/runs/43241386488) in_progress（22:50快照），尚非终态，接续须查；以下“未提交推送”保留验证收尾时状态。只保存Git，不发新版或部署生产；无关.taste-skill和logs-temp-hardening-types.txt保留未跟踪。Owner随后还有更严重的问题待补充。
+2026-11-12 22:50 owner已明确授权提交推送，本批 E01–E21 修复、守卫与五轮／两遍／原生验收记录69文件已提交 `5b13db743e7b3b779fc1130f5cd631f2d10f708a` 并推送origin/main，`ls-remote`核远端同SHA。CI 43241386494（原仓库 Actions 运行 43241386494（历史记录，未迁移）） queued、Alpine SSH 43241386488（原仓库 Actions 运行 43241386488（历史记录，未迁移）） in_progress（22:50快照），尚非终态，接续须查；以下“未提交推送”保留验证收尾时状态。只保存Git，不发新版或部署生产；无关.taste-skill和logs-temp-hardening-types.txt保留未跟踪。Owner随后还有更严重的问题待补充。
 
 ## 2026-11-12 整份 E01–E21 源码修复／五轮审视／两遍排查（未部署）
 
@@ -553,7 +555,7 @@
 
 ## 2026-11-12 v1.8.7／Agentv1.0.7三轮审视及正式发行完成
 
-- 已公开[面板v1.8.7](https://github.com/mastalee928/payincus/releases/tag/v1.8.7)和[Agentv1.0.7](https://github.com/mastalee928/payincus/releases/tag/agent-v1.0.7)，latest=v1.8.7。正式source=`41077946d0c789fe510aff53dd67675b101ffe3c`，tree=`0d402f51ebd098a8a0017ae6bfdbbd92133c9358`；PR #10合入，同已验候选835f06c6源码树一致，v1.8.7注释tag`3bf8a977b594f1123f0d2f3921d9690e479123b9`解引用正式source。历史tag／资产未改。
+- 已公开[面板v1.8.7](https://github.com/masta-lee/mastaincus/tree/v1.8.7)（旧版资产未迁移）和[Agentv1.0.7](https://github.com/masta-lee/mastaincus/tree/agent-v1.0.7)（旧版资产未迁移），latest=v1.8.7。正式source=`41077946d0c789fe510aff53dd67675b101ffe3c`，tree=`0d402f51ebd098a8a0017ae6bfdbbd92133c9358`；PR #10合入，同已验候选835f06c6源码树一致，v1.8.7注释tag`3bf8a977b594f1123f0d2f3921d9690e479123b9`解引用正式source。历史tag／资产未改。
 - 三轮覆盖管理员当前单实例最终价／用户无改价／回卖原价、宿主BBR新旧接入自动修复／失败正常销售、实际IncusStopped／72小时截止原容器与磁盘快照转发删除、五分钟原管理／Agent恢复／已受理删除／失败换机恢复／自动回池。新增远端在途不重发停删、单项续费错误继续后续并在lane收尾报告扫描未完成、持久累计目标原因与重试、通知与已确认删除结果分开。详见[三轮报告](docs/instance-patrol-three-round-review-2026-11-12.md)。
 - 最终候选CI43138646402全部15job success，原236池集成步骤六独立DB片全覆盖、独立网关6步保持；原生Alpine43138646313／Agent43138646528、最终预览43138640777全必需终态通过。main CI43142231591全15成功、main Alpine43142231543／Agent43142231877成功；正式43142302663双构建、双首装与Release共5job success。真实Incus巡查实际Stopped→截止DELETE→系统卷／快照／转发消失→回池已实跑；完整242迁移、双端／唯一后台／公开Agent下载、备份／恢复／SQL／加密ZIP／回退／续接通过。OSS传输为适配器。
 - 六面板公开资产实际下载核API digest／size／hash，双OTA一致；正式双包源码／242迁移／用户无改价编辑器／root归属／安全路径／巡查代码／受信网关21文件签名hash模式ELF通过；Release说明回读一致。Agentsource=c99067be，三公开资产和最终artifact相同，后续Agent全部构建／协议输入未变；main发行检查相同后跳过覆盖。完整hash表／所有失败闭环见[发行记录](docs/release-v1.8.7-validation.md)，使用检查见[更新后检查](docs/release-v1.8.7-owner-click-test.md)。
@@ -794,7 +796,7 @@
 
 ## 2026-11-10 主控自动加固精确补丁已部署（宿主验收未完成）
 
-- 产品源码 `a081cb029eaaefef18b111e1c2da22ae7f367317`、记录提交 `1215be7ddfd395f02dd9e6e305cc803c058dec49` 已推 `codex/automatic-hardening-grub`；[草稿PR #8](https://github.com/mastalee928/payincus/pull/8)已附聊天，尚未合并或发行。该PR初始HEAD含`[skip ci]`，当时关联Actions为0，不能称CI通过。
+- 产品源码 `a081cb029eaaefef18b111e1c2da22ae7f367317`、记录提交 `1215be7ddfd395f02dd9e6e305cc803c058dec49` 已推 `codex/automatic-hardening-grub`；草稿PR #8（原仓库 PR #8（历史记录，未迁移））已附聊天，尚未合并或发行。该PR初始HEAD含`[skip ci]`，当时关联Actions为0，不能称CI通过。
 - `2026-11-09T15:58:26Z`已按原v1.8.5实际官方包/文件哈希/权限与完整seal比对部署28个变化文件及3个固定工具，保留原文件与manifest备份。仅重启原唯一backend，健康/业务启动/恢复保护及单进程核验通过，新PID906163；版本仍v1.8.5，未执行OTA，未移动稳定tag或改资产。
 - 随后定位本轮补丁传输的CRLF行尾导致受限网关脚本直接执行失败，公网IP巡检因此进入保护，加固统报HARDENING_OFFLINE。`16:09:41Z`精确纠正6份脚本副本为同产品commit的Git规范LF字节，原权限/完整seal复验、受限peer读取通过，无后台或宿主重启。`16:13:34Z`自然巡检已将全部28台公网IP核回synced，未手工改数据库标记；两原客户仍running。
 - 本轮追加升级器写入前拒绝CRLF及其零写入回归，加固区分离线/故障隔离/IP保护/安装等待，保留全部门禁。7项Python升级器、真实PG队列、安全/SSH守卫、后端类型与构建通过；准确追加源码提交和同来源Actions待本轮记录。诊断精修尚未部署。
@@ -815,7 +817,7 @@
 
 - 正式源码`e7faf22a03f920532ee0a35466f06597921767bb` / tree `64aa7d4a309be4d266fab92a3a499a993ea8026d`；PR #7合入main同SHA，注释tag对象`4bf4a6644c1451d15eebbe745c5b20b469c87dba`，旧稳定tag不移动。
 - 候选CI42577102595与main CI42590910672各十job、Alpine关联run全部终态success。预览42577106537四必需job成功/Release skipped，正式42607390425五job成功，213守卫/241迁移/双原生首装与完整恢复拒绝断言核验；所有关联运行无未处理失败。
-- [Release](https://github.com/mastalee928/payincus/releases/tag/v1.8.5)于`2026-11-09T11:27:19Z`公开；六资产实际下载核API digest/大小/双OTA、包内下载器三个编译文件/首页居中及菜单修复、原受信Ed25519签名，说明与latest回读一致。Agent v1.0.5原来源/三资产保持。详见[完整运行与六资产摘要](docs/release-v1.8.5-validation.md)。
+- [Release](https://github.com/masta-lee/mastaincus/tree/v1.8.5)（旧版资产未迁移）于`2026-11-09T11:27:19Z`公开；六资产实际下载核API digest/大小/双OTA、包内下载器三个编译文件/首页居中及菜单修复、原受信Ed25519签名，说明与latest回读一致。Agent v1.0.5原来源/三资产保持。详见[完整运行与六资产摘要](docs/release-v1.8.5-validation.md)。
 - Owner自行按[网页升级检查](docs/release-v1.8.5-owner-click-test.md)升级。旧安装首次下载仍由当前下载器执行，新下载器随新版安装生效；本轮未代生产OTA/重启/OSS恢复。真实OSS新B、独立备用、客户公网、千台/72小时仍未验收。
 
 
@@ -829,7 +831,7 @@
 
 - 双架构预览42577106537已四必需job全部终态success/Release skipped；独立核实际完整checkout、213守卫、241迁移、双原生首装与全部备份/预检/恢复/回退续接/SQL ZIP及旧CRLF拒绝断言，下载器504与真实断流/超时回归标记已核。Alpine42577102536九job已核同来源success。当前仅候选CI42577102595的Pool串行回归待终态，其余九job已成功；未推进main或tag。
 
-- 候选`e7faf22a03f920532ee0a35466f06597921767bb` / tree `64aa7d4a309be4d266fab92a3a499a993ea8026d`已精确20路径提交并推`codex/release-v1.8.5`，[PR #7](https://github.com/mastalee928/payincus/pull/7)已附聊天。实际PR checkout `b6d0b062c5a6dd71f306ac709841c8d10a5d2611`独立tree相同。候选CI42577102595、Alpine42577102536、双架构预览42577106537运行中；同SHA完整终态前不推进稳定tag。补跑测试清单/下载器/路由与lint均自然exit0，lint保留既有369警告。Agent v1.0.5原tag/tree及三资产digest/大小/更新时间比原实际下载基线一致。
+- 候选`e7faf22a03f920532ee0a35466f06597921767bb` / tree `64aa7d4a309be4d266fab92a3a499a993ea8026d`已精确20路径提交并推`codex/release-v1.8.5`，PR #7（原仓库 PR #7（历史记录，未迁移））已附聊天。实际PR checkout `b6d0b062c5a6dd71f306ac709841c8d10a5d2611`独立tree相同。候选CI42577102595、Alpine42577102536、双架构预览42577106537运行中；同SHA完整终态前不推进稳定tag。补跑测试清单/下载器/路由与lint均自然exit0，lint保留既有369警告。Agent v1.0.5原tag/tree及三资产digest/大小/更新时间比原实际下载基线一致。
 
 - Owner已授权重新发行，包含OTA下载504修复和首页三轮修复。基线main为`b36e77f7fc7b89cfb2b354c50c3bd8a40b2dba62`，递增v1.8.5；旧稳定v1.8.4及Agent v1.0.5保持。阶段与完整来源记录在ignored `logs/release-v1.8.5-plan.json`。
 - 下载器对暂时错误最多三次尝试，切换经同Release元数据绑定的官方asset API；完整流超时、私有临时文件、大小/SHA256和重定向凭据隔离保持，永久/完整性错误拒绝安装。首页地区卡两侧等宽居中，短窗口按地图实际宽度避让，手机语言与导航菜单互斥。
@@ -869,7 +871,7 @@
 
 - 正式源码`2c3201122bfface31b7c20e6497437b5814ce699` / tree `512e37424d51cf66fab1a7ade5c3ca2323fd94de`；PR #6合入main同SHA，稳定注释tag对象`6a516f547ba52b3816450e1041cdf5b945f8eda4`不移动。
 - 候选CI42512962099与main CI42524993262各十job全部成功、实际checkout及关键断言独立核验；全部同源码Alpine/Agent关联run终态success，无未处理失败。预览42523751752四必需job成功/Release skipped；正式42535118475五job全部成功，213守卫/241迁移/双原生首装与完整恢复拒绝断言核验。
-- [正式Release](https://github.com/mastalee928/payincus/releases/tag/v1.8.4)于`2026-11-08T23:40:17Z`公开，六资产实际下载并核API digest/大小/双OTA/包内修复与原受信Ed25519签名，latest与说明回读一致；Agent v1.0.5三资产同来源已核，旧v1.0.4不变。六资产完整摘要与全部run见[公开验证](docs/release-v1.8.4-validation.md)。
+- [正式Release](https://github.com/masta-lee/mastaincus/tree/v1.8.4)（旧版资产未迁移）于`2026-11-08T23:40:17Z`公开，六资产实际下载并核API digest/大小/双OTA/包内修复与原受信Ed25519签名，latest与说明回读一致；Agent v1.0.5三资产同来源已核，旧v1.0.4不变。六资产完整摘要与全部run见[公开验证](docs/release-v1.8.4-validation.md)。
 - 原三次失败由最终候选及main完整CI闭环，原日志保留。最终只补脱敏文档`[skip ci]`到main，tag与产品源码不变；文档提交及关联run留本地发行台账。
 - Owner自行按[网页升级检查](docs/release-v1.8.4-owner-click-test.md)操作，本次未代做生产OTA/账号账务/重启/DNS/OSS恢复。自动重启白名单仍为空、内存实验关闭；真实OSS新B、独立备用、原客户公网、千台/72小时与原生自动重启缺口仍未验收。下文“未提交/未发行”仅为当时阶段记录。
 
@@ -889,7 +891,7 @@
 
 - 当前候选已更新为`efddf8edfdad614cb1cec80fdb7244f3cf8c4fc0` / tree `f3fdc2a64a5a6ee11196e58d72653a2cba022f4e`，PR实际checkout `3f4c1d25309b89478a76db510336c68628dca17c`独立tree一致。原CI42509303581终态failure，唯一Pool step9旧mTLS快照夹具空metadata被新隔离门禁拒绝；原Alpine42509303611/Agent42509303603终态success并逐job核来源，历史不作新SHA证据。仅修测试返回完整当前/快照配置并区分读取与写入，补四类不完整/特权拒绝零写入；本机真实PG/mTLS权限20竞争、单连接、隔离/快照守卫和含测试类型均自然exit0。新CI42509959699、Alpine42509959701、Agent42509959734跟踪中；未推进main/稳定tag/公开Agent。
 
-- 候选`2a25cd0a9229c22bb757e1f0c9bce4ab8788fe36` / tree `3d68d1d10c0042d3e5d79e83225120730cd901e8`已精确88路径提交并非force推送`codex/release-v1.8.4`，[PR #6](https://github.com/mastalee928/payincus/pull/6)已附聊天。PR checkout `2f90630e8d1cb8087d6479035bcbdbc58107fe01`独立tree一致。当前CI42509303581、Alpine42509303611、Agent42509303603运行中，以plan.pendingRuns为准；未打稳定tag/推进main。面板预览等待候选Agent发布后再触发，防首装因旧公开Agent版本不符失败。
+- 候选`2a25cd0a9229c22bb757e1f0c9bce4ab8788fe36` / tree `3d68d1d10c0042d3e5d79e83225120730cd901e8`已精确88路径提交并非force推送`codex/release-v1.8.4`，PR #6（原仓库 PR #6（历史记录，未迁移））已附聊天。PR checkout `2f90630e8d1cb8087d6479035bcbdbc58107fe01`独立tree一致。当前CI42509303581、Alpine42509303611、Agent42509303603运行中，以plan.pendingRuns为准；未打稳定tag/推进main。面板预览等待候选Agent发布后再触发，防首装因旧公开Agent版本不符失败。
 
 - Owner已授权本线程累计改动提交推送及正式发新版。现从已推送`3f4f83d0cb0c7a792c1a685e383c6eada8bca61e`整理v1.8.4，main基线`18858dd6c0f81d1ac789bcacebb4ffcf64c6fc37`；此前各小节“未提交/未发行”为当时阶段记录，最新结果以本节及`logs/release-v1.8.4-plan.json`为准。保留`.taste-skill/`和本地临时日志，不加入docs-site/Pages。
 - 本版包括SSH官方修订/原密码保护、实例隔离与持久安全检查、自动续费/到账补续/原身份开机与截止回池、管理员改期/改邮箱、已配置网关只读检查和首页改进。Agent启动标识上报需要独立版本，递增为v1.0.5；原agent-v1.0.4 tag/三资产不覆盖。面板与Agent双架构CI和公开包分别核验。
@@ -1001,12 +1003,12 @@
 
 ## 2026-11-08 加固代码复审与源码分支推送
 
-- 最终运行源码`683f952cab61239416fe0848d1e60b900a074934` / tree `23655484a09030a8fef2618cb12cdb6dff010145`已非force推送`codex/alpine-ssh-security`，远端完整SHA一致。[专项42426418362](https://github.com/mastalee928/payincus/actions/runs/42426418362)九job全部终态success，逐job日志独立核实际checkout同完整SHA与关键PASS；同源码关联运行发现仅此专项，无未处理新失败。最终台账单独文档提交`[skip ci]`，不改变已验证运行源码/稳定tag或发布包。
+- 最终运行源码`683f952cab61239416fe0848d1e60b900a074934` / tree `23655484a09030a8fef2618cb12cdb6dff010145`已非force推送`codex/alpine-ssh-security`，远端完整SHA一致。专项42426418362（原仓库 Actions 运行 42426418362（历史记录，未迁移））九job全部终态success，逐job日志独立核实际checkout同完整SHA与关键PASS；同源码关联运行发现仅此专项，无未处理新失败。最终台账单独文档提交`[skip ci]`，不改变已验证运行源码/稳定tag或发布包。
 - 七原生job：Alpine3.19–3.24 AMD64与3.22 ARM64，签名旧revision→官方修订、原密码新登录、错误/长/空密码/未知用户拒绝、持续SSH/SFTP字节与文件hash、幂等、BusyBox watcher真实锁释放后续接、五秒活跃继承锁/缺baseline/未知旧锁拒绝及reload失败后恢复全部通过；SFTP各983040–1933312字节。两维护job核真实PG迁移/原管理员/原身份/授权锁竞争、新接入当前故障门禁、客户恢复/expiry/任务/64KiB/临时实例零生命周期写、远端Python条件回退、Agent报告/流量账務与状态/网络观察屏障；重启与内核标签在维护专项仍为明确夹具。原九日志、完整终态及归档索引在ignored `logs/security-hardening-v8-ci-42426418362*`。
 - Owner最新授权精修后提交推送`codex/alpine-ssh-security`；已从原HEAD `586cc3b491dd82a40f6a8d2442d36a4db6191055`非force推送源码`baedf3dbdad448eaed3b011b257859238cfcfcb9` / tree `ef35745f11ae565dd7a56d7580adfcaa491cfda1`，远端完整SHA一致，没有覆盖其他提交。没有main/tag/发行或生产操作。
-- 同源码[专项42425826725](https://github.com/mastalee928/payincus/actions/runs/42425826725)九job全部终态：AMD64/ARM64维护两job success，七个原生SSH job均在测试入口被Node24/tsx loader API拒绝，未进入Docker补丁流程。原日志与终态快照保留；最小修测试入口使用tsx公开`tsImport` API，加实际同bootstrap子进程导入守卫，保留原生密码/SSH/SFTP断言。首次Windows路径导入缺file URL导致守卫非零，修pathToFileURL后自然exit0；不放宽产品认证、不盲rerun旧运行。后续同来源CI身份与终态在本节补记。
-- 后续`12debabc43f1a5229b0f39add4d9b588e2f338fa` / tree `a03c95c98f68175d4dd2ace1339873185030a1ed`已推同分支。[专项42426016661](https://github.com/mastalee928/payincus/actions/runs/42426016661)原生进入官方补丁/密码/持续SSH/SFTP及锁专项后，在末尾注入reload失败的立即重试被继承锁拒绝；确切step/job原日志保留。BusyBox1.36 `timeout`源码确认命令已结束后watchdog仍最多一秒持继承fd，原即时flock因此拒绝；最小改flock最多等待两秒，以真正锁释放为条件，不解活锁/删锁。新增真实BusyBox watcher后即时续接，活跃子进程改五秒保持仍必须拒绝，缺原baseline与未知旧锁继续拒绝。守卫及Bash语法通过，完整原生结果由新来源CI核验，不宣称本机原生成功。
-- `9bb17417b010d38a50376b0fbfcc2cc0f750db49` / tree `e046e124b634b0676ed210be0b961c0bddd5b34d`已推。[专项42426329157](https://github.com/mastalee928/payincus/actions/runs/42426329157)新增锁夹具本身沿用即时flock，前一正常update仍有短暂watchdog，故在人工故障注入前非零；日志stack准确指向test第131行，非产品补丁/密码失败。仅夹具建立自己的锁时采用同有界等待，不放宽五秒活跃子进程拒绝或缺baseline保护，后续同SHA继续独立核验。
+- 同源码专项42425826725（原仓库 Actions 运行 42425826725（历史记录，未迁移））九job全部终态：AMD64/ARM64维护两job success，七个原生SSH job均在测试入口被Node24/tsx loader API拒绝，未进入Docker补丁流程。原日志与终态快照保留；最小修测试入口使用tsx公开`tsImport` API，加实际同bootstrap子进程导入守卫，保留原生密码/SSH/SFTP断言。首次Windows路径导入缺file URL导致守卫非零，修pathToFileURL后自然exit0；不放宽产品认证、不盲rerun旧运行。后续同来源CI身份与终态在本节补记。
+- 后续`12debabc43f1a5229b0f39add4d9b588e2f338fa` / tree `a03c95c98f68175d4dd2ace1339873185030a1ed`已推同分支。专项42426016661（原仓库 Actions 运行 42426016661（历史记录，未迁移））原生进入官方补丁/密码/持续SSH/SFTP及锁专项后，在末尾注入reload失败的立即重试被继承锁拒绝；确切step/job原日志保留。BusyBox1.36 `timeout`源码确认命令已结束后watchdog仍最多一秒持继承fd，原即时flock因此拒绝；最小改flock最多等待两秒，以真正锁释放为条件，不解活锁/删锁。新增真实BusyBox watcher后即时续接，活跃子进程改五秒保持仍必须拒绝，缺原baseline与未知旧锁继续拒绝。守卫及Bash语法通过，完整原生结果由新来源CI核验，不宣称本机原生成功。
+- `9bb17417b010d38a50376b0fbfcc2cc0f750db49` / tree `e046e124b634b0676ed210be0b961c0bddd5b34d`已推。专项42426329157（原仓库 Actions 运行 42426329157（历史记录，未迁移））新增锁夹具本身沿用即时flock，前一正常update仍有短暂watchdog，故在人工故障注入前非零；日志stack准确指向test第131行，非产品补丁/密码失败。仅夹具建立自己的锁时采用同有界等待，不放宽五秒活跃子进程拒绝或缺baseline保护，后续同SHA继续独立核验。
 - 本轮精修三处：维护准备、远端自启条件更新和恢复动作均要求Incus明确`ephemeral=false`，拒绝临时/缺失/非布尔持久属性，防止停止临时实例自动删盘；宿主维护获节点锁后复核完整管理身份与batch，拒绝等待锁期间变更的旧地址；新接入最终完成再次核独占模式、故障隔离及公网IP门禁，不采纳旧加固成功或清接入凭据。
 - 真实隔离PG/原证书mTLS客户恢复专项、AMD64/ARM64空宿主维护协议专项和队列专项自然exit0。新增真实READ COMMITTED节点锁竞争明确观测锁等待，原管理地址改变后零远端准备/重启；临时实例运行/停止均零start/stop；新接入三种当前门禁变化均拒绝完成并保留凭据。队列专项移除强制exit0，仅导入期间的后台cache timer unref，失败仍自然非零。三项隔离/SSH/加固守卫与Python七项夹具、源码及四专项类型检查通过；构建与日志见ignored `logs/security-hardening-v8-*`。一次守卫选择名称不匹配未执行，记录原非零日志后改正确三项清单，未算通过。
 - 本轮前端无新增修改，沿v7源文件hash核复用双端构建、v6真实Vue/Chrome三语/移动/键盘及撤权回执证据；已有SSH补丁、非特权、反代维护协调和内存实验按原范围集成提交，不重跑未变大矩阵。
@@ -1071,7 +1073,7 @@
 - 下一次安装包必含项：owner已安排本轮修复随下次版本一并发行，无需现在单独发版。集成 `codex/alpine-ssh-security` 的已验证源码后，核 AMD64/ARM64 实际包内共享模板、初始化/交付检查、维护 API 和双端入口；原密码与身份保护保持。当前仅记录下一次发行门槛，不立即合并 main、打 tag 或更新生产客户。
 - 已推分支 `codex/alpine-ssh-security`，核验源码 `536594ec9f58cc210715f1a1514c63659f24f1af` / tree `1e33905a88c63b89f919761071b03a52cc5b9f81`。采用 [OpenSSH 10.6p2 官方公告](https://www.openssh.com/releasenotes.html)与 Alpine stable `pw.patch` 对应签名修订；不关闭密码登录、不强制转换 PAM、不重置客户密码、主机密钥、端口或 SSH 配置。公告影响部分 Linux musl/PAM-disabled 环境；未公布的 CVE、利用情况或具体原因不作推断。
 - 新 Alpine 容器/VM 初始化及宿主接入使用共享补丁检查，独占交付同时核包与实际监听二进制。既有客户维护有管理员实例详情页显式入口，核原管理证书、登记 attempt/endpointHash/UUID、当前管理员会话与实例/转移/恢复/快照/反代冲突。持原密码连接，更新后核运行监听进程、原连接与新登录；账户、密钥、配置、权限和 `sshd -T` 前后比较。没有后台启动扫描或普通 OTA 静默维护客户。
-- [专项 42089071874](https://github.com/mastalee928/payincus/actions/runs/42089071874) **8 job 全部终态 success**，逐 job 完整 checkout 与 PASS markers 独立核验。AMD64 Alpine 3.19–3.24 六分支，加 3.22 ARM64，均实测官方旧 revision → 修补 revision、原密码新登录、错误/300与1024字符/空密码及不存在用户拒绝、原持续 SSH/SFTP 字节与文件 hash 完整、幂等、已装补丁但 reload 失败后重新加载续接。每项持续 SFTP 为 1,048,576–1,769,472 字节；未伪造服务启动状态。PG job `127461979492` 同来源核管理员/原身份/真实并发锁/任务/失败续接/账目与初始化守卫。`logs/alpine-ssh-native-verified.json`、run 快照和八份原日志保留本地。
+- 专项 42089071874（原仓库 Actions 运行 42089071874（历史记录，未迁移）） **8 job 全部终态 success**，逐 job 完整 checkout 与 PASS markers 独立核验。AMD64 Alpine 3.19–3.24 六分支，加 3.22 ARM64，均实测官方旧 revision → 修补 revision、原密码新登录、错误/300与1024字符/空密码及不存在用户拒绝、原持续 SSH/SFTP 字节与文件 hash 完整、幂等、已装补丁但 reload 失败后重新加载续接。每项持续 SFTP 为 1,048,576–1,769,472 字节；未伪造服务启动状态。PG job `127461979492` 同来源核管理员/原身份/真实并发锁/任务/失败续接/账目与初始化守卫。`logs/alpine-ssh-native-verified.json`、run 快照和八份原日志保留本地。
 - 本机 server/client type-check、server build、最终双端 build、Alpine/宿主安装/前端路由/i18n 守卫通过；独占交付专项核18 OS alias × 容器/VM × 两种密码策略及真实本机 SSH 指纹/错误密码/非root/不可达/ECDSA/RSA。隔离 PG 自然 exit0。真实 Chrome 管理员详情页核1440/768/390宽、三语/深浅、44px、无溢出、重复点击与旧会话迟到结果；照片与日志存 ignored logs。210项清单登记只证明清单完整，不宣称本轮全量套件通过。
 - 历史失败及改正保留：`42084579076` 夹具不支持 `--allow-downgrades`；`42084942483` 不支持直接 HTTPS apk 参数，改为 HTTPS 下载本地签名包；`42085540542` 产品误用带包名 `apk info -v` 读到说明，改为无参数 installed 列表；`42085915611`/`42086166954` 仅新建官方 `sshd_config.apk-new` 被 manifest 拒绝，增加脱敏诊断并在生效配置保持的前提下允许该备份。`42087523457`/`42088154205` 3.19–3.21 未进入产品脚本，旧 OpenRC 容器启动报“already starting”；源码查明锁文件 open 失败亦会产生此提示，一次性容器缺 boot 创建的 `/run/openrc/exclusive` 等目录，补目录后最新三 job 通过。此前“依赖递归启动”的判断没有确证，修正为已核初始化目录缺失；不推断客户 SSH 产品故障。最新缺省脚本检查须调用实际 Git Bash 路径并核自然退出，不能把 PowerShell 找不到 bash 后残留 `$LASTEXITCODE=0` 当成功；本轮补用绝对路径，两份 Bash syntax 自然 exit0。
 - 自动维护仅覆盖同分支/同上游修订、标准 OpenRC 且原登记身份完整的运行独占实例；跨版本、已知自动 restart 钩子旧修订、自定义参数、缺原密码/身份、仅 recoveryIdentity 或换机后旧 managedCleanup 不符均保守拒绝，不能删 UUID 门禁。Linux 原生实证是一次性 Docker/标准无 PAM sshd，不代替全分支 VM 镜像首装、所有自定义/PAM/Krb 配置或生产公网无中断验收。
@@ -1079,28 +1081,28 @@
 
 ## 2026-11-05 v1.8.3 七项修复正式发行核验完成
 
-- 正式源码 `1ac022b567ee959d0d44df70462c73e9683f08d6`，tree `c75c12e4313dba81d1b17a29f8c5b95c12fec09b`。main精确非force快进、PR [#5](https://github.com/mastalee928/payincus/pull/5) MERGED且mergeCommit同源码；注释tag `v1.8.3` 对象 `bc0639ba9ece29ce334c7ed56cfc6c8a345a7926` 固定解引用同源码。最终文档提交不移动tag、不重新打包。
-- 候选CI [41894899709](https://github.com/mastalee928/payincus/actions/runs/41894899709) 十job success、实际PR checkout `df33a8fc35f3c0c18d58f8593c04d2d1ba456f73` tree同候选；预览 [41894888749](https://github.com/mastalee928/payincus/actions/runs/41894888749) 四必需job success/Release skipped。正式 [41914476956](https://github.com/mastalee928/payincus/actions/runs/41914476956) 五job success、双原生首装独立核验。main CI [41914468073](https://github.com/mastalee928/payincus/actions/runs/41914468073) 现已十job全部终态success；23:09:02Z逐job实际checkout同完整正式源码，最终Pool日志、16/58/78–81/90与本批隔离/PG/App/API/三语真实触摸markers已核。旧候选step99失败由候选与main新来源通过闭环，原日志保留。
+- 正式源码 `1ac022b567ee959d0d44df70462c73e9683f08d6`，tree `c75c12e4313dba81d1b17a29f8c5b95c12fec09b`。main精确非force快进、PR #5（原仓库 PR #5（历史记录，未迁移）） MERGED且mergeCommit同源码；注释tag `v1.8.3` 对象 `bc0639ba9ece29ce334c7ed56cfc6c8a345a7926` 固定解引用同源码。最终文档提交不移动tag、不重新打包。
+- 候选CI 41894899709（原仓库 Actions 运行 41894899709（历史记录，未迁移）） 十job success、实际PR checkout `df33a8fc35f3c0c18d58f8593c04d2d1ba456f73` tree同候选；预览 41894888749（原仓库 Actions 运行 41894888749（历史记录，未迁移）） 四必需job success/Release skipped。正式 41914476956（原仓库 Actions 运行 41914476956（历史记录，未迁移）） 五job success、双原生首装独立核验。main CI 41914468073（原仓库 Actions 运行 41914468073（历史记录，未迁移）） 现已十job全部终态success；23:09:02Z逐job实际checkout同完整正式源码，最终Pool日志、16/58/78–81/90与本批隔离/PG/App/API/三语真实触摸markers已核。旧候选step99失败由候选与main新来源通过闭环，原日志保留。
 - 最后按同SHA发现仅上述四关联运行，全部终态success，无新增Agent/Pages或未处理发行失败。`logs/release-v1.8.3-{candidate-ci,preview,formal,main-ci}-verified.json`与逐job原始日志归档；209完整守卫、240迁移、唯一后台、双前端、公开Agent、双首装备份预检/恢复/改变后回退续接及SQL ZIP/旧CRLF完整性拒绝分别核验，预览没有替代正式。
-- [v1.8.3 Release](https://github.com/mastalee928/payincus/releases/tag/v1.8.3) 于 `2026-11-04T21:27:53Z` 公开发布，非draft/prerelease、核验latest=v1.8.3。六资产实际下载并核API digest/大小、SHA256/双OTA、包内版本/迁移/LICENSE/root/路径/native、本批前后端修复编译文件及双组件原受信Ed25519签名/20文件/完整sourceCommit；Release说明回读一致、更新后资产保持。AMD64 `214176614` 字节/hash `b6ead81c50180d5d84f11e4aff5e08b4b850f0637fd1fe0574215fc57568246e`，ARM64 `213431430` 字节/hash `9b67415d0b83317446e6c384a131a95071b6aa41d77703271d0e0c05e05dce9b`。完整六项与范围见[公开验证记录](docs/release-v1.8.3-validation.md)。
+- [v1.8.3 Release](https://github.com/masta-lee/mastaincus/tree/v1.8.3)（旧版资产未迁移） 于 `2026-11-04T21:27:53Z` 公开发布，非draft/prerelease、核验latest=v1.8.3。六资产实际下载并核API digest/大小、SHA256/双OTA、包内版本/迁移/LICENSE/root/路径/native、本批前后端修复编译文件及双组件原受信Ed25519签名/20文件/完整sourceCommit；Release说明回读一致、更新后资产保持。AMD64 `214176614` 字节/hash `b6ead81c50180d5d84f11e4aff5e08b4b850f0637fd1fe0574215fc57568246e`，ARM64 `213431430` 字节/hash `9b67415d0b83317446e6c384a131a95071b6aa41d77703271d0e0c05e05dce9b`。完整六项与范围见[公开验证记录](docs/release-v1.8.3-validation.md)。
 - Agent保持v1.0.4，原tag来源 `76e779df77e52cbe96ee2e103d57dd951dba4e1e`、tree `359dcf6657f8666e1274a2b21bc556c2dbf28270` 与三资产hash/大小/更新时间沿原实际下载基线不变，无移动/重发。`panel-assets-verified.json`、`public-release-verified.json`、`agent-after-main-verified.json`及资产验签日志归档，不重复下载发布。
 - 本版修复done后二次隔离无新核验、转移40001有限提交重试与持久续接、工单公网IPv4/管理员OCI标签、首页底部、三语说明图标、转移状态门禁、品牌副标题与余额显示。原身份/未知残留/客户与库存保护保持，首次失败原因持久记录；历史开通#26具体失败步骤无原日志，不能猜因。代码复核、本机隔离PG/TLS与真实Vue/Chrome、对应守卫/类型/双端build均有独立证据，本机未重复全套大矩阵。
 - Owner自行[网页升级与检查](docs/release-v1.8.3-owner-click-test.md)，含实际版本/提交、七项回归、接入/IP、支付、OSS与日志/库存判据。此前只读目标实际已v1.8.2（deployedAt `2026-11-04T16:53:54.766Z`），不是本agent升级；本次未代部署v1.8.3、解除生产隔离或操作客户。真实OCI/原Agent客户公网、真实OSS全新B完整灾备、独立备用、近千台/72小时仍未全面验收。`.taste-skill/`保留；以下“在跑/准备”均为历史阶段记录。
 
 ## 2026-11-05 v1.8.3 正式发行与六资产已核，等待最终 main CI
 
-- [v1.8.3 Release](https://github.com/mastalee928/payincus/releases/tag/v1.8.3) 于 `2026-11-04T21:27:53Z` 实际公开发布，非draft/prerelease，panel latest=v1.8.3。正式Build & Release [41914476956](https://github.com/mastalee928/payincus/actions/runs/41914476956) 五job全部终态success；verify-workflow.py formal独立核五job实际checkout同完整源码 `1ac022b567ee959d0d44df70462c73e9683f08d6`，双原生首装、209守卫/240迁移、唯一后台/双前端/公开Agent、备份预检/恢复/改变后回退续接、SQL ZIP及旧CRLF完整性拒绝通过。`formal-verified.json`和五日志归档，不再查询或重跑。
+- [v1.8.3 Release](https://github.com/masta-lee/mastaincus/tree/v1.8.3)（旧版资产未迁移） 于 `2026-11-04T21:27:53Z` 实际公开发布，非draft/prerelease，panel latest=v1.8.3。正式Build & Release 41914476956（原仓库 Actions 运行 41914476956（历史记录，未迁移）） 五job全部终态success；verify-workflow.py formal独立核五job实际checkout同完整源码 `1ac022b567ee959d0d44df70462c73e9683f08d6`，双原生首装、209守卫/240迁移、唯一后台/双前端/公开Agent、备份预检/恢复/改变后回退续接、SQL ZIP及旧CRLF完整性拒绝通过。`formal-verified.json`和五日志归档，不再查询或重跑。
 - 六公开资产实际下载至 `logs/release-v1.8.3-panel-assets`，核API digest/大小、双tar独立SHA256、双OTA字节/hash/大小/URL/架构、包内1.8.3/240迁移/LICENSE/root归属/路径/native和本批前后端修复编译markers。每包双架构组件独立用v1.8.2沿用的受信Ed25519公钥验签，20文件hash/大小/权限/ELF架构、catalog/payload完整sourceCommit同源码。AMD64包 `214176614` 字节 SHA256 `b6ead81c50180d5d84f11e4aff5e08b4b850f0637fd1fe0574215fc57568246e`；ARM64包 `213431430` 字节 SHA256 `9b67415d0b83317446e6c384a131a95071b6aa41d77703271d0e0c05e05dce9b`。`panel-assets-verified.json`与verification.log归档，不重复下载或执行verify-public-release.py。
 - Release说明按tag-notes.md更新并回读逐字一致，更新后六资产/latest复核 `public-release-verified.json`。Agent仍v1.0.4，原tag来源 `76e779df77e52cbe96ee2e103d57dd951dba4e1e`/tree `359dcf6657f8666e1274a2b21bc556c2dbf28270`、三资产hash/大小/更新时间沿实际下载基线不变，`agent-after-main-verified.json`归档，无重发。
-- 当前仅main CI [41914468073](https://github.com/mastalee928/payincus/actions/runs/41914468073) Pool `126870351390` 未终态，21:31Z step57，无新失败；其余九job终态success，实际checkout同完整正式源码，`main-ci-partial-verified.json`及九日志归档。最终须核十job完整终态及日志，最后发现同SHA关联新增run并全部核验；当前四关联run中候选/预览/formal均success，不查旧终态。完成后才提交最终公开验证文档与台账，不把九job成功说成全部main CI通过。
+- 当前仅main CI 41914468073（原仓库 Actions 运行 41914468073（历史记录，未迁移）） Pool `126870351390` 未终态，21:31Z step57，无新失败；其余九job终态success，实际checkout同完整正式源码，`main-ci-partial-verified.json`及九日志归档。最终须核十job完整终态及日志，最后发现同SHA关联新增run并全部核验；当前四关联run中候选/预览/formal均success，不查旧终态。完成后才提交最终公开验证文档与台账，不把九job成功说成全部main CI通过。
 - 本次未代部署v1.8.3或解除生产隔离；此前只读目标已v1.8.2，源码/隔离/发行不代表该目标受影响流程已恢复。首装OSS为本地传输替身，真实OCI/原Agent客户公网、真实OSS全新B完整灾备、独立备用、千台/72小时仍未验收。以下保留阶段历史。
 
 ## 2026-11-05 v1.8.3 候选核验完成，main 与正式 tag 已推进
 
-- 候选CI [41894899709](https://github.com/mastalee928/payincus/actions/runs/41894899709) 已十job全部终态success。逐job实际PR checkout `df33a8fc35f3c0c18d58f8593c04d2d1ba456f73` 的tree与正式源码 `1ac022b567ee959d0d44df70462c73e9683f08d6` 同为 `c75c12e4313dba81d1b17a29f8c5b95c12fec09b`；最终Pool完整日志、16/58/78–81/90、本批隔离/转移PG/API/完整App及三语实际触摸markers已核。证据 `logs/release-v1.8.3-candidate-ci-verified.json` 与十份日志归档，旧step99失败由新来源通过闭环，历史保留不再查询。
-- 同来源预览 [41894888749](https://github.com/mastalee928/payincus/actions/runs/41894888749) 四必需job全部success/Release skipped，209守卫、240迁移、双原生首装全部恢复/回退续接及SQL ZIP/旧CRLF拒绝已独立核验并归档，不再查询或重跑。
-- `2026-11-04T21:16:01Z` main从 `6ddd67d8c38099f5c29aebd890c131bea6113b02` 精确非force快进至上述源码，PR [#5](https://github.com/mastalee928/payincus/pull/5) 已MERGED，mergeCommit同完整源码。注释tag `v1.8.3` 对象 `bc0639ba9ece29ce334c7ed56cfc6c8a345a7926` 于21:16:05Z核验推送、解引用同源码；不再执行publish.py，不移动任何稳定tag。
-- 同SHA关联发现共四run：候选CI/预览均终态success；新main CI [41914468073](https://github.com/mastalee928/payincus/actions/runs/41914468073) 与正式Build & Release [41914476956](https://github.com/mastalee928/payincus/actions/runs/41914476956) 仍在跑，无新失败，尚无关联Agent/Pages运行。plan.pendingRuns仅后两项；终态须分别核全部十job/五job实际来源与日志，再核六公开资产、原受信签名、OTA/latest与Agent原基线。
+- 候选CI 41894899709（原仓库 Actions 运行 41894899709（历史记录，未迁移）） 已十job全部终态success。逐job实际PR checkout `df33a8fc35f3c0c18d58f8593c04d2d1ba456f73` 的tree与正式源码 `1ac022b567ee959d0d44df70462c73e9683f08d6` 同为 `c75c12e4313dba81d1b17a29f8c5b95c12fec09b`；最终Pool完整日志、16/58/78–81/90、本批隔离/转移PG/API/完整App及三语实际触摸markers已核。证据 `logs/release-v1.8.3-candidate-ci-verified.json` 与十份日志归档，旧step99失败由新来源通过闭环，历史保留不再查询。
+- 同来源预览 41894888749（原仓库 Actions 运行 41894888749（历史记录，未迁移）） 四必需job全部success/Release skipped，209守卫、240迁移、双原生首装全部恢复/回退续接及SQL ZIP/旧CRLF拒绝已独立核验并归档，不再查询或重跑。
+- `2026-11-04T21:16:01Z` main从 `6ddd67d8c38099f5c29aebd890c131bea6113b02` 精确非force快进至上述源码，PR #5（原仓库 PR #5（历史记录，未迁移）） 已MERGED，mergeCommit同完整源码。注释tag `v1.8.3` 对象 `bc0639ba9ece29ce334c7ed56cfc6c8a345a7926` 于21:16:05Z核验推送、解引用同源码；不再执行publish.py，不移动任何稳定tag。
+- 同SHA关联发现共四run：候选CI/预览均终态success；新main CI 41914468073（原仓库 Actions 运行 41914468073（历史记录，未迁移）） 与正式Build & Release 41914476956（原仓库 Actions 运行 41914476956（历史记录，未迁移）） 仍在跑，无新失败，尚无关联Agent/Pages运行。plan.pendingRuns仅后两项；终态须分别核全部十job/五job实际来源与日志，再核六公开资产、原受信签名、OTA/latest与Agent原基线。
 - 正式首装和六资产尚未完成，不能称正式发行核验完成；本次未代做生产OTA、解除隔离或客户操作。此前只读目标已v1.8.2，本次v1.8.3尚无目标部署证据；真实OSS新B、原Agent/客户公网、独立备用、千台/72小时仍未验收。阶段台账留至最终文档提交，不为记录触发产品重跑。以下保留原阶段历史。
 
 ## 2026-11-05 v1.8.3 本批七项修复与候选发行准备
@@ -1113,7 +1115,7 @@
 
 Owner已授权整理、修复、代码复核、推送和新版本发行；稳定v1.8.2不移动，本次不代做生产OTA、清数据库隔离或操作客户网络。旧v1.8.2监控已删除。
 
-候选 `2a7f80ff99826c7c12bba3be817c791870375118` / tree `1343324f71e27e96c89c65564ddb6a83ee2f818b` 已推 `codex/release-v1.8.3`，PR [#5](https://github.com/mastalee928/payincus/pull/5) 已附聊天。2026-11-04T18:42Z：CI [41887788857](https://github.com/mastalee928/payincus/actions/runs/41887788857) 九job终态success/仅Pool综合job在跑；实际PR checkout `df8181d4b9bef24d51889168361a23247059bdb2` 已独立核tree与候选一致，九job日志归档。预览 [41887784640](https://github.com/mastalee928/payincus/actions/runs/41887784640) 双构建success、AMD64完整209守卫已核，双原生首装恢复仍在跑，无新失败。此为阶段记录，main仍 `6ddd67d8c38099f5c29aebd890c131bea6113b02`，尚未打v1.8.3稳定tag或正式发行；`logs/release-v1.8.3-plan.json/status.json`与本线程监控 `payincus-v1-8-3` 持续核验。阶段文档保留到最终台账，不为纯记录换候选或重跑测试。
+候选 `2a7f80ff99826c7c12bba3be817c791870375118` / tree `1343324f71e27e96c89c65564ddb6a83ee2f818b` 已推 `codex/release-v1.8.3`，PR #5（原仓库 PR #5（历史记录，未迁移）） 已附聊天。2026-11-04T18:42Z：CI 41887788857（原仓库 Actions 运行 41887788857（历史记录，未迁移）） 九job终态success/仅Pool综合job在跑；实际PR checkout `df8181d4b9bef24d51889168361a23247059bdb2` 已独立核tree与候选一致，九job日志归档。预览 41887784640（原仓库 Actions 运行 41887784640（历史记录，未迁移）） 双构建success、AMD64完整209守卫已核，双原生首装恢复仍在跑，无新失败。此为阶段记录，main仍 `6ddd67d8c38099f5c29aebd890c131bea6113b02`，尚未打v1.8.3稳定tag或正式发行；`logs/release-v1.8.3-plan.json/status.json`与本线程监控 `payincus-v1-8-3` 持续核验。阶段文档保留到最终台账，不为纯记录换候选或重跑测试。
 
 2026-11-04T18:43Z：预览41887784640已全部终态success/Release skipped；`release-v1.8.3-verify-workflow.py preview`独立核四job实际checkout、209守卫/240迁移、双原生首装与完整备份预检/还原/改变后回退续接/SQL ZIP完整性及旧CRLF拒绝条件，`logs/release-v1.8.3-preview-verified.json`与四份日志归档。预览不再查询或重跑，pending仅CI41887788857。
 
@@ -1126,10 +1128,10 @@ Owner已授权整理、修复、代码复核、推送和新版本发行；稳定
 
 ## 2026-11-05 v1.8.2 发行核验完成；隔离恢复遗漏仍未修复
 
-- 正式源码 `b70a9f56b9a06d72c0d91c6bebd984db9e7c68c5`，tree `2dd572ace1f390f84dc23ac18dd0374ba3fe8d1c`。main从 `2172dd0720ce9b60330222f08bd97d0c2959167c` 精确非force快进，PR [#4](https://github.com/mastalee928/payincus/pull/4) 已MERGED且mergeCommit同源码。注释tag `v1.8.2` 对象 `5973f499c0cc82a9318c7e321886446c3729a9a0` 固定解引用同源码，文档收尾不移动tag、不重新打包。
-- 候选CI [41835355829](https://github.com/mastalee928/payincus/actions/runs/41835355829) 十job success，实际PR checkout `99a887abbb7412ae35f682f586b98162a84c160c` 与候选tree一致；预览 [41835346983](https://github.com/mastalee928/payincus/actions/runs/41835346983) 四必需job success/Release skipped。正式 [41855613144](https://github.com/mastalee928/payincus/actions/runs/41855613144) 五job success，双原生首装独立核验，不以预览替代。main CI [41855600457](https://github.com/mastalee928/payincus/actions/runs/41855600457) 现已十job终态success；`verify-ci.py`逐job实际checkout均同完整正式源码，最终Pool日志及16/58/78–81/90等步骤归档。按同SHA最后发现只有上述四关联运行，全部终态，无新增Agent/Pages运行或未处理发行失败。
+- 正式源码 `b70a9f56b9a06d72c0d91c6bebd984db9e7c68c5`，tree `2dd572ace1f390f84dc23ac18dd0374ba3fe8d1c`。main从 `2172dd0720ce9b60330222f08bd97d0c2959167c` 精确非force快进，PR #4（原仓库 PR #4（历史记录，未迁移）） 已MERGED且mergeCommit同源码。注释tag `v1.8.2` 对象 `5973f499c0cc82a9318c7e321886446c3729a9a0` 固定解引用同源码，文档收尾不移动tag、不重新打包。
+- 候选CI 41835355829（原仓库 Actions 运行 41835355829（历史记录，未迁移）） 十job success，实际PR checkout `99a887abbb7412ae35f682f586b98162a84c160c` 与候选tree一致；预览 41835346983（原仓库 Actions 运行 41835346983（历史记录，未迁移）） 四必需job success/Release skipped。正式 41855613144（原仓库 Actions 运行 41855613144（历史记录，未迁移）） 五job success，双原生首装独立核验，不以预览替代。main CI 41855600457（原仓库 Actions 运行 41855600457（历史记录，未迁移）） 现已十job终态success；`verify-ci.py`逐job实际checkout均同完整正式源码，最终Pool日志及16/58/78–81/90等步骤归档。按同SHA最后发现只有上述四关联运行，全部终态，无新增Agent/Pages运行或未处理发行失败。
 - 证据 `logs/release-v1.8.2-{candidate-ci,preview,formal,main-ci}-verified.json` 及逐job日志。209完整守卫、240迁移、唯一后台、双前端、公开Agent、首装备份预检/还原/改变后回退续接、SQL/ZIP完整性、旧版CRLF迁移及拒绝条件均通过。Linux接入job另核真实PG/不同实际SSH的A/B旧IP复用与原生WireGuard删除、0600回执、中断续接和迟到回执保护；原历史失败由当前来源闭环，保留原失败证据。
-- [v1.8.2 Release](https://github.com/mastalee928/payincus/releases/tag/v1.8.2) 于 `2026-11-04T15:29:15Z` 发布，非draft/prerelease，panel latest=v1.8.2。六公开资产已实际下载并核API digest/大小、独立SHA256、两OTA manifest、240迁移/修复编译文件/LICENSE/root归属/原生架构、每包双架构组件的独立受信Ed25519签名和catalog/payload完整sourceCommit。AMD64 `214172891` 字节 SHA256 `86fbc64cbc795aeb2565ba7c9b8495a8ebe3fc3c44b203c9ca49c84a0744ffc5`；ARM64 `213423279` 字节 SHA256 `ec7918d253730a5ad86f40370a9aeb3ca9b703b806485a82074a5e3b6d2c936c`。六项摘要见[公开验证记录](docs/release-v1.8.2-validation.md)，下载及完整验签证据在ignored logs，不重复下载发布。
+- [v1.8.2 Release](https://github.com/masta-lee/mastaincus/tree/v1.8.2)（旧版资产未迁移） 于 `2026-11-04T15:29:15Z` 发布，非draft/prerelease，panel latest=v1.8.2。六公开资产已实际下载并核API digest/大小、独立SHA256、两OTA manifest、240迁移/修复编译文件/LICENSE/root归属/原生架构、每包双架构组件的独立受信Ed25519签名和catalog/payload完整sourceCommit。AMD64 `214172891` 字节 SHA256 `86fbc64cbc795aeb2565ba7c9b8495a8ebe3fc3c44b203c9ca49c84a0744ffc5`；ARM64 `213423279` 字节 SHA256 `ec7918d253730a5ad86f40370a9aeb3ca9b703b806485a82074a5e3b6d2c936c`。六项摘要见[公开验证记录](docs/release-v1.8.2-validation.md)，下载及完整验签证据在ignored logs，不重复下载发布。
 - Agent保持v1.0.4，原tag来源 `76e779df77e52cbe96ee2e103d57dd951dba4e1e`、tree `359dcf6657f8666e1274a2b21bc556c2dbf28270` 与三公开资产hash/大小/更新时间未变；`agent-after-main-verified.json`复用原实际下载证据。未移动或手工重发Agent。
 - 生产事实单独记录：此次只读诊断实际读得目标主控v1.8.2 / `b70a9f56b9a0`，deployedAt `2026-11-04T16:53:54.766Z`；本agent没有执行该升级。目标已升级不代表全部生产流程验收。Host #23存在已确认且未修复的 `done清理任务+再次故障隔离` 恢复遗漏，IPv4/IPv6仍pending，详情见下一节；不得把CI/发行通过说成该线上问题已解决。
 - [网页升级与检查](docs/release-v1.8.2-owner-click-test.md)已明确版本检查、接入/IP/支付/OSS/日志步骤及该已知限制。首装OSS是本地传输替身；真实OCI换IP后原Agent与客户公网连接、真实OSS全新B完整灾备、独立备用接管、近千台/72小时仍未验收。本轮未操作生产OTA/还原/DNS/OCI换IP/客户实例，`.taste-skill/`保留。以下保留诊断与各阶段历史，旧“在跑/未部署”仅是当时状态。
@@ -1148,17 +1150,17 @@ Owner已授权整理、修复、代码复核、推送和新版本发行；稳定
 
 - 候选CI `41835355829` 已十job全部终态success，实际PR checkout `99a887abbb7412ae35f682f586b98162a84c160c` 与候选 `b70a9f56b9a06d72c0d91c6bebd984db9e7c68c5` 的tree同为 `2dd572ace1f390f84dc23ac18dd0374ba3fe8d1c`。Pool后继16/58/78–81/90、Linux实际接入/IP复用、快照恢复/支付及逐job日志已核，归档 `logs/release-v1.8.2-candidate-ci-verified.json`；历史失败闭环，旧运行不再查询。
 - 双架构预览 `41835346983` 已success，双构建与双原生首装success/Release skipped；209守卫、240迁移、备份预检/还原/回退续接、SQL/ZIP/旧版CRLF迁移拒绝及四job实际来源已核，见 `logs/release-v1.8.2-preview-verified.json`，不重跑。
-- 2026-11-04T15:14:06Z main从 `2172dd0720ce9b60330222f08bd97d0c2959167c` 精确非force快进至同候选，PR [#4](https://github.com/mastalee928/payincus/pull/4) 已MERGED；同来源注释tag `v1.8.2` 已推送，对象 `5973f499c0cc82a9318c7e321886446c3729a9a0`，解引用同候选。稳定tag不移动。
+- 2026-11-04T15:14:06Z main从 `2172dd0720ce9b60330222f08bd97d0c2959167c` 精确非force快进至同候选，PR #4（原仓库 PR #4（历史记录，未迁移）） 已MERGED；同来源注释tag `v1.8.2` 已推送，对象 `5973f499c0cc82a9318c7e321886446c3729a9a0`，解引用同候选。稳定tag不移动。
 - 当前只跟main CI `41855600457` 和正式Build & Release `41855613144`，均完整headSha同候选，未见新失败；终态后分别独立核十job/五job实际checkout和日志，再下载六公开资产核hash/大小/OTA/受信签名/完整sourceCommit。plan.pendingRuns为准，本线程监控继续；正式首装及公开资产尚未核验完成。
 - 2026-11-04T15:25Z快照：main其余九job success且日志实际checkout已归档 `logs/release-v1.8.2-main-ci-partial-verified.json`，仅Pool `126663241997` 在跑（step52）。正式双构建 `126663283555` / `126663283953` success，已核209/209全套、原生恢复锁/权限及双组件完整sourceCommit，见 `logs/release-v1.8.2-formal-partial-verified.json`；双首装 `126668822684` / `126668822710` 在跑step4。部分job成功不代替两运行终态验证，成功日志供终态verifier复用，不重跑或重复下载。
 - 15:41Z正式 `41855613144` 已五job全部终态success，`verify-workflow.py formal` 独立核五job实际checkout、双架构首装及240迁移/209守卫/唯一后台/双端/公开Agent/备份预检恢复/改变后回退续接/SQL ZIP/旧版CRLF迁移拒绝，归档 `logs/release-v1.8.2-formal-verified.json` 及五份日志，不再查询或重跑。v1.8.2已由正式workflow实际发布；正在下载核六公开资产，尚未宣称hash/签名/OTA完成。main仅Pool在跑step103；plan只保留main CI。
 - 15:43Z六公开资产已下载至 `logs/release-v1.8.2-panel-assets` 并独立核API digest/大小、双tar SHA256、两OTA manifest字节/hash/大小/URL/架构、包内版本/240迁移/LICENSE/root归属/路径/原生架构/编译修复/worker入口。每包双架构组件独立受信Ed25519签名、20文件hash/权限/ELF及catalog/payload完整sourceCommit同b70；version.json/OTA的12位提交另有完整身份核验。AMD64 `214172891` 字节 SHA256 `86fbc64cbc795aeb2565ba7c9b8495a8ebe3fc3c44b203c9ca49c84a0744ffc5`；ARM64 `213423279` 字节 SHA256 `ec7918d253730a5ad86f40370a9aeb3ca9b703b806485a82074a5e3b6d2c936c`。证据 `panel-assets-verified.json` / verification.log，不重复下载发布。
-- Release https://github.com/mastalee928/payincus/releases/tag/v1.8.2 于2026-11-04T15:29:15Z实际发布，非draft/prerelease；说明按tag-notes.md更新并回读一致，更新后六资产/latest=v1.8.2再核，见 `logs/release-v1.8.2-public-release-verified.json`。Agent v1.0.4原tag/tree/三资产hash/大小/更新时间保持并复用原实际下载证据，见 `agent-after-main-verified.json`。当前仅mainCI待终态，最终公开台账与doc提交待其通过。
+- Release https://github.com/masta-lee/mastaincus/tree/v1.8.2 （旧版资产未迁移） 于2026-11-04T15:29:15Z实际发布，非draft/prerelease；说明按tag-notes.md更新并回读一致，更新后六资产/latest=v1.8.2再核，见 `logs/release-v1.8.2-public-release-verified.json`。Agent v1.0.4原tag/tree/三资产hash/大小/更新时间保持并复用原实际下载证据，见 `agent-after-main-verified.json`。当前仅mainCI待终态，最终公开台账与doc提交待其通过。
 - 本轮未生产升级/还原、DNS、OCI换IP或客户实例操作。Agent v1.0.4原tag/tree/资产保持；首装OSS为本地传输替身。真实OCI与原Agent客户公网、新B完整OSS灾备、备用接管、近千台/72小时缺口保持。以下为准备与历史阶段记录。
 
 ## 2026-11-04 v1.8.2 发行准备
 
-- 当前已提交推送候选 `b70a9f56b9a06d72c0d91c6bebd984db9e7c68c5`，分支 `codex/release-v1.8.2`，PR [#4](https://github.com/mastalee928/payincus/pull/4) 已附本线程；候选CI `41835355829` 与预览 `41835346983` 在跑。PR实际checkout `99a887abbb7412ae35f682f586b98162a84c160c` 和候选tree均 `2dd572ace1f390f84dc23ac18dd0374ba3fe8d1c`；逐job来源待终态完整归档。
+- 当前已提交推送候选 `b70a9f56b9a06d72c0d91c6bebd984db9e7c68c5`，分支 `codex/release-v1.8.2`，PR #4（原仓库 PR #4（历史记录，未迁移）） 已附本线程；候选CI `41835355829` 与预览 `41835346983` 在跑。PR实际checkout `99a887abbb7412ae35f682f586b98162a84c160c` 和候选tree均 `2dd572ace1f390f84dc23ac18dd0374ba3fe8d1c`；逐job来源待终态完整归档。
 - 当前Linux新job `126592714298` 已success：实际PG/两套不同SSH身份的A/B旧IP复用、当前root认证与无客户预检、真实WireGuard删除、0600回执、发布中断续接及迟到旧回执保留新登记均过，日志 `logs/release-v1.8.2-candidate-ci-job-126592714298.log`。这项不证明真实OCI控制台换IP或原Agent公网重连。
 - 当前来源209项完整守卫全部通过，AMD64/ARM64构建均success且逐job实际checkout/catalog与payload完整sourceCommit同 `b70a9f56`，见 `logs/release-v1.8.2-preview-builds-verified.json`。双原生首装在跑；CI当前仅完整Pool仍未终态，其余9job success。两个历史根因已由当前来源专项及完整209守卫闭环；首装、完整CI、正式标签/资产尚未完成。本线程监控 `payincus-v1-8-2` 已创建，按plan继续，最终核验结束后删除。
 - 预览 `41835346983` 现已终态success，双构建/双原生首装全部success，Release按预览协议skipped。`verify-workflow.py preview` 已核四job实际checkout同完整候选、209守卫/240迁移、唯一后台/双前端/公开Agent、备份预检还原、改变后回退续接、完整SQL/ZIP、旧版CRLF迁移和拒绝场景；归档 `logs/release-v1.8.2-preview-verified.json` / preview-job日志，不再查询或重跑该预览。首装OSS仍是本地传输替身，无客户宿主。仅候选CI `41835355829` 的Pool job `126592714425` 未终态（最近step59），其余9job success及实际PR checkout已核；plan.pendingRuns只保留该CI。正式发行必须等待CI，再独立核mainCI/正式首装和六资产，稳定v1.8.2尚未打tag。
@@ -1234,7 +1236,7 @@ Owner已授权整理、修复、代码复核、推送和新版本发行；稳定
 
 ## 2026-11-04 v1.8.1 正式发行、全部 CI 与资产核验完成
 
-- [正式 Release](https://github.com/mastalee928/payincus/releases/tag/v1.8.1) 于 `2026-11-03T15:08:52Z` 发布，非 draft/prerelease。正式 Build & Release `41658234856` 五 job 全部 success，逐 job 实际 checkout 均为 `bc860dcbdb364557611531fda388921968c35600`；正式双架构首装独立核过 238 迁移、唯一后台、双端、恢复内登录、legacy 回退续接、snapshot 零人工材料自动恢复、SQL/ZIP 完整性与旧版本迁移。见 `logs/release-v1.8.1-formal-verified.json` 和正式逐 job 日志。
+- [正式 Release](https://github.com/masta-lee/mastaincus/tree/v1.8.1)（旧版资产未迁移） 于 `2026-11-03T15:08:52Z` 发布，非 draft/prerelease。正式 Build & Release `41658234856` 五 job 全部 success，逐 job 实际 checkout 均为 `bc860dcbdb364557611531fda388921968c35600`；正式双架构首装独立核过 238 迁移、唯一后台、双端、恢复内登录、legacy 回退续接、snapshot 零人工材料自动恢复、SQL/ZIP 完整性与旧版本迁移。见 `logs/release-v1.8.1-formal-verified.json` 和正式逐 job 日志。
 - 六公开资产已实际下载并独立核验。AMD64 大小 `214165053`、SHA256 `3722697c3fcf9a1cf6cd8d58d181244a74f12851ebae4d42569c6af1d80e18c7`；ARM64 大小 `213389266`、SHA256 `28c93bae9dbdf6df6ee74bce16d4b37802a5005ccd105b4f7edb02d587fba2f0`。API digest/大小、独立校验文件、两份 OTA manifest 字节与 URL 一致；包内版本/238 迁移/LICENSE/路径/root 归属/原生架构、支付 worker 与恢复修正均通过。每包双架构组件各 20 文件大小/hash/权限/ELF 及独立 Ed25519 信任、公钥/catalog/payload 完整 sourceCommit 同正式来源，见 `panel-assets-verified.json` 和验证日志。
 - Release 说明已按 tag-notes.md 更新并回读；GitHub 将换行转为 CRLF，逐行完全一致，核验仅统一换行后通过，不改正文。更新后六资产保持，panel latest=v1.8.1，Agent v1.0.4 的原 tag/tree/三资产 digest/大小/更新时间保持，复用此前实际下载基线。见 `public-release-verified.json`、`agent-after-main-verified.json`；不重复下载或发布。
 - 主分支 CI `41658225173` 九 job 全部 success；逐 job 实际 checkout 同正式完整来源，Pool `125994183211` 全部业务步骤及清理结束，16/58/78/79/80/81/90 等原失败后继步骤均成功。原生 nft、维护锁、真实 Incus、原 Agent HMAC、恢复和付款标记均核验，九份日志及哈希见 `logs/release-v1.8.1-main-ci-verified.json`。候选 CI、预览、正式发行及全部历史运行已终态，无未处理发行失败。
@@ -1364,7 +1366,7 @@ Owner已授权整理、修复、代码复核、推送和新版本发行；稳定
 
 ## 2026-11-02 v1.8.0 发行、资产及全部 CI 收尾完成
 
-- [v1.8.0正式发行](https://github.com/mastalee928/payincus/releases/tag/v1.8.0)与六公开资产已核验，完整发行来源保持`85323d5fe7ddbbf80ca0e9258308bca395ddcd23`，注释tag对象保持`554aa2855b65e5aad7986ff5c2751f4c70d6bbac`。main CI `41345869211`八job现均success，最后Pool `124965429881`于22:09:17 UTC完成；八job实际checkout均853，修正步骤16/80/81与真实行锁断言通过，终态证据`logs/release-v1.8.0-main-ci-verified.json`和逐job日志。
+- [v1.8.0正式发行](https://github.com/masta-lee/mastaincus/tree/v1.8.0)（旧版资产未迁移）与六公开资产已核验，完整发行来源保持`85323d5fe7ddbbf80ca0e9258308bca395ddcd23`，注释tag对象保持`554aa2855b65e5aad7986ff5c2751f4c70d6bbac`。main CI `41345869211`八job现均success，最后Pool `124965429881`于22:09:17 UTC完成；八job实际checkout均853，修正步骤16/80/81与真实行锁断言通过，终态证据`logs/release-v1.8.0-main-ci-verified.json`和逐job日志。
 - 本任务15个关联运行全部终态，同853的候选CI/Agent/预览、main CI/Agent和正式发行六个运行均success；旧四个失败运行保留原结论，分别由后继测试适配和完整候选/main门禁解决，无未处理失败。main的真实Incus/systemd日志再次确认运行guest、系统卷/快照/forward删除、两worker库存结算及旧Agent身份修复后签名心跳。Agent v1.0.4本轮Publish skipped，原标签、源码tree及公开资产保持，未重复发行。
 - 公开脱敏汇总：[v1.8.0发行验证台账](docs/release-v1.8.0-verification.json)，包含完整源码/实际checkout区分、各run终态、失败解决链、正式首装恢复、六资产hash与组件签名、修复文件/迁移以及日志摘要哈希。仅提交本次最终文档记录并跳过重复CI，不移动稳定tag、不重新构建资产；记录保存后删除`payincus-v1-8-0`监控。以下章节为历史阶段记录，当前终态以本节及公开台账为准。
 - 本版包含换机旧源实际回收、Host30类原客户就绪恢复、Host32类证书与Agent认证修复、单批完整删除及到期三天宽限/续费保护、可读日志和宿主IPv6纯文本。owner从网页“系统更新”升级后按[完整非SSH点击实测流程](docs/release-v1.8.0-owner-click-test.md)逐项验证；后台已受理任务自动续接，原身份、权限、磁盘与账目保护保持。
@@ -1372,7 +1374,7 @@ Owner已授权整理、修复、代码复核、推送和新版本发行；稳定
 
 ## 2026-11-02 v1.8.0 已正式发布并核验公开资产，待 main CI 收尾
 
-- [面板v1.8.0](https://github.com/mastalee928/payincus/releases/tag/v1.8.0)于20:24:32 UTC实际发布，非draft/prerelease，panel latest=v1.8.0。正式`41345894421`双构建、双首装及Release五job全部success，逐job实际checkout均`85323d5fe7ddbbf80ca0e9258308bca395ddcd23`。正式日志独立核过202项、236迁移、唯一后台、双前端、公开Agent、备份/预检/恢复/live状态改变回退续接、SQL/ZIP完整性与旧版CRLF迁移及拒绝；证据`logs/release-v1.8.0-formal-verified.json`、`formal-job-*.log`。
+- [面板v1.8.0](https://github.com/masta-lee/mastaincus/tree/v1.8.0)（旧版资产未迁移）于20:24:32 UTC实际发布，非draft/prerelease，panel latest=v1.8.0。正式`41345894421`双构建、双首装及Release五job全部success，逐job实际checkout均`85323d5fe7ddbbf80ca0e9258308bca395ddcd23`。正式日志独立核过202项、236迁移、唯一后台、双前端、公开Agent、备份/预检/恢复/live状态改变回退续接、SQL/ZIP完整性与旧版CRLF迁移及拒绝；证据`logs/release-v1.8.0-formal-verified.json`、`formal-job-*.log`。
 - 六个公开资产实际下载至`logs/release-v1.8.0-panel-assets/`，API digest/大小、双tar独立校验文件和两份OTA manifest的字节/大小/hash/URL/架构全部匹配。AMD64包213793834字节，SHA256 `7211c77e17b5a5a6de93e09e3325a2bceb5df48cef32ff9aeb8ccb9f8cf73c1a`；ARM64包213027450字节，SHA256 `85b3e35d49551aad71ab2cbfad7a4e0f5c3924b318bc9b2c3c04fa85e4be4df7`。
 - 包内1.8.0版本、236迁移、LICENSE、root归属、归档路径/原生架构、修复编译文件、worker入口和三项恢复/删除迁移已核。每包的双架构网关组件用独立受信公钥核Ed25519签名、20文件hash/大小/权限/ELF架构；catalog与签名payload完整sourceCommit均853，version.json/OTA沿现格式12位提交。证据`logs/release-v1.8.0-panel-assets-verified.json`、`panel-assets-verification.log`。
 - 正式发行说明已按`logs/release-v1.8.0-tag-notes.md`更新并回读一致，覆盖换机回收、Host30/32类自动修复、单批删除、到期保护、日志及IPv6，并链接[完整网页实测流程](docs/release-v1.8.0-owner-click-test.md)。更新后再核六资产与latest，见`logs/release-v1.8.0-public-release-verified.json`。Agent本轮Publish skipped，原v1.0.4来源与资产已归档保持。
@@ -1383,7 +1385,7 @@ Owner已授权整理、修复、代码复核、推送和新版本发行；稳定
 - main Agent `41345869226`已终态success，Publish按预期skipped；成功job实际checkout均853，版本变更门禁明确false。公开Agent三资产大小/hash及更新时间仍与上次实际下载核验一致，原tag仍76e779df、agent tree不变，复用既有下载证据；`logs/release-v1.8.0-agent-after-main-verified.json`保存逐job来源与比对，不重复发布或下载。panel latest此时仍v1.7.9。当前仅正式`41345894421`（双构建成功，双首装/Release待终态）及main CI `41345869211` Pool运行，无新失败。
 
 - 候选 `85323d5fe7ddbbf80ca0e9258308bca395ddcd23` 的CI `41335981541` 已八job全部success；逐job实际checkout均为PR merge `5b67c37b7430ea41cc8ee010d7f559bac0a2c67e`，与候选tree同`74e1756ef7d6d85b62b4a092c0c8be718bc6b16e`。此前三个测试适配失败已由后继step16/80/81及整体CI成功闭环，历史日志保留，无未处理失败。完整终态/逐job来源证据`logs/release-v1.8.0-candidate-ci-verified.json`；同候选双架构预览/首装与真实Incus/systemd证据继续复用，不重跑。
-- 核remote main为预期祖先 `a6239b50e928d1eed4a9ea0a6325f4386b3c0b79`、v1.8.0 tag与Release均未占用后，精确fast-forward验证候选至main。PR [#2](https://github.com/mastalee928/payincus/pull/2)于20:14:57 UTC合并，mergeCommit为同一853；无force/squash。注释tag `v1.8.0`对象`554aa2855b65e5aad7986ff5c2751f4c70d6bbac`于20:15:12 UTC推送，解引用为853，禁止挪动。证据`logs/release-v1.8.0-publish-gates.json`、`tag-published.json`、`pr-merged.json`。
+- 核remote main为预期祖先 `a6239b50e928d1eed4a9ea0a6325f4386b3c0b79`、v1.8.0 tag与Release均未占用后，精确fast-forward验证候选至main。PR #2（原仓库 PR #2（历史记录，未迁移））于20:14:57 UTC合并，mergeCommit为同一853；无force/squash。注释tag `v1.8.0`对象`554aa2855b65e5aad7986ff5c2751f4c70d6bbac`于20:15:12 UTC推送，解引用为853，禁止挪动。证据`logs/release-v1.8.0-publish-gates.json`、`tag-published.json`、`pr-merged.json`。
 - 正式Build & Release `41345894421`已启动；main CI `41345869211`、main Agent `41345869226`同步跟进，全部完整headSha均为853。逐run快照与待运行项以plan/status为准，所有关联运行`logs/release-v1.8.0-main-associated-runs.json`。正式首装/Release终态及公开资产尚未核验，不能称v1.8.0已发行完成。
 - Agent仍v1.0.4，源码tree`359dcf6657f8666e1274a2b21bc556c2dbf28270`不变，原tag仍`76e779df77e52cbe96ee2e103d57dd951dba4e1e`；本轮main预期Publish skipped。未操作生产OTA/配置/数据库/DNS/客户实例，owner网页实测仍待发行后自行更新；完整独立OSS/接管/千台/72小时未验收。
 
@@ -1406,7 +1408,7 @@ Owner已授权整理、修复、代码复核、推送和新版本发行；稳定
 - 后继候选 `099571cd0429b528307ac19295037fe59e106c03` 已推送；仅修正三处测试适配，产品源码未再次变化。双架构无tag预览 `41331035120` 已全成功（双构建、双首装，Release按预期skipped），逐job日志实际checkout与签名组件完整sourceCommit均为099；全套202项通过，236迁移、唯一后端、公开Agent、备份/预检/恢复/改变live状态后的回退/续接、SQL与ZIP完整性及旧版CRLF迁移/拒绝均通过。证据 `logs/release-v1.8.0-preview-verified.json`、`preview-job-*.log`、`preview-artifacts.json`。预览成功不等于正式发行；不重复查询或重跑本预览。
 - 同099的CI `41331026864` 已七job成功，仅Pool `124920962766`尚在运行；此前失败的managed-provision存储核验step16现已成功。真实Incus/systemd job `124920962954`成功，实际checkout为PR merge `05133985f8fd67b68d17e00bec6dd331be388d7a`，与候选tree同 `dc7d4442798512908e6f03bbfb757ec8fd4dbc47`，分别记录身份。日志 `logs/release-v1.8.0-actual-incus-099571cd-success.log`；Agent PR `41331026840` success、Publish skipped，不重发v1.0.4。余下CI终态后才精确FF main并打正式tag；当前仍未正式发布或生产部署。后续运行以 `logs/release-v1.8.0-plan.json` / `status.json` 为准。
 
-- 首轮已提交推送：后端`22761023`、前端`5293c04c`、文档`5eb67311c12b50e92d8d38f4c663271be6de1236`，PR [#2](https://github.com/mastalee928/payincus/pull/2)。CI `41330334475` 八job中七成功；实际Incus job `124918886288`已真实通过运行容器/快照/卷/forward删除、pool/通用worker库存结算、systemd Go v1.0.4认证修复心跳。实际checkout `b852ef9bd4e6de3ac139e398e96ac19dbdad3660`为PR合并提交，tree与候选同`9d8b818c4d5c5d1379e958435d777e320c3e4e6c`，不混写来源。Agent PR `41330334491` success、Publish skipped。
+- 首轮已提交推送：后端`22761023`、前端`5293c04c`、文档`5eb67311c12b50e92d8d38f4c663271be6de1236`，PR #2（原仓库 PR #2（历史记录，未迁移））。CI `41330334475` 八job中七成功；实际Incus job `124918886288`已真实通过运行容器/快照/卷/forward删除、pool/通用worker库存结算、systemd Go v1.0.4认证修复心跳。实际checkout `b852ef9bd4e6de3ac139e398e96ac19dbdad3660`为PR合并提交，tree与候选同`9d8b818c4d5c5d1379e958435d777e320c3e4e6c`，不混写来源。Agent PR `41330334491` success、Publish skipped。
 - 首轮CI的Pool step16失败：旧`test-review-managed-provision`替身没有存储清单响应，新增严格卷核验因此拒绝释放，产品保护按预期工作。已补真实形状的存储/网络只读响应，并加存储拒绝/未知、残系统卷/快照四例；全28组PG+mTLS专项通过`logs/release-v1.8.0-managed-storage-reviewed.log`。
 - 预览`41330352460` ARM64构建成功，AMD64全套202项实际执行、200通过；两项静态守卫仍匹配迁移前路由内实现（快照互斥、管理员不退款），已改为检查统一删除服务和原调用参数，专项通过。首装与Release均skipped，**首轮预览失败，尚未正式发行**。首轮运行已全部终态；失败保留，待修正后新SHA CI/预览通过覆盖。错误根因是移动删除实现时漏同步两项静态守卫和一项HTTP替身；后续同类提取须核调用方与测试适配器，不放宽资源释放条件。
 
@@ -1451,7 +1453,7 @@ Owner已授权整理、修复、代码复核、推送和新版本发行；稳定
 
 ## 2026-11-01 v1.7.9 正式发行、资产核验与 CI 全部收尾
 
-- [面板 v1.7.9](https://github.com/mastalee928/payincus/releases/tag/v1.7.9) 已于 09:40:51 UTC 正式发布，latest 为 v1.7.9，非 draft/prerelease。正式运行 `41293344545` 的双构建、双首装及 Release 共五 job 全部 success；每个 job 的实际 checkout 均核为 `4c24d4fd9ecdbc68b78f869862a53acc849ef2ab`，见 `logs/release-v1.7.9-formal-verified.json` 和 `logs/release-v1.7.9-formal-release.log`。双首装真实通过 233 迁移、唯一后台、公开 Agent、备份/预检/恢复/回退/续跑、SQL/ZIP完整性及旧版/CRLF迁移和拒绝；OSS传输仍是一次性VM本地替身。
+- [面板 v1.7.9](https://github.com/masta-lee/mastaincus/tree/v1.7.9)（旧版资产未迁移） 已于 09:40:51 UTC 正式发布，latest 为 v1.7.9，非 draft/prerelease。正式运行 `41293344545` 的双构建、双首装及 Release 共五 job 全部 success；每个 job 的实际 checkout 均核为 `4c24d4fd9ecdbc68b78f869862a53acc849ef2ab`，见 `logs/release-v1.7.9-formal-verified.json` 和 `logs/release-v1.7.9-formal-release.log`。双首装真实通过 233 迁移、唯一后台、公开 Agent、备份/预检/恢复/回退/续跑、SQL/ZIP完整性及旧版/CRLF迁移和拒绝；OSS传输仍是一次性VM本地替身。
 - 六个公开发行资产已实际下载到 `logs/release-v1.7.9-panel-assets/`，全部大小和 GitHub SHA256 digest 匹配；两个 tar 包各自校验文件、版本 OTA manifest 与 ota-manifest.json 的大小/hash/URL/架构一致，两份 manifest 字节相同。AMD64 包 `213737232` bytes，SHA256 `c504f4135e45cd2e173c2cd9ea109330c0b94c81d725ef33542146ede718296c`；ARM64 包 `212982462` bytes，SHA256 `fee06af248eb3c07d7b474a5b4dd9d8909a0740939f32cf602d83efeaa06d63e`。
 - 包内根/server版本1.7.9、LICENSE、233迁移、双端入口、root归属、归档路径及原生依赖架构已核。两个包各自包含的双架构网关组件，以仓库独立公钥（与先前受信发行一致）核 Ed25519 签名、20文件哈希/大小/权限及ELF架构；catalog与签名payload均绑定完整4c源码。version.json/OTA manifest沿现格式记录12位提交，完整身份由tag、实际checkout及签名组件另核。受限WireGuard回退路径修复已包含。证据 `logs/release-v1.7.9-panel-assets-verified.json`、`logs/release-v1.7.9-panel-assets-verification.log`。
 - 正式发行说明已按 `logs/release-v1.7.9-tag-notes.md` 更新并回读一致，包含全局BT/挖矿/测速及本次网关回退修复；更新后再核公开六资产未变和panel latest，见 `logs/release-v1.7.9-public-release-verified.json`。配套Agent v1.0.4公开资产与标签身份已在main自动发布后核验，复用上一节证据，不重复发布。
@@ -2254,7 +2256,7 @@ Owner已授权整理、修复、代码复核、推送和新版本发行；稳定
 
 ## 2026-10-31 v1.7.8 正式发行完成（未部署生产）
 
-- Release：https://github.com/mastalee928/payincus/releases/tag/v1.7.8 ，publishedAt为2026-10-30T21:40:09Z。annotated tag精确指向c77b68c5aab9d3e6f48f4091c7dce111c055465a；正式运行41131263041整体success，双构建、双首装与发布五job全部成功。
+- Release：https://github.com/masta-lee/mastaincus/tree/v1.7.8 （旧版资产未迁移） ，publishedAt为2026-10-30T21:40:09Z。annotated tag精确指向c77b68c5aab9d3e6f48f4091c7dce111c055465a；正式运行41131263041整体success，双构建、双首装与发布五job全部成功。
 - AMD64首装job124326102688、ARM64首装job124326102582日志分别保存logs/release-v1.7.8/install-{amd64,arm64}.log：230迁移、唯一后端/双前端/admin登录、正式安装Prisma重复八连接超时及迟到BEGIN回滚归还、整库共享快照/ZIP与ZIP64恢复、历史迁移均通过。备份演练OSS传输仍为模拟，不代表公网OSS整机灾备。
 - 正式AMD64包212050377字节，SHA256 f65add6dcea66925496a7755fdf665db0dc5b72b15bc471afe07cf14d93a6ea0；ARM64包211248190字节，SHA256 563e0d29586993a80b60fd67940a7f796f249251970c3e8606c05ccb85b85cac。两包源码/版本/root归属、冻结Prisma patch及两Node runtime、同事务复用、清理期限、地图和三语资源核验自然exit0。下载的两个sha256及两份一致OTA manifest与实际包字节/hash/大小/下载URL完全匹配，也与Release资产digest一致。
 - 后续主分支0777d97ea70efa820f8dad158e4f034dfe657439已推，包含94214b23的R174、67f3b47c的R177和0777d97e的R181；这些不在固定v1.7.8内。CI41123203452/41127725085/41131579517/41131838318/41132122560仍须逐个到终态，payincus-ci保持ACTIVE。
@@ -4224,27 +4226,27 @@ Owner已授权整理、修复、代码复核、推送和新版本发行；稳定
 
 ## 2026-10-28 R1-187 工单创建关联实例复核
 
-- R183提交`84f8464c95c67012b64dfbc178aad06d53c40d62`已push并核远端一致，[CI40658726890](https://github.com/mastalee928/payincus/actions/runs/40658726890)success。
+- R183提交`84f8464c95c67012b64dfbc178aad06d53c40d62`已push并核远端一致，CI40658726890（原仓库 Actions 运行 40658726890（历史记录，未迁移））success。
 - 创建工单事务内持原实例/宿主行锁，核对实例当前owner、host与未删除状态后才写工单及首条消息；不允许无实例却任意关联host。网站和Public API共享此helper，目标变化均在附件清理后返回409。不会以旧路由快照决定提交关联。
 - `logs/takeover-ticket-target-r1.log`实际PG/Fastify验证helper和网站路由共六种竞争：事务先改owner/host/deleted并持锁，实际观察pg阻塞后提交变化，创建409/目标异常且零工单消息；正常关联/无实例创建及首条消息trigger故障全回滚通过。Public API共用helper与守卫已核，完整PAT认证/附件服务未实跑；R186当前账户/session和通知目标仍需后续修复，不能称工单权限全面完成。
 - server build/type-check `takeover-ticket-target-build.log`、包含两专项的独立类型检查`takeover-ticket-target-typecheck.log`与4/4工单/Public API守卫`takeover-ticket-target-guards.log`通过。新专项已接CI；无迁移/前端/生产操作，按owner授权保存后继续。
 
 ## 2026-10-28 R1-183 工单分页与数字搜索
 
-- 旧恢复无身份回滚修复`5e3d3a1860892d9b14ecbc702bbaa7db99c014ed`已推送main、远端一致，[CI40657754668](https://github.com/mastalee928/payincus/actions/runs/40657754668)success。
+- 旧恢复无身份回滚修复`5e3d3a1860892d9b14ecbc702bbaa7db99c014ed`已推送main、远端一致，CI40657754668（原仓库 Actions 运行 40657754668（历史记录，未迁移））success。
 - 四个工单列表/消息入口拒绝非完整十进制与不安全整数，DB共享分页再次限制乘积offset到有符号32位范围；超界回首页且响应元数据一致，正常pageSize仍最多100。数字搜索只将可表示的正整数ID加入PG条件，大数/科学记数/十六进制继续作为原文字匹配；重复search参数不再调用数组trim报500。
 - `logs/takeover-ticket-pagination-r3.log`真实PG/Fastify通过四路由与四DB helper异常值/重复参数/偏移临界/有效二页及末页/100上限/大数字主题搜索，原工单消息未改。前两次fixture漏注册requireAdmin导致路由注册失败，补全后实际运行通过，不当作业务失败；第一轮孤立测试用户/host无客户数据。
 - 后端build/type-check `takeover-ticket-pagination-build.log`、专项类型检查`takeover-ticket-pagination-test-types-final.log`、4/4工单守卫`takeover-ticket-pagination-guards.log`通过；清单188项/55专项合法`takeover-ticket-pagination-manifest.log`，新专项已接入CI。未前端/浏览器/生产验收，不重复无关构建。R186/187工单写入授权与关联目标是后续独立小项，327未全部完成。
 
 ## 2026-10-28 旧恢复任务拒绝无身份回滚
 
-- 上批`f6571c6dfaf8ef6c0f5d78677d3da845a36766c3`已推送main并核远端一致，[CI40656767813](https://github.com/mastalee928/payincus/actions/runs/40656767813)success。
+- 上批`f6571c6dfaf8ef6c0f5d78677d3da845a36766c3`已推送main并核远端一致，CI40656767813（原仓库 Actions 运行 40656767813（历史记录，未迁移））success。
 - 旧FAILED任务没有持久副本UUID，不能仅凭原名存在就启动同名实例、删除临时副本。回滚入口新增缺失recoveryState立即409，所有副本和记录保持；拒绝发生在创建Incus连接前。实例owner/host owner/admin三权限真实PG/Fastify回归均零远端I/O，`logs/takeover-restore-legacy-authorization.log`通过；原授权及stop矩阵同次通过。3/3守卫`takeover-restore-legacy-guards.log`和server build/type-check `takeover-restore-legacy-build.log`通过。
 - 本小项只封住旧记录的无身份误删路径，不是人工恢复已完成；已有持久状态的续跑、回滚操作、查询和真实Incus恢复继续待验。接续原清单R1-183工单分页/数字搜索边界，不因恢复模块阶段保存停止327项精修。
 
 ## 2026-10-28 恢复替换身份与未决副本保护
 
-- 前批停止确认`f8dd60c9b7b5d4c86f05ffbdb7778456b614e571`已推送main；[CI40654013875](https://github.com/mastalee928/payincus/actions/runs/40654013875)最终success。Owner再次明确每个可核验小项完成即提交推送并继续，已同步OWNER_REQUIREMENTS；327项仍未全部完成。
+- 前批停止确认`f8dd60c9b7b5d4c86f05ffbdb7778456b614e571`已推送main；CI40654013875（原仓库 Actions 运行 40654013875（历史记录，未迁移））最终success。Owner再次明确每个可核验小项完成即提交推送并继续，已同步OWNER_REQUIREMENTS；327项仍未全部完成。
 - 新增持久`recovery_state`：原/临时UUID、类型、根盘池、设备与受保护配置摘要、原备份/快照ID和名称、阶段与导入operation。先提交意图再远端操作；补采复用固定连接。stop/delete/rename/start持实例和当前授权锁，阶段间重核原归属、host身份、备份、账户/session与attempt。导入使用原实际根盘池；停止状态、设备/地址及UUID不符时保留两份。
 - 替换删除只调用原实例精确API并确认该路径404，不调用会删除独占转发的普通deleteInstance；重命名后核验原名绑定临时UUID，启动后确认Running。失败不按名称清理副本；异常、重启、超时保留PROCESSING/manual_intervention及操作门禁。新建备份锁内拒未决恢复。末尾只清原固定清单，实例更新与COMPLETED同事务；终态写失败整段DB回滚。
 - 实际PG/mTLS15场景`logs/takeover-restore-replacement-final.log`通过：错误IPv6/池/UUID、原名复用、封禁、后增备份、导入/删除/断连/重命名/启动/最后DB失败；至少保留一份，所有场景零网络转发API请求，原双栈/归属字段保留。授权`takeover-restore-replacement-auth-final.log`、停止与传输`takeover-restore-replacement-transport.log`、上传/删除回归`takeover-restore-replacement-upload.log`通过；磁盘内容和客户连接仍为Incus边界替身，未真实Incus或SIGKILL验收。
@@ -4253,7 +4255,7 @@ Owner已授权整理、修复、代码复核、推送和新版本发行；稳定
 
 ## 2026-10-28 恢复前停止确认
 
-- 上批恢复授权`1299ce6ebe762f871ac9ae2fd25d8febc3e0bfc8`已普通push main并核对远端一致；[CI40653341209](https://github.com/mastalee928/payincus/actions/runs/40653341209)最终7/7 success，Linux已执行新增授权PG专项。额外恢复一致性守卫`logs/takeover-restore-auth-consistency-guard.log`通过；新增专项独立类型检查`logs/takeover-restore-auth-test-types-final.log`通过。
+- 上批恢复授权`1299ce6ebe762f871ac9ae2fd25d8febc3e0bfc8`已普通push main并核对远端一致；CI40653341209（原仓库 Actions 运行 40653341209（历史记录，未迁移））最终7/7 success，Linux已执行新增授权PG专项。额外恢复一致性守卫`logs/takeover-restore-auth-consistency-guard.log`通过；新增专项独立类型检查`logs/takeover-restore-auth-test-types-final.log`通过。
 - 移除恢复worker吞掉stop异常后继续导入/删除原实例的逻辑。恢复专用stop先读实际状态、必要时停止、再确认Stopped；未知状态拒绝，查询和PUT共用90秒截止。`importStarted`与远端停止分开：导入前失败不清理任何临时副本、标记import_not_started，也不能借rollback删除未知临时资源。此标记仍不是完整持久operation恢复。
 - `logs/takeover-restore-stop-transport.log`真实mTLS覆盖已Stopped、成功停止、未知状态、状态403、stop500、成功回执但仍Running、stop/查询挂起总截止，并回归原流传输矩阵。`logs/takeover-restore-stop-worker.log`真实PG/Fastify/mTLS实际worker验证stop500和成功但仍Running均FAILED/import_not_started，备份仍ready、零导出/导入/副本删除、回滚拒绝，前批授权/队列/attempt矩阵同次通过。5/5相关守卫`logs/takeover-restore-stop-guards.log`；真实Incus磁盘/网络和SIGKILL仍未验。
 - 后续复审新定位：`incus-instances.deleteInstance`会顺带`removeDedicatedForward`，当前恢复替换原实例调用它可能删除按原实例名归属的IPv4/IPv6转发，且恢复后没有对应重建。必须在原/临时UUID、原设备/双栈地址/存储完整性绑定之后，用仅替换客机的删除确认路径保留原转发；不能简单跳过删除确认或据名称存在认定副本安全。原清单、失败/重启持续门禁、rollback与完整灾备继续待修。
@@ -4272,7 +4274,7 @@ Owner已授权整理、修复、代码复核、推送和新版本发行；稳定
 ## 2026-10-28 连续四批保存与下一阶段规格
 
 - 本轮四个业务阶段均已推送main并分别核对远端：上传当前授权`eac0b068916b55e7af82347526b3d4ec91886046`、上传attempt与退避`8d73ab341b83d1f7b3b729a3fcf2659143e8e867`、备份删除确认`5a8f9e53ce6a79d3813257343687d0b907f88695`、恢复传输`5e63e8e951a6064e8f93b537652e13785b858ebc`。前三批源码CI分别40648563020/40649284830/40650075642，均7/7 success。
-- 最新[CI40650542350](https://github.com/mastalee928/payincus/actions/runs/40650542350)绑定5e63e8e，最终7/7 success；Linux已实际执行新增恢复传输及扩展上传/删除专项。四批业务提交各自CI全部成功；后续docs-only提交的CI身份与业务提交分别记录，不混为同一head。
+- 最新CI40650542350（原仓库 Actions 运行 40650542350（历史记录，未迁移））绑定5e63e8e，最终7/7 success；Linux已实际执行新增恢复传输及扩展上传/删除专项。四批业务提交各自CI全部成功；后续docs-only提交的CI身份与业务提交分别记录，不混为同一head。
 - 当前业务源码已全部提交推送；恢复worker新一轮仅完成代码复审与[详细规格](docs/restore-task-recovery-review.md)，**未编辑**restoreTaskWorker/db restore/rollback核心。原UUID/临时UUID、原备份关系、失效授权和未决任务持久门禁、逐阶段远端确认及SIGKILL矩阵是下批重点。
 - 两个隔离PG库仍在127.0.0.1:55438：运行夹具takeover_20261028_pool_test（新列单独SQL应用），迁移证据库takeover_auto_final_20261028_pool_test（226条实际迁移历史）。本轮未重跑完整188；每批类型、相关守卫、后端build、mTLS/PG专项分别见下文。前端无改动，不把server缺ESLint配置说成lint通过。
 - 三台专用测试机资料/不限用途授权保持；SSH可信身份来源仍未闭合，本轮未新连远端或操作生产。327项、真实Incus/OSS和完整网关灾备仍未完成，继续逐段修复与提交推送。
@@ -4288,7 +4290,7 @@ Owner已授权整理、修复、代码复核、推送和新版本发行；稳定
 
 ## 2026-10-28 备份删除确认与共享操作锁
 
-- 上一批`8d73ab341b83d1f7b3b729a3fcf2659143e8e867`已普通push并核对origin；[CI 40649284830](https://github.com/mastalee928/payincus/actions/runs/40649284830)7/7 success。此前eac0b06也7/7。每段源码/测试/备忘及时推送，无积压到327整体完成。
+- 上一批`8d73ab341b83d1f7b3b729a3fcf2659143e8e867`已普通push并核对origin；CI 40649284830（原仓库 Actions 运行 40649284830（历史记录，未迁移））7/7 success。此前eac0b06也7/7。每段源码/测试/备忘及时推送，无积压到327整体完成。
 - 修复备份删除catch所有远端错误后仍软删数据库的问题。复用实例共享锁、current actor/session/归属、host行锁和未决snapshot/proxy/transfer/upload/restore门禁，锁保持至远端确认与本地提交。绑定请求早期host身份和备份原名称，固定原mTLS连接；创建中备份拒删，已deleted记录不再远端操作。
 - IncusApiError携带实际HTTP状态和原request path；只有该备份精确路径的404可视为不存在，async operation的404或连接/403/500不能冒充资源缺失。DELETE后再GET确认不存在，仍存在则保留ready。HTTP错误即使JSON伪装sync成功也拒绝。
 - `logs/takeover-backup-delete-final.log`真实PG/Fastify/mTLS专项通过：403/500/伪sync500/断连/删除后仍存在保留记录，旧owner/撤销session/变更host与活跃上传零删除请求；持锁远端等待时新upload/restore拒绝；确认缺失成功，terminal重复零远端；远端已删后PG trigger阻止落库保留ready，再以精确404重试完成。前两批上传回归同次通过，真实磁盘和存储仍是边界替身。
@@ -4297,7 +4299,7 @@ Owner已授权整理、修复、代码复核、推送和新版本发行；稳定
 
 ## 2026-10-28 上传执行批次隔离与重试状态
 
-- 前一授权/目标修复`eac0b068916b55e7af82347526b3d4ec91886046`已普通push main并核对远端；[CI 40648563020](https://github.com/mastalee928/payincus/actions/runs/40648563020)全部7/7 success，新增上传真实PG专项已在Linux执行。阶段推送继续，不是发版或生产更新。
+- 前一授权/目标修复`eac0b068916b55e7af82347526b3d4ec91886046`已普通push main并核对远端；CI 40648563020（原仓库 Actions 运行 40648563020（历史记录，未迁移））全部7/7 success，新增上传真实PG专项已在Linux执行。阶段推送继续，不是发版或生产更新。
 - 每次领取持久生成attempt UUID和远端文件名，再开始远端I/O；同task同毫秒的新attempt也不会覆盖旧文件，补偿只清理本次文件。进度/终态/重试/运行时超时清理CAS包含UUID、startedAt和retryCount。文件名最多255 ASCII字符，截短描述前缀而保留完整task/attempt/时间后缀。
 - 真正持久nextAttemptAt并由claim执行30秒重试等待；失败来源未开始上传时不误删，上传失败而远端清理不确认则FAILED/cleanup_required、保留filename和错误且不自动重试。单后端启动时将旧PROCESSING标interrupted，保留已持久文件名供核对；运行时null startedAt也能退出卡死，当前进程仍执行的任务不被清理。
 - `logs/takeover-upload-attempt-final.log`真实PG/Fastify/mTLS专项通过：完整前阶段回归、新旧attempt同startedAt/retryCount仍由UUID隔离、旧失败不删新文件、30秒等待/启动后仍等待、重试新文件、清理失败持久回执及零自动重试、当前运行保护、重启中断文件保留、null时间、长文件名。存储仍为内存替身；调用启动恢复helper不冒充SIGKILL/真实OSS恢复。
@@ -4317,13 +4319,13 @@ Owner已授权整理、修复、代码复核、推送和新版本发行；稳定
 ## 2026-10-28 阶段远端确认（当前接续点）
 
 - 已按owner要求连续提交并推送：`c277ba3`保存旧聊天与当前积压248文件；`437ff02`补Markdown测试依赖；`8465e9d`隔离备份上传文件；`7a38eca0cdf97f88dcec551c1cd3028538af7536`修复备份导出身份与流控制。每次均普通push main，无强推，最新业务提交已核对`git ls-remote`相同；记录前工作区干净且无领先未推送commit。
-- 最新[CI 40644502640](https://github.com/mastalee928/payincus/actions/runs/40644502640)对应`7a38eca`，7个job全部success；Linux实际新增上传/导出集成及双架构组件、类型、构建、计费/交付删除/网关候选通过。此前`437ff02`、`8465e9d`的CI也全部成功，首次`c277ba3`锁清单失败原因和修复见下文，不隐去失败历史。
+- 最新CI 40644502640（原仓库 Actions 运行 40644502640（历史记录，未迁移））对应`7a38eca`，7个job全部success；Linux实际新增上传/导出集成及双架构组件、类型、构建、计费/交付删除/网关候选通过。此前`437ff02`、`8465e9d`的CI也全部成功，首次`c277ba3`锁清单失败原因和修复见下文，不隐去失败历史。
 - 这是一段落保存，不是327项或完整A失联→B真实OSS恢复验收。下批优先备份create/upload/restore锁内当前actor/session、实例归属与宿主/存储身份、未决操作门禁及持久恢复。已只读定位`db/backups.ts`、`db/backup-upload-tasks.ts`、`db/restore-tasks.ts`、`routes/backups.ts`和两worker，未开始这些授权/队列核心改动。
 - 三台专用测试机全部已找回私有资料，系统解析地址均正确；用途可重新分配，不受旧网关角色限制。只读SSH握手查证尚未完成可信身份闭合：A/B与旧可信pin不符，C目前只找到旧观察记录。详细记录在仓库外`takeover-connection-audit-20261028.private.json`；未发送密码/未改远端。继续独立源码与CI验证，不因该问题搁置项目、不要求owner重复给资料。
 
 ## 2026-10-28 备份导出身份与流控制
 
-- 前一阶段`8465e9d606588d540718d001b29a097cf91e8a27`已推送并核对远端；[CI运行40641931069](https://github.com/mastalee928/payincus/actions/runs/40641931069)7/7通过，新增上传集成已实际在Linux/PG执行。阶段推送习惯继续，无tag/Release/生产操作。
+- 前一阶段`8465e9d606588d540718d001b29a097cf91e8a27`已推送并核对远端；CI运行40641931069（原仓库 Actions 运行 40641931069（历史记录，未迁移））7/7通过，新增上传集成已实际在Linux/PG执行。阶段推送习惯继续，无tag/Release/生产操作。
 - Incus常规API与独立导出连接统一从原client生成TLS transport，保留已登记CA与fingerprint；修正备份导出专用Agent无条件关闭服务端认证。旧手工登记无pin兼容行为未改，不能把它说成新身份验收。导出资源名逐段编码并拒绝dot segment。
 - 流由`pull`按需读一个chunk，避免`start`中循环无界enqueue；取消/读取失败直接销毁专用连接，总期限默认30分钟，外部AbortSignal可提前终止，无消费者也执行截止。错误响应最多读取约4KiB。上传provider提前失败时finally销毁来源Node流，避免导出连接挂起。
 - 实际mTLS验证正常内容/长度、常规API已连后换证书的新导出拒绝且零HTTP请求、256MiB慢消费者背压、取消远端关闭、停滞与无人消费超时、外部取消/预取消、错误体上限、后续正常导出及legacy兼容通过`logs/takeover-backup-export-final.log`。真实PG上传回归`logs/takeover-backup-export-upload-regression.log`通过，存储仍为接口替身；server类型/后端构建及4/4相关守卫见`logs/takeover-backup-export-typecheck.log`、`logs/takeover-backup-export-build.log`、`logs/takeover-backup-export-guards.log`。新增专项登记并接入CI原隔离job。
@@ -4331,7 +4333,7 @@ Owner已授权整理、修复、代码复核、推送和新版本发行；稳定
 
 ## 2026-10-28 备份上传文件隔离与阶段 CI
 
-- `437ff0217f72d31733a35a5a89811e00c491c5d4`已推送；[CI运行40639322152](https://github.com/mastalee928/payincus/actions/runs/40639322152)7/7成功，含双架构网关组件、计费到期、交付删除、远端候选、类型与双端构建。仅源码CI，不代表正式发行/全新安装/完整网关验收。
+- `437ff0217f72d31733a35a5a89811e00c491c5d4`已推送；CI运行40639322152（原仓库 Actions 运行 40639322152（历史记录，未迁移））7/7成功，含双架构网关组件、计费到期、交付删除、远端候选、类型与双端构建。仅源码CI，不代表正式发行/全新安装/完整网关验收。
 - 追加代码复审：备份上传任务的远端名称只有秒级时间，同一用户/实例/备份在同一秒的不同任务可能互相覆盖，后一任务失败清理会删前一任务文件；现名称加入任务ID，保留原扩展名和可读字段。执行入口拒绝非PROCESSING/重复本进程执行，数据库读取失败或任务不存在不泄漏running集合。单进程限制保持。
 - 初步怀疑“上传后日志失败会触发补偿”经调用链和真实PG trigger推翻：`sendNotification`和`createLog`已有内部catch；未保留多余业务修改。专项真实注入日志失败，确认已成功文件与COMPLETED回执保留。冻结Date以确保相同秒，失败新任务只删自身文件，原成功文件不变；另含终态/取消/不存在零远端、同任务并发单执行及实例字段保持。真实PG+mTLS Incus导出、存储接口显式内存夹具，通过`logs/takeover-upload-completion-final.log`；未连接真实OSS/Incus磁盘。
 - server类型、后端构建通过`logs/takeover-upload-typecheck.log`与`logs/takeover-upload-final-build.log`；2项备份守卫`logs/takeover-upload-guards.log`，补充断言后的复验另见`logs/takeover-upload-final-guards.log`。新增专项登记并接入CI既有隔离PG job，无前端变更。
@@ -4340,8 +4342,8 @@ Owner已授权整理、修复、代码复核、推送和新版本发行；稳定
 ## 2026-10-28 全部积压阶段保存与 Agent 代码复审
 
 - **阶段提交已推送并核对远端**：`c277ba30a2180606e14fe96a071e096359b2c832`，248文件，包含旧聊天与本聊天积压。推送后工作区干净，无本地领先提交。之后继续施工按阶段保存，不等全部目标完成。
-- 同提交[Agent运行40638325677](https://github.com/mastalee928/payincus/actions/runs/40638325677)成功，实际Linux `go test ./...`（含report、upgrade与常规controllerconfig）及IPv6 namespace包测试通过；发行步骤skipped，Agent未发行。需显式root/远端条件的网关迁移审计不据此声称已运行。日志`logs/takeover-checkpoint-agent-actions.log`，此证据补足下方“待Linux实跑”中的常规Agent测试，不能替代真实systemd服务或Incus宿主流程。
-- 同提交[CI运行40638325831](https://github.com/mastalee928/payincus/actions/runs/40638325831)在依赖安装失败：锁文件已有jsdom，server/package.json漏devDependency，而Markdown安全测试实际require它。已补`jsdom:^26.1.0`，离线锁文件再生成与原锁完全一致、frozen-lockfile校验及实际Markdown运行测试通过（`logs/takeover-checkpoint-frozen-lockfile.log`、`logs/takeover-checkpoint-markdown-final.log`）；保持CI frozen校验，后续提交重新验证。
+- 同提交Agent运行40638325677（原仓库 Actions 运行 40638325677（历史记录，未迁移））成功，实际Linux `go test ./...`（含report、upgrade与常规controllerconfig）及IPv6 namespace包测试通过；发行步骤skipped，Agent未发行。需显式root/远端条件的网关迁移审计不据此声称已运行。日志`logs/takeover-checkpoint-agent-actions.log`，此证据补足下方“待Linux实跑”中的常规Agent测试，不能替代真实systemd服务或Incus宿主流程。
+- 同提交CI运行40638325831（原仓库 Actions 运行 40638325831（历史记录，未迁移））在依赖安装失败：锁文件已有jsdom，server/package.json漏devDependency，而Markdown安全测试实际require它。已补`jsdom:^26.1.0`，离线锁文件再生成与原锁完全一致、frozen-lockfile校验及实际Markdown运行测试通过（`logs/takeover-checkpoint-frozen-lockfile.log`、`logs/takeover-checkpoint-markdown-final.log`）；保持CI frozen校验，后续提交重新验证。
 - Owner明确将此前聊天与本聊天全部积压源码、测试、迁移、规格及交接资料一起分阶段提交推送，之后继续修；授权已写入OWNER_REQUIREMENTS。基线main与远端均为0e80103，提交前无本地领先commit，积压均为工作区。正式平台/Agent版本不变；本次不打tag、不发Release、不做生产OTA。
 - 暂存范围包含旧网关两份Linux测试与旧安装的design-taste-frontend技能及锁文件；两个恢复规格新增精确gitignore例外。日志、数据库、运行产物与仓库外私有连接资料不纳入。
 - 用户要求无法完整运行部分先做代码级审查。本次逐段核对升级下载/解压上限、flock的稳定inode与旧PID处理、systemd重启确认/超时、Incus采集取消/并发/部分结果、CPU统计、远端见证mTLS/租约与隔离测试。CPU累积计数倒退时无符号减法可能形成错误占用率，已补倒退拒绝及正常/异常样本测试；旧网关错误holder断言曾重用已消费nonce，已改新nonce+错误身份真实签名并补正确身份对照，租约过期等待补总截止取消。
@@ -4443,10 +4445,10 @@ Owner已授权整理、修复、代码复核、推送和新版本发行；稳定
 
 ## 2026-10-27 v1.7.7 正式发行与再次代码复审
 
-- 修复提交`ef12578eaa99a943808a162b0548a2be868a40f2`已推送main；[源码CI40446366307](https://github.com/mastalee928/payincus/actions/runs/40446366307)所有job成功，包含独立PG远端设置、IPv6/删除集成、Linux安装执行器、Go全量/竞态及双架构组件验签。Agent构建40446366305成功，Publish预期skipped，仍沿用Agent v1.0.3。
-- [同提交预览40446366982](https://github.com/mastalee928/payincus/actions/runs/40446366982)双构建、双首装全部成功，Release预期skipped。AMD64原生181/181；两架构实际应用218迁移、单后端、双前端、管理员登录及管理身份核验通过；备份/预检/恢复/回滚/续跑、整库SQL完整性与ZIP/迁移兼容演练通过，OSS传输为隔离替身，不计真实云端灾备。
+- 修复提交`ef12578eaa99a943808a162b0548a2be868a40f2`已推送main；源码CI40446366307（原仓库 Actions 运行 40446366307（历史记录，未迁移））所有job成功，包含独立PG远端设置、IPv6/删除集成、Linux安装执行器、Go全量/竞态及双架构组件验签。Agent构建40446366305成功，Publish预期skipped，仍沿用Agent v1.0.3。
+- 同提交预览40446366982（原仓库 Actions 运行 40446366982（历史记录，未迁移））双构建、双首装全部成功，Release预期skipped。AMD64原生181/181；两架构实际应用218迁移、单后端、双前端、管理员登录及管理身份核验通过；备份/预检/恢复/回滚/续跑、整库SQL完整性与ZIP/迁移兼容演练通过，OSS传输为隔离替身，不计真实云端灾备。
 - 实际下载预览AMD64包SHA256为`4f92547519b8d1505cccfbccd456f130f67dca561847cc6b798d70ff7234fb69`，ARM64为`062236b501c89e30e6fa11edcbb181ab1fcd4f7f724612ac9e4936f08ec5cc92`。两包源码、version元数据、归档root身份、双前端/许可证、四份20文件独立组件签名/哈希/大小/模式/ELF及本次修复内容通过；固定组件公钥与原正式发行及GitHub配置一致。预览包浏览器实际操作表单、打开并提交确认后显示回执且当前仍本机，SSH/root/数据为隔离边界；390px无横溢出、可见主控件44px，截图已本地保存。
-- [v1.7.7正式Release](https://github.com/mastalee928/payincus/releases/tag/v1.7.7)已公开发布，非draft/非prerelease，latest为v1.7.7。正式tag绑定上述提交；[正式流程40447477254](https://github.com/mastalee928/payincus/actions/runs/40447477254)双构建、双首装与Release全部success。两架构正式包实际218迁移、单后端、双前端、管理员登录、管理身份、备份/预检/恢复/回滚/续跑、整库完整性与兼容检查通过；OSS传输仍为隔离替身。没有生产OTA、DD、DNS或客户操作。
+- [v1.7.7正式Release](https://github.com/masta-lee/mastaincus/tree/v1.7.7)（旧版资产未迁移）已公开发布，非draft/非prerelease，latest为v1.7.7。正式tag绑定上述提交；正式流程40447477254（原仓库 Actions 运行 40447477254（历史记录，未迁移））双构建、双首装与Release全部success。两架构正式包实际218迁移、单后端、双前端、管理员登录、管理身份、备份/预检/恢复/回滚/续跑、整库完整性与兼容检查通过；OSS传输仍为隔离替身。没有生产OTA、DD、DNS或客户操作。
 - 公开正式AMD64包SHA256为`d45fd04df7a9c5301c3794dbad2c912c8667d755d7d0a9eda5d6a53f8c9653e0`，ARM64为`250c06a5fcb13f11fa0cffc5ce9800e36413d87168217a8cae393a2f06769821`，分别211708006/210916752字节。实际下载六份公开资产均与GitHub digest、双SHA256文件及OTA清单一致；两份OTA清单逐字节相同，版本/tag/源码身份及双架构下载URL核验通过。两包再次通过四份20文件组件独立验签/哈希/大小/模式/ELF、归档root身份、双前端/许可证/地图、新迁移及最终错误预算/原任务重试/IPv6回归修复内容核验，证据在忽略目录logs/release-v1.7.7/formal-package-result.json及formal-manifest-result.json。
 
 - Owner明确再次代码审查后发版，本阶段范围为独立网关页面、外部/备用候选检查安装、持久错误和IPv4-only网关回归；完整接管/切回/新IP主控恢复与公网灾备仍未完成，见GATEWAY_PROGRESS及docs/gateway-setup-v1.7.7.md。前节未发版是上一轮事实，后续发行结果在本节追加。
@@ -4476,13 +4478,13 @@ Owner已授权整理、修复、代码复核、推送和新版本发行；稳定
 - `logs/test-run-20261027-092159`的client类型、前端路由/i18n、host-pool4/4通过；双端构建、dist-boundary、相关前端ESLint、server build通过。浏览器实际构建在19535独立夹具验1440/768/390、左右键、三语、深浅主题、侧栏顺序及手机菜单关闭；备用计划/安装确认实际提交返回夹具回执，无真实SSH或root执行，不计真机接管。
 - 独立PG远端设置集成通过冲突规划、中断续接、幂等/目标变化拒绝、加密凭据与安装任务不会被较新检查挤掉回归。容量及未完成门禁见GATEWAY_PROGRESS。完整测试机连接资料只存仓库外本地私有档案，读取入口见OWNER_REQUIREMENTS；A/B旧SSH身份与当前不符、C无可靠旧指纹，未认证/未远端变更。本阶段未提交/推送/tag/发布/生产OTA；正式v1.7.6证据保留。
 
-维护仓库：[mastalee928/payincus](https://github.com/mastalee928/payincus)。GitHub Fork 关系已于 2026-10-16 解除；仓库地址和提交历史保留。原 BSD 3-Clause 许可证与版权声明继续保留在 LICENSE。
+维护仓库：[mastalee928/payincus](https://github.com/masta-lee/mastaincus)。GitHub Fork 关系已于 2026-10-16 解除；仓库地址和提交历史保留。原 BSD 3-Clause 许可证与版权声明继续保留在 LICENSE。
 
 ## 2026-10-27 v1.7.6 最终源码审视与候选验证
 
-- [v1.7.6正式Release](https://github.com/mastalee928/payincus/releases/tag/v1.7.6)已发布，非draft、非prerelease，latest为v1.7.6；[正式流程40368811024](https://github.com/mastalee928/payincus/actions/runs/40368811024)双构建、双首装和Release全部success，tag保持绑定修复提交fb328e87cad431fc53d89a098205b6e0b5a04151。实际下载的公开正式包AMD64 SHA256为`cdb693b1007a5b9174550d6f1de56bb95e70210eb8a2418a09b288245f1d1993`，ARM64为`ed19fc08fb6003e3dc8eea27b05d6f8494e3e234b0715475f3fb0986cd8d1ba2`，分别211672465/210863420字节，与各自SHA256文件、GitHub digest及OTA清单完全一致，两份清单逐字节相同。公开双包再次核验版本/完整源码身份、新迁移及修复内容、root归档所有权、许可证、双前端和四份独立签名组件；每份20文件的哈希/大小/模式与ELF架构通过。证据在忽略目录logs/release-v1.7.6/formal-package-result.json及formal-manifest-result.json；正式包管理员创建页另以隔离数据实操，最终桌面/平板/手机与深浅色截图已人工查看。
+- [v1.7.6正式Release](https://github.com/masta-lee/mastaincus/tree/v1.7.6)（旧版资产未迁移）已发布，非draft、非prerelease，latest为v1.7.6；正式流程40368811024（原仓库 Actions 运行 40368811024（历史记录，未迁移））双构建、双首装和Release全部success，tag保持绑定修复提交fb328e87cad431fc53d89a098205b6e0b5a04151。实际下载的公开正式包AMD64 SHA256为`cdb693b1007a5b9174550d6f1de56bb95e70210eb8a2418a09b288245f1d1993`，ARM64为`ed19fc08fb6003e3dc8eea27b05d6f8494e3e234b0715475f3fb0986cd8d1ba2`，分别211672465/210863420字节，与各自SHA256文件、GitHub digest及OTA清单完全一致，两份清单逐字节相同。公开双包再次核验版本/完整源码身份、新迁移及修复内容、root归档所有权、许可证、双前端和四份独立签名组件；每份20文件的哈希/大小/模式与ELF架构通过。证据在忽略目录logs/release-v1.7.6/formal-package-result.json及formal-manifest-result.json；正式包管理员创建页另以隔离数据实操，最终桌面/平板/手机与深浅色截图已人工查看。
 - 本轮保留既有Agent v1.0.3，没有发布无关Go改动。生产未OTA、未销毁客户或修改退款，现有故障隔离未解除。72组SSH生成/统一原生解析/真实协议验证不等于Ubuntu、Rocky、Alma、CentOS每个原始镜像均已完成全新交付或VM启动；真实公网A整机失联/B从OSS恢复、全部P0–P6/四拓扑/72小时仍未整体验收。
-- 修复提交`fb328e87cad431fc53d89a098205b6e0b5a04151`已推送main；[源码CI40366648035](https://github.com/mastalee928/payincus/actions/runs/40366648035)全部success，包含新增机器池/IPv6/删除隔离PG与实际双向TLS边界集成。[同提交预览40366668498](https://github.com/mastalee928/payincus/actions/runs/40366668498)双构建、双首装全部success，Release预期skipped；AMD64完整180/180。两种首装均应用218条迁移，唯一后端、双前端、管理员登录、管理身份、Agent下载、备份预检/恢复/回滚/续跑及完整数据库/ZIP/迁移兼容演练通过；OSS transport为隔离替身，不等于真实云端灾备。
+- 修复提交`fb328e87cad431fc53d89a098205b6e0b5a04151`已推送main；源码CI40366648035（原仓库 Actions 运行 40366648035（历史记录，未迁移））全部success，包含新增机器池/IPv6/删除隔离PG与实际双向TLS边界集成。同提交预览40366668498（原仓库 Actions 运行 40366668498（历史记录，未迁移））双构建、双首装全部success，Release预期skipped；AMD64完整180/180。两种首装均应用218条迁移，唯一后端、双前端、管理员登录、管理身份、Agent下载、备份预检/恢复/回滚/续跑及完整数据库/ZIP/迁移兼容演练通过；OSS transport为隔离替身，不等于真实云端灾备。
 - 实际预览AMD64包SHA256为`cb7a7009ebec3a2ff4d3a1b70d22d842097d35aacf84c90764da59ed58fb6a2d`，ARM64为`b285639328bc9bbb34e2d4cecf300255929df210daabfe72a0ae2146fe70169d`。两包版本preview-fb328e8、源码fb328e87cad4、组件版本1.7.6及完整源码身份一致；四份组件清单均按独立固定公钥验签，每份20文件哈希/大小/模式与ELF架构通过，归档root所有，双端、许可证、新迁移与本轮修复存在。预览包实际浏览器再次核对单月续费、零退款确认及点击确认后仅显示销毁成功，数据为独立夹具。
 - 正式tag v1.7.6绑定上述同一提交；正式流程与公开资产按本节最终结果记录，发行不等于生产更新。
 - Owner明确授权审视、提交推送和发版，范围为九项及本轮紧急交付/销毁修复；不包含生产OTA、客户删除退款或公网DNS变更。IPv6统一复用第1项修复，不做重复实现。
@@ -4517,8 +4519,8 @@ Owner已授权整理、修复、代码复核、推送和新版本发行；稳定
 
 ## 2026-10-26 v1.7.5 正式发行：全球地图首页与手机球体
 
-- Owner明确授权推送和发版本。源码`eb82a4fecb5865ea550e0d36c6aefb1e249fb061`已推送main，正式tag v1.7.5绑定同一提交；[源码CI40228993793](https://github.com/mastalee928/payincus/actions/runs/40228993793)全部success。[发行预览40228994828](https://github.com/mastalee928/payincus/actions/runs/40228994828)AMD64/ARM64双构建和双首装全部success，Release预期skipped；干净检出的180项全量测试180/180通过。
-- [正式流程40229999359](https://github.com/mastalee928/payincus/actions/runs/40229999359)双构建、双首装和Release全部success。[v1.7.5公开Release](https://github.com/mastalee928/payincus/releases/tag/v1.7.5)已发布，非draft、非prerelease，面板latest为v1.7.5。现有Agent代码未改，正式agent-v1.0.3双架构资产保留，不另发Agent或改变其latest规则。
+- Owner明确授权推送和发版本。源码`eb82a4fecb5865ea550e0d36c6aefb1e249fb061`已推送main，正式tag v1.7.5绑定同一提交；源码CI40228993793（原仓库 Actions 运行 40228993793（历史记录，未迁移））全部success。发行预览40228994828（原仓库 Actions 运行 40228994828（历史记录，未迁移））AMD64/ARM64双构建和双首装全部success，Release预期skipped；干净检出的180项全量测试180/180通过。
+- 正式流程40229999359（原仓库 Actions 运行 40229999359（历史记录，未迁移））双构建、双首装和Release全部success。[v1.7.5公开Release](https://github.com/masta-lee/mastaincus/tree/v1.7.5)（旧版资产未迁移）已发布，非draft、非prerelease，面板latest为v1.7.5。现有Agent代码未改，正式agent-v1.0.3双架构资产保留，不另发Agent或改变其latest规则。
 - 实际下载公开AMD64包SHA256为`c119eb60499c7f586a35f8765e1a0833fba9ba0d07fb51106a6601d6e6f12109`，ARM64为`8d718b73c134488404958ce901353b965df92c8b8ecf915e4ca08d91b40f7942`，与各自sha256文件、OTA manifest的SHA/尺寸及GitHub资产digest一致；两份OTA清单逐字节相同，源码身份为eb82a4fecb58。正式包与预览SHA分开，预览AMD64为`0c0909583be2e1ded36e32040ea46c0d12e4fc70c49cba4c2723875235ff71cf`，ARM64为`b496ceeb069abe2bb35db4b6f73cd9c354579d37b37f986fab3ea3602cf0ecdd`。
 - 两个公开包内四份组件清单按独立固定公钥验签，版本1.7.5、完整源码身份、每份20项实际内容/SHA/大小/模式及ELF架构通过；归档root所有，原BSD许可证、双端页面和地图资源与源码一致。Windows归档检查证明内容、身份及记录模式；原生权限/服务/安装证据来自同提交的双架构首装，不能替代生产实证。
 - 新首页已接入原PortalView：桌面宽幅矢量地图，手机默认可旋转球体，原项目三语菜单共用；真实品牌/库存/地区编号及原purchase/login/help/dashboard路径保留。正式首页不显示预览、刷新、调试时间、固定演示站链接或动态开关，动效自动跟随系统辅助功能。实际预览包的三语、球体/首卡/选购与登录路由、菜单焦点，以及公开AMD64包的桌面/默认手机/控件移除再次通过Chrome检查；旋转、双指、候选映射与防误触、平滑定位、系统减少动态切换已分别实测。结果在忽略目录`logs/ui-release-v1.7.5/`。
@@ -4546,7 +4548,7 @@ Owner已授权整理、修复、代码复核、推送和新版本发行；稳定
 
 ## 2026-10-25 v1.7.4 正式发行
 
-- 正式标签v1.7.4绑定a208d480af47c2231a1da54cf4c6308833ed8b7d。[正式流程40204464333](https://github.com/mastalee928/payincus/actions/runs/40204464333)双构建、双首装、Release全部success；[公开正式版](https://github.com/mastalee928/payincus/releases/tag/v1.7.4)于15:05:58 UTC发布，非draft、非prerelease。同提交CI40201711740及预览40201711815全部通过。
+- 正式标签v1.7.4绑定a208d480af47c2231a1da54cf4c6308833ed8b7d。正式流程40204464333（原仓库 Actions 运行 40204464333（历史记录，未迁移））双构建、双首装、Release全部success；[公开正式版](https://github.com/masta-lee/mastaincus/tree/v1.7.4)（旧版资产未迁移）于15:05:58 UTC发布，非draft、非prerelease。同提交CI40201711740及预览40201711815全部通过。
 - 独立下载公开包：AMD64 SHA256 93f63d02825773e17eea58b159e03619e784e8f7bb6f1edcbb0e5bd025197021（211285098字节）；ARM64 8faf13cde73bc8222d79252fb7d94f6a0420ec696e7ed8eb5569689d7d0a7925（210486196字节）。两份OTA清单一致，版本/源码/架构/尺寸/URL与实际内容及SHA文件全部匹配；root归档成员、双端、原BSD许可证与源码身份核验通过。四份组件清单按此前独立固定公钥验签，20项内容/尺寸/模式与ELF架构均正确。
 - 完整AMD64预览从v1.7.3安装器升级、正常管理员登录及中文组合查询、自然五分钟持久巡检、完整DB/支付/双端/API/WS/Agent/日志暴露检查已通过，原五客户和管理身份保持；具体预览证据见下节。公开正式包OTA任务6已从完整预览主控受理，正在真实更新；不得用预览证据代替该终态。原生产主控仍v1.7.3，agent没有自动生产OTA。
 - 公开正式包OTA任务6已成功：15:09:26→15:19:00 UTC完成preview-a208d48→v1.7.4，实际下载SHA与公开AMD64资产一致、真实Prisma主入口/全部DB支付/双端/API/WS/Agent及日志/头部暴露检查通过，systemd最终success/inactive。原五身份文件、JWT/加密/DB配置保持，十个程序与已核验的a208包一致，唯一后端PID281630/NRestarts0；客户五台UUID/Running/PID保持。属于完整公开包平铺OTA，不冒充v1.7.2跨版本或原子布局。
@@ -4557,11 +4559,11 @@ Owner已授权整理、修复、代码复核、推送和新版本发行；稳定
 
 ## 2026-10-25 v1.7.4 同提交预览与发行门槛
 
-- 最终源码a208d480af47c2231a1da54cf4c6308833ed8b7d已推送。[源码CI40201711740](https://github.com/mastalee928/payincus/actions/runs/40201711740)全success；[发行预览40201711815](https://github.com/mastalee928/payincus/actions/runs/40201711815)双构建/双首装全success，Release预期skipped。
+- 最终源码a208d480af47c2231a1da54cf4c6308833ed8b7d已推送。源码CI40201711740（原仓库 Actions 运行 40201711740（历史记录，未迁移））全success；发行预览40201711815（原仓库 Actions 运行 40201711815（历史记录，未迁移））双构建/双首装全success，Release预期skipped。
 - 实际预览AMD64 SHA256 1b85ac49a8b29a0cffd889e8280c10d8fab7649307da7806cb4854531ccb6e41，ARM64 93775854574f04b46c38a7309820eddc6936f872ec31d350a4fbadbdcc6d408f。归档成员root所有、根/后端版本1.7.4、双端页面、完整源码身份与BSD许可证一致；Windows工作树CRLF仅作行尾归一后比对许可证正文。两个包内四份组件清单使用此前独立登记的公钥验签，实际20项文件/大小/模式及ELF架构匹配。原生Linux同包双组件验签和权限检查通过。
 - 第一次大包传输观察超时导致不完整归档，未安装；独立传输完整文件并按本地/远端同一SHA校验后才解包。完整AMD64预览通过原安装器在隔离B完成v1.7.3→preview-a208d48升级，退出0、217迁移无待执行。原五个身份文件与JWT/加密/DB配置保持，十个修改程序与实际包逐字节一致，唯一后端PID276000/NRestarts0。没有源码覆盖；这项是安装器升级，最终工作者的同版本完整OTA证据另见前节。
 - 完整包实际管理员登录与时间/用户名/邮箱/中文「续费成功」组合查询200且匹配原英文续费；自然14:50和14:55 UTC五分钟巡检的开始/完成持久记录及状态读回通过。完整DB/支付配置、双端静态/API/WS、Agent清单和日志/头部曝光检查均退出0，没有RUN_DB_CHECKS=0。客户五台UUID/Running/PID保持；新包仍使用仅本机受约束短期TLS夹具和临时1GB交换空间，不计真实公网HTTPS/失联灾备。
-- 已按既有正式发行授权将v1.7.4 tag绑定a208d48并推送，[正式流程40204464333](https://github.com/mastalee928/payincus/actions/runs/40204464333)进行中；正式公开资产、公开包OTA与目标部署将分别补证据，不将预览SHA当正式包SHA。生产主控当前v1.7.3，agent未自动生产OTA。完整原子OTA、公网DNS/A整机失联（owner按约定上线后实测）、P0–P6/四拓扑/唯一写者/72小时仍按各自门槛保留。
+- 已按既有正式发行授权将v1.7.4 tag绑定a208d48并推送，正式流程40204464333（原仓库 Actions 运行 40204464333（历史记录，未迁移））进行中；正式公开资产、公开包OTA与目标部署将分别补证据，不将预览SHA当正式包SHA。生产主控当前v1.7.3，agent未自动生产OTA。完整原子OTA、公网DNS/A整机失联（owner按约定上线后实测）、P0–P6/四拓扑/唯一写者/72小时仍按各自门槛保留。
 
 ## 2026-10-25 线上新宿主 DD 后重试身份修复
 
@@ -4596,7 +4598,7 @@ Owner已授权整理、修复、代码复核、推送和新版本发行；稳定
 
 ## 2026-10-25 v1.7.3 正式发行
 
-- 正式tag v1.7.3绑定9b4110dfb7e7b222b88a977892da7cc4dc32eb9a。[正式流程40179811833](https://github.com/mastalee928/payincus/actions/runs/40179811833)双构建、双首装及Release全部success；[公开Release](https://github.com/mastalee928/payincus/releases/tag/v1.7.3)于09:26:20 UTC发布，非draft、非prerelease。同提交源码CI40177609000与预览40177617003均success。
+- 正式tag v1.7.3绑定9b4110dfb7e7b222b88a977892da7cc4dc32eb9a。正式流程40179811833（原仓库 Actions 运行 40179811833（历史记录，未迁移））双构建、双首装及Release全部success；[公开Release](https://github.com/masta-lee/mastaincus/tree/v1.7.3)（旧版资产未迁移）于09:26:20 UTC发布，非draft、非prerelease。同提交源码CI40177609000与预览40177617003均success。
 - 下载实际公开双架构包，SHA256、尺寸、OTA两份清单字节一致、版本/完整源码身份、原BSD许可证、双前端、双架构组件和无需SSH的新worker通过。正式AMD64 SHA256 d1fd3d247906da2be162526aea46d3648b3df862d350372f5f3c7dac3dd8f035；ARM64 75f72a9ed92bae1a73d599d5cbc67e42b9cc0199ff4da79bb40ff1eaafe74a12；这些值与预览分别记录。
 - 用此前独立登记的发行公钥核验两个公开包内的四份组件清单：Ed25519签名、源码/版本/架构和每份20项实际文件SHA全部匹配，ELF架构正确。Windows资产检查只证明签名、内容与来源；root权限和原生服务证据来自同提交预览首装及实际Linux完整包流程，不混记。
 - 使用方式：原后台“系统更新”选择v1.7.3；升级后“机器池→管理网关”直接检查本机并确认，主控兼网关无需SSH地址/密码。固定网关域名保存一次并自动同步已有宿主，容量4093，逐台错误和重试保留；独立/备用网关显示预留入口。本机配置实际成功截图位于维护者忽略目录local-only-package-success/browser-success.png。
@@ -4604,7 +4606,7 @@ Owner已授权整理、修复、代码复核、推送和新版本发行；稳定
 
 ## 2026-10-25 v1.7.3 同提交预览与完整包本机流程
 
-- 本机无需SSH修正已提交推送9b4110dfb7e7b222b88a977892da7cc4dc32eb9a。[源码CI40177609000](https://github.com/mastalee928/payincus/actions/runs/40177609000)全success；[发行预览40177617003](https://github.com/mastalee928/payincus/actions/runs/40177617003)双构建/双首装全success，Release预期skipped。
+- 本机无需SSH修正已提交推送9b4110dfb7e7b222b88a977892da7cc4dc32eb9a。源码CI40177609000（原仓库 Actions 运行 40177609000（历史记录，未迁移））全success；发行预览40177617003（原仓库 Actions 运行 40177617003（历史记录，未迁移））双构建/双首装全success，Release预期skipped。
 - 下载实际双架构预览包，版本/源码/许可证/双前端及新worker一致。预览AMD64 SHA256 f1f611164b3140add16fa9b2e4cd87392a8b04895014b8e43c41b9bd42456536、ARM64 e0dc0dd05e7bbd562e75a0c80c1fe2acd0f1efe15024a37046b16c1c53cd2796。完整AMD64包传到隔离主控后哈希一致，使用此前独立登记的发行公钥验证包内两个架构的签名、20项文件内容和源码身份。
 - 在实际隔离主控以完整包安装器完成v1.7.2→v1.7.3非原子布局升级，退出0，数据库备份和旧程序备份保留；没有用源码覆盖新worker。原WG配置、管理SSH/Incus私钥、平台控制私钥与身份及整个.env保持，217迁移无待执行，唯一后端正常。安装启动交叠时首轮独立控制登记核验拒绝，安装完成后原核验器成功；未放宽检查或重建身份，不把首轮拒绝记为成功。
 - 完整包经网页执行本机计划与确认，任务1feca9bc-2a5c-46ba-b953-130a096b2d7a于09:13:51 UTC成功、容量4093、唯一后端MainPID224646/NRestarts0。五台客户UUID/Running/PID与原基线一致；再次核对密钥、WG、受保护环境和新worker字节通过。此项为安装器升级及本机流程，未记为原子OTA/真实公网灾备。
@@ -4612,7 +4614,7 @@ Owner已授权整理、修复、代码复核、推送和新版本发行；稳定
 
 ## 2026-10-25 本机主控兼网关无需 SSH 的修正与实测
 
-- 最新已提交的63598325478ab368f18e4da15fe19c6ac68f230c：[源码CI40175370074](https://github.com/mastalee928/payincus/actions/runs/40175370074)全success；[发行预览40175370842](https://github.com/mastalee928/payincus/actions/runs/40175370842)双构建、双首装全success，Release预期skipped。此前588af59失败的DATABASE_URL占位问题已修复。此包仍为旧SSH两字段方案，不能将其当成本机无需SSH修正的发行证据。
+- 最新已提交的63598325478ab368f18e4da15fe19c6ac68f230c：源码CI40175370074（原仓库 Actions 运行 40175370074（历史记录，未迁移））全success；发行预览40175370842（原仓库 Actions 运行 40175370842（历史记录，未迁移））双构建、双首装全success，Release预期skipped。此前588af59失败的DATABASE_URL占位问题已修复。此包仍为旧SSH两字段方案，不能将其当成本机无需SSH修正的发行证据。
 - 按owner纠正，本机配置API只接收请求ID，schema2不携带SSH地址/密码；固定root执行器直接检查本机，复用已保存域名，未保存时自动发现公网IPv4。管理员会话、Origin、撤销、安全文件权限、恢复保护及计划绑定继续严格核验；状态变更/过期必须重新检查，拒绝向此本机接口追加远程执行参数。
 - 原生测试主控经实际网页“检查本机并生成计划”→“确认配置网关”，任务93fb1a4c-d0b8-42ee-bec2-b5144837588e在08:35:45 UTC成功，容量4093，唯一后端MainPID213388/NRestarts0。准备阶段真实封存校验耗时约90秒，配置期间后台正常重启，页面等待后显示完成。五台原客户UUID/Running/PID逐项与此前基线一致，原管理私钥/WG peer及JWT、ENCRYPTION_KEY、数据库连接保持。网关环境字段与旧基线的预期修改单独核对，未将整.env/WG文件字节变化误判为身份变化。
 - 宿主已安装的自动更新保持成功；网页无本机SSH输入，扩展网关及外部独立/备用入口经过键盘展开验证。浅/深1440、768、390尺寸检查0 FAIL/0 WARN并看图；深色首轮恰逢后台重启，留下读取失败截图，服务恢复后重新检查成功。隔离网络/本机hosts/DNS夹具仍不计真实公网灾备。
@@ -4621,7 +4623,7 @@ Owner已授权整理、修复、代码复核、推送和新版本发行；稳定
 ## 2026-10-25 owner 主控实际 OTA 失败、修复与 v1.7.3 候选
 
 - 当前首要要求以 OWNER_REQUIREMENTS.md 为准：单机主控兼网关 A 整机完全失联，B 全新安装并从 OSS 恢复后宿主自动重连、客户保持正常。此完整新场景尚未验收；旧手工 SSH/逐台补装说明不再作为常规流程，正在替换为网页自动配置。当前正式版仍为 v1.7.2，新 UI 与 v1.7.3 尚未发布。
-- 升级兼容修复已提交推送 e40f3acfd1d033eab7ac5bbfa7e24da8ab07d14b，[CI40169352906](https://github.com/mastalee928/payincus/actions/runs/40169352906)全部成功。此提交未发行新版本，不含尚在验收的网页配置执行器。
+- 升级兼容修复已提交推送 e40f3acfd1d033eab7ac5bbfa7e24da8ab07d14b，CI40169352906（原仓库 Actions 运行 40169352906（历史记录，未迁移））全部成功。此提交未发行新版本，不含尚在验收的网页配置执行器。
 - 新网页配置仅填当前主控SSH地址和密码，系统先检查连接并生成绑定计划，再确认安装；端口自动读取、原地址不换、至少/20扩容，状态和结果持久保留，密码提交/卸载与worker完成后清除。当前网关状态单独真实核验；原本绑定到旧主控IP的本机SSH跳转复用固定域名，明确自定义bastion仍保留。
 - 实际隔离主控验证错误密码返回SSH_AUTH_FAILED、计划过期和确认授权守卫，正确请求完整安装state=succeeded/hostCapacity=4093，唯一后端NRestarts=0；JWT/ENCRYPTION_KEY/数据库配置及原管理密钥/peer保持，五台客户UUID、Running、PID前后相同。真机发现并修复启动前置脚本误调用受限systemctl包装器、确认字段集合不一致；新增回归，相关类型/前端/i18n/授权守卫通过。
 - 原生Linux网络命名空间验证/24→/20、4093容量、原密钥/peer/客户路由、幂等和故障回退；1000条实际文件地址保留分配通过（wg为测试边界）。真实PostgreSQL1000条持久DNS队列全部中断续接、最多四路并发、最终1001项安装回执通过（远端部署为测试边界）。实际WG/固定SSH指纹宿主补装经过网页排队/失败持久/重试成功；真实systemd+受限周期解析通过，测试宿主使用命名空间文件/网络映射与独立DNS夹具。旧手工测试解析进程、服务目录与resolver视图问题只在测试环境修正，未修改客户磁盘或真实公网DNS。
@@ -4640,13 +4642,13 @@ Owner已授权整理、修复、代码复核、推送和新版本发行；稳定
 
 ## 2026-10-25 v1.7.2 正式发行与首要场景验收
 
-- 最终源码8eb306e2aba2b39a3bf3746995ae3da51532e3c3的[CI40153761970](https://github.com/mastalee928/payincus/actions/runs/40153761970)和[预览40153762395](https://github.com/mastalee928/payincus/actions/runs/40153762395)成功：双构建、双首装success，预览Release预期skipped。最终AMD64/ARM64完整包均已安装运行，无编译覆盖；独立公钥下双组件验签与完整源码身份通过。预览包SHA256：AMD64 8d3591b27aaf3b2ff9751715ccc2e3a8f08cea6ee960d9df10b784d26a549688，ARM64 1cc5eb7107fbaf70b67c83e085a5b58a446fcd32f0a42d755fc01aa7bec09361，正式重建资产另核对，不复用这些值冒充。
+- 最终源码8eb306e2aba2b39a3bf3746995ae3da51532e3c3的CI40153761970（原仓库 Actions 运行 40153761970（历史记录，未迁移））和预览40153762395（原仓库 Actions 运行 40153762395（历史记录，未迁移））成功：双构建、双首装success，预览Release预期skipped。最终AMD64/ARM64完整包均已安装运行，无编译覆盖；独立公钥下双组件验签与完整源码身份通过。预览包SHA256：AMD64 8d3591b27aaf3b2ff9751715ccc2e3a8f08cea6ee960d9df10b784d26a549688，ARM64 1cc5eb7107fbaf70b67c83e085a5b58a446fcd32f0a42d755fc01aa7bec09361，正式重建资产另核对，不复用这些值冒充。
 - 真实OSS最终完整包backup20e42109-24f1-4512-ae02-7bf16ef96db9、preview ef9a916b-6327-4b08-816e-8286aab9d8d9、restore、核账与resume全部成功。五台running记录、原账147.25/补续账户0/新购账户10、实例8两笔renew和实例9一笔newPurchase精确保留；原控制/WG/管理SSH/TLS哈希、Bot及绑定保持，保护内SSH/Incus库存5/5匹配。resume实际72秒，验证90秒启动门禁；后端唯一PID165880/NRestarts0，health recoveryHeld=false。此次是同目标机完整恢复复验，独立跨机/新身份空库冷恢复已由c456完整包证明，不能混写。
 - 最终8eb恢复后复用原成功买家/订单/实例9，固定受信客机公钥NAT SSH通过；原意向重试200，仍一台/一笔10元正常newPurchase账单与consume关联，余额10、原账147.25，未重复扣费或手工客机初始化。新建202及公钥首次初始化来自前一c456完整业务包实证；最终包复验保持交付行为，证据8eb306e-sale-verification-result.json。
 - 原四台UUID/Running与969项持久内容/权限/链接保持，五台实际Running。仅u2的DHCP租约更新和02:00客机定时生成logrotate状态有差异，按实际路径/时间/日志轮转头单独审计，未改原基线或修客机数据。原Incus/WG/SSH身份哈希一致。公网同一严格客机公钥SSH跨完整更新/恢复持续90分钟以上，boot/init起点不变；使用仅向授权测试主控开放的透明命名空间转送，不计客户生产宿主部署。原公网后台PID500181/重启计数0、本机及公网health正常，专用宿主PID102787保持。
 - 首轮最终备份已上传并回读，但嵌套测试前缀355字符追加安装/备份ID超过400的校验上限，保留返回OSS_RETENTION_FAILED；明确错误为OSS_PREFIX_INVALID。原归档保留；短独立前缀的新输入全部成功。未放宽校验，此配置长度边界留作后续修复，安装恢复说明推荐短前缀。
 - Owner已确认完整OSS恢复后的「OSS完整恢复补续测试-CloudReady」TG到达，无需重绑；自然五分钟与重复巡检、正常补续、删除回执/库存、真实管理员入口、双架构旧平铺升级证据沿用此前分项。原子OTA尚未真机验收，不计为已通过。
-- 已按旧聊天明确授权将正式标签v1.7.2指向最终8eb源码并推送；[正式发行40158029302](https://github.com/mastalee928/payincus/actions/runs/40158029302)全部成功：双构建、双首装、Release均success，公开[正式v1.7.2](https://github.com/mastalee928/payincus/releases/tag/v1.7.2)为非草稿/非预发行。两种公开包独立下载，SHA256与两份OTA清单、大小/URL/架构、8eb来源、许可证/双组件/双端页面通过；正式AMD64 SHA256 e5409358bb6e6ad1f9c8ddb491f346ffcc2dfce86c783e66a70793dd057980dc，ARM64 5644fbcd8a6949b6426a4b0f619b6a0b6bb31b668861849eef0bd23ba7d5757e。源码/测试、预览包、正式Release与原站部署分别记录；原站仍保持旧版本，未DD/OTA。
+- 已按旧聊天明确授权将正式标签v1.7.2指向最终8eb源码并推送；正式发行40158029302（原仓库 Actions 运行 40158029302（历史记录，未迁移））全部成功：双构建、双首装、Release均success，公开[正式v1.7.2](https://github.com/masta-lee/mastaincus/tree/v1.7.2)（旧版资产未迁移）为非草稿/非预发行。两种公开包独立下载，SHA256与两份OTA清单、大小/URL/架构、8eb来源、许可证/双组件/双端页面通过；正式AMD64 SHA256 e5409358bb6e6ad1f9c8ddb491f346ffcc2dfce86c783e66a70793dd057980dc，ARM64 5644fbcd8a6949b6426a4b0f619b6a0b6bb31b668861849eef0bd23ba7d5757e。源码/测试、预览包、正式Release与原站部署分别记录；原站仍保持旧版本，未DD/OTA。
 - 新增[DD与OSS恢复操作说明](docs/controller-dd-oss-recovery-v1.7.2.md)：原v1.7.1先升级、已有宿主补装固定域名、制作含新增身份的完整成功备份后才由owner DD；恢复保护内按外部凭证核账，最后解除。文档命令bash语法、相对链接、部署文档守卫、VitePress生产构建与测试清单179项分类检查通过，业务代码未新增变更。公网同一SSH观察持续6229秒（约104分钟）后主动结束，命名透明转送/INPUT规则已撤下，专用客户宿主PID102787保持。源升级夹具后端已停止、仅本轮drop-in归档、原nginx恢复，数据库/身份/客户实例保留。首要场景的软件发行与操作交付完成；owner原站升级/补装及DD按操作说明另行执行。完整P0–P6/AC01–AC34/四拓扑/切换切回/唯一写者/72小时仍保留，持续目标active。
 
 ## 可复用发版验证 skill
@@ -4712,7 +4714,7 @@ Owner 要求记录本轮双架构预览全通过的排障方法，新增 [payinc
 
 ## 2026-10-24 当前完整候选包真实 OSS 冷恢复复验
 
-- 源码 `d03fdc1fa93ee1928bfef33ca01c92af251e8e8b` 的[源码 CI40064236220](https://github.com/mastalee928/payincus/actions/runs/40064236220)和[预览40064236950](https://github.com/mastalee928/payincus/actions/runs/40064236950)均 success；AMD64/ARM64 构建、全新安装及恢复/回滚全部通过，Release 预期 skipped。此前新.env遗漏 Agent 下载令牌的失败已在这一提交终态关闭。
+- 源码 `d03fdc1fa93ee1928bfef33ca01c92af251e8e8b` 的源码 CI40064236220（原仓库 Actions 运行 40064236220（历史记录，未迁移））和预览40064236950（原仓库 Actions 运行 40064236950（历史记录，未迁移））均 success；AMD64/ARM64 构建、全新安装及恢复/回滚全部通过，Release 预期 skipped。此前新.env遗漏 Agent 下载令牌的失败已在这一提交终态关闭。
 - 下载同次双架构实际完整包；ARM64 SHA256 `d25e61133bc4d26918d273981fdf852d0643b74807bb001e0742f429d71dc3bc`，AMD64 `7b7004c06bce960a2cc515be55dc1256a9a3e7a330293c13f1d3eec936d76394`。ARM完整包传到物理A/B后哈希一致；使用独立既有发行信任核对并验证包内两架构组件和完整sourceCommit，未加源码覆盖。B独立空数据库、新环境和新控制签名/WG/SSH/TLS身份先完成受信登记，确认新身份与A不同。
 - 旧 `preview-101aeba` 备份被当前包以 `OSS_APP_VERSION_UNSUPPORTED` 正确拒绝；未放宽跨预览限制。改在A原测试库的独立副本使用同一候选包创建新的OSS测试前缀；源端自然补续只影响副本，原账库保留。原Go Agent在快照前重新在线。本轮快照余额137.25，之后用正常业务函数完成测试充值20与续费10，余额147.25，保存关联正常账单、准确周期和到账时间；人工渠道测试不冒充外部供应商回调。
 - A唯一后端、独立源PG及管理通道确认停止，B只收到OSS输入、摘要和独立账证。新备份 `de7a1d23-85b6-4f4c-b93c-b6038cf7b731`、预检 `96d708c1-be41-4a69-bf45-d86a5b2517f9` 的产品恢复成功：整库、三台付费实例和原控制/WG/管理SSH/Incus TLS摘要一致；B目的环境与新受信组件保留，固定登记验证通过，恢复保护下业务和Agent503。演练旧单元引用及已迁移库冗余迁移调用的失败未计通过；脚本修正后完整产品恢复通过，无产品代码放宽。
@@ -4720,7 +4722,7 @@ Owner 要求记录本轮双架构预览全通过的排障方法，新增 [payinc
 
 ## 2026-10-24 新表单预览的 AMD64 Agent 首装失败修复
 
-- `f3c7592764d69295c152e3f3f24c4bd1caf66e2f` 的[源码 CI40058400498](https://github.com/mastalee928/payincus/actions/runs/40058400498)成功，[预览40058665238](https://github.com/mastalee928/payincus/actions/runs/40058665238)失败：两架构构建及 ARM64 首装成功，AMD64 作业 `120768753351` 已完成迁移、网关登记和服务启动，在读取已发布 Agent 清单时由 GitHub 匿名 403 限流导致面板404，`new installation must resolve a published Agent` 断言失败。未到后续备份恢复验收，Release跳过；不是账单网页构建失败。
+- `f3c7592764d69295c152e3f3f24c4bd1caf66e2f` 的源码 CI40058400498（原仓库 Actions 运行 40058400498（历史记录，未迁移））成功，预览40058665238（原仓库 Actions 运行 40058665238（历史记录，未迁移））失败：两架构构建及 ARM64 首装成功，AMD64 作业 `120768753351` 已完成迁移、网关登记和服务启动，在读取已发布 Agent 清单时由 GitHub 匿名 403 限流导致面板404，`new installation must resolve a published Agent` 断言失败。未到后续备份恢复验收，Release跳过；不是账单网页构建失败。
 - 根因是全新 `generate_env()` 的 heredoc 固定生成空 `INCUDAL_AGENT_RELEASE_TOKEN`，已有 `.env` 路径的补齐逻辑没有在此执行，导致 CI 传入 token 没进入后台。初始生成改为使用显式提供值；既有非空 token 不覆盖、空值补齐保持。首装 smoke 在请求 Agent 前以布尔断言核对 `.env` 和唯一后端 `/proc/<pid>/environ` 中的提供值，不在失败输出暴露凭据；真实公开 Agent 和双架构下载/校验断言保持。
 - 安装守卫覆盖 fresh/保留非空/补齐空值/未提供值及不打印 token，保留生产 readonly 路径常量，测试在独立 shell 装载同一组函数。Git Bash 守卫及 JS 语法通过；隔离 Linux 实物环境文件 root:incudal/0640、真实 systemd/incudal 用户收到测试 token 通过，未改原站点/服务。部署、Agent版本和平台备份守卫通过。此项修复仍需新提交双架构预览终态，不能把旧 ARM 成功计为新运行全通过；未tag/Release/生产OTA。
 
@@ -4729,7 +4731,7 @@ Owner 要求记录本轮双架构预览全通过的排障方法，新增 [payinc
 - 恢复核对表单可补回多笔已完成续费：独立凭证、金额、月数、付款时间及每个账期结束，起点从恢复到期自动连续衔接，最终到期直接取最后账期，避免两个时间输入不一致。仅填写到期与补回正常账单明确区分；添加/移除有上限和焦点回归。充值可填确认净额、到账时间和流水；预览分列到账、续费扣款及其它净额调整。三种语言补齐，所有日期输入保留毫秒。
 - 使用完整 `505369b` ARM64 后端、独立新 PG 库、实际 Web 密码/MFA 登录与生产 API 进行浏览器验收（保护为受控夹具）：100→128、订单40/到账38、正常续费10元/1月及精确周期/时间一起落库，消费日志关联账单，现有退款上限查询为10元。错误MFA提示且凭据清空；同内容用新MFA重试返回原记录，复用MFA拒绝，仍仅1账单/2余额日志/1修订，保护保持。没有 mock 请求或另起第二个业务后端。
 - 动态账期及最终到期一致、添加/移除焦点、模态Tab边界、1440/768/390、明暗及简中/英文/繁中18组合截图通过，无横向溢出，凭据未导出。修复Vue scoped全局选择器把深色日历控件留在浅色的问题，真实浏览器最终18组合的原生color-scheme一致。沿用黑白/原字体和 achromatic-ledger；Inspector保留原生模态覆盖背景标题、既有OSS边线、12px帮助及长表单滚动的明确范围例外，不宣称无例外检查。
-- Client类型、修改文件ESLint、路由/i18n、最终双端构建及dist边界通过。源码API阶段[CI40049459038](https://github.com/mastalee928/payincus/actions/runs/40049459038)和[预览40049674014](https://github.com/mastalee928/payincus/actions/runs/40049674014)双构建/双首装/恢复回滚success，Release预期跳过。实际包传输首轮触及工具时限导致连接工具重置，未计完成；改为可跟踪并发SFTP后全包哈希及独立既有签名信任一致。隔离应用目录700首次启动失败并自动清理，改成安装器755后受保护启动通过，未放宽保护判断。
+- Client类型、修改文件ESLint、路由/i18n、最终双端构建及dist边界通过。源码API阶段CI40049459038（原仓库 Actions 运行 40049459038（历史记录，未迁移））和预览40049674014（原仓库 Actions 运行 40049674014（历史记录，未迁移））双构建/双首装/恢复回滚success，Release预期跳过。实际包传输首轮触及工具时限导致连接工具重置，未计完成；改为可跟踪并发SFTP后全包哈希及独立既有签名信任一致。隔离应用目录700首次启动失败并自动清理，改成安装器755后受保护启动通过，未放宽保护判断。
 - 证据维护者忽略目录 `ledger-bill-ui/ledger-browser-result.json`、`ledger-retry-result.json`、`ledger-layout-result.json`、云端隔离目录 `database-result.json`。网页为同源组件验收入口；新完整前端包、真实OSS新账单联验、销售/删除库存/升级仍待继续，正式版本仍v1.7.1，未tag/Release/生产OTA。
 
 ## 2026-10-24 恢复核对补回正常续费账单（API 阶段）
@@ -4759,7 +4761,7 @@ Owner 要求记录本轮双架构预览全通过的排障方法，新增 [payinc
 
 ## 2026-10-24 当前完整预览包与真实 Agent 源端基线
 
-- 源码 `101aeba742cd64968708d833d7997168aef5b38d` 的[源码 CI](https://github.com/mastalee928/payincus/actions/runs/40035690849)与[发行预览](https://github.com/mastalee928/payincus/actions/runs/40035691682)均 success；AMD64/ARM64 构建、全新安装及恢复/回滚通过，Release 预期 skipped。179/179 本地全量检查通过，日志 `logs/test-run-20261024-063147/`。正式发行仍 v1.7.1。
+- 源码 `101aeba742cd64968708d833d7997168aef5b38d` 的源码 CI（原仓库 Actions 运行 40035690849（历史记录，未迁移））与发行预览（原仓库 Actions 运行 40035691682（历史记录，未迁移））均 success；AMD64/ARM64 构建、全新安装及恢复/回滚通过，Release 预期 skipped。179/179 本地全量检查通过，日志 `logs/test-run-20261024-063147/`。正式发行仍 v1.7.1。
 - 下载同次预览的实际双架构资产；完整 ARM64 包 SHA256 `fe06ef4a4d1782e602220051f580dbbfe2c75549de02a98e30f574a7f4a1f6d3` 在物理 A/B 传输后匹配。初始化/刷新前，包内发行公钥与独立保存的既有受信登记比较一致；产品登记器验证两种架构组件、版本和完整源码提交。新隔离环境使用该完整包，未加源码 overlay。
 - 旧源临时命名空间结束导致其 tmpfs 控制身份丢失；A 通过生产归档认证和恢复函数从原真实 OSS 备份取回控制签名身份，映射到新包的已验签组件，再由固定登记器验证。原管理 SSH、WireGuard、Incus 客户端和宿主服务端信任保留；本轮私有材料改用持久实体目录，不依赖 tmpfs 保存。
 - A 唯一实际 systemd 后端运行完整包；原生 Incus 三台 Running 和磁盘标记核对通过。三台测试实例已登记真实付费计划。正式 Agent v1.0.3 AMD64 资产哈希与 GitHub 发布摘要一致，经原管理隧道访问私有代理至唯一 127.0.0.1:3001 后端；生产 HMAC 验签、心跳落库 online/version/lastSeenAt 和原 Incus socket 读取通过，凭据在下一份备份前入库。脱敏结果 `logs/controller-takeover-research-20261022/joint101-baseline-result.json`。
@@ -4788,7 +4790,7 @@ Owner 要求记录本轮双架构预览全通过的排障方法，新增 [payinc
 
 ## 2026-10-24 核对入口双架构预览与物理宿主连接基线
 
-- `74d97bbcbe47190f6309f894aa3cebfacfca6986` 的[源码 CI](https://github.com/mastalee928/payincus/actions/runs/40006901699) 已成功；[发行预览](https://github.com/mastalee928/payincus/actions/runs/40007174008) 的 AMD64/ARM64 构建、全新安装及恢复/回滚全部成功，Release 为预期 skipped。正式发行仍 v1.7.1，未新增 tag、Release 或生产 OTA。
+- `74d97bbcbe47190f6309f894aa3cebfacfca6986` 的源码 CI（原仓库 Actions 运行 40006901699（历史记录，未迁移）） 已成功；发行预览（原仓库 Actions 运行 40007174008（历史记录，未迁移）） 的 AMD64/ARM64 构建、全新安装及恢复/回滚全部成功，Release 为预期 skipped。正式发行仍 v1.7.1，未新增 tag、Release 或生产 OTA。
 - 专用 AMD64 宿主使用官方原生 Incus，三台隔离实例仍运行；独立管理 WireGuard 与另一物理机源 A 连通，沿原公钥和管理 /32 无丢包。固定域名守护程序在该宿主通过真实 DNS/libc 解析源 A 并运行周期检查。测试 DNS 仅存在于隔离网络，未修改公共 DNS；原测试后端和独立网关服务核实仍 active。
 - 本节仅为源端连接基线。B 尚未从这份跨机测试备份取得原身份，A 通道失联后的 B 自动重连、SSH/mTLS/心跳及账务修订仍待联合验收；不能视为首要发行目标或完整 HA 已达标。
 
@@ -4817,7 +4819,7 @@ Owner 要求记录本轮双架构预览全通过的排障方法，新增 [payinc
 ## 2026-10-23 对话接手与控制身份真实 OSS 冷恢复
 
 - 接手已中断的网关灾备工作，完整读取原聊天及其关联施工记录；优先范围仍为主控兼网关 A 丢失后 B 从 OSS 恢复、固定域名重连和账务核对，完整 P0–P6/AC01–AC34 与 72 小时离线目标保留。专用测试机、故障注入、新 OSS 测试前缀和分阶段提交推送沿用 owner 明确授权；不据此扩大生产变更范围。
-- 当前源码 `24b70e1055b630fed3f966183eb40a5d35ff75e8` 的 [CI 39968460120](https://github.com/mastalee928/payincus/actions/runs/39968460120) 与 [预览 39968464066](https://github.com/mastalee928/payincus/actions/runs/39968464066) 已重新读取终态：源码 CI、AMD64/ARM64 构建和双首装/恢复均 success；Release 为预期 skipped，正式发行仍 v1.7.1。
+- 当前源码 `24b70e1055b630fed3f966183eb40a5d35ff75e8` 的 CI 39968460120（原仓库 Actions 运行 39968460120（历史记录，未迁移）） 与 预览 39968464066（原仓库 Actions 运行 39968464066（历史记录，未迁移）） 已重新读取终态：源码 CI、AMD64/ARM64 构建和双首装/恢复均 success；Release 为预期 skipped，正式发行仍 v1.7.1。
 - 专用测试主控隔离 mount 中，以受信签名组件分别初始化 A/B 身份；使用实际平台归档编码器、真实隔离 PG dump 和生产 OSS 客户端上传/回读三份控制身份。上传完成后移除隔离环境的 A 原身份目录及本地归档/dump，再启动另一 Node 进程，仅从新测试前缀下载、认证和恢复。三份文件哈希匹配、错误密码拒绝、B 新私钥未冒充 A、B 受信组件目录保留及 root 登记验证均通过。
 - 脱敏证据为维护者忽略目录 `logs/controller-takeover-research-20261022/controller-cloud-codec-result.json` 和 `controller-cloud-root-result.json`。原测试业务后端 PID/重启计数不变、健康正常。该专项尚未执行完整平台恢复或激活客户管理身份，未验证宿主重连、DNS 故障切换、备份后交易对账或完整 HA，不将其计为联合验收完成。
 - 本轮仅补充验证和文档，未改产品源码；平台备份守卫、security-config 文档约束、177 项测试清单校验及 diff 检查通过，未将清单校验记作全量执行。
@@ -4832,23 +4834,23 @@ Owner 要求记录本轮双架构预览全通过的排障方法，新增 [payinc
 
 ## 当前源码与发布状态
 
-- 面板 [v1.7.1](https://github.com/mastalee928/payincus/releases/tag/v1.7.1) 已正式发布，发行源码 `9d1e5ba47dd6bf0a0937413892dacfeeb15e4a1d`，注解标签对象 `b9e5ca546250ada32e9df55455bba454f54f5a4d`，GitHub 面板 latest 为 v1.7.1。修复旧 OTA 解包保留构建机 UID 导致备份执行器安装回滚的问题；双架构预览、正式首装/恢复演练与公开资产校验通过。测试主控任务 #13 已使用原版 v1.7.0 执行器成功升级至 v1.7.1，2026-10-22 从实际管理后台复核成功日志及运行版本；同日 owner 明确确认已升级至 v1.7.1、正常运行、所有宿主均正常。下方各版本 latest 为当时状态；生产 OTA 未执行。
-- 面板 [v1.7.0](https://github.com/mastalee928/payincus/releases/tag/v1.7.0) 已正式发布，发行源码 `33b08791dc62e819fbbff847c38cd9e9ba438a37`，注解标签对象 `e778882f3e20e62067abdcc289136de3d7e0f407`，GitHub 面板 latest 为 v1.7.0。纳入恢复保护、批量/已售恢复、故障状态、客户日志、密码重装及同配置跨区域更换机器；双架构预览与正式首装/恢复演练通过。首页改版已取消，设计样稿和新安装的设计技能未进入发行提交。测试站此前已热更新验证相关功能，生产 OTA 未执行。
-- 面板 [v1.6.9](https://github.com/mastalee928/payincus/releases/tag/v1.6.9) 已正式发布，发行源码 `54203107fa138d92f0e29ece97d0c3fe1ed80090`，注解标签对象 `bce6f35d18e9bf00549349db8dc4fb8e4696980f`。GitHub 面板 latest 为 v1.6.9；双架构预览及正式首装/恢复演练、真实 OSS 额外 ZIP 上传/回读/隔离恢复均通过。测试主控已直接热更新验证，生产 OTA 未执行。
-- 面板 [v1.6.8](https://github.com/mastalee928/payincus/releases/tag/v1.6.8) 已正式发布，发行源码 `44d26132f02f9bbaeb87c50305e39fb40f65be6c`，注解标签对象 `733c867101089fe1d24b9dd53d25b36c8c0a90a1`。GitHub 面板 latest 为 v1.6.8，双架构预览、正式首装及 Linux 本机备份/恢复/回退演练均成功。真实 OSS 测试桶验收及生产 OTA 未执行。
-- 面板 [v1.6.7](https://github.com/mastalee928/payincus/releases/tag/v1.6.7) 已正式发布，发行源码 `fa716ee699e4ff77400b21bd093968c8be5f0dbc`（注解标签 `v1.6.7`，对象 `da4fdd3d1087d8cc59a8b0c4fcedba637ae95a6a`）；GitHub 面板 latest 为 v1.6.7。测试主控已载入 v1.6.7 同源内容（发布前经第六轮内部热替换上机，双端 index.html 与发行包逐字节一致）；面板 OTA 正式升级待执行。下方 v1.6.6 及其“已通过面板 OTA 升级至 v1.6.6”为当时状态。
-- 面板 [v1.6.6](https://github.com/mastalee928/payincus/releases/tag/v1.6.6) 已正式发布，发行源码 `9f1a14a799a9600a4aa6a3c84f9cffa7d68ad087`（注解标签 `v1.6.6`，对象 `55bdb1dcfba1197b42a050ad8bf130afccaf6410`）；GitHub 面板 latest 为 v1.6.6，测试主控已通过面板 OTA 升级至 v1.6.6；其后的仪表盘负载条修复等提交已随 v1.6.7 发布。下方 v1.6.5 及其“已通过面板 OTA 升级至 v1.6.5”为当时状态。
-- 面板 [v1.6.5](https://github.com/mastalee928/payincus/releases/tag/v1.6.5) 已正式发布，发行源码 `3fb8a0eb9dd95088addf221e538a9eeac4e687f3`（注解标签 `v1.6.5`，对象 `26a2651773e813b7292506c9a7fd776b4672bb16`）；GitHub 面板 latest 为 v1.6.5，测试主控已通过面板 OTA 升级至 v1.6.5。下方 v1.6.4 及其“已通过面板 OTA 升级至 v1.6.4”为当时状态。
-- 面板 [v1.6.4](https://github.com/mastalee928/payincus/releases/tag/v1.6.4) 已正式发布，发行源码 `41d87820504977ffb24f895ab6c735a67f17fdaa`（注解标签 `v1.6.4`，对象 `8d39a04ea5d084378664e24ff0c0326758c2d744`）；GitHub 面板 latest 为 v1.6.4，测试主控已通过面板 OTA 升级至 v1.6.4。下方 v1.6.3 及其“已通过面板 OTA 升级至 v1.6.3”为当时状态。
-- 面板 [v1.6.3](https://github.com/mastalee928/payincus/releases/tag/v1.6.3) 已正式发布，发行源码 `f8d2ca450e01a10a54ae5f57b75e4f80821371dd`（注解标签 `v1.6.3`，对象 `5d7b3e170a6de887256c5ccc2ba32e8e8d7bb58f`）；GitHub 面板 latest 为 v1.6.3，测试主控已通过面板 OTA 升级至 v1.6.3。下方 v1.6.2 及其“尚未进入新的正式安装包”为当时状态。
-- 面板 [v1.6.2](https://github.com/mastalee928/payincus/releases/tag/v1.6.2) 与 [Agent v1.0.3](https://github.com/mastalee928/payincus/releases/tag/agent-v1.0.3) 已正式发布，源码均为 `2b81ce66e99c0941df8f579f085be59ce909541f`；后续源码和文档提交不改变已发布标签或安装包。下方实例配置权限收紧与购物车布局精修属于发布后的源码及测试站更新，尚未进入新的正式安装包。
+- 面板 [v1.7.1](https://github.com/masta-lee/mastaincus/tree/v1.7.1)（旧版资产未迁移） 已正式发布，发行源码 `9d1e5ba47dd6bf0a0937413892dacfeeb15e4a1d`，注解标签对象 `b9e5ca546250ada32e9df55455bba454f54f5a4d`，GitHub 面板 latest 为 v1.7.1。修复旧 OTA 解包保留构建机 UID 导致备份执行器安装回滚的问题；双架构预览、正式首装/恢复演练与公开资产校验通过。测试主控任务 #13 已使用原版 v1.7.0 执行器成功升级至 v1.7.1，2026-10-22 从实际管理后台复核成功日志及运行版本；同日 owner 明确确认已升级至 v1.7.1、正常运行、所有宿主均正常。下方各版本 latest 为当时状态；生产 OTA 未执行。
+- 面板 [v1.7.0](https://github.com/masta-lee/mastaincus/tree/v1.7.0)（旧版资产未迁移） 已正式发布，发行源码 `33b08791dc62e819fbbff847c38cd9e9ba438a37`，注解标签对象 `e778882f3e20e62067abdcc289136de3d7e0f407`，GitHub 面板 latest 为 v1.7.0。纳入恢复保护、批量/已售恢复、故障状态、客户日志、密码重装及同配置跨区域更换机器；双架构预览与正式首装/恢复演练通过。首页改版已取消，设计样稿和新安装的设计技能未进入发行提交。测试站此前已热更新验证相关功能，生产 OTA 未执行。
+- 面板 [v1.6.9](https://github.com/masta-lee/mastaincus/tree/v1.6.9)（旧版资产未迁移） 已正式发布，发行源码 `54203107fa138d92f0e29ece97d0c3fe1ed80090`，注解标签对象 `bce6f35d18e9bf00549349db8dc4fb8e4696980f`。GitHub 面板 latest 为 v1.6.9；双架构预览及正式首装/恢复演练、真实 OSS 额外 ZIP 上传/回读/隔离恢复均通过。测试主控已直接热更新验证，生产 OTA 未执行。
+- 面板 [v1.6.8](https://github.com/masta-lee/mastaincus/tree/v1.6.8)（旧版资产未迁移） 已正式发布，发行源码 `44d26132f02f9bbaeb87c50305e39fb40f65be6c`，注解标签对象 `733c867101089fe1d24b9dd53d25b36c8c0a90a1`。GitHub 面板 latest 为 v1.6.8，双架构预览、正式首装及 Linux 本机备份/恢复/回退演练均成功。真实 OSS 测试桶验收及生产 OTA 未执行。
+- 面板 [v1.6.7](https://github.com/masta-lee/mastaincus/tree/v1.6.7)（旧版资产未迁移） 已正式发布，发行源码 `fa716ee699e4ff77400b21bd093968c8be5f0dbc`（注解标签 `v1.6.7`，对象 `da4fdd3d1087d8cc59a8b0c4fcedba637ae95a6a`）；GitHub 面板 latest 为 v1.6.7。测试主控已载入 v1.6.7 同源内容（发布前经第六轮内部热替换上机，双端 index.html 与发行包逐字节一致）；面板 OTA 正式升级待执行。下方 v1.6.6 及其“已通过面板 OTA 升级至 v1.6.6”为当时状态。
+- 面板 [v1.6.6](https://github.com/masta-lee/mastaincus/tree/v1.6.6)（旧版资产未迁移） 已正式发布，发行源码 `9f1a14a799a9600a4aa6a3c84f9cffa7d68ad087`（注解标签 `v1.6.6`，对象 `55bdb1dcfba1197b42a050ad8bf130afccaf6410`）；GitHub 面板 latest 为 v1.6.6，测试主控已通过面板 OTA 升级至 v1.6.6；其后的仪表盘负载条修复等提交已随 v1.6.7 发布。下方 v1.6.5 及其“已通过面板 OTA 升级至 v1.6.5”为当时状态。
+- 面板 [v1.6.5](https://github.com/masta-lee/mastaincus/tree/v1.6.5)（旧版资产未迁移） 已正式发布，发行源码 `3fb8a0eb9dd95088addf221e538a9eeac4e687f3`（注解标签 `v1.6.5`，对象 `26a2651773e813b7292506c9a7fd776b4672bb16`）；GitHub 面板 latest 为 v1.6.5，测试主控已通过面板 OTA 升级至 v1.6.5。下方 v1.6.4 及其“已通过面板 OTA 升级至 v1.6.4”为当时状态。
+- 面板 [v1.6.4](https://github.com/masta-lee/mastaincus/tree/v1.6.4)（旧版资产未迁移） 已正式发布，发行源码 `41d87820504977ffb24f895ab6c735a67f17fdaa`（注解标签 `v1.6.4`，对象 `8d39a04ea5d084378664e24ff0c0326758c2d744`）；GitHub 面板 latest 为 v1.6.4，测试主控已通过面板 OTA 升级至 v1.6.4。下方 v1.6.3 及其“已通过面板 OTA 升级至 v1.6.3”为当时状态。
+- 面板 [v1.6.3](https://github.com/masta-lee/mastaincus/tree/v1.6.3)（旧版资产未迁移） 已正式发布，发行源码 `f8d2ca450e01a10a54ae5f57b75e4f80821371dd`（注解标签 `v1.6.3`，对象 `5d7b3e170a6de887256c5ccc2ba32e8e8d7bb58f`）；GitHub 面板 latest 为 v1.6.3，测试主控已通过面板 OTA 升级至 v1.6.3。下方 v1.6.2 及其“尚未进入新的正式安装包”为当时状态。
+- 面板 [v1.6.2](https://github.com/masta-lee/mastaincus/tree/v1.6.2)（旧版资产未迁移） 与 [Agent v1.0.3](https://github.com/masta-lee/mastaincus/tree/agent-v1.0.3)（旧版资产未迁移） 已正式发布，源码均为 `2b81ce66e99c0941df8f579f085be59ce909541f`；后续源码和文档提交不改变已发布标签或安装包。下方实例配置权限收紧与购物车布局精修属于发布后的源码及测试站更新，尚未进入新的正式安装包。
 - 此前 GitHub main 停留在 b140752，后续功能只在维护者工作区及测试主控直接部署。`429e858` 已补齐完整功能，后续提交修复全新安装验证中发现的问题。
 - 源码包括机器池、定价、购物车、一机一卖、Alpine / Debian 接入、1 GiB swap、WireGuard 管理、全端口 TCP/TCP+UDP、故障换机、公网 IPv4 与多 IPv6 自动同步、用户/管理员 PUSH，以及首页、45 区域选购和 UPAY Pro 更新。
 - 安装器、OTA、Agent、文档和问题反馈均使用本仓库。新安装增加管理网关配置，发行包包含完整迁移、探测、网络、swap 与网关脚本。
 - 本地类型检查及全套配置测试已逐项通过；安装器、仓库来源、部署配置、OTA 与网关参数守卫通过。Lint 无错误，保留已有样式警告；文档构建通过。
-- [正式发布工作流](https://github.com/mastalee928/payincus/actions/runs/38878414833) 全部成功：Linux amd64 / arm64 分别构建并从真实发行包全新安装，通过 209 条数据库迁移、IPv6 数据字段、唯一后端启动、双端访问、管理员登录、机器池 API、固定主机指纹 SSH 网关及正式 Agent 下载和执行验证。
+- 正式发布工作流（原仓库 Actions 运行 38878414833（历史记录，未迁移）） 全部成功：Linux amd64 / arm64 分别构建并从真实发行包全新安装，通过 209 条数据库迁移、IPv6 数据字段、唯一后端启动、双端访问、管理员登录、机器池 API、固定主机指纹 SSH 网关及正式 Agent 下载和执行验证。
 - 已实际下载两种架构的公开安装包，确认 SHA256、文件大小、OTA manifest、包内版本与 Git 提交一致；检查全部迁移和 IPv6、UPAY 等关键模块，包内 LICENSE 与发行源码原文一致。GitHub 的面板 latest 为 v1.6.2；公开一键安装脚本与发行源码一致。
-- [源码 CI](https://github.com/mastalee928/payincus/actions/runs/38877110604)、[Agent 发布](https://github.com/mastalee928/payincus/actions/runs/38877110746) 均通过；[本仓库文档站](https://mastalee928.github.io/payincus/) 已上线。
+- 源码 CI（原仓库 Actions 运行 38877110604（历史记录，未迁移））、Agent 发布（原仓库 Actions 运行 38877110746（历史记录，未迁移）） 均通过；原仓库文档站当时已上线；新仓库文档配置已迁移，部署结果另行核验。
 
 ## 2026-10-23 固定网关域名和宿主补装（阶段源码）
 
@@ -4860,17 +4862,17 @@ Owner 要求记录本轮双架构预览全通过的排障方法，新增 [payinc
 - 真实空PG数据库+远端安装边界夹具覆盖缺管理/恢复保护不下发、失败持久、重试、并发重复拒绝和历史回执身份/域名失效；登记独立 `test:host-gateway-dns-integration` 及排除原因，CI在独立PG16任务运行。root Python两组各9项通过。真实浏览器保存/重读、补装失败→重试、缺身份禁用、三宽度/深浅色无横向溢出；inspector0 FAIL/1空白WARN（独立组件预览余下空白，完整页另有安装记录区块）。
 - 全套planned/executed/passed177、failed0（`logs/test-run-20261023-204739/summary.txt`，7m17s），前后端类型、双端生产构建、dist边界、后台构建和新组件ESLint通过；最新小改的相关验证随后记录。证据在本地 `dns-service-runtime-result.json`、`dns-ssh-install-result.json`、`dns-openrc-result.json`、`gateway-page-browser/endpoint-browser-result.json`。未部署原客户宿主或新正式版本；完整OSS身份恢复、旧主控丢失/新IP联合演练、账务补偿及完整P0–P6继续。
 - 阶段 b6ecea3 已推送，源码 CI 39957744733 的双架构组件和独立 PG 联调成功，网关守卫因无 DATABASE_URL 失败：通用 onboarding-ssh 顶层导入数据库配置。修正为实际 gatewayCommand 才按需加载端点设置；新增独立无数据库进程的预检回归，Windows 网关全守卫与 Linux 独立预检、服务器类型和构建通过。CI/首装及线上证据分开，本地177项使用占位DB配置曾掩盖此初始化依赖；后续新CI结论另记。
-- 修正提交 c8c87f3 [源码 CI 39958461294](https://github.com/mastalee928/payincus/actions/runs/39958461294) 全部 success；原 b6ecea3 [双架构预览 39957814230](https://github.com/mastalee928/payincus/actions/runs/39957814230) 和修正后的 [双架构预览39958463692](https://github.com/mastalee928/payincus/actions/runs/39958463692) 双构建/首装全部成功，Release skipped。CI无数据库初始化依赖错误已闭环，未正式发版或部署客户主控。
+- 修正提交 c8c87f3 源码 CI 39958461294（原仓库 Actions 运行 39958461294（历史记录，未迁移）） 全部 success；原 b6ecea3 双架构预览 39957814230（原仓库 Actions 运行 39957814230（历史记录，未迁移）） 和修正后的 双架构预览39958463692（原仓库 Actions 运行 39958463692（历史记录，未迁移）） 双构建/首装全部成功，Release skipped。CI无数据库初始化依赖错误已闭环，未正式发版或部署客户主控。
 
 ## 2026-10-23 同机网关恢复的目标入口映射（新增源码）
 
 - 平台环境恢复继续保留B的数据库登录、网站/公网入口及JWT/SSH指纹，仅恢复原数据加密身份。另核对备份WireGuard Interface中的唯一有效ListenPort，用它映射B现有域名/IP Endpoint端口，避免B新装默认端口与A原配置不一致。拒绝缺失/非法端口、非本机网关映射和缺目标SSH指纹；不从A环境覆盖B的SSH信任。
 - Windows及ARM64备份守卫通过，类型和后台构建通过；双架构首装演练补充目标端口不同→恢复原端口→回滚保留目标环境的检查。此检查不是完整OSS A/B冷恢复验收，新预览实证随后记录。
-- 映射提交 bb694ff [源码CI39959624357](https://github.com/mastalee928/payincus/actions/runs/39959624357) 和 [双架构预览39959627974](https://github.com/mastalee928/payincus/actions/runs/39959627974) 全部success；两种实际首装/恢复演练确认端口映射及回滚目标环境，Release skipped。
+- 映射提交 bb694ff 源码CI39959624357（原仓库 Actions 运行 39959624357（历史记录，未迁移）） 和 双架构预览39959627974（原仓库 Actions 运行 39959627974（历史记录，未迁移）） 全部success；两种实际首装/恢复演练确认端口映射及回滚目标环境，Release skipped。
 
 ## 2026-10-23 控制签名身份纳入平台归档（新增源码）
 
-- 提交0374bee [源码CI39961966190](https://github.com/mastalee928/payincus/actions/runs/39961966190)全部success；[双架构预览39961969761](https://github.com/mastalee928/payincus/actions/runs/39961969761)的AMD64/ARM64构建和实际首装全部success。两种架构均执行新增控制签名身份备份、恢复后核验和回滚；Release预期skipped，未创建正式发行或部署客户主控。此演练的OSS传输仍为本地替身，真实云端冷恢复/宿主重连联合验收尚未完成。
+- 提交0374bee 源码CI39961966190（原仓库 Actions 运行 39961966190（历史记录，未迁移））全部success；双架构预览39961969761（原仓库 Actions 运行 39961969761（历史记录，未迁移））的AMD64/ARM64构建和实际首装全部success。两种架构均执行新增控制签名身份备份、恢复后核验和回滚；Release预期skipped，未创建正式发行或部署客户主控。此演练的OSS传输仍为本地替身，真实云端冷恢复/宿主重连联合验收尚未完成。
 
 - 平台备份增加固定controller/signing.pem、identity.json、enrollment.json，备份前完整root登记验证及环境平台ID匹配。归档仅接受三项固定路径，保留加密认证/回读/完整性限制。
 - 恢复要求三份完整、私钥摘要/身份/平台/发行信任匹配；旧组件路径不作为恢复目标，使用B已验签登记的组件目录重新生成登记信息，保留A原私钥及平台身份。写文件后和回滚后再次运行固定root登记验证器，失败保护模式不放行；环境平台ID从已核对身份映射。备份不包含可执行旧组件或任意归档路径。
@@ -4886,23 +4888,23 @@ Owner 要求记录本轮双架构预览全通过的排障方法，新增 [payinc
 - 真实 Linux arm64 + 独立空 PostgreSQL + Incus 6.0.4 专用实例联合通过：断网暂停、同快照两笔续费仅一次成功和扣费、重连后续费实例保持 Running、3 天保留期到期停机/删除、确认不存在后库存归零、重复巡检无重复动作。Incus 在独立 mount/net、专用 delegated cgroup 及有界测试单元中运行，应用数据库独立；未改变客户实例或唯一业务后端。初次隔离未挂载 cgroup 控制层导致 LXC 监控 C 库崩溃/回执超时，修正测试环境后真实回执/删除通过，失败样本保留。
 - 仓库新增可重复 `test:billing-expiry-integration`（必须显式 opt-in、空本机 *_expiry_test 库及 OpenSSL），覆盖 HTTPS Incus 夹具断网、重试、丢失 DELETE 回执和一次扣费/释放；登记全量排除原因并增加独立 PG16 CI 作业。该夹具与上一条真实 Incus 证据分开。证据：`logs/controller-takeover-research-20261022/expiry-real-scheduler-result.json`、`expiry-integration-result.json`、`gateway-page-browser/expiry-browser-result.json`。
 - 最终全套 planned/executed/passed=176、failed=0（6 分 36 秒，`logs/test-run-20261023-190403/summary.txt`），专项 8/8、前后端类型、最终后台构建、此前本阶段双端构建和 dist 边界通过。Lint 0 errors、665 既有告警。源码提交和 Actions 状态另记；无新正式 Release 或客户后端部署；DNS 设置/旧宿主补装/联合 OSS 切换与错过自动续费对账仍未完成。
-- 阶段提交 [f84a160](https://github.com/mastalee928/payincus/commit/f84a1601b49eb2f8aec24dc500f3c4ab0a070ac5) 已推送；[CI 39944597711](https://github.com/mastalee928/payincus/actions/runs/39944597711) 五项全部成功：独立 PG16 到期回归、amd64/arm64 组件包、Lint/类型、Build。源码/CI 通过不表示现有主控已部署该巡检。
+- 阶段提交 [f84a160](https://github.com/masta-lee/mastaincus/commit/f84a1601b49eb2f8aec24dc500f3c4ab0a070ac5) 已推送；CI 39944597711（原仓库 Actions 运行 39944597711（历史记录，未迁移）） 五项全部成功：独立 PG16 到期回归、amd64/arm64 组件包、Lint/类型、Build。源码/CI 通过不表示现有主控已部署该巡检。
 
 ## 2026-10-23 首装 sudo 解析兼容与拒绝阶段诊断（未发版）
 
 - 后续 sudo 解析器拒绝命令参数里的 wildcard。网关/备份/OTA 安装和原子布局迁移规则统一只授权 root 固定 systemctl wrapper，继续由 wrapper 严格限制三个参数、start/--no-block 及管理任务模板/ID；不授权原始 systemctl。网关安装额外核对 wrapper 父目录不可写、root:root/0755 和发行源码逐字节一致后才安装规则。
 - 安装 shell 守卫、网关/OTA/部署/备份 6 项检查、真实 Linux visudo、实际 incudal 用户 sudo 的有效 UUID/错误单元拒绝通过。实际 ARM64 预览包在隔离 mount/空状态目录的原安装入口与新规则均能登记两个架构并生成新独立测试身份，systemctl 在该测试内使用固定命令替身；没有安装到原业务主控全局目录。不能据该结果宣称 CI 首装问题均已修好。
 - ARM64 CI 的身份准备拒绝在上述实际包重放中尚未重现。准备器仅增加固定 stage 字段（catalog、环境、组件验证/保存、身份和发布环境），不输出异常或文件内容；14 项 Linux 准备守卫含异常敏感文本不可外泄检查通过。后续预览以阶段提示定位 runner 差异，失败仍保持拒绝；禁止以忽略验签、放宽目录权限或重建已有身份替代修复。
-- [acdfece](https://github.com/mastalee928/payincus/commit/acdfece8dd80ed2962abb1afe0801a5588d1655d) 已推送，[源码 CI 39945675497](https://github.com/mastalee928/payincus/actions/runs/39945675497) 成功。[发行预览 39945678206](https://github.com/mastalee928/payincus/actions/runs/39945678206) 两种构建成功，sudo wildcard 错误消失，两种首装均在 release-catalog 阶段拒绝。实际同份 ARM64 新预览包在独立 root 目录核对 catalog/版本/签名组件通过，尚未定位 runner 路径差异；继续细分固定阶段并在失败时输出属主/权限/大小/是否链接等非敏感元数据。Release skipped，无新正式发行。
-- 诊断提交 43b668c [源码 CI 39947512535](https://github.com/mastalee928/payincus/actions/runs/39947512535) 成功。[预览 39947515057](https://github.com/mastalee928/payincus/actions/runs/39947515057) 两种构建成功、首装均拒绝 release-directory；非敏感元数据确证两种 GitHub runner 的 /opt 均为 root:root/0777，导致受信父目录检查拒绝，包内文件权限正确。一次性 GitHub 首装测试先核验 root 非链接 /opt 并移除 group/other 写权限，生产验签/登记检查保持。真实 Linux 隔离 mount 重现 0777 拒绝、chmod go-w 后实际签名目录通过，安装 shell 守卫通过；新预览结果单独记录。
-- d1ca985 [预览 39948962555](https://github.com/mastalee928/payincus/actions/runs/39948962555) 两种构建成功，目录信任拒绝已消失。AMD64 在后续 OTA sudoers 遇到新版 parser 不支持 requiretty，移除该默认关闭的可选设置；ARM64 已安装、唯一后台/双端/管理员登录/机器池/Agent 下载通过，但备份演练报 OSS_ARCHIVE_INVALID。根因是 manifest 只接受数字版本，而既有 assertBackupVersion 已接受同提交 preview-hex；增加严格 7–40 位十六进制 preview 归档格式支持，同预览认证往返通过，跨预览恢复仍拒绝。Windows 与真实 ARM64 备份守卫、类型和后台构建通过，安装 shell 守卫通过；待后续预览重新核验，不宣称完整首装通过。
-- 1f81d80 [预览 39950946588](https://github.com/mastalee928/payincus/actions/runs/39950946588) 两种构建、首装/登录/Agent、备份/预检/恢复/回滚/续跑及完整数据库/ZIP 数据校验通过，最后的历史版本迁移兼容演练均因 OSS_BACKUP_MIGRATION_FAILED 失败。迁移夹具目录继承首装 umask077，但 Prisma 使用 incudal 用户读取；仅将该无密钥、受信临时夹具目录设为0755、文件0644，不放宽生产迁移权限。授权 ARM64 主控仅创建独立临时数据库，在实际 umask077 下完整旧版本/CRLF迁移、金额保持及错误版本/数据库版本/未知迁移拒绝通过；唯一业务后端不变。新预览结果另记，未发布 Release。
-- 迁移夹具修复 [7dd0887](https://github.com/mastalee928/payincus/commit/7dd0887) 已推送，[发行预览 39952149465](https://github.com/mastalee928/payincus/actions/runs/39952149465) 完整 success：两个构建及 AMD64/ARM64 全新安装验证均成功，Release 按无 tag 预览设计 skipped。首装包括唯一后台、双端/管理员登录/机器池与 Agent、控制身份登记、备份预检/恢复/回滚/续跑、完整数据库/ZIP 数据和历史版本/CRLF迁移验收；此前失败样本保留。DNS补装/完整OSS故障切换仍未验收，没有新正式Release或客户OTA。
+- [acdfece](https://github.com/masta-lee/mastaincus/commit/acdfece8dd80ed2962abb1afe0801a5588d1655d) 已推送，源码 CI 39945675497（原仓库 Actions 运行 39945675497（历史记录，未迁移）） 成功。发行预览 39945678206（原仓库 Actions 运行 39945678206（历史记录，未迁移）） 两种构建成功，sudo wildcard 错误消失，两种首装均在 release-catalog 阶段拒绝。实际同份 ARM64 新预览包在独立 root 目录核对 catalog/版本/签名组件通过，尚未定位 runner 路径差异；继续细分固定阶段并在失败时输出属主/权限/大小/是否链接等非敏感元数据。Release skipped，无新正式发行。
+- 诊断提交 43b668c 源码 CI 39947512535（原仓库 Actions 运行 39947512535（历史记录，未迁移）） 成功。预览 39947515057（原仓库 Actions 运行 39947515057（历史记录，未迁移）） 两种构建成功、首装均拒绝 release-directory；非敏感元数据确证两种 GitHub runner 的 /opt 均为 root:root/0777，导致受信父目录检查拒绝，包内文件权限正确。一次性 GitHub 首装测试先核验 root 非链接 /opt 并移除 group/other 写权限，生产验签/登记检查保持。真实 Linux 隔离 mount 重现 0777 拒绝、chmod go-w 后实际签名目录通过，安装 shell 守卫通过；新预览结果单独记录。
+- d1ca985 预览 39948962555（原仓库 Actions 运行 39948962555（历史记录，未迁移）） 两种构建成功，目录信任拒绝已消失。AMD64 在后续 OTA sudoers 遇到新版 parser 不支持 requiretty，移除该默认关闭的可选设置；ARM64 已安装、唯一后台/双端/管理员登录/机器池/Agent 下载通过，但备份演练报 OSS_ARCHIVE_INVALID。根因是 manifest 只接受数字版本，而既有 assertBackupVersion 已接受同提交 preview-hex；增加严格 7–40 位十六进制 preview 归档格式支持，同预览认证往返通过，跨预览恢复仍拒绝。Windows 与真实 ARM64 备份守卫、类型和后台构建通过，安装 shell 守卫通过；待后续预览重新核验，不宣称完整首装通过。
+- 1f81d80 预览 39950946588（原仓库 Actions 运行 39950946588（历史记录，未迁移）） 两种构建、首装/登录/Agent、备份/预检/恢复/回滚/续跑及完整数据库/ZIP 数据校验通过，最后的历史版本迁移兼容演练均因 OSS_BACKUP_MIGRATION_FAILED 失败。迁移夹具目录继承首装 umask077，但 Prisma 使用 incudal 用户读取；仅将该无密钥、受信临时夹具目录设为0755、文件0644，不放宽生产迁移权限。授权 ARM64 主控仅创建独立临时数据库，在实际 umask077 下完整旧版本/CRLF迁移、金额保持及错误版本/数据库版本/未知迁移拒绝通过；唯一业务后端不变。新预览结果另记，未发布 Release。
+- 迁移夹具修复 [7dd0887](https://github.com/masta-lee/mastaincus/commit/7dd0887) 已推送，发行预览 39952149465（原仓库 Actions 运行 39952149465（历史记录，未迁移）） 完整 success：两个构建及 AMD64/ARM64 全新安装验证均成功，Release 按无 tag 预览设计 skipped。首装包括唯一后台、双端/管理员登录/机器池与 Agent、控制身份登记、备份预检/恢复/回滚/续跑、完整数据库/ZIP 数据和历史版本/CRLF迁移验收；此前失败样本保留。DNS补装/完整OSS故障切换仍未验收，没有新正式Release或客户OTA。
 
 ## 2026-10-23 发行预览 AMD64 组件权限修复（未发版）
 
 - 57c8411 源码 CI 39927406425 全部成功；发行预览 39927543459 的 ARM64 面板包构建完成，但 AMD64 在 root 侧组件验签失败，首次安装作业因此未执行。两种组件编译、Node 官方下载 SHA256 和固定签名公钥匹配已通过；不把 ARM64 构建或源码 CI 当作首装通过。
-- 后续 c3d28c1 [预览 39929532392](https://github.com/mastalee928/payincus/actions/runs/39929532392) 两种构建成功，但两种首装均失败：AMD64 visudo 拒绝命令参数里的 wildcard；ARM64 在环境生成后拒绝控制身份准备。Release 作业 skipped，没有新 tag/正式资产或 OTA；这两项继续修复，不能把该预览记录为成功。
+- 后续 c3d28c1 预览 39929532392（原仓库 Actions 运行 39929532392（历史记录，未迁移）） 两种构建成功，但两种首装均失败：AMD64 visudo 拒绝命令参数里的 wildcard；ARM64 在环境生成后拒绝控制身份准备。Release 作业 skipped，没有新 tag/正式资产或 OTA；这两项继续修复，不能把该预览记录为成功。
 - 真实 Linux 复现严格 umask 077 下普通 cp -R 改变已签名文件权限，固定验证器按清单拒绝。CI/Release 的 root 拷贝改为 --preserve=mode --no-preserve=ownership，保留已核验来源模式且目标归 root，不放宽验证器。13 组包回归通过，新增先复现无权限保持失败、再验证正确拷贝成功的测试；Node 来源守卫增加两工作流参数约束。修复后的双架构预览另行运行记录。
 
 ## 2026-10-23 签名组件发行与首装准备接线（预览待验，未发版）
@@ -4943,7 +4945,7 @@ Owner 要求记录本轮双架构预览全通过的排障方法，新增 [payinc
 
 ## 2026-10-23 独立网关组件包与运行验证（阶段交付，未发版）
 
-- 组件包基础提交 `f27a57c` 已推送；[CI 39895823020](https://github.com/mastalee928/payincus/actions/runs/39895823020) 全部通过，包括 amd64/arm64 原生包构建/验签/进程验收、类型/Lint/守卫及完整构建。
+- 组件包基础提交 `f27a57c` 已推送；CI 39895823020（原仓库 Actions 运行 39895823020（历史记录，未迁移）） 全部通过，包括 amd64/arm64 原生包构建/验签/进程验收、类型/Lint/守卫及完整构建。
 - 后续新增 root 侧完整安装计划和固定新装执行器。计划绑定物理机器、当前预检摘要、包清单哈希、已提交源码身份及平台签名配置，有明确期限；包/平台信任来自单独受保护策略。已有接口、服务、执行文件或安装身份进入连接/迁移流程，不隐式重装。执行器不接受 shell/任意目标路径，持久保存原请求、步骤与独立密钥，中断后仅在原确认仍有效且配置一致时续跑；缺密钥、文件/服务变更和同提交下的另一个签名包拒绝。安装后及重复执行重新检查当前内核接口、公钥、端口、地址和 peer，资源写权仍为 false。
 - 授权灾难测试机的新平台测试身份已实际完成 root 安装→两个独立 systemd 服务→真实 HTTPS 登录/状态/退出→重复同请求返回相同回执→服务重启后身份不变。新服务 NRestarts=0，最终内核检查代码在该实际接口执行通过。初次安装前后业务后端 PID、IPv4 默认路由与完整 nft 规则哈希一致；IPv6 原始哈希因 RA 动态 expires 字段变化，不能当作完全一致证据，随后排除该倒计时后的双栈默认拓扑/规则/PID 在新服务重启前后保持一致。没有执行客户实例操作。
 - 安装流程使用独立固定证书和随机密码/MFA/恢复码，秘密只留 root 私有 bootstrap 文件；公网 HTTPS 认证使用该证书校验通过。现阶段仍明确列出自主备份登记、宿主写服务及公开证书生命周期阻断，不将固定证书当作完整自动续期方案。实际包内 Python 导入曾生成 __pycache__ 导致严格验签拒绝，已禁止生成字节码，不放宽额外文件守卫。新增安装材料进入固定组件清单，现为 20 项。
@@ -4958,10 +4960,10 @@ Owner 要求记录本轮双架构预览全通过的排障方法，新增 [payinc
 ## 2026-10-23 签名候选与独立发现基础（隔离实测，完整接管未完成）
 
 - 后台网关任务补齐持久底座：固定平台/网关/物理machine-id与SSH指纹，严格计划哈希、独立步骤operationId、单目标活动任务约束、PG事务前有界排队及跨进程非阻塞锁。失去执行租约转needs_review并保留机器占用，不自动重放；重新确认后要求started步骤对账。全部回执与配置版本校验后只推进一次版本，凭据与执行租约不进入公共select，结束/过期清除凭据。尚未开放任务API、页面执行或特权安装接线，摘要回执不是物理证明，不标HA就绪。
-- 任务底座提交9b526f5已推送，[CI 39883087278](https://github.com/mastalee928/payincus/actions/runs/39883087278)成功。随后新增统一只读网关预检：本机固定execFile无需SSH、远端固定python stdin，读取实际机器/系统/服务归属、接口alias与地址、全路由及UDP/TCP监听；错误目标、既有路由重叠、未知服务和占用HTTPS端口阻断。Node严格校验报告并重新计算请求/现场摘要。实际主控ARM64本机执行器、固定SSH指纹的A网关amd64远端执行器、B状态、错误机器ID/占用端口/路由冲突通过；证据 `gateway-preflight-live.json`、`gateway-preflight-local-bound.json`、`gateway-preflight-remote-bound.json`。A/B使用专用Node目录，系统PATH缺Node按事实显示依赖缺口，未自动忽略。Python7组冲突守卫、Node请求/报告边界、双端类型及相关候选/机器池守卫、服务器构建与新文件ESLint通过；尚无页面任务/安装执行接线。
-- 预检提交c00591e已推送，[CI 39884135967](https://github.com/mastalee928/payincus/actions/runs/39884135967)成功。继续接机器池只读网关列表/任务查询/inspect路由，要求当前管理员及Web sid/Bearer/精确管理端Origin；严格schema、限量/限频、错误信息只输出固定码。平台ID从配置读取，本机不用SSH，远端固定一个公网IP及SSH指纹。检查报告与摘要回执原子持久，重复请求返回原报告，变更参数复用请求ID/重复物理机器身份拒绝。succeeded仅指检查完成，依赖/冲突阻断仍显示，canWrite=false；没有安装/应急写入口。
+- 任务底座提交9b526f5已推送，CI 39883087278（原仓库 Actions 运行 39883087278（历史记录，未迁移））成功。随后新增统一只读网关预检：本机固定execFile无需SSH、远端固定python stdin，读取实际机器/系统/服务归属、接口alias与地址、全路由及UDP/TCP监听；错误目标、既有路由重叠、未知服务和占用HTTPS端口阻断。Node严格校验报告并重新计算请求/现场摘要。实际主控ARM64本机执行器、固定SSH指纹的A网关amd64远端执行器、B状态、错误机器ID/占用端口/路由冲突通过；证据 `gateway-preflight-live.json`、`gateway-preflight-local-bound.json`、`gateway-preflight-remote-bound.json`。A/B使用专用Node目录，系统PATH缺Node按事实显示依赖缺口，未自动忽略。Python7组冲突守卫、Node请求/报告边界、双端类型及相关候选/机器池守卫、服务器构建与新文件ESLint通过；尚无页面任务/安装执行接线。
+- 预检提交c00591e已推送，CI 39884135967（原仓库 Actions 运行 39884135967（历史记录，未迁移））成功。继续接机器池只读网关列表/任务查询/inspect路由，要求当前管理员及Web sid/Bearer/精确管理端Origin；严格schema、限量/限频、错误信息只输出固定码。平台ID从配置读取，本机不用SSH，远端固定一个公网IP及SSH指纹。检查报告与摘要回执原子持久，重复请求返回原报告，变更参数复用请求ID/重复物理机器身份拒绝。succeeded仅指检查完成，依赖/冲突阻断仍显示，canWrite=false；没有安装/应急写入口。
 - 新报告迁移仅应用隔离库；真实ARM64主控本机检查API、A网关amd64远端检查API均通过登记→预检→持久查询→重复提交，身份重复/参数冲突/本机凭据拒绝；接线后11组真实PG事务回归通过。证据 `gateway-management-route-live.json`、`gateway-management-remote-route-live.json`、`gateway-task-journal-route-regression.json`。真实Fastify权限/Origin/schema守卫已登记根清单与CI（175项），相关类型/管理员/会话/任务守卫、服务器构建、新文件ESLint通过；未改变业务数据库或客户宿主管理入口，完整HA及页面安装仍未完成。
-- 检查接口提交3f070ea已推送，[CI 39885428821](https://github.com/mastalee928/payincus/actions/runs/39885428821)成功。机器池新增管理网关页签：本机/独立/已有目标选择、预先核验SSH指纹、临时凭据、管理网段/端口、真实检查及持久阻断。本机无SSH字段，提交/切换/离开清除表单秘密，列表重新检查恢复原身份；新增页签方向键/Home/End及焦点转移。保持黑白token和既有机器池行为，没有安装/控制权按钮冒充可用。
+- 检查接口提交3f070ea已推送，CI 39885428821（原仓库 Actions 运行 39885428821（历史记录，未迁移））成功。机器池新增管理网关页签：本机/独立/已有目标选择、预先核验SSH指纹、临时凭据、管理网段/端口、真实检查及持久阻断。本机无SSH字段，提交/切换/离开清除表单秘密，列表重新检查恢复原身份；新增页签方向键/Home/End及焦点转移。保持黑白token和既有机器池行为，没有安装/控制权按钮冒充可用。
 - 使用design-taste-frontend及fixing-accessibility，延续Data terminal（seed779163351，保留品牌字体/配色，无重抽）；浅深色1440/768/390真实浏览器检查0 FAIL/0 WARN，身份/网段等宽提示按用途保留。真实页面调用隔离主控API完成检查→刷新→重查路由冲突、模式切换清凭据、焦点及手机无横向溢出，`gateway-page-browser/live-result.json`；样本会话只在隔离服务，不替代正式权限守卫。双端类型/路由/i18n守卫通过（`logs/test-run-20261023-102154/summary.txt`），双端构建/dist边界/服务器构建及修改文件ESLint通过。发行工作流、首装检查补入预检Python文件，配置示例加入稳定GATEWAY_PLATFORM_ID；正式Release与业务部署未更改。
 - 新增迁移仅应用于新建隔离PostgreSQL16数据库；在授权测试主控独立Node22 ARM64目录执行11组真实事务验收，覆盖8路重复请求、跨进程锁竞争、新进程重读UTC租约（数据库会话Asia/Shanghai）、中断保留占用/同operationId对账、回执重放/冲突、精确确认/过期、版本只推进一次、管理员撤销与远端凭据过期清除。两次同机验收通过，证据 `gateway-task-journal-live.json`。跨机SSH隧道样本发现默认5秒事务排队超时，修为事务前排队；新进程首次连接抖动另以同机隔离连接完成正式证据，不把失败样本计作通过。
 - 14项新增守卫已登记根清单及CI，清单现174项；相关双端类型、候选/发现、管理员权限、会话状态、机器池守卫通过，服务器构建与新增文件ESLint通过。没有前端文件变更，没有在业务数据库应用迁移，现有唯一测试后端active、NRestarts=0。最新前三阶段提交ac1b09e/183bedd/706af0d的CI与Agent构建已复核成功；本轮不更改版本、标签或正式Release资产。
@@ -4980,17 +4982,17 @@ Owner 要求记录本轮双架构预览全通过的排障方法，新增 [payinc
 - Owner 后续明确改为每完成一个大步骤、通过对应验证后立即提交推送，不再积累到全部阶段结束；此前“最终实现完成才提交”不再适用于阶段源码提交。完整灾备验收与发布仍分开记录。
 - 继续补齐独立 incudal-maintenance HTTPS 准备服务：TLS1.3 客户端证书认证，逐请求候选/见证验签；只开放检查与拒绝准备，私有/loopback 独立端口、同宿主身份 flock 单服务；先恢复持久签名拒绝再监听。拒绝查询/编码路径、未知接口、超限/压缩正文和并发准备，失败不泄露配置或部分输出；SIGTERM 关闭监听，保留拒绝状态。尚无租约写入口、完整本地写者审计或正式宿主启动安装。
 - 本阶段最终全套检查 planned/executed/passed=173、failed=0，`logs/test-run-20261023-044946/summary.txt`；服务器构建通过。独立 Ubuntu 24.04 amd64 的完整 Go race/vet 与维护服务构建通过，证据 `maintenance-service-race.json`；真实隔离 net namespace 中，生产 HTTPS 服务恢复签名隔离后监听、mTLS 检查、不同端口重复服务及缺失状态拒绝、停止关闭监听均通过，双栈客户转发规则保持，证据 `maintenance-service-lifecycle.json`。CI 增加维护命令的 race 检查；没有前端源码改动、真实实例电源操作或整机重启验收，不作为完整P0–P6通过证据。
-- 基础阶段提交 [69d9fe6](https://github.com/mastalee928/payincus/commit/69d9fe6eaddba419a17aa33312f2ae4d61f8b33e) 已推送；[CI 39854695406](https://github.com/mastalee928/payincus/actions/runs/39854695406) 和 [Agent 构建 39854695385](https://github.com/mastalee928/payincus/actions/runs/39854695385) 成功，版本与正式发行资产不变。
+- 基础阶段提交 [69d9fe6](https://github.com/masta-lee/mastaincus/commit/69d9fe6eaddba419a17aa33312f2ae4d61f8b33e) 已推送；CI 39854695406（原仓库 Actions 运行 39854695406（历史记录，未迁移）） 和 Agent 构建 39854695385（原仓库 Actions 运行 39854695385（历史记录，未迁移）） 成功，版本与正式发行资产不变。
 - 独立见证补齐受信首次初始化、身份清单和mTLS状态/准备/激活/租约接口：签名身份固定，证书精确绑定主控/持有者/节点范围，同节点请求串行；已有/缺失/损坏状态不能重新初始化。Windows26项接口守卫、服务器类型和构建通过；独立Ubuntu amd64真实CLI验证mTLS、重复权威拒绝、重启保留代次、缺失/损坏拒绝、正常退出关闭监听，单节点样本RSS约62MiB，证据 `witness-service-cli.json`。夹具签发租约不构成真实宿主物理隔离，正式部署/恢复流程、宿主采集与写代理尚未完成。
-- 见证服务阶段 [01d63c8](https://github.com/mastalee928/payincus/commit/01d63c8916a5e3f3c6e0ffc0cd3c6074948698e6) 已推送，[CI 39856820346](https://github.com/mastalee928/payincus/actions/runs/39856820346) 成功；独立Linux26项接口及正常/强制退出CLI重启验证通过，证据 `witness-service-linux-final.json`。
+- 见证服务阶段 [01d63c8](https://github.com/masta-lee/mastaincus/commit/01d63c8916a5e3f3c6e0ffc0cd3c6074948698e6) 已推送，CI 39856820346（原仓库 Actions 运行 39856820346（历史记录，未迁移）） 成功；独立Linux26项接口及正常/强制退出CLI重启验证通过，证据 `witness-service-linux-final.json`。
 - 双通道基础增加host-management-channels/v1及独立incudal-channels命令/服务：a/b不同公钥、接口与/32控制路由，预检全部路由表/地址/接口归属，拒绝隐式替换/退役；签名高水位及不可变本地身份持久化，缺失初始化状态拒绝。已过Node/Go10共同向量、服务器类型/相关候选守卫和编译（`logs/test-run-20261023-053639/summary.txt`），完整Go race/vet。实际WireGuard隔离namespace验证双握手、A断链/B保持、客户默认路由不变、运行接口丢失恢复、过期本地恢复/过期更新拒绝、实际命令与单服务及状态丢失防回放；证据 `channels-go-netns-final.json`。尚未配置真实A/B机器通道、正式安装/init顺序、页面或租约写代理，不作为整机HA完成证据。
-- 双通道基础 [2cb03a0](https://github.com/mastalee928/payincus/commit/2cb03a0dad21e39015e2426c3c70a332a57079ce) 已推送，[CI 39859758227](https://github.com/mastalee928/payincus/actions/runs/39859758227) 和 [Agent 构建 39859758302](https://github.com/mastalee928/payincus/actions/runs/39859758302) 成功。随后新测试主控arm64通过同源incudal-channels连接两台独立amd64网关专用身份/网段，真实UDP双握手与探测通过，A测试接口停止后B继续、主控健康/默认路由保持，证据 `channels-live-cross-machine.json`。仅使用新建测试接口，不宣称现有客户宿主已双通道覆盖。
+- 双通道基础 [2cb03a0](https://github.com/masta-lee/mastaincus/commit/2cb03a0dad21e39015e2426c3c70a332a57079ce) 已推送，CI 39859758227（原仓库 Actions 运行 39859758227（历史记录，未迁移）） 和 Agent 构建 39859758302（原仓库 Actions 运行 39859758302（历史记录，未迁移）） 成功。随后新测试主控arm64通过同源incudal-channels连接两台独立amd64网关专用身份/网段，真实UDP双握手与探测通过，A测试接口停止后B继续、主控健康/默认路由保持，证据 `channels-live-cross-machine.json`。仅使用新建测试接口，不宣称现有客户宿主已双通道覆盖。
 - 新增显式通道服务安装计划/哈希检查及systemd/OpenRC单元。实际Debian测试主控systemd通过：错误哈希拒绝且现存unit/进程不变；启动前恢复接口，停止服务不删除通道，丢失B接口后启动重建并在有限18秒探测窗口重握手，主控后端进程及默认路由不变；服务内存约5–11MiB，128MiB限额。证据 `channels-systemd-live.json`，安装器相关守卫通过。整机重启、Alpine/OpenRC、真实宿主与发现/页面下发仍待后续验收。
-- 安装阶段[aecc28b](https://github.com/mastalee928/payincus/commit/aecc28b23afb8d71d92dcbefa22babbd4e2f0de3)已推送，[CI 39861248743](https://github.com/mastalee928/payincus/actions/runs/39861248743)成功。后续独立发现增加节点签名路径绑定的双通道领取与持久发布；Go常驻服务可配置独立HTTPS/节点seed/CA，失败报告并保留当前通道。服务器类型/构建/相关守卫通过（`logs/test-run-20261023-060002/summary.txt`），Go全包race/vet通过；独立发现服务守卫增至34项。
+- 安装阶段[aecc28b](https://github.com/masta-lee/mastaincus/commit/aecc28b23afb8d71d92dcbefa22babbd4e2f0de3)已推送，CI 39861248743（原仓库 Actions 运行 39861248743（历史记录，未迁移））成功。后续独立发现增加节点签名路径绑定的双通道领取与持久发布；Go常驻服务可配置独立HTTPS/节点seed/CA，失败报告并保留当前通道。服务器类型/构建/相关守卫通过（`logs/test-run-20261023-060002/summary.txt`），Go全包race/vet通过；独立发现服务守卫增至34项。
 - 实际新测试主控Go经独立见证机HTTPS读取并应用新签名通道代次，旧代次再次发布后被宿主持久水位拒绝；停止发现进程时通道服务持续运行，A/B均可达并记录读取失败，证据 `channels-discovery-live.json`。测试中发现A接口down/up丢失独立回程host route，恢复测试路由后双向探测通过；正式网关服务仍需负责持久协调，不以握手替代路由/通信实证。该试验不是现有客户宿主通信接管，也未验证主控整机灾难、网页发布或资源写者隔离。
 - 网关传输增加签名配置、持久身份/代次、peer墓碑及独立incudal-gateway服务/安装器。Node/Go10共同向量、服务器类型与相关守卫通过（`logs/test-run-20261023-061816/summary.txt`），完整Go race/vet通过。实际隔离内核验证接口down后的peer回程路由恢复、冲突/签名拒绝、撤销落盘中断后重试、旧快照拒绝及墓碑不能复活；证据 `gateway-transport-go-final.json`。
 - 实际两台独立Ubuntu amd64网关安装同源专用传输服务，systemd启动/停止/恢复回程路由及新测试主控双向探测通过，B重启重连测得19289毫秒；证据 `gateway-transport-live.json`。测试机专用网段/身份，不修改客户资源；仍无网关Web/MFA、自主OSS备份、宿主真实审计写代理或完整整机灾难验收，不作为P0–P6全部完成证据。
-- 网关协调[1d1ed2d](https://github.com/mastalee928/payincus/commit/1d1ed2d30c19025bf4cd2a442f33e5cc2cf4de60)已推送，[CI 39864715146](https://github.com/mastalee928/payincus/actions/runs/39864715146)和[Agent构建39864715109](https://github.com/mastalee928/payincus/actions/runs/39864715109)成功。
+- 网关协调[1d1ed2d](https://github.com/masta-lee/mastaincus/commit/1d1ed2d30c19025bf4cd2a442f33e5cc2cf4de60)已推送，CI 39864715146（原仓库 Actions 运行 39864715146（历史记录，未迁移））和Agent构建39864715109（原仓库 Actions 运行 39864715109（历史记录，未迁移））成功。
 - 本地写者审计补齐固定可执行/配置哈希、UID/capability/Incus管理组、procfs二次进程及exec变化、Incus socket/netlink/BPF描述符、调度清单与NOFOLLOW/文件边界，接入受保护维护登记的可选writerAudit。Linux实际未知root进程、文件权限/取消及非root管理组守卫、完整Go race/vet通过，证据 `writer-audit-go.json`；服务器类型/候选守卫通过（`logs/test-run-20261023-064107/summary.txt`）。事实清点不构成旧授权/本地任务实际隔离，ManagedWriterIsolationVerified仍false、原阻断项保留，未据此签发完整宿主回执。
 - 网关独立认证/控制台：scrypt密码、持久TOTP防重放/恢复码消耗/登录锁、账号版本撤销及进程会话；HTTPS Cookie/Origin/CSRF/CSP、限量本机ip/wg状态和固定接口。18项认证及19项HTTPS守卫通过，服务器类型/构建、前端路由、双端构建/dist边界通过；浏览器实际登录、恢复码展开/重放拒绝、刷新、黑白主题/退出，1440/768/390布局无横向溢出。设计源码检查0失败，渲染检查0失败、登录屏留白和skip-link边界识别两条提示已解释；证据 `gateway-console-browser.json`。状态行使用明确样本，不代替真机验收。
 - 两台独立Ubuntu amd64网关的真实HTTPS控制台登录/peer接口和完整回程路由/退出/恢复码重放拒绝通过，独立systemd服务NRestarts=0、各约30MiB内存，传输服务持续运行；证据 `gateway-console-live.json`、`gateway-console-systemd.json`。安装器拦截官方Node包保留的非root构建UID，测试目录修正归属后通过。运行配置已移除初始化密码/MFA材料。当前只读及写门禁/备份阻断如实显示，正式独立证书续期、主控页面配置、应急写、OSS自主备份和完整灾难验收尚未完成。
@@ -5000,11 +5002,11 @@ Owner 要求记录本轮双架构预览全通过的排障方法，新增 [payinc
 - 迁移审计接入实际sshd有效配置、Include/Match旁路检查及root:root/0600 Incus Unix socket；受审调度树哈希绑定目录/链接/文件变化，未知特权进程及旧任务阻断。修正审计自身临时FD误判，只有完整受审事实才标本地写者隔离。完整Go race/vet、SSH认证方式/树变化守卫及显式三namespace集成通过：真实禁用SSH/root socket/procfs/nft采集后签回执，新增调度任务立即拒绝；证据 `migration-audit-go.json`、`migration-audit-isolated.json`。类型/相关守卫通过（`logs/test-run-20261023-082845/summary.txt`）。本集成Unix API为固定替身，未作为真实Incus电源动作、客户宿主或完整分区验收。
 - 后续同源迁移测试在新测试主控arm64隔离mnt/net/pid中连接真实Incus6.0.4，实际SSH有效配置、root-only Unix socket、进程/调度树和nft水位采集→节点回执→签名短租约→固定Incus只读执行通过；原请求重放、3秒实际租约到期和调度变化均拒绝。证据 `migration-runtime-real-incus.json`；完整Go race/vet通过。此项仍使用临时见证签名身份，未执行真实实例电源/远端见证HTTP/客户宿主，完整接管继续施工。
 
-- 本机采集提交 [e9aa5f4](https://github.com/mastalee928/payincus/commit/e9aa5f4b31af9a828a103ac6a8d6e10fb4c4549b) 的 [CI 39830723408](https://github.com/mastalee928/payincus/actions/runs/39830723408) 和 [Agent 构建 39830723410](https://github.com/mastalee928/payincus/actions/runs/39830723410) 成功，未修改VERSION或发布新资产。
+- 本机采集提交 [e9aa5f4](https://github.com/masta-lee/mastaincus/commit/e9aa5f4b31af9a828a103ac6a8d6e10fb4c4549b) 的 CI 39830723408（原仓库 Actions 运行 39830723408（历史记录，未迁移）） 和 Agent 构建 39830723410（原仓库 Actions 运行 39830723410（历史记录，未迁移）） 成功，未修改VERSION或发布新资产。
 - 继续实现host-fence-prepare/v1见证签名准备许可，21项共同Node/Go边界通过；独立incudal-maintenance只读预检严格核对登记/输入、两方签名及最高观察代次后读取本机Incus，尚未完成的网络/凭据/进程审计始终列为阻断，canWrite=false。错误许可不创建状态、高代次后拒绝旧请求、重复预检/错误权限/未知命令与JSON均有命令级守卫。
 - 实际Incus6.0.4隔离环境中，由Node见证生成许可、Go独立维护命令读取真实活动/结束任务并持久记录最高代次；有任务时准确阻断，无任务仍不冒充物理隔离。错误许可/不安全登记拒绝；Go全包race/vet通过，类型检查/服务器编译/相关候选守卫通过。证据 `maintenance-cli-go.json`、`maintenance-real-incus.json` 保留本地。未接入正式Agent main/安装服务，未改宿主或主控管理入口。
 
-- 见证提交 [7eb81a3](https://github.com/mastalee928/payincus/commit/7eb81a339afdea2ac495157cc513e30fa64b3fc3) 的 [CI 39829854002](https://github.com/mastalee928/payincus/actions/runs/39829854002) 与 [Agent 构建 39829853941](https://github.com/mastalee928/payincus/actions/runs/39829853941) 成功，版本不变，未发Agent新版本。
+- 见证提交 [7eb81a3](https://github.com/masta-lee/mastaincus/commit/7eb81a339afdea2ac495157cc513e30fa64b3fc3) 的 CI 39829854002（原仓库 Actions 运行 39829854002（历史记录，未迁移）） 与 Agent 构建 39829853941（原仓库 Actions 运行 39829853941（历史记录，未迁移）） 成功，版本不变，未发Agent新版本。
 - 宿主Go加入独立本机只读Incus操作采集，固定Unix socket GET全部项目操作，安全文件/祖先权限与链接检查、超时/取消、响应大小/操作数量/JSON深度/重复键边界；连接失败、HTTP拒绝/跳转/HTML、未知分组拒绝。Go全包race/vet通过；实际Incus6.0.4隔离任务活动及最终结束分别被Go检出，Node静止门禁同步验证。证据 `quiescence-go-final.json`、`incus-go-quiescence.json`。尚未接入Agent main或宿主写权限执行，原主控/宿主不变。
 
 - 接管前静止检查提交 `7834689` 已推送。后续新增 Node/Go 宿主隔离回执：绑定候选/挑战/bootId及主控代次，要求实际旧连接/凭据隔离和无未结束任务，严格规范字节与30秒有效期。26项跨语言向量、实际Go签名由Node核验、Go race/vet通过；未接入宿主root执行器，签名协议不是实际隔离证明。
@@ -5012,11 +5014,11 @@ Owner 要求记录本轮双架构预览全通过的排障方法，新增 [payinc
 - 见证最终 Windows 23项/Linux 25项守卫通过，包含时钟回拨持久保护和容差内逻辑时间防过期复活。实际Go使用预登记临时节点私钥签署见证挑战回执，Node见证原子激活、进程重开幂等、下一代拒绝旧回执全部通过；证据 `witness-linux.json`、`witness-go-integration.json` 保留本地。此处只有内部状态联调，无真实资源写权限。
 - 回执/见证阶段全套173项通过，`logs/test-run-20261023-020837/summary.txt`；之后时间持久保护另过最终服务器类型检查/编译、Windows候选守卫及Linux见证/Go联调。此阶段没有前端变更，无新版本、生产OTA或真实客户宿主控制变更。
 
-- 后续 [8db15c6](https://github.com/mastalee928/payincus/commit/8db15c6fd28973acf3c83fe25ab36b56bdf60b62) 的 [CI 39822967631](https://github.com/mastalee928/payincus/actions/runs/39822967631) 与 [文档部署 39822967641](https://github.com/mastalee928/payincus/actions/runs/39822967641) 成功，未发新版本。
+- 后续 [8db15c6](https://github.com/masta-lee/mastaincus/commit/8db15c6fd28973acf3c83fe25ab36b56bdf60b62) 的 CI 39822967631（原仓库 Actions 运行 39822967631（历史记录，未迁移）） 与 文档部署 39822967641（原仓库 Actions 运行 39822967641（历史记录，未迁移）） 成功，未发新版本。
 - 补齐只读接管前静止检查 inspectControllerQuiescence：真实 Incus 状态分组、ID/状态码、1024项边界及未知格式拒绝；旧连接/凭据未隔离、SSH进程/本地任务/Incus活动操作存在时阻断。状态码按 Incus 6.0.4 官方定义复核（Operation created=100、Pending=105）。类型检查、服务器编译和已登记候选守卫通过；canActivate 不构成写租约或资源核对成功。
 - 从 Debian 包只提取 Incus 6.0.4 与依赖到专用实验目录，在独立 mount/net/pid 命名空间启动真实守护进程，sys/proc/sys保护且隐藏AppArmor控制入口，不安装系统服务/创建客户实例。延迟镜像任务提交后客户端关闭，真实任务继续运行，检查模块拒绝；测试源释放后任务按预期进入Failure，静止检查通过。Failure只表示任务结束，资源完整性仍须另查。验收脚本及调用适配入仓，证据 `logs/controller-takeover-research-20261022/incus-quiescence.json`；不等同于真实网关接管。
 
-- 基础提交 [5e2a3cc](https://github.com/mastalee928/payincus/commit/5e2a3ccfc341b4018a4a811e2e03fcb0339e8544) 已推送；[CI 39819910429](https://github.com/mastalee928/payincus/actions/runs/39819910429) 和 [Agent 构建 39819910433](https://github.com/mastalee928/payincus/actions/runs/39819910433) 均成功，Agent VERSION 未修改，发布作业未触发。文档站本地构建通过；这些结果不等同于线上接管。
+- 基础提交 [5e2a3cc](https://github.com/masta-lee/mastaincus/commit/5e2a3ccfc341b4018a4a811e2e03fcb0339e8544) 已推送；CI 39819910429（原仓库 Actions 运行 39819910429（历史记录，未迁移）） 和 Agent 构建 39819910433（原仓库 Actions 运行 39819910433（历史记录，未迁移）） 均成功，Agent VERSION 未修改，发布作业未触发。文档站本地构建通过；这些结果不等同于线上接管。
 - 继续补齐内部候选状态库：受限结构登记、跨实例串行/跨进程 mutation.lock、原子持久发布、过期历史候选最高代次验证、同版本幂等及永久撤销墓碑；撤销不删除身份/nonce，不通过普通 enroll 自动复活。尚未开放受权网页/主控管理接口。Windows 20 项、Linux 22 项状态库边界及 29/43 项 HTTPS/CLI 检查通过；真实 Go 客户端经正式 CLI 验证登记→读取→新配置发布→再读取→撤销→拒绝，仍无写授权。最终全套 173 项通过，`logs/test-run-20261023-011442/summary.txt`；服务器编译通过。
 - 新增显式启用的 Linux `scripts/test-controller-fence-netns.py`，在未命名独立网络命名空间验证 8 项网络门禁方向：旧既有/新建管理套接字拒绝、新管理源通过、客户模拟连接保持、重载幂等，并证明已接受的任务不会随连接隔离取消。网络规则仅作用于测试命名空间，未改主控或宿主防火墙；使用 TCP/任务夹具，不冒充真实 WireGuard/SSH/Incus 或完整写者门禁。完整接管仍须执行路径/已启动任务隔离与核对，证据 `logs/controller-takeover-research-20261022/fence-netns.json`。
 
@@ -5069,9 +5071,9 @@ Owner 要求记录本轮双架构预览全通过的排障方法，新增 [payinc
 
 ## 2026-10-22 v1.7.1 正式发行与测试站 OTA 收尾核验
 
-- 发行源码 `9d1e5ba47dd6bf0a0937413892dacfeeb15e4a1d`，标签对象 `b9e5ca546250ada32e9df55455bba454f54f5a4d`。预览 [39614785962](https://github.com/mastalee928/payincus/actions/runs/39614785962)、正式 [39616260761](https://github.com/mastalee928/payincus/actions/runs/39616260761) 均成功：amd64/arm64 构建、归档 root UID/GID 检查、真实发行包首装、212 条迁移、唯一后端、管理员登录、管理网关及备份/预检/恢复/回退/恢复运营演练。OSS 传输在 CI 中使用本地替身。正式发布于北京时间 2026-10-21 22:31:35，非 draft、非 prerelease；本轮 GitHub API 复核 latest 为 v1.7.1。
+- 发行源码 `9d1e5ba47dd6bf0a0937413892dacfeeb15e4a1d`，标签对象 `b9e5ca546250ada32e9df55455bba454f54f5a4d`。预览 39614785962（原仓库 Actions 运行 39614785962（历史记录，未迁移））、正式 39616260761（原仓库 Actions 运行 39616260761（历史记录，未迁移）） 均成功：amd64/arm64 构建、归档 root UID/GID 检查、真实发行包首装、212 条迁移、唯一后端、管理员登录、管理网关及备份/预检/恢复/回退/恢复运营演练。OSS 传输在 CI 中使用本地替身。正式发布于北京时间 2026-10-21 22:31:35，非 draft、非 prerelease；本轮 GitHub API 复核 latest 为 v1.7.1。
 - 两份已下载公开安装包重新校验通过：amd64 109074252 字节 SHA256 `fdae6bbc3caba1ac269ec42446258904ee8d4c68f1a8c996f66ceba4b26fb263`，arm64 108335628 字节 SHA256 `ff202065b25dc4ec2937d6948b51c97c64763d481c7fadb31c32e030df381e57`。校验文件、资产 digest、两份 OTA manifest、版本与源码身份一致；全部归档成员 UID/GID 均为 0，新执行器包含 `--no-same-owner`，关键运行模块与双端边界通过，设计样稿和技能未包含。证据 `logs/release-v1.7.1/verification.json`。
-- 发行源码本地全套 172/172（含双端类型检查，`logs/test-run-20261021-220344/summary.txt`）、双端及后端构建、文档构建通过；Linux [源码 CI 39614784138](https://github.com/mastalee928/payincus/actions/runs/39614784138) 与 [文档 Pages 39614784139](https://github.com/mastalee928/payincus/actions/runs/39614784139) 均成功。
+- 发行源码本地全套 172/172（含双端类型检查，`logs/test-run-20261021-220344/summary.txt`）、双端及后端构建、文档构建通过；Linux 源码 CI 39614784138（原仓库 Actions 运行 39614784138（历史记录，未迁移）） 与 文档 Pages 39614784139（原仓库 Actions 运行 39614784139（历史记录，未迁移）） 均成功。
 - 本轮直接读取已登录测试管理后台：任务 #13 为 `v1.7.0 → v1.7.1`、成功。日志始于北京时间 2026-10-21 22:35:28，22:37:32 完成；实际执行的是旧 `tar -xzf`，随后备份执行器安装成功，直接覆盖此前失败路径。整目录备份 `/opt/incudal.bak.20261021143528`、预迁移数据库备份 `/opt/incudal.bak.20261021143528/db-pre-migrate-v1.7.1-20261021143528.sql` 均在日志中记录。无待执行迁移，数据库/支付就绪、双端静态资源/API/WS、Agent manifest 和日志凭据检查通过，未跳过 DB 检查。页面运行版本为 v1.7.1、Commit 为 `9d1e5ba47dd6`，部署时间为 22:36:31。
 - 2026-10-22 当前测试站健康接口返回 `status=ok`、`recoveryHeld=false`；实际用户概览显示实例 #13/#15 均运行中，名称、San Jose 区域及 2 核/768 MiB/30 GiB 配置可见，用户余额为 999868.90；管理端显示该用户仍有 2 个实例。本轮通过浏览器读取证据，旧 SSH 会话已断开，未重新执行服务器上的全字段/全用户余额快照断言或唯一后端进程检查；此前 #12 的逐项断言见下方，不能当作 #13 的同等验证。
 - 2026-10-22 owner 明确确认：「我已经确定升级至1.7.1，并且正常运行，所有宿主均正常，请记录」。据此记录升级与当前运行状态的 owner 实际确认；下方 Frankfurt 宿主离线等内容为历史故障记录，不代表此次确认时的状态。SSH 补充核验已停止，该确认不等同于重新执行全字段快照断言或后端进程数量检查。
@@ -5085,9 +5087,9 @@ Owner 要求记录本轮双架构预览全通过的排障方法，新增 [payinc
 
 ## 2026-10-21 v1.7.0 正式发行证据
 
-- 发行源码 `33b08791dc62e819fbbff847c38cd9e9ba438a37`，标签对象 `e778882f3e20e62067abdcc289136de3d7e0f407`。预览 [39608386204](https://github.com/mastalee928/payincus/actions/runs/39608386204)、正式 [39609841694](https://github.com/mastalee928/payincus/actions/runs/39609841694) 均通过双架构构建及首装、212 条迁移、唯一后端、管理员登录、管理网关、备份/预检/恢复/回退/恢复运营演练；OSS 传输在 CI 中使用本地替身。正式发布北京时间 21:47:30，非 draft、非 prerelease。
+- 发行源码 `33b08791dc62e819fbbff847c38cd9e9ba438a37`，标签对象 `e778882f3e20e62067abdcc289136de3d7e0f407`。预览 39608386204（原仓库 Actions 运行 39608386204（历史记录，未迁移））、正式 39609841694（原仓库 Actions 运行 39609841694（历史记录，未迁移）） 均通过双架构构建及首装、212 条迁移、唯一后端、管理员登录、管理网关、备份/预检/恢复/回退/恢复运营演练；OSS 传输在 CI 中使用本地替身。正式发布北京时间 21:47:30，非 draft、非 prerelease。
 - 实际下载两份公开安装包，amd64 109195921 字节 SHA256 `fc2a91fe3ca2f0c17cb3a32085f5a1d3a2949d1b06c402b396ac00b3b04917e4`，arm64 108303008 字节 SHA256 `66cf7ac7aaba0440adcdaaedfa694f970545d08827a1cd775c8328f90da1d196`。校验文件、资产 digest、两个 OTA manifest 一致，包内版本/源码/迁移与关键运行模块一致；用户 dist 无管理员换机接口、本地设计及技能未包含。校验记录 `logs/release-v1.7.0/verification.json`。
-- 本地最终全套 172/172（`logs/test-run-20261021-211836/summary.txt`）、双端/后端构建、文档构建和 Lint 通过。Linux [源码 CI 39608386337](https://github.com/mastalee928/payincus/actions/runs/39608386337) 包含 Agent 测试通过，文档 Pages [39608386414](https://github.com/mastalee928/payincus/actions/runs/39608386414) 通过。后续旧 OTA 所有权问题及真实更新证据见上方，不将首装通过等同于旧版本 OTA 验证。
+- 本地最终全套 172/172（`logs/test-run-20261021-211836/summary.txt`）、双端/后端构建、文档构建和 Lint 通过。Linux 源码 CI 39608386337（原仓库 Actions 运行 39608386337（历史记录，未迁移）） 包含 Agent 测试通过，文档 Pages 39608386414（原仓库 Actions 运行 39608386414（历史记录，未迁移）） 通过。后续旧 OTA 所有权问题及真实更新证据见上方，不将首装通过等同于旧版本 OTA 验证。
 
 ## 2026-10-21 PHP 紧急安全通告适用性核对
 
@@ -5143,16 +5145,16 @@ Owner 要求记录本轮双架构预览全通过的排障方法，新增 [payinc
 
 ## 2026-10-21 v1.6.9 发布（完整备份、额外 ZIP 与恢复指南）
 
-- [正式发行 39539930557](https://github.com/mastalee928/payincus/actions/runs/39539930557) 的五个作业全部成功，2026-10-21 11:47:37（北京时间）发布，非 draft、非 prerelease。发行源码及标签对象与上方记录一致；amd64 作业完整执行 172 项检查，planned / executed / passed 均为 172、failed 为 0。双架构 Linux 首装及恢复演练使用本地 OSS 传输替身；真实云端证据单独记录在下方。
+- 正式发行 39539930557（原仓库 Actions 运行 39539930557（历史记录，未迁移）） 的五个作业全部成功，2026-10-21 11:47:37（北京时间）发布，非 draft、非 prerelease。发行源码及标签对象与上方记录一致；amd64 作业完整执行 172 项检查，planned / executed / passed 均为 172、failed 为 0。双架构 Linux 首装及恢复演练使用本地 OSS 传输替身；真实云端证据单独记录在下方。
 - 两种架构的公开发行包已下载复核：amd64 109177028 字节、SHA256 `5f8f97cb8ad928ac31ded4eb9308000f86da819cb663c809814d5d121d705016`；arm64 108318101 字节、SHA256 `780f7036271ace68fab685e686c621f9d0bcfc77fa2b4a8220f4d4f3b96d300a`。各自 `.sha256`、GitHub 资产 digest 与 OTA manifest 一致；两份 manifest 逐字节一致，记录 `gitCommit=54203107fa13`、`minimumUpdaterVersion=v0.0.3`、`buildTime=2026-10-21T03:47:25.946Z`。包内版本、212 条迁移、备份模块、双端工具/说明与发行脚本同源均通过；两种架构的双端 index.html 哈希一致，不含本地 `.env` 或 `oss-review.html`。核验记录：`logs/release-v1.6.9/verification.json`。
-- 同一发行提交的 [源码 CI 39538543643](https://github.com/mastalee928/payincus/actions/runs/39538543643) 与 [文档 Pages 39538543664](https://github.com/mastalee928/payincus/actions/runs/39538543664) 均成功。公开 main 的安装器、恢复工具和说明与本地源码逐字节一致，发行包内上述脚本与 LICENSE 与发行提交逐字节一致。Agent v1.0.3 仍提供 x86_64/aarch64 两种二进制，面板 latest 仍为 v1.6.9。
+- 同一发行提交的 源码 CI 39538543643（原仓库 Actions 运行 39538543643（历史记录，未迁移）） 与 文档 Pages 39538543664（原仓库 Actions 运行 39538543664（历史记录，未迁移）） 均成功。公开 main 的安装器、恢复工具和说明与本地源码逐字节一致，发行包内上述脚本与 LICENSE 与发行提交逐字节一致。Agent v1.0.3 仍提供 x86_64/aarch64 两种二进制，面板 latest 仍为 v1.6.9。
 - 保留原自动恢复 `payload.enc` 与完成标记，额外上传按 UTC 日期时间命名、使用同一密码的 AES-256 ZIP/ZIP64。ZIP 包含同源整库归档、可移植整库 SQL、按表排列 SQL、权限/配置/身份、快照清单、完整性报告、中文说明和交互工具。
 - 备份在共享快照下核对每张表的完整记录、多重集、结构、大对象及归档序列状态；保留原归属/授权和 globals。实际临时库恢复匹配后才打包；ZIP 每项解密哈希与两份 OSS 对象回读均通过才发布 complete 标记。清理失败显示警告；中断清理覆盖额外 ZIP，且限于当前安装命名空间。
 - 页面底部直接提供两种中文恢复场景和说明/工具下载；工具使用目标机已安装执行器，交互读取秘密并固定读取目标 .env。旧加密格式读取保持兼容，旧包不会补生成 ZIP。
 - 本地 172 项完整检查全部通过（`logs/test-run-20261021-103403/summary.txt`），双端/后端构建和 dist 边界、安装器守卫、冻结依赖通过；Lint 0 错误（663 条既有样式警告）。后续数据库 SQL 导出调整另跑类型/平台备份守卫/后端构建。说明和工具公开副本与发行脚本同源校验通过。
 - 浏览器真实点击恢复步骤、说明/工具下载通过；390px 深色样本页面宽度与 scrollWidth 均 390，无横向溢出。样本使用模拟接口；不等同于云端上传或实际恢复。机械 UI 检查返回空列表。
 - 测试主控恢复工具 `status` 实际调用成功；公网下载与安装脚本副本逐字节一致（SHA256 `6116600a752ab8df540a002a25c82a1b362ddd3594ee367964753c780480d039`）。新增发行首装断言核对双端公开工具/说明与执行器脚本的副本一致。
-- 授权测试主控已热更新，唯一后端健康且 NRestarts=0；更新前保存数据库、运行配置、证书及受影响文件。真实 Linux 隔离演练已通过逐表 SQL、整库 SQL 与原生归档恢复一致性，以及金额、数组下标、序列、大对象、缺表、外部表拒绝等检查。真实 OSS 已验证：备份 e0b7ab24-8998-4814-899a-902f134e5d33，ZIP `payincus-backup-20261021-031730-UTC.zip`（北京时间 11:17:30）1,845,157 字节；相同密码解密全部文件、126 表/1,318 行/118 序列、整库 SQL 与原生归档实际恢复一致，原 payload.enc 预检成功。预检任务 1a91e48a-009d-4f3a-a0f0-83c11037a4a2，配置 revision 与恢复保护保持不变。[双架构预览 39538838380](https://github.com/mastalee928/payincus/actions/runs/39538838380) 和 [正式发行 39539930557](https://github.com/mastalee928/payincus/actions/runs/39539930557) 均通过，包含 212 条迁移、唯一后端、双端登录、备份/预检/恢复/回退/恢复运营、密钥一致性与全库 SQL/原生恢复核对。生产 OTA 未执行。
+- 授权测试主控已热更新，唯一后端健康且 NRestarts=0；更新前保存数据库、运行配置、证书及受影响文件。真实 Linux 隔离演练已通过逐表 SQL、整库 SQL 与原生归档恢复一致性，以及金额、数组下标、序列、大对象、缺表、外部表拒绝等检查。真实 OSS 已验证：备份 e0b7ab24-8998-4814-899a-902f134e5d33，ZIP `payincus-backup-20261021-031730-UTC.zip`（北京时间 11:17:30）1,845,157 字节；相同密码解密全部文件、126 表/1,318 行/118 序列、整库 SQL 与原生归档实际恢复一致，原 payload.enc 预检成功。预检任务 1a91e48a-009d-4f3a-a0f0-83c11037a4a2，配置 revision 与恢复保护保持不变。双架构预览 39538838380（原仓库 Actions 运行 39538838380（历史记录，未迁移）） 和 正式发行 39539930557（原仓库 Actions 运行 39539930557（历史记录，未迁移）） 均通过，包含 212 条迁移、唯一后端、双端登录、备份/预检/恢复/回退/恢复运营、密钥一致性与全库 SQL/原生恢复核对。生产 OTA 未执行。
 
 ## 2026-10-20 OSS 设置修复（测试主控热更新，未发版）
 
@@ -5170,18 +5172,18 @@ Owner 要求记录本轮双架构预览全通过的排障方法，新增 [payinc
 - 本地验证：172 项全量检查全部通过，双端和后端构建、dist 边界、Bash 安装守卫通过，Lint 0 错误；桌面/窄屏浅深色页面和恢复确认已检查。
 - 新增 `scripts/smoke-platform-backup.mjs`，双架构首装 CI 已在一次性 Linux VM 上通过真实 PostgreSQL/systemd 的备份、预检、恢复、回退、恢复登录和跨主密钥一致性检查；仅 OSS 传输以本地文件替代。两边均应用 212 条迁移，确认唯一后端、双端访问、受限管理网关以及配套 Agent v1.0.3 下载和运行。
 - 云端 OSS 权限、实际上传与云端异常清理尚待专用测试桶验收；平台备份不包含 VPS 磁盘，换 IP 的 WireGuard 自动重连仍待后续专项。
-- [预览运行 39384509063](https://github.com/mastalee928/payincus/actions/runs/39384509063) 成功：双架构构建与首装/恢复验证成功，发布作业按预览设计 skipped。源码 [CI 39384508902](https://github.com/mastalee928/payincus/actions/runs/39384508902) 和文档 Pages [39384508903](https://github.com/mastalee928/payincus/actions/runs/39384508903) 成功。
-- [正式发布 39386136385](https://github.com/mastalee928/payincus/actions/runs/39386136385) 的五个作业全部 success：arm64 构建、amd64 构建、两种架构首装/恢复验证、发布 Release。Release 于北京时间 2026-10-20 15:30:53 发布，非 draft、非 prerelease；公开 release notes 已补齐使用和验收边界。
+- 预览运行 39384509063（原仓库 Actions 运行 39384509063（历史记录，未迁移）） 成功：双架构构建与首装/恢复验证成功，发布作业按预览设计 skipped。源码 CI 39384508902（原仓库 Actions 运行 39384508902（历史记录，未迁移）） 和文档 Pages 39384508903（原仓库 Actions 运行 39384508903（历史记录，未迁移）） 成功。
+- 正式发布 39386136385（原仓库 Actions 运行 39386136385（历史记录，未迁移）） 的五个作业全部 success：arm64 构建、amd64 构建、两种架构首装/恢复验证、发布 Release。Release 于北京时间 2026-10-20 15:30:53 发布，非 draft、非 prerelease；公开 release notes 已补齐使用和验收边界。
 - 两份公开安装包已实际下载复核：amd64 106775535 字节，sha256 `74d97518d0807e3712b803fe6fc5e75436694df8808977f9174f1ca25cdd6f33`；arm64 105928055 字节，sha256 `827311f5721827518de9e548f918a15b756045fcd47c5cbe083d679840b8ff09`。校验文件、版本化及通用 OTA manifest 一致，manifest 和包内元数据均指向 `v1.6.8` / `44d26132f02f`。
 - 包内备份 worker/CLI/服务/安装脚本、完整迁移、双端入口与 LICENSE 已确认；双架构前端入口 HTML 哈希一致。未包含 `.env` 或本地 UI 样本。安装包及本地复核记录保存在 Git 忽略的 `logs/release-v1.6.8/`。
 - 操作要求已公开到 `docs-site/docs/deployment/oss-backup.md`。本次只发布 GitHub 源码/标签/Release，没有执行生产 OTA。后续台账/版本日志文档提交不改变发行标签及安装包内容。
 
 ## 2026-10-18 v1.6.7 发布（机器池面板改版、区域三语化与客户实例打磨）
 
-- 发行源码 `fa716ee699e4ff77400b21bd093968c8be5f0dbc`（`ec7c329` 仪表盘负载条修复、`f006276`/`e74c81a` 机器池面板改版、`0563db7` 选购区域卡片瘦身、`d7b609c` 区域三语与 OCI 机型名、`6a96e1e` 重置密码与精简销毁弹窗、`58e9e9b` 实例面打磨、`f141fa8` 钱包推荐计划隐藏与余额流水文案迁移、`fa716ee` 版本准备）；注解标签 `v1.6.7`（对象 `da4fdd3d1087d8cc59a8b0c4fcedba637ae95a6a`）。[正式发布运行](https://github.com/mastalee928/payincus/actions/runs/39141400802) 运行级结论 success，五个作业全部成功：构建 arm64 2m32s、构建 amd64 5m36s、全新安装验证 arm64 1m23s、全新安装验证 amd64 1m25s、发布 Release 19s（15:38:34Z→15:46:01Z；publishedAt 2026-10-18T15:45:58Z，非 draft、非 prerelease；GitHub 面板 latest 为 v1.6.7）。
-- [预览运行](https://github.com/mastalee928/payincus/actions/runs/39140719213)（7m42s）：两个构建作业成功（arm64 2m35s、amd64 5m54s），双架构全新安装验证均成功（arm64 1m39s、amd64 1m34s），`发布 Release` 按预览设计 skipped。
+- 发行源码 `fa716ee699e4ff77400b21bd093968c8be5f0dbc`（`ec7c329` 仪表盘负载条修复、`f006276`/`e74c81a` 机器池面板改版、`0563db7` 选购区域卡片瘦身、`d7b609c` 区域三语与 OCI 机型名、`6a96e1e` 重置密码与精简销毁弹窗、`58e9e9b` 实例面打磨、`f141fa8` 钱包推荐计划隐藏与余额流水文案迁移、`fa716ee` 版本准备）；注解标签 `v1.6.7`（对象 `da4fdd3d1087d8cc59a8b0c4fcedba637ae95a6a`）。正式发布运行（原仓库 Actions 运行 39141400802（历史记录，未迁移）） 运行级结论 success，五个作业全部成功：构建 arm64 2m32s、构建 amd64 5m36s、全新安装验证 arm64 1m23s、全新安装验证 amd64 1m25s、发布 Release 19s（15:38:34Z→15:46:01Z；publishedAt 2026-10-18T15:45:58Z，非 draft、非 prerelease；GitHub 面板 latest 为 v1.6.7）。
+- 预览运行（原仓库 Actions 运行 39140719213（历史记录，未迁移））（7m42s）：两个构建作业成功（arm64 2m35s、amd64 5m54s），双架构全新安装验证均成功（arm64 1m39s、amd64 1m34s），`发布 Release` 按预览设计 skipped。
 - 公开资产：`incudal-v1.6.7-linux-amd64.tar.gz` 104572352 字节 sha256 `b85ac4b269a59b6c3580bdc55201102a4fe386ee27bba6e899304332959d61dd`；`incudal-v1.6.7-linux-arm64.tar.gz` 103739504 字节 sha256 `5073b7b6f5fe0102c55db3c808ce1d6036daab993daebb70e6920e4e35c55654`；两份 `.sha256` 已重新下载复核通过；`incudal-v1.6.7-ota-manifest.json` 与通用 `ota-manifest.json` 内容一致，记录 `gitCommit=fa716ee699e4`、`minimumUpdaterVersion=v0.0.3`；发行包内 user/admin `index.html` 与本地构建逐字节一致（双架构相同）。
-- 同一提交的源码 CI（[39140374936](https://github.com/mastalee928/payincus/actions/runs/39140374936)、[39140704865](https://github.com/mastalee928/payincus/actions/runs/39140704865)）与文档站 Pages 部署（[39140704831](https://github.com/mastalee928/payincus/actions/runs/39140704831)）成功。
+- 同一提交的源码 CI（39140374936（原仓库 Actions 运行 39140374936（历史记录，未迁移））、39140704865（原仓库 Actions 运行 39140704865（历史记录，未迁移）））与文档站 Pages 部署（39140704831（原仓库 Actions 运行 39140704831（历史记录，未迁移）））成功。
 - 本地验证：`node scripts/run-tests.mjs` 全部通过（planned / executed / passed 171、failed 0、5m46s）；前后端类型检查、双端生产构建与 dist 边界守卫、Lint（0 错误）通过。
 - 本次发布内容：
   - 管理端机器池面板改版（行操作菜单、地区筛选 chips、紧凑行展示公网 IPv4 与 OCI 账号）；选购页区域卡片去掉库存状态行。
@@ -5195,10 +5197,10 @@ Owner 要求记录本轮双架构预览全通过的排障方法，新增 [payinc
 
 ## 2026-10-18 v1.6.6 发布（用户 Telegram 通知、管理端分类告警机器人与管理员建号）
 
-- 发行源码 `9f1a14a799a9600a4aa6a3c84f9cffa7d68ad087`（含 `1b109d3` 的用户 Telegram 通知与逐用户聚合、`2e4b71b`/`d4b8621` 管理端分类告警机器人、`7a43fa8` 管理员建号、`ea3fe38` 仪表盘机型展示）；注解标签 `v1.6.6`（对象 `55bdb1dcfba1197b42a050ad8bf130afccaf6410`）。[正式发布运行](https://github.com/mastalee928/payincus/actions/runs/39109797096) 运行级结论 success，五个作业全部成功：构建 arm64 2m33s、构建 amd64 3m49s、全新安装验证 amd64 1m24s、全新安装验证 arm64 1m29s、发布 Release 24s（publishedAt 2026-10-18T08:06:29Z，非 draft、非 prerelease）。
-- [预览运行](https://github.com/mastalee928/payincus/actions/runs/39109288989)（7m08s）：两个构建作业成功（arm64 2m33s、amd64 5m34s），双架构全新安装验证均成功（arm64 1m25s、amd64 1m30s），`发布 Release` 按预览设计 skipped。
+- 发行源码 `9f1a14a799a9600a4aa6a3c84f9cffa7d68ad087`（含 `1b109d3` 的用户 Telegram 通知与逐用户聚合、`2e4b71b`/`d4b8621` 管理端分类告警机器人、`7a43fa8` 管理员建号、`ea3fe38` 仪表盘机型展示）；注解标签 `v1.6.6`（对象 `55bdb1dcfba1197b42a050ad8bf130afccaf6410`）。正式发布运行（原仓库 Actions 运行 39109797096（历史记录，未迁移）） 运行级结论 success，五个作业全部成功：构建 arm64 2m33s、构建 amd64 3m49s、全新安装验证 amd64 1m24s、全新安装验证 arm64 1m29s、发布 Release 24s（publishedAt 2026-10-18T08:06:29Z，非 draft、非 prerelease）。
+- 预览运行（原仓库 Actions 运行 39109288989（历史记录，未迁移））（7m08s）：两个构建作业成功（arm64 2m33s、amd64 5m34s），双架构全新安装验证均成功（arm64 1m25s、amd64 1m30s），`发布 Release` 按预览设计 skipped。
 - 公开资产：`incudal-v1.6.6-linux-amd64.tar.gz` 104591129 字节 sha256 `4cef381fe6510021d417590bb06acf3d3dc07970b0a5919cae33df478bf5d08c`；`incudal-v1.6.6-linux-arm64.tar.gz` 103721559 字节 sha256 `5fda24182f54e933579e7b37e1a1605a30a098d8cbe9f19d94d0806d03e5bd9c`；两份 `.sha256` 与 `incudal-v1.6.6-ota-manifest.json`（另含通用 `ota-manifest.json`，两者内容一致），manifest 记录 `gitCommit=9f1a14a799a9`、`minimumUpdaterVersion=v0.0.3`、`buildTime=2026-10-18T08:06:19.402Z`；两种架构发行包已重新下载并逐字节复核体积与 sha256 一致。
-- 同一提交的源码 CI（[39109288202](https://github.com/mastalee928/payincus/actions/runs/39109288202)，Lint & Type Check 1m26s + Build 2m30s）与文档站 Pages 部署（[39109288025](https://github.com/mastalee928/payincus/actions/runs/39109288025)，build 26s + deploy 8s）均成功。
+- 同一提交的源码 CI（39109288202（原仓库 Actions 运行 39109288202（历史记录，未迁移）），Lint & Type Check 1m26s + Build 2m30s）与文档站 Pages 部署（39109288025（原仓库 Actions 运行 39109288025（历史记录，未迁移）），build 26s + deploy 8s）均成功。
 - 本地验证：9f1a14a 上 `node scripts/run-tests.mjs` 全部通过（planned / executed / passed 171、failed 0、5m40s）；前后端类型检查、双端生产构建与 dist 边界守卫、Lint（0 错误、无新增告警）通过。守卫清单 169→171：新增 `test:user-telegram-notify-guards` 与 `test:admin-alert-bots-guards`。
 - 9f1a14a 同时包含版本位（三个 `package.json`）、`README.md`、`AGENTS.md` 更新至 v1.6.6 与新增 `docs-site/release-notes/v1.6.6.md`；文档站版本日志按 v1.6.6 重新生成并随本次台账提交。
 - 本次发布内容：
@@ -5212,10 +5214,10 @@ Owner 要求记录本轮双架构预览全通过的排障方法，新增 [payinc
 
 ## 2026-10-18 v1.6.5 发布（Windows 工具链与 Agent 版本清单取数健壮性）
 
-- 发行源码 `3fb8a0eb9dd95088addf221e538a9eeac4e687f3`（含 `67efd41` 的 Agent 403 修复与 `cea16a6` 的 Windows 工具链落地）；注解标签 `v1.6.5`（对象 `26a2651773e813b7292506c9a7fd776b4672bb16`）。[正式发布运行](https://github.com/mastalee928/payincus/actions/runs/39088069681) 运行级结论 success；已取得用时的作业：amd64 构建 3m28s、双架构全新安装验证各 1m30s、发布 Release 25s（publishedAt 2026-10-18T01:58:25Z，非 draft、非 prerelease）。arm64 构建作业在 GitHub 作业接口里结论字段缺失（status 仍为 in_progress、completedAt 为空），属接口数据不一致；该架构的发行包与全新安装验证均已成功产出并通过。
-- [预览运行](https://github.com/mastalee928/payincus/actions/runs/39087584812)（7m25s）：两个构建作业成功（arm64 2m42s、amd64 5m52s），双架构全新安装验证均成功（arm64 1m24s、amd64 1m20s，amd64 本次首轮即过；此前 v1.6.3 与 v1.6.4 预览各因新装面板匿名抓取 GitHub 限流失败一次），`发布 Release` 按预览设计 skipped。
+- 发行源码 `3fb8a0eb9dd95088addf221e538a9eeac4e687f3`（含 `67efd41` 的 Agent 403 修复与 `cea16a6` 的 Windows 工具链落地）；注解标签 `v1.6.5`（对象 `26a2651773e813b7292506c9a7fd776b4672bb16`）。正式发布运行（原仓库 Actions 运行 39088069681（历史记录，未迁移）） 运行级结论 success；已取得用时的作业：amd64 构建 3m28s、双架构全新安装验证各 1m30s、发布 Release 25s（publishedAt 2026-10-18T01:58:25Z，非 draft、非 prerelease）。arm64 构建作业在 GitHub 作业接口里结论字段缺失（status 仍为 in_progress、completedAt 为空），属接口数据不一致；该架构的发行包与全新安装验证均已成功产出并通过。
+- 预览运行（原仓库 Actions 运行 39087584812（历史记录，未迁移））（7m25s）：两个构建作业成功（arm64 2m42s、amd64 5m52s），双架构全新安装验证均成功（arm64 1m24s、amd64 1m20s，amd64 本次首轮即过；此前 v1.6.3 与 v1.6.4 预览各因新装面板匿名抓取 GitHub 限流失败一次），`发布 Release` 按预览设计 skipped。
 - 公开资产：`incudal-v1.6.5-linux-amd64.tar.gz` 104530875 字节 sha256 `8b3676b9dcf4e041cb7f24dcb83a3eb4a504393b5be357a5fa787da104889399`；`incudal-v1.6.5-linux-arm64.tar.gz` 103700049 字节 sha256 `d9273ecf88ee3d4670b4fcf2df528ec7274f731e03cb0be56d30a13941fa4633`；两份 `.sha256` 与 `incudal-v1.6.5-ota-manifest.json`（另含通用 `ota-manifest.json`），manifest 记录 `gitCommit=3fb8a0eb9dd9`、`minimumUpdaterVersion=v0.0.3`。
-- 同一提交的源码 CI（[39087584675](https://github.com/mastalee928/payincus/actions/runs/39087584675)，Lint & Type Check 1m45s + Build 2m32s）与文档站 Pages 部署（[39087584738](https://github.com/mastalee928/payincus/actions/runs/39087584738)，42s）均成功。
+- 同一提交的源码 CI（39087584675（原仓库 Actions 运行 39087584675（历史记录，未迁移）），Lint & Type Check 1m45s + Build 2m32s）与文档站 Pages 部署（39087584738（原仓库 Actions 运行 39087584738（历史记录，未迁移）），42s）均成功。
 - 本地验证：main 上 `node scripts/run-tests.mjs` 全部通过（planned / executed / passed 169、failed 0、5m44s）；前后端类型检查、双端生产构建与 dist 边界守卫、`pnpm --dir docs-site --ignore-workspace check:deployment`、`bash scripts/test-install-panel-guards.sh`、`node scripts/run-tests.mjs --check` 与 `pnpm install --frozen-lockfile` 均通过。根 `pnpm test` 现为 `node scripts/run-tests.mjs` + 根 `package.json` 的 169 条 `testGuards` 清单（逐条 spawn；旧版「`&&` 串成超长脚本」在 Windows 上会被 shell 静默截断却退出 0，是本次修复的假绿来源）。
 - 本次发布内容：
   - Agent 版本清单取数健壮性：`server/src/routes/agent.ts` 的 GitHub 请求改为有界重试（仅重试 403 rate limit / 429 / 5xx 与网络错误，遵守 Retry-After，其它 4xx 立即失败），连续失败且已有缓存时继续提供旧清单并提示配置 `INCUDAL_AGENT_RELEASE_TOKEN`；`.github/workflows/release.yml` 的全新安装验证注入 `github.token`（本次 amd64 作业日志显示该变量已传入且全程无 403 行），`scripts/install-panel.sh` 与 `scripts/init-env.sh` 把环境中的该变量写入 `.env`。
@@ -5232,10 +5234,10 @@ Owner 要求记录本轮双架构预览全通过的排障方法，新增 [payinc
 
 ## 2026-10-18 v1.6.4 发布（结算可选在线支付渠道、用户导航调整与回调防伪断言）
 
-- 发行源码 `41d87820504977ffb24f895ab6c735a67f17fdaa`；注解标签 `v1.6.4`（对象 `8d39a04ea5d084378664e24ff0c0326758c2d744`）。[正式发布运行](https://github.com/mastalee928/payincus/actions/runs/39053295718) 五个作业全部成功：amd64 / arm64 构建、双架构全新安装验证与发布 Release（`publishedAt 2026-10-17T17:26:38Z`，非 draft、非 prerelease）。
-- [预览运行](https://github.com/mastalee928/payincus/actions/runs/39052508600)：两个构建作业成功；`全新安装验证 (arm64)` 首轮通过，`全新安装验证 (amd64)` 首次因新装面板抓取 Agent release 命中 GitHub 403 限流失败（`fetchJsonFromGitHub`，`server/dist/routes/agent.js:404`），`gh run rerun --failed` 重跑后通过，整体结论成功。
+- 发行源码 `41d87820504977ffb24f895ab6c735a67f17fdaa`；注解标签 `v1.6.4`（对象 `8d39a04ea5d084378664e24ff0c0326758c2d744`）。正式发布运行（原仓库 Actions 运行 39053295718（历史记录，未迁移）） 五个作业全部成功：amd64 / arm64 构建、双架构全新安装验证与发布 Release（`publishedAt 2026-10-17T17:26:38Z`，非 draft、非 prerelease）。
+- 预览运行（原仓库 Actions 运行 39052508600（历史记录，未迁移））：两个构建作业成功；`全新安装验证 (arm64)` 首轮通过，`全新安装验证 (amd64)` 首次因新装面板抓取 Agent release 命中 GitHub 403 限流失败（`fetchJsonFromGitHub`，`server/dist/routes/agent.js:404`），`gh run rerun --failed` 重跑后通过，整体结论成功。
 - 公开资产：`incudal-v1.6.4-linux-amd64.tar.gz` 104538519 字节 sha256 `5594bdfdc561d315c81f4893cf7ae536f993178f920cd38c3769009d84f310e0`；`incudal-v1.6.4-linux-arm64.tar.gz` 103683820 字节 sha256 `48d5ecc531588ec3deabe517660037283fa5408b39faa34c0d6b344742a6e695`；两份 `.sha256` 与 `incudal-v1.6.4-ota-manifest.json`（另含通用 `ota-manifest.json`），manifest 记录 `gitCommit=41d878205049`、`minimumUpdaterVersion=v0.0.3`。
-- 同一提交的源码 CI（[39052465293](https://github.com/mastalee928/payincus/actions/runs/39052465293)，Lint & Type Check + Build）与文档站 Pages 部署（[39052465326](https://github.com/mastalee928/payincus/actions/runs/39052465326)）均成功。
+- 同一提交的源码 CI（39052465293（原仓库 Actions 运行 39052465293（历史记录，未迁移）），Lint & Type Check + Build）与文档站 Pages 部署（39052465326（原仓库 Actions 运行 39052465326（历史记录，未迁移）））均成功。
 - 本地验证：前后端类型检查、client ESLint（0 error，保留既有样式警告；改动的 CheckoutView 无新增告警、DashboardView 唯一 1 条为 HEAD 既有）、双端生产构建与 dist 边界守卫、文档站构建与 `check:deployment` 全部通过。全套 167 条守卫逐条核验：首次整串（`npm_config_script_shell=bash pnpm test`）在 `user-destroy-incus-order` 之后被 Windows 侧命令串截断（`None of the selected packages has a "test:ins" script`）却仍返回 0；比对根脚本命令清单后补跑缺失的 20 条（`instance-delete-incus-order` 至 `host-public-ipv6`），全部通过，覆盖完整。CI 侧同一守卫步骤在 Linux amd64 上亦为 success。
 - 本次发布内容：
   - 购物车结算（含选购页「加入并结算」）可选支付方式：账户余额，或后台已启用的任一在线支付渠道。选网关渠道时按整单金额创建充值单，服务端 `calculateRechargeAmountForCredit` 把手续费补足（易支付手续费外加、其它渠道内扣向上取整，并用 `calculateActualAmount` 逐分校验），保证实际到账不少于订单金额；到账后仍由余额完成整单扣款与开通，购买订单没有新增支付状态。
@@ -5252,10 +5254,10 @@ Owner 要求记录本轮双架构预览全通过的排障方法，新增 [payinc
 
 ## 2026-10-17 v1.6.3 发布（在线更新的失败可见性与阻塞修复）
 
-- 发行源码 `f8d2ca450e01a10a54ae5f57b75e4f80821371dd`；注解标签 `v1.6.3`（对象 `5d7b3e170a6de887256c5ccc2ba32e8e8d7bb58f`）。[正式发布运行](https://github.com/mastalee928/payincus/actions/runs/39041293327) 五个作业全部成功：amd64 / arm64 构建、双架构全新安装验证与发布 Release。
-- [预览运行](https://github.com/mastalee928/payincus/actions/runs/39040445406) 首次的 `全新安装验证 (amd64)` 因新装面板抓取 Agent release 命中 GitHub 403 限流而失败（`fetchJsonFromGitHub`，`server/dist/routes/agent.js`），重跑该作业后通过、整体结论为成功；该健壮性缺口已单独记录待修，本次未改动相关代码。
+- 发行源码 `f8d2ca450e01a10a54ae5f57b75e4f80821371dd`；注解标签 `v1.6.3`（对象 `5d7b3e170a6de887256c5ccc2ba32e8e8d7bb58f`）。正式发布运行（原仓库 Actions 运行 39041293327（历史记录，未迁移）） 五个作业全部成功：amd64 / arm64 构建、双架构全新安装验证与发布 Release。
+- 预览运行（原仓库 Actions 运行 39040445406（历史记录，未迁移）） 首次的 `全新安装验证 (amd64)` 因新装面板抓取 Agent release 命中 GitHub 403 限流而失败（`fetchJsonFromGitHub`，`server/dist/routes/agent.js`），重跑该作业后通过、整体结论为成功；该健壮性缺口已单独记录待修，本次未改动相关代码。
 - 公开资产：`incudal-v1.6.3-linux-amd64.tar.gz` 104550174 字节 sha256 `5984472d6c9937e2ebddf9d82c752676fdcc358abaebafa64097c6cff60a4ecc`；`incudal-v1.6.3-linux-arm64.tar.gz` 103705434 字节 sha256 `6ea07ce7de0e90ded81c9c5da9ca0d588c22692b25939235f553a9adda02833f`；两份 `.sha256` 与 `incudal-v1.6.3-ota-manifest.json`（另含通用 `ota-manifest.json`），manifest 记录 `gitCommit=f8d2ca450e01`、`minimumUpdaterVersion=v0.0.3`。
-- 同一提交的源码 CI（[39040332118](https://github.com/mastalee928/payincus/actions/runs/39040332118)，Lint & Type Check + Build）与文档站 Pages 部署（[39040332125](https://github.com/mastalee928/payincus/actions/runs/39040332125)）均成功；本地双端类型检查、ESLint（0 error）、全套 169 项守卫（CI 同款占位 `DATABASE_URL`）、双端构建与 dist 边界、文档站构建、`pnpm install --frozen-lockfile` 全部通过。
+- 同一提交的源码 CI（39040332118（原仓库 Actions 运行 39040332118（历史记录，未迁移）），Lint & Type Check + Build）与文档站 Pages 部署（39040332125（原仓库 Actions 运行 39040332125（历史记录，未迁移）））均成功；本地双端类型检查、ESLint（0 error）、全套 169 项守卫（CI 同款占位 `DATABASE_URL`）、双端构建与 dist 边界、文档站构建、`pnpm install --frozen-lockfile` 全部通过。
 - 测试主控（`51.170.43.169`，旧布局）经面板 OTA 任务 `#3` 由 v1.6.2 升至 v1.6.3：`startedAt 14:43:38Z`、`finishedAt 14:45:35Z`，日志结尾 `System update completed successfully`；更新前整目录备份 `/opt/incudal.bak.20261017144338`（内含 `db-pre-migrate-v1.6.3-*.sql`）。升级后唯一后端 active、`NRestarts=0`、`/api/health` 正常，`version.json` 为 v1.6.3（`gitCommit=f8d2ca450e01`）。
 - 真机验证新行为（临时移走 root helper 以模拟“unit 已启动但 worker 未运行”，此状态下不可能真正安装；验证后 helper 复原、清单重新封存）：
   - 任务 `#4` 未在 24 秒内被认领，被**立即标记为失败**，原因是“更新任务未在 24 秒内启动（unit failed/failed，Result=exit-code，ExecMainStatus=203）…排查命令：journalctl -u 'incudal-online-update@4.service'”；同 unit 的 journal 显示 `Unable to locate executable '/usr/local/libexec/incudal/incudal-online-task'` 与 `status=203/EXEC`，与面板显示的原因一致。
@@ -5266,7 +5268,7 @@ Owner 要求记录本轮双架构预览全通过的排障方法，新增 [payinc
 
 ## 2026-10-16 实例高级配置仅限管理员（发布后源码与测试部署）
 
-- 源码提交 `b9c1e73211a642d0c90f1de6e187ec4b906f965e` 已推送 main；[源码 CI](https://github.com/mastalee928/payincus/actions/runs/38911749969) 的类型、Lint、Agent 测试及构建均通过。本轮没有新 Release 或 OTA，现有正式安装包不包含本节改动。
+- 源码提交 `b9c1e73211a642d0c90f1de6e187ec4b906f965e` 已推送 main；源码 CI（原仓库 Actions 运行 38911749969（历史记录，未迁移）） 的类型、Lint、Agent 测试及构建均通过。本轮没有新 Release 或 OTA，现有正式安装包不包含本节改动。
 - `InstanceDetailView.vue` 从用户端移除整个“配置”页签，以入口条件隔离组件加载及渲染；管理员端保留。用户端生产产物不再包含进程上限提升的界面组件，直接指定配置页签也不能显示它。
 - `server/src/routes/instances.ts` 对配置读取、进程上限提升、SWAP 开关及原已禁用的高级配置写入统一使用管理员认证。`batch-config.ts` 同时限制高级配置及 SWAP 字段，非管理员宿主机所有者不能通过批量接口绕过；不调整实例现有资源值。
 - 新增不连接数据库或宿主机的真实路由回归，覆盖未登录、实例所有者、其他用户、非管理员宿主机所有者、HEAD/直接请求、伪装请求字段、批量修改的全部受限字段，以及管理员读取和原有参数校验。新增检查已加入根测试流程。Client/Server 类型检查、前端路由、实例路由、管理员权限、鉴权会话、操作冲突、批量配置、i18n、双端构建与产物边界守卫通过。
@@ -5286,7 +5288,7 @@ Owner 要求记录本轮双架构预览全通过的排障方法，新增 [payinc
 - 本次整合 main 上的首页、45 区域选购、购物车与 UPAY Pro 更新，以及此前已在测试环境验收的多 IPv6 交付；保留 `ef798a5` 的 HTTPS 收银台修复。下方 IPv6 专项中的“未提交、未发布”为当时状态。
 - 配套 Agent 版本提高为 `v1.0.3`。Agent 发布增加真实 Linux 网络命名空间验收，覆盖双 IPv6 数据包、协议限制、地址生命周期与路由保留。
 - 本地按根 `test` 脚本逐项执行的 168 项检查全部通过，涵盖双端类型、业务和前端守卫；新的安装验收脚本通过语法与来源检查。发行包新装验收增加 IPv6 数据字段、发布源码版本及正式 Agent 双架构下载、大小、SHA256 和可执行能力检查。
-- [预览安装](https://github.com/mastalee928/payincus/actions/runs/38877337714) 与 [正式发行](https://github.com/mastalee928/payincus/actions/runs/38878414833) 均通过双架构全新安装。公开面板包、OTA manifest、SHA256 和 Agent 双架构资产已独立下载核对；前述直接部署记录与本次 GitHub 新装证据分开保存。
+- 预览安装（原仓库 Actions 运行 38877337714（历史记录，未迁移）） 与 正式发行（原仓库 Actions 运行 38878414833（历史记录，未迁移）） 均通过双架构全新安装。公开面板包、OTA manifest、SHA256 和 Agent 双架构资产已独立下载核对；前述直接部署记录与本次 GitHub 新装证据分开保存。
 - 现有测试主控的更新检查返回 `latest=v1.6.2`、`updateAvailable=true`、`canManageUpdates=true`，运行标识仍为 `v1.6.1-upaypro.3`，本轮没有执行面板 OTA。两台宿主已通过正常自动升级流程运行正式 Agent `v1.0.3`，心跳、一个/两个 IPv6、库存及端口协议状态正常。
 
 ## 2026-10-16 首页与选购界面源码
@@ -5298,7 +5300,7 @@ Owner 要求记录本轮双架构预览全通过的排障方法，新增 [payinc
 
 ## 2026-10-16 UPAY Pro 接入与测试主控更新
 
-- UPAY Pro 接入提交为 `1d37ff0c72bb5e669ee50c959351d77ac711c039`，已推送 main；[对应 CI](https://github.com/mastalee928/payincus/actions/runs/38842372055) 的类型、Lint 与构建检查通过。接口按上游 `a232783` 实现，各支付网络分别配置渠道。
+- UPAY Pro 接入提交为 `1d37ff0c72bb5e669ee50c959351d77ac711c039`，已推送 main；对应 CI（原仓库 Actions 运行 38842372055（历史记录，未迁移）） 的类型、Lint 与构建检查通过。接口按上游 `a232783` 实现，各支付网络分别配置渠道。
 - 固定提交的 166 项完整本地检查通过；Linux arm64 隔离构建完成后端、双端前端及前端路由、产物边界和 UPAY 守卫。部署包使用 LF 换行，未使用工作区未提交内容。
 - Owner 授权后，测试主控于北京时间 2026-10-16 11:32 完成直接部署，运行标识为 `v1.6.1-upaypro.1`。应用新增 `202610160001_add_upaypro_payment_provider`，迁移总数为 208；已备份程序、数据库与运行配置，并重新生成 Prisma Client、封存程序文件。
 - 更新后唯一后端、双端入口与静态资源、数据库及生产就绪检查、日志与响应头检查通过。实际管理员登录、版本与支付渠道 API 通过；两台 Agent 在线且心跳正常。配置表单的浏览器操作与支付事务已在此前隔离环境验证，真实 UPAY 付款、回调及到账仍待 owner 测试。
@@ -5320,7 +5322,7 @@ Owner 要求记录本轮双架构预览全通过的排障方法，新增 [payinc
 ## 2026-10-16 UPAY 充值下单修复
 
 - 修复已推送 main：`1c5b21d` 修正 Node.js 多地址 DNS lookup 的回调格式，`ef798a5` 让收银台链接固定使用已配置的 HTTPS 域名。UPAY 返回的 AppUrl 可以是反向代理后的 HTTP 地址；仍校验交易号、固定收银台路径、金额、有效期，并拒绝附加查询参数、片段和 URL 凭据，不访问或返回该上游地址。
-- 新回归分别复现旧实现失败并验证修复；两次 Linux arm64 隔离快照的 166 项完整检查及后端构建均通过，改动文件 Lint 通过。[DNS 修复 CI](https://github.com/mastalee928/payincus/actions/runs/38853012962) 与 [UPAY 收银台修复 CI](https://github.com/mastalee928/payincus/actions/runs/38854723532) 均成功。
+- 新回归分别复现旧实现失败并验证修复；两次 Linux arm64 隔离快照的 166 项完整检查及后端构建均通过，改动文件 Lint 通过。DNS 修复 CI（原仓库 Actions 运行 38853012962（历史记录，未迁移）） 与 UPAY 收银台修复 CI（原仓库 Actions 运行 38854723532（历史记录，未迁移）） 均成功。
 - Owner 授权后，测试主控于北京时间 2026-10-16 13:15 更新为 `v1.6.1-upaypro.3`。两次修复仅替换各自后端模块的四个构建文件及版本元数据；更新前分别备份受影响文件、数据库、运行配置与证书，更新后重新封存程序。既有 IPv6 部署、schema 与 209 条迁移保持原状，本次没有新增迁移。
 - 真机验收通过：使用已启用的 USDT-TRC20 渠道创建人民币 10 元待支付订单、打开 HTTPS 收银台、核对保存的币种/网络/交易号、重新支付和打开新的收银台。创建与重新支付均 HTTP 200，未付款状态保持 pending，账户余额不变；本次诊断订单已取消，验证会话已注销。
 - 唯一后端、健康检查及未跳过数据库的生产/支付就绪检查通过。真实链上转账、支付回调与最终到账仍待 owner 付款验收。这两次修复当时仅直接部署，后续已整合到正式版 `v1.6.2`。

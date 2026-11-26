@@ -1,6 +1,6 @@
 [Unit]
 Description=PayIncus online update rollback task %i
-Documentation=https://github.com/mastalee928/payincus
+Documentation=https://github.com/masta-lee/mastaincus
 After=network.target postgresql.service redis-server.service
 Requires=postgresql.service redis-server.service
 

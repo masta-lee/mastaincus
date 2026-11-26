@@ -1,6 +1,6 @@
 # v1.8.1 支付与 OSS 还原验证记录
 
-[v1.8.1](https://github.com/mastalee928/payincus/releases/tag/v1.8.1) 已于 2026-11-03 15:08:52 UTC 正式发布，六公开资产已实际下载并核验。候选与主分支 CI、正式双架构首装及资产核验已全部通过。可从管理员后台「版本更新」升级；本次没有代为升级生产，也不代表完整灾备已验收。
+[v1.8.1](https://github.com/masta-lee/mastaincus/tree/v1.8.1)（旧版发行资产未迁移，仅链接标签源码） 已于 2026-11-03 15:08:52 UTC 正式发布，六公开资产已实际下载并核验。候选与主分支 CI、正式双架构首装及资产核验已全部通过。可从管理员后台「版本更新」升级；本次没有代为升级生产，也不代表完整灾备已验收。
 
 ## 本次行为
 
@@ -48,11 +48,11 @@
 
 ## CI、安装与发行资产
 
-候选 `bc860dcbdb364557611531fda388921968c35600` 的[双架构预览](https://github.com/mastalee928/payincus/actions/runs/41639521902)已成功：209 项守卫、238 项迁移、原生 Linux 维护锁、唯一后台、两端页面、恢复期登录、legacy 回退续接、snapshot 自动还原、SQL/ZIP 完整性及旧版本兼容均核验。四 job 实际 checkout 与包内组件完整来源一致。首装使用一次性 Linux 虚拟机，OSS 传输为本地替身；不等于正式发行或独立真实 OSS 灾备。
+候选 `bc860dcbdb364557611531fda388921968c35600` 的双架构预览（原仓库 Actions 运行 #41639521902；未迁移）已成功：209 项守卫、238 项迁移、原生 Linux 维护锁、唯一后台、两端页面、恢复期登录、legacy 回退续接、snapshot 自动还原、SQL/ZIP 完整性及旧版本兼容均核验。四 job 实际 checkout 与包内组件完整来源一致。首装使用一次性 Linux 虚拟机，OSS 传输为本地替身；不等于正式发行或独立真实 OSS 灾备。
 
-[候选 CI](https://github.com/mastalee928/payincus/actions/runs/41639497558)九个 job 全部成功，包括原生 nft、恢复与支付、实际 Incus 清理和机器池综合流程。其实际 PR checkout 为 `b97f29eb04fa833e25d97c0ac28d32575de1845f`，与候选的代码树一致；原失败步骤均由本次后继成功闭环。已将同候选精确 FF 至 main，并创建同提交注释 tag，未 force/squash。
+候选 CI（原仓库 Actions 运行 #41639497558；未迁移）九个 job 全部成功，包括原生 nft、恢复与支付、实际 Incus 清理和机器池综合流程。其实际 PR checkout 为 `b97f29eb04fa833e25d97c0ac28d32575de1845f`，与候选的代码树一致；原失败步骤均由本次后继成功闭环。已将同候选精确 FF 至 main，并创建同提交注释 tag，未 force/squash。
 
-[正式构建和发行](https://github.com/mastalee928/payincus/actions/runs/41658234856)五个 job 全部成功，实际 checkout 同正式完整来源；正式双首装独立通过上述恢复与完整性演练。[主分支 CI](https://github.com/mastalee928/payincus/actions/runs/41658225173)九个 job 全部成功，包含机器池全部业务步骤及清理；逐 job 实际 checkout 均为 `bc860dcbdb364557611531fda388921968c35600`。原失败对应的后继步骤通过，全部历史运行终态，无未处理发行失败。稳定 tag 不移动，Agent 保持 v1.0.4，原 tag、代码树和三份资产哈希/大小/更新时间保持。
+正式构建和发行（原仓库 Actions 运行 #41658234856；未迁移）五个 job 全部成功，实际 checkout 同正式完整来源；正式双首装独立通过上述恢复与完整性演练。主分支 CI（原仓库 Actions 运行 #41658225173；未迁移）九个 job 全部成功，包含机器池全部业务步骤及清理；逐 job 实际 checkout 均为 `bc860dcbdb364557611531fda388921968c35600`。原失败对应的后继步骤通过，全部历史运行终态，无未处理发行失败。稳定 tag 不移动，Agent 保持 v1.0.4，原 tag、代码树和三份资产哈希/大小/更新时间保持。
 
 六资产下载后核过 API digest、独立 SHA256、两份 OTA manifest 字节与 URL、238 迁移、LICENSE、原生架构、包内支付 worker 与恢复修正；每个安装包中的双架构网关组件另核独立 Ed25519 签名、完整 sourceCommit 及每个文件 hash/大小/权限。Release 说明回读一致，latest 为 v1.8.1。
 

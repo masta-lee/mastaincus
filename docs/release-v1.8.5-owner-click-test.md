@@ -1,6 +1,6 @@
 # v1.8.5 网页升级与检查
 
-由管理员自行操作。核对[正式Release](https://github.com/mastalee928/payincus/releases/tag/v1.8.5)和[验证记录](release-v1.8.5-validation.md)中的最终来源及资产；发行完成不代表生产已升级。
+由管理员自行操作。核对[正式Release](https://github.com/masta-lee/mastaincus/tree/v1.8.5)（旧版发行资产未迁移，仅链接标签源码）和[验证记录](release-v1.8.5-validation.md)中的最终来源及资产；发行完成不代表生产已升级。
 
 ## 升级与下载
 

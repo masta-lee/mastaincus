@@ -20,7 +20,7 @@ const bytes = (arch: string, releaseVersion = version) => Buffer.from(`verified 
 const hash = (arch: string, releaseVersion = version) => createHash('sha256').update(bytes(arch, releaseVersion)).digest('hex')
 const publisher=generateKeyPairSync('ed25519'),publisherKey=publisher.publicKey.export({format:'der',type:'spki'}).subarray(12).toString('base64')
 const publisherManifest=()=>({version,sourceCommit:'a'.repeat(40),files:Object.fromEntries(platforms.map(arch=>['linux-'+arch,{binarySha256:hash(arch),signature:sign(null,Buffer.from('payincus/agent-package/v1\n'+version.slice(1)+'\nlinux-'+arch+'\n'+hash(arch)),publisher.privateKey).toString('base64')}]))})
-const release = () => [{ tag_name: `agent-${version}`, assets: [...platforms.map((arch, index) => ({ name: `incudal-agent-${arch === 'amd64' ? 'x86_64' : 'aarch64'}-${version}`, size: bytes(arch).length, url: `https://api.github.com/repos/mastalee928/payincus/releases/assets/${index + 1}` })),{name:'publisher-manifest.json',browser_download_url:'https://github.com/mastalee928/payincus/releases/download/agent-'+version+'/publisher-manifest.json'}] }]
+const release = () => [{ tag_name: `agent-${version}`, draft: false, assets: [...platforms.map((arch, index) => ({ name: `incudal-agent-${arch === 'amd64' ? 'x86_64' : 'aarch64'}-${version}`, size: bytes(arch).length, url: `https://api.github.com/repos/masta-lee/mastaincus/releases/assets/${index + 1}` })),{name:'publisher-manifest.json',browser_download_url:'https://github.com/masta-lee/mastaincus/releases/download/agent-'+version+'/publisher-manifest.json',...(publisherApi?{url:'https://api.github.com/repos/masta-lee/mastaincus/releases/assets/3'}:{})}] }]
 // Only substitute the publisher identity in this disposable copy. Real
 // Ed25519 verification and all production route/cache logic remain unchanged.
 const routeSource=await readFile(new URL('../src/routes/agent.ts',import.meta.url),'utf8')
@@ -29,6 +29,7 @@ const fixtureRoute=new URL('../src/routes/.agent-release-concurrency-'+tag+'.ts'
 await writeFile(fixtureRoute,routeSource.replace('y6C9aLon6OtgHPp5KPVDpxoNha95YptW03o4Dp2djQA=',publisherKey),{flag:'wx'})
 const counts = new Map<string, number>()
 let metadataFailure = false, checksumFailure = false, incomplete = false, metadataThrottle = false
+let publisherApi = false, includeDraft = false
 let binaryFailure: 'http' | 'hash' | 'empty' | 'network' | 'body' | null = null
 let binaryPhase = false, gateKind: 'metadata' | 'checksum' | 'binary' = 'metadata'
 let gateMode: 'headers' | 'body' = 'headers'
@@ -54,14 +55,20 @@ async function fixtureFetch(url: string | URL | Request, options?: RequestInit):
   const parsed = new URL(String(url))
   assert.ok(options?.signal instanceof AbortSignal, 'shared request preserves the external fetch deadline')
   assert.ok(parsed.protocol === 'https:' && ['api.github.com', 'github.com'].includes(parsed.hostname), 'no real or untrusted upstream requests')
-  if(parsed.pathname.endsWith('/publisher-manifest.json'))return Response.json(publisherManifest())
+  if(parsed.pathname.endsWith('/publisher-manifest.json'))return publisherApi ? new Response('', {status:404}) : Response.json(publisherManifest())
+  if(parsed.pathname==='/repos/masta-lee/mastaincus/releases/assets/3') {
+    assert.equal(new Headers(options?.headers).get('accept'),'application/octet-stream')
+    record('publisher:api')
+    return Response.json(publisherManifest())
+  }
   const metadata = parsed.pathname.endsWith('/releases')
   const arch = parsed.pathname.endsWith('/2') || parsed.pathname.includes('aarch64') ? 'arm64' : 'amd64'
   const releaseVersion = parsed.pathname.includes(oldVersion) ? oldVersion : version
   const kind = metadata ? 'metadata' : binaryPhase ? 'binary' : 'checksum'
   record(metadata ? kind : `${kind}:${releaseVersion}:${arch}`)
   const failure = metadata ? metadataFailure : kind === 'checksum' ? checksumFailure : binaryFailure === 'http'
-  const contents = metadata ? Buffer.from(JSON.stringify(incomplete ? [{ ...release()[0], assets: release()[0].assets.slice(0, 1) }] : release()))
+  const publishedReleases = incomplete ? [{ ...release()[0], assets: release()[0].assets.slice(0, 1) }] : release()
+  const contents = metadata ? Buffer.from(JSON.stringify(includeDraft ? [{...release()[0],tag_name:'agent-v99.0.0',draft:true},...publishedReleases] : publishedReleases))
     : binaryPhase && binaryFailure === 'hash' ? Buffer.from('corrupted binary') : bytes(arch, releaseVersion)
   const mustWait = kind === gateKind
   if (mustWait) markStarted()
@@ -80,6 +87,7 @@ async function fixtureFetch(url: string | URL | Request, options?: RequestInit):
 async function fresh(mode: string) {
   await app?.close(); app = undefined; counts.clear()
   metadataFailure = false; checksumFailure = false; incomplete = false; metadataThrottle = false; binaryFailure = null; binaryPhase = false
+  publisherApi = false; includeDraft = false
   globalThis.fetch = fixtureFetch
   const routeUrl = new URL(fixtureRoute); routeUrl.searchParams.set('concurrency', `${tag}-${mode}`)
   const routes = (await import(routeUrl.href)).default
@@ -107,6 +115,10 @@ async function warmManifest() {
 }
 
 try {
+  await fresh('private-publisher-and-draft'); publisherApi = true; includeDraft = true
+  await warmManifest()
+  assert.equal((await manifest()).json().version,version,'a newer authenticated draft must never replace the published Agent')
+  assert.equal(total('publisher:api'),1,'a private publisher manifest uses its authenticated official asset API')
   for (const mode of ['headers', 'body'] as const) {
     await fresh(`metadata-${mode}`); setGate('metadata', mode)
     const manifests = Array.from({ length: 20 }, manifest), heartbeats = Array.from({ length: 7 }, heartbeat)

@@ -2,7 +2,7 @@
 
 ## 正式发行
 
-[v1.8.8](https://github.com/mastalee928/payincus/releases/tag/v1.8.8)已于2026-11-12 06:48:37 UTC公开，latest=v1.8.8。PR #11已合入，正式source=`a7d7d841aec3a692c2e5f3fba67cb0a01de96817`，tree=`3bd0703177d93342208770454e9fb69667d75610`，与已验候选99defedb源码树完全一致；注释tag=`673d55d5d7d94fe370bce43afa252a2db3401da8`，解引用同正式source。
+[v1.8.8](https://github.com/masta-lee/mastaincus/tree/v1.8.8)（旧版发行资产未迁移，仅链接标签源码）已于2026-11-12 06:48:37 UTC公开，latest=v1.8.8。PR #11已合入，正式source=`a7d7d841aec3a692c2e5f3fba67cb0a01de96817`，tree=`3bd0703177d93342208770454e9fb69667d75610`，与已验候选99defedb源码树完全一致；注释tag=`673d55d5d7d94fe370bce43afa252a2db3401da8`，解引用同正式source。
 
 - 最终候选CI43165702787全部15job success；Alpine43165702695全success；预览43165731736双构建／双首装／六旧升级全部success，Release预期skipped。
 - 合入后的main CI43169146619全部15job success；正式源码树与候选一致，未以候选结果冒充main结果。

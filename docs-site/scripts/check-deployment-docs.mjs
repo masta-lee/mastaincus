@@ -51,8 +51,8 @@ for (const path of [
 }
 
 const config = read('docs-site/docs/.vitepress/config.ts')
-requireText(config, "const siteOrigin = 'https://mastalee928.github.io/payincus'", 'VitePress config')
-requireText(config, "base: '/payincus/'", 'VitePress config')
+requireText(config, "const siteOrigin = 'https://masta-lee.github.io/mastaincus'", 'VitePress config')
+requireText(config, "base: '/mastaincus/'", 'VitePress config')
 requireText(config, 'transformHead({ pageData })', 'VitePress config')
 requireText(config, 'hostname: `${siteOrigin}/`', 'VitePress config')
 
@@ -66,7 +66,7 @@ if (existsSync(resolve(repoRoot, 'docs-site/docs/public/CNAME'))) {
 }
 
 const robots = read('docs-site/docs/public/robots.txt')
-requireText(robots, 'Sitemap: https://mastalee928.github.io/payincus/sitemap.xml', 'robots.txt')
+requireText(robots, 'Sitemap: https://masta-lee.github.io/mastaincus/sitemap.xml', 'robots.txt')
 
 const workflow = read('.github/workflows/docs-pages.yml')
 requireText(workflow, '- main', 'docs workflow')

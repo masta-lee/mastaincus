@@ -332,11 +332,11 @@ assert.ok(
   'Agent release smoke must cover install script serving and deterministic binary download rejection paths'
 )
 assert.ok(releaseWorkflow.includes('cp scripts/reconnect-host-management.sh release/scripts/'), 'release packages must include the existing-identity host management recovery tool')
-assert.ok(readme.includes('INCUDAL_AGENT_RELEASE_REPOSITORY=mastalee928/payincus'), 'README must document the current Agent release repository')
-assert.ok(backendServiceExample.includes('Documentation=https://github.com/mastalee928/payincus'), 'systemd backend example must point documentation to the current repository')
+assert.ok(readme.includes('INCUDAL_AGENT_RELEASE_REPOSITORY=masta-lee/mastaincus'), 'README must document the current Agent release repository')
+assert.ok(backendServiceExample.includes('Documentation=https://github.com/masta-lee/mastaincus'), 'systemd backend example must point documentation to the current repository')
 assert.ok(
-  installPanel.includes('readonly GITHUB_REPO="mastalee928/payincus"') &&
-    installPanel.includes('# 项目地址: https://github.com/mastalee928/payincus'),
+  installPanel.includes('readonly GITHUB_REPO="masta-lee/mastaincus"') &&
+    installPanel.includes('# 项目地址: https://github.com/masta-lee/mastaincus'),
   'install script must download panel releases from the current repository'
 )
 assert.ok(verifySplitHost.includes('fetch_url "frontend proxied API" "$FRONTEND_URL/api/health"'), 'split verify script must verify frontend /api proxy')

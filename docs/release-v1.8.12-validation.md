@@ -1,8 +1,8 @@
 # v1.8.12 发行和现场验收
 
-正式[v1.8.12](https://github.com/mastalee928/payincus/releases/tag/v1.8.12)于2026-11-15 11:14:33北京时间公开，tag/source `fc284676c570f88a532cc05018ad43e7f2996a31`。PR16合入，产品代码与验收来源`8cd82d858791ac78e60664ef5aa290104ea3bd01`完全一致；合入后仅台账/Release notes新增。
+正式[v1.8.12](https://github.com/masta-lee/mastaincus/tree/v1.8.12)（旧版发行资产未迁移，仅链接标签源码）于2026-11-15 11:14:33北京时间公开，tag/source `fc284676c570f88a532cc05018ad43e7f2996a31`。PR16合入，产品代码与验收来源`8cd82d858791ac78e60664ef5aa290104ea3bd01`完全一致；合入后仅台账/Release notes新增。
 
-完整产品CI[43666672521](https://github.com/mastalee928/payincus/actions/runs/43666672521)29/29 success，原生Incus账户删除及本批注册HTTP/PG/TG集成通过，Alpine43666672557 success；本地225/225及最后creating/账务/权限专项已通过。正式tag重复[43670232244](https://github.com/mastalee928/payincus/actions/runs/43670232244)双构建、双首装及六v1.8.11原worker正常/已迁移/后半程回滚再升级全部success，正式Release成功；preview-agent预期skipped不替代正式Agent下载。Agent仍原v1.0.15，没有新增Agent发行。
+完整产品CI43666672521（原仓库 Actions 运行 #43666672521；未迁移）29/29 success，原生Incus账户删除及本批注册HTTP/PG/TG集成通过，Alpine43666672557 success；本地225/225及最后creating/账务/权限专项已通过。正式tag重复43670232244（原仓库 Actions 运行 #43670232244；未迁移）双构建、双首装及六v1.8.11原worker正常/已迁移/后半程回滚再升级全部success，正式Release成功；preview-agent预期skipped不替代正式Agent下载。Agent仍原v1.0.15，没有新增Agent发行。
 
 六个公开资产已重新下载，全部API digest/size/SHA、双checksum与OTA两个清单一致。两个实际公开tar原固定组件公钥/签名、完整source、244迁移、新模块/权限、用户包无删号/修改续费价入口核过；与正式build artifact完全一致。AMD64 214613716 bytes / `8b7714bf1a6498fa9fae3d5dfc39cb63eba193df9892151d998f00c44d9a9875`；ARM64 213839523 bytes / `b56df7d939fff2fa66586190de758785102a6d57e3a527b9f727a8ed9cc07918`。证据`logs/account-public-assets-verified.json`、`account-public-package-verified.log`。
 

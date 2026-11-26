@@ -5,6 +5,8 @@ description: Deploy PayIncus on Debian or Ubuntu from a verified GitHub Release
 
 # One-click Install
 
+The new repository is private. Source files, raw installer URLs and release assets require an authorized GitHub identity; the anonymous download examples below are not directly usable in this phase. The new GitHub Pages address has not been deployed yet.
+
 <p class="doc-lead">Deploy PayIncus on a clean server with the official installer. It configures dependencies, database access, environment variables, systemd, and the selected external access mode.</p>
 
 <div class="doc-meta">
@@ -32,7 +34,7 @@ The default install directory is `/opt/incudal`. This is the real path used by t
 ## Install
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/mastalee928/payincus/main/scripts/install-panel.sh -o install-panel.sh
+curl -fsSL https://raw.githubusercontent.com/masta-lee/mastaincus/main/scripts/install-panel.sh -o install-panel.sh
 sudo bash install-panel.sh
 ```
 
@@ -65,7 +67,7 @@ An existing cloudflared service is never overwritten or restarted. Enter `reuse`
 Download the current installer before using these commands:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/mastalee928/payincus/main/scripts/install-panel.sh -o install-panel.sh
+curl -fsSL https://raw.githubusercontent.com/masta-lee/mastaincus/main/scripts/install-panel.sh -o install-panel.sh
 
 # Configure an existing installation; restart the single backend to apply URLs
 sudo bash install-panel.sh --configure-cf-tunnel
@@ -117,7 +119,7 @@ The following CLI is a maintainer fallback when the web interface is unavailable
 sudo bash install-panel.sh --configure-host-pool
 ```
 
-Use `ONBOARDING_PUBLIC_HOST`, `ONBOARDING_MANAGEMENT_ADDRESS`, `ONBOARDING_WG_PORT` and `ONBOARDING_CONTROL_SSH_PORT` to set the address and ports. Existing gateway keys and peers are preserved. See [host pool configuration](https://github.com/mastalee928/payincus/blob/main/docs/host-pool.md) for a separate or custom gateway.
+Use `ONBOARDING_PUBLIC_HOST`, `ONBOARDING_MANAGEMENT_ADDRESS`, `ONBOARDING_WG_PORT` and `ONBOARDING_CONTROL_SSH_PORT` to set the address and ports. Existing gateway keys and peers are preserved. See [host pool configuration](https://github.com/masta-lee/mastaincus/blob/main/docs/host-pool.md) for a separate or custom gateway.
 
 ## Upgrade and Uninstall
 

@@ -225,7 +225,7 @@ const modalTitle = computed(() => t(`oss.${({ create: 'newBucket', delete: 'dele
     <p v-if="nextReadAt" role="status">{{ t('oss.review.automation.next',{time:date(new Date(nextReadAt).toISOString())}) }}</p>
     <p v-if="actionError" role="alert" class="oss-notice danger">{{ actionError }}</p>
     <template v-if="!loading && !loadError">
-      <div v-if="!runtimeReady" class="oss-notice" role="status"><p>{{ t('oss.runtimeMissing') }}</p><a href="https://mastalee928.github.io/payincus/deployment/oss-backup" target="_blank" rel="noopener noreferrer">{{ t('oss.deploymentHelp') }}</a></div>
+      <div v-if="!runtimeReady" class="oss-notice" role="status"><p>{{ t('oss.runtimeMissing') }}</p><a href="https://github.com/masta-lee/mastaincus/blob/main/docs-site/docs/deployment/oss-backup.md" target="_blank" rel="noopener noreferrer">{{ t('oss.deploymentHelp') }}</a></div>
       <p v-if="automaticUncertain" class="oss-notice" role="status">{{ t('oss.automaticAcknowledgement') }}</p>
       <div v-if="automaticRestore" class="oss-notice" role="status" aria-live="polite"><strong>{{ t(`oss.automaticPhases.${automaticRestore.phase}`) }}</strong><p v-if="automaticRestore.code">{{ errorText(automaticRestore.code) }}</p><small>{{ date(automaticRestore.updatedAt) }}</small></div>
       <div v-if="held" class="oss-notice"><p>{{ t('oss.review.automation.autoResume') }}</p><div class="oss-actions"><button :disabled="busy || active || reviewBusy" @click="openModal('rollback')">{{ t('oss.rollback') }}</button></div></div>

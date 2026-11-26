@@ -20,8 +20,8 @@ if (suppliedAgentToken) {
   const backendEnv = (await readFile(`/proc/${backendPid}/environ`, 'utf8')).split('\0')
   assert.ok(backendEnv.includes(`INCUDAL_AGENT_RELEASE_TOKEN=${suppliedAgentToken}`), 'the single backend must receive the supplied Agent release token')
 }
-assert.equal(env.SYSTEM_UPDATE_RELEASE_REPOSITORY, 'mastalee928/payincus')
-assert.equal(env.INCUDAL_AGENT_RELEASE_REPOSITORY, 'mastalee928/payincus')
+assert.equal(env.SYSTEM_UPDATE_RELEASE_REPOSITORY, 'masta-lee/mastaincus')
+assert.equal(env.INCUDAL_AGENT_RELEASE_REPOSITORY, 'masta-lee/mastaincus')
 assert.equal(env.INCUDAL_AGENT_RELEASE_DIR, process.env.INCUDAL_PREVIEW_AGENT_DIR ? '/opt/incudal/agent-release' : '')
 const expectedPackage = JSON.parse(await readFile(new URL('../package.json', import.meta.url), 'utf8'))
 for (const path of ['/opt/incudal/package.json', '/opt/incudal/server/package.json']) {

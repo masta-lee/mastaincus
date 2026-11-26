@@ -12,7 +12,7 @@ https://admin.example.com/admin/system-update
 
 ```dotenv
 SYSTEM_UPDATE_APPLY_MODE=auto
-SYSTEM_UPDATE_RELEASE_REPOSITORY=mastalee928/payincus
+SYSTEM_UPDATE_RELEASE_REPOSITORY=masta-lee/mastaincus
 ```
 
 `auto` prefers verified GitHub Release OTA artifacts. If no matching artifact exists for the target tag, it can fall back to Git tag build mode.

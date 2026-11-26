@@ -31,7 +31,7 @@ https://admin.example.com/admin/system-update
 
 ```dotenv
 SYSTEM_UPDATE_APPLY_MODE=auto
-SYSTEM_UPDATE_RELEASE_REPOSITORY=mastalee928/payincus
+SYSTEM_UPDATE_RELEASE_REPOSITORY=masta-lee/mastaincus
 ```
 
 `auto` 会优先使用 GitHub Release OTA artifact。如果目标 tag 没有可用 artifact，则回退到 Git tag 构建模式。

@@ -1,9 +1,9 @@
 # PayIncus 文档站
 
-这是 PayIncus 的 VitePress 双语文档站源码，发布地址为 `https://mastalee928.github.io/payincus/`。
+这是 PayIncus 的 VitePress 双语文档站源码，目标发布地址为 `https://masta-lee.github.io/mastaincus/`。新仓库的 Pages 尚未部署；当前可直接阅读本目录的 Markdown 源码。
 
-- 中文默认路径：`/payincus/`
-- 英文路径：`/payincus/en/`
+- 中文默认路径：`/mastaincus/`
+- 英文路径：`/mastaincus/en/`
 
 ## 本地运行
 
@@ -41,13 +41,15 @@ docs/.vitepress/dist
 
 ## GitHub Pages
 
+新仓库目前为私有，Actions 暂未启用，以下为后续 Pages 配置流程，不表示站点已经发布。
+
 文档站通过 GitHub Actions 发布到 GitHub Pages：
 
 ```text
 .github/workflows/docs-pages.yml
 ```
 
-仓库 Pages 使用 GitHub Actions 部署，基路径为 `/payincus/`；不使用上游自定义域名或 CNAME。
+仓库 Pages 使用 GitHub Actions 部署，基路径为 `/mastaincus/`；不使用上游自定义域名或 CNAME。
 
 GitHub 仓库需要在 `Settings -> Pages` 中选择 GitHub Actions 作为发布源，Custom domain 保持为空。
 

@@ -2,7 +2,7 @@
 
 管理员后台「系统」分组的 OAuth 下方提供「阿里云OSS」。平台备份包含完整数据库、机器池分组和已接入宿主的登记信息、运行环境、受管证书，以及本机管理网关的 WireGuard/SSH 身份与节点地址登记。
 
-客户 VPS 磁盘、远端独立网关文件、外部图床及邮箱原件需另行保护。v1.7.2 支持固定直连管理域名：旧宿主先在原通道可用时「补装并核验」，换机恢复原身份后切换 DNS，产品守护程序周期更新原 peer Endpoint。未补装或固定旧 IP 的宿主仍需通过独立控制台处理。操作步骤见 [v1.7.2 DD 与 OSS 恢复](https://github.com/mastalee928/payincus/blob/main/docs/controller-dd-oss-recovery-v1.7.2.md)。
+客户 VPS 磁盘、远端独立网关文件、外部图床及邮箱原件需另行保护。v1.7.2 支持固定直连管理域名：旧宿主先在原通道可用时「补装并核验」，换机恢复原身份后切换 DNS，产品守护程序周期更新原 peer Endpoint。未补装或固定旧 IP 的宿主仍需通过独立控制台处理。操作步骤见 [v1.7.2 DD 与 OSS 恢复](https://github.com/masta-lee/mastaincus/blob/main/docs/controller-dd-oss-recovery-v1.7.2.md)。
 
 ## 安装要求
 

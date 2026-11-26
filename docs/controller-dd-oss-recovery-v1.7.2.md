@@ -1,5 +1,7 @@
 # v1.7.2 主控 DD 与 OSS 恢复操作说明
 
+本页保留 v1.7.2 的原验证流程与结论。该版本发行资产尚未迁移到新仓库，[v1.7.2 标签源码](https://github.com/masta-lee/mastaincus/tree/v1.7.2)已保留；下面两条旧资产下载步骤只保留文件记录，不作为当前可执行下载命令。
+
 适用于主控兼管理网关 A 丢失、在 B 或 DD 后的原机器恢复管理。客户宿主与客户 VPS 保留原机器和磁盘。DD 由 owner 执行；只在下列准备全部完成后操作。
 
 ## DD 前：在原主控完成准备
@@ -20,7 +22,7 @@
 
 在独立空目录下载对应架构的正式包和安装器：
 
-```bash
+```text
 mkdir -p /tmp/incudal
 cd /tmp/incudal
 case "$(uname -m)" in
@@ -28,10 +30,10 @@ case "$(uname -m)" in
   aarch64|arm64) arch=arm64 ;;
   *) echo '不支持的架构'; exit 1 ;;
 esac
-curl -fLO "https://github.com/mastalee928/payincus/releases/download/v1.7.2/incudal-v1.7.2-linux-${arch}.tar.gz"
-curl -fLO "https://github.com/mastalee928/payincus/releases/download/v1.7.2/incudal-v1.7.2-linux-${arch}.tar.gz.sha256"
+# 历史下载记录：incudal-v1.7.2-linux-${arch}.tar.gz；旧版发行资产未迁移，仅链接标签源码：https://github.com/masta-lee/mastaincus/tree/v1.7.2
+# 历史下载记录：incudal-v1.7.2-linux-${arch}.tar.gz.sha256；旧版发行资产未迁移，仅链接标签源码：https://github.com/masta-lee/mastaincus/tree/v1.7.2
 sha256sum -c "incudal-v1.7.2-linux-${arch}.tar.gz.sha256"
-curl -fsSL https://raw.githubusercontent.com/mastalee928/payincus/v1.7.2/scripts/install-panel.sh -o install-panel.sh
+curl -fsSL https://raw.githubusercontent.com/masta-lee/mastaincus/v1.7.2/scripts/install-panel.sh -o install-panel.sh
 sudo bash install-panel.sh
 ```
 

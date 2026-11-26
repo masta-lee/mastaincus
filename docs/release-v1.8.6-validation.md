@@ -1,11 +1,11 @@
 # v1.8.6 验证记录
 
-核验时间：2026-11-11 02:18 UTC。面板 [v1.8.6](https://github.com/mastalee928/payincus/releases/tag/v1.8.6) 与配套 [Agent v1.0.6](https://github.com/mastalee928/payincus/releases/tag/agent-v1.0.6) 已公开发行；面板为最新稳定版。此次仅发行软件，未代部署生产。
+核验时间：2026-11-11 02:18 UTC。面板 [v1.8.6](https://github.com/masta-lee/mastaincus/tree/v1.8.6)（旧版发行资产未迁移，仅链接标签源码） 与配套 [Agent v1.0.6](https://github.com/masta-lee/mastaincus/tree/agent-v1.0.6)（旧版发行资产未迁移，仅链接标签源码） 已公开发行；面板为最新稳定版。此次仅发行软件，未代部署生产。
 
 ## 源码与发行身份
 
 - 正式完整源码：`00b39869a85a592ec50f3d67935d409968613a86`；tree：`bb256ed37bab9c2e8619af5779a8edd7726acf9a`。
-- main 从 `fea9d66cfeeb0a2ce804a644d9ddd3e14c2b9f8f` 非强制快进至该提交；[PR #9](https://github.com/mastalee928/payincus/pull/9) 已合并，mergeCommit 与正式源码相同。
+- main 从 `fea9d66cfeeb0a2ce804a644d9ddd3e14c2b9f8f` 非强制快进至该提交；PR #9（原仓库 PR #9；未迁移） 已合并，mergeCommit 与正式源码相同。
 - 注释标签 v1.8.6：`3a5bb59ec510357d249ea92af5da4bf154f778f1`，解引用指向上述正式源码；历史稳定标签未移动。
 - Agent v1.0.6 的完整来源为 `fea9d66cfeeb0a2ce804a644d9ddd3e14c2b9f8f`，已先行公开并核实三项资产。面板随后仅补充Node SSH生成器补丁与回归；Agent源码树、构建脚本、工作流和安装／协议输入逐项完全相同，继续使用原稳定Agent资产。新面板预览与正式首装独立验证该依赖组合。后续文档提交不改变标签源码。
 
@@ -24,11 +24,11 @@
 
 | 工作流 | Run ID | 终态 |
 | --- | --- | --- |
-| [CI / pull_request](https://github.com/mastalee928/payincus/actions/runs/42908470060) | 42908470060 | success |
-| [Alpine SSH security / pull_request](https://github.com/mastalee928/payincus/actions/runs/42908470077) | 42908470077 | success |
-| [Build & Release / workflow_dispatch](https://github.com/mastalee928/payincus/actions/runs/42908807624) | 42908807624 | success |
-| [CI / push](https://github.com/mastalee928/payincus/actions/runs/42927242059) | 42927242059 | success |
-| [Build & Release / push](https://github.com/mastalee928/payincus/actions/runs/42943161374) | 42943161374 | success |
+| CI / pull_request（原仓库 Actions 运行 #42908470060；未迁移） | 42908470060 | success |
+| Alpine SSH security / pull_request（原仓库 Actions 运行 #42908470077；未迁移） | 42908470077 | success |
+| Build & Release / workflow_dispatch（原仓库 Actions 运行 #42908807624；未迁移） | 42908807624 | success |
+| CI / push（原仓库 Actions 运行 #42927242059；未迁移） | 42927242059 | success |
+| Build & Release / push（原仓库 Actions 运行 #42943161374；未迁移） | 42943161374 | success |
 
 逐job从日志提取实际完整checkout并核提交／tree。候选CI与main CI均为十job全部success，包含真实Incus清理；预览双构建和双首装success，发布job预期skipped；正式双构建、双首装和发布共五job全部success。
 
@@ -63,7 +63,7 @@
 | incudal-agent-x86_64-v1.0.6 | 5410968 | `1c381d5cc2e2c8e804c53b0a1a634aa6dee3f17e4610db03fb336ecf951ef4a7` |
 | LICENSE | 1496 | `5659dbf51fa91752f85fe0fb6677086ac1fbc368768ac3d230a70af86afdad6b` |
 
-三公开文件与原Agent来源候选artifact逐字节摘要一致；候选Agent [42883551153](https://github.com/mastalee928/payincus/actions/runs/42883551153)、正式原生Agent [42903794983](https://github.com/mastalee928/payincus/actions/runs/42903794983)、原main Agent [42906307022](https://github.com/mastalee928/payincus/actions/runs/42906307022)／Alpine [42906307160](https://github.com/mastalee928/payincus/actions/runs/42906307160)均全必需终态通过，日志保持原SHA归属；双ELF架构、版本及新防护标记通过。原v1.0.5 tag、三资产hash／大小／更新时间保持基线不变；原main关联Agent发布检查同源同摘要后跳过重复发布；新面板依赖补丁未触发Agent发布。
+三公开文件与原Agent来源候选artifact逐字节摘要一致；候选Agent 42883551153（原仓库 Actions 运行 #42883551153；未迁移）、正式原生Agent 42903794983（原仓库 Actions 运行 #42903794983；未迁移）、原main Agent 42906307022（原仓库 Actions 运行 #42906307022；未迁移）／Alpine 42906307160（原仓库 Actions 运行 #42906307160；未迁移）均全必需终态通过，日志保持原SHA归属；双ELF架构、版本及新防护标记通过。原v1.0.5 tag、三资产hash／大小／更新时间保持基线不变；原main关联Agent发布检查同源同摘要后跳过重复发布；新面板依赖补丁未触发Agent发布。
 
 ## 实证边界
 

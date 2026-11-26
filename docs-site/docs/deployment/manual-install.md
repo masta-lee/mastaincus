@@ -50,16 +50,18 @@ sudo install -d -o incudal -g incudal /opt/incudal /opt/incudal/releases /opt/in
 
 ## 下载并校验 Release
 
-先在 [GitHub Releases](https://github.com/mastalee928/payincus/releases) 确认版本和服务器架构。以下版本号仅为示例，请替换为准备部署的正式 Tag。
+新仓库当前为私有，源码、raw 安装入口和发行资产需要有仓库访问权限的 GitHub 身份；下面的匿名下载示例在该阶段不能直接使用。GitHub Pages 目标地址尚未部署，可先阅读 `docs-site/docs/` 中的文档源码。
+
+先在 [GitHub Releases](https://github.com/masta-lee/mastaincus/releases) 确认版本和服务器架构。以下版本号仅为示例，请替换为准备部署的正式 Tag。
 
 ```bash
-export VERSION=v1.3.4
+export VERSION=v1.8.14
 export ARCH=amd64
 export PACKAGE="incudal-${VERSION}-linux-${ARCH}.tar.gz"
 export RELEASE_DIR="/opt/incudal/releases/${VERSION}"
 
-curl -fLO "https://github.com/mastalee928/payincus/releases/download/${VERSION}/${PACKAGE}"
-curl -fLO "https://github.com/mastalee928/payincus/releases/download/${VERSION}/${PACKAGE}.sha256"
+curl -fLO "https://github.com/masta-lee/mastaincus/releases/download/${VERSION}/${PACKAGE}"
+curl -fLO "https://github.com/masta-lee/mastaincus/releases/download/${VERSION}/${PACKAGE}.sha256"
 sha256sum -c "${PACKAGE}.sha256"
 ```
 

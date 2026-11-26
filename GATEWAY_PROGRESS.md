@@ -178,7 +178,7 @@ Owner最新授权空闲seoul-amd-3原生独立验收及通过后程序逐台处�
 
 - 正式源码`e7faf22a03f920532ee0a35466f06597921767bb` / tree `64aa7d4a309be4d266fab92a3a499a993ea8026d`；PR #7合入main同SHA，注释tag对象`4bf4a6644c1451d15eebbe745c5b20b469c87dba`，旧稳定tag不移动。
 - 候选CI42577102595与main CI42590910672各十job、Alpine关联run全部终态success。预览42577106537四必需job成功/Release skipped，正式42607390425五job成功，213守卫/241迁移/双原生首装与完整恢复拒绝断言核验；所有关联运行无未处理失败。
-- [Release](https://github.com/mastalee928/payincus/releases/tag/v1.8.5)于`2026-11-09T11:27:19Z`公开；六资产实际下载核API digest/大小/双OTA、包内下载器三个编译文件/首页居中及菜单修复、原受信Ed25519签名，说明与latest回读一致。Agent v1.0.5原来源/三资产保持。详见[完整运行与六资产摘要](docs/release-v1.8.5-validation.md)。
+- [Release](https://github.com/masta-lee/mastaincus/tree/v1.8.5)（旧版发行资产未迁移，仅链接标签源码）于`2026-11-09T11:27:19Z`公开；六资产实际下载核API digest/大小/双OTA、包内下载器三个编译文件/首页居中及菜单修复、原受信Ed25519签名，说明与latest回读一致。Agent v1.0.5原来源/三资产保持。详见[完整运行与六资产摘要](docs/release-v1.8.5-validation.md)。
 - Owner自行按[网页升级检查](docs/release-v1.8.5-owner-click-test.md)升级。旧安装首次下载仍由当前下载器执行，新下载器随新版安装生效；本轮未代生产OTA/重启/OSS恢复。真实OSS新B、独立备用、客户公网、千台/72小时仍未验收。
 
 
@@ -190,7 +190,7 @@ Owner最新授权空闲seoul-amd-3原生独立验收及通过后程序逐台处�
 
 - 正式源码`2c3201122bfface31b7c20e6497437b5814ce699` / tree `512e37424d51cf66fab1a7ade5c3ca2323fd94de`；PR #6合入main同SHA，稳定注释tag对象`6a516f547ba52b3816450e1041cdf5b945f8eda4`不移动。
 - 候选CI42512962099与main CI42524993262各十job全部成功、实际checkout及关键断言独立核验；全部同源码Alpine/Agent关联run终态success，无未处理失败。预览42523751752四必需job成功/Release skipped；正式42535118475五job全部成功，213守卫/241迁移/双原生首装与完整恢复拒绝断言核验。
-- [正式Release](https://github.com/mastalee928/payincus/releases/tag/v1.8.4)于`2026-11-08T23:40:17Z`公开，六资产实际下载并核API digest/大小/双OTA/包内修复与原受信Ed25519签名，latest与说明回读一致；Agent v1.0.5三资产同来源已核，旧v1.0.4不变。六资产完整摘要与全部run见[公开验证](docs/release-v1.8.4-validation.md)。
+- [正式Release](https://github.com/masta-lee/mastaincus/tree/v1.8.4)（旧版发行资产未迁移，仅链接标签源码）于`2026-11-08T23:40:17Z`公开，六资产实际下载并核API digest/大小/双OTA/包内修复与原受信Ed25519签名，latest与说明回读一致；Agent v1.0.5三资产同来源已核，旧v1.0.4不变。六资产完整摘要与全部run见[公开验证](docs/release-v1.8.4-validation.md)。
 - 原三次失败由最终候选及main完整CI闭环，原日志保留。最终只补脱敏文档`[skip ci]`到main，tag与产品源码不变；文档提交及关联run留本地发行台账。
 - Owner自行按[网页升级检查](docs/release-v1.8.4-owner-click-test.md)操作，本次未代做生产OTA/账号账务/重启/DNS/OSS恢复。自动重启白名单仍为空、内存实验关闭；真实OSS新B、独立备用、原客户公网、千台/72小时与原生自动重启缺口仍未验收。下文“未提交/未发行”仅为当时阶段记录。
 
@@ -210,7 +210,7 @@ Owner在复审完成后授权提交推送本批到现有`codex/alpine-ssh-securi
 
 ## 2026-11-08 精修后源码分支提交
 
-最终运行源码`683f952cab61239416fe0848d1e60b900a074934` / tree `23655484a09030a8fef2618cb12cdb6dff010145`已推同分支；[42426418362](https://github.com/mastalee928/payincus/actions/runs/42426418362)九job终态success并逐job核checkout/markers，七项原生密码/持续SSH/SFTP/锁/失败续接与双架构PG/维护协议回归通过。前面三次运行的loader错误、watchdog短暂锁和新增夹具即时锁失败已按确切step修正并由新来源闭环；原日志保留。最终只补文档`[skip ci]`，尚无新安装包或生产加固。
+最终运行源码`683f952cab61239416fe0848d1e60b900a074934` / tree `23655484a09030a8fef2618cb12cdb6dff010145`已推同分支；42426418362（原仓库 Actions 运行 #42426418362；未迁移）九job终态success并逐job核checkout/markers，七项原生密码/持续SSH/SFTP/锁/失败续接与双架构PG/维护协议回归通过。前面三次运行的loader错误、watchdog短暂锁和新增夹具即时锁失败已按确切step修正并由新来源闭环；原日志保留。最终只补文档`[skip ci]`，尚无新安装包或生产加固。
 
 Owner授权审查后推送`codex/alpine-ssh-security`。精修临时实例停止即删除保护、获锁后完整节点管理身份复核和新接入当前故障/IP/独占门禁；真实PG锁竞争、mTLS客户恢复、双架构协议和队列专项通过，准确推送身份/Actions以HANDOFF本轮记录为准。提交源码不启动原生重启白名单、不触发main/tag/正式发行或生产部署。原生双架构全流程、VM/Frozen/GRUB/缺工具、独立救援及完整OSS灾备/原Agent与客户公网、72小时缺口保持。
 
@@ -234,7 +234,7 @@ Owner接受必要宿主重启的短暂客户中断，要求已有宿主和新对
 
 ## 2026-11-06 Alpine OpenSSH 安全修复源码及隔离专项完成
 
-分支 `codex/alpine-ssh-security` 核验源码 `536594ec9f58cc210715f1a1514c63659f24f1af`，同来源 [42089071874](https://github.com/mastalee928/payincus/actions/runs/42089071874) 八job全部终态success且逐job日志/checkout已核。AMD64六分支3.19–3.24与3.22 ARM64真实官方签名修订、原密码新登录、错误/长/空密码拒绝、原SSH/SFTP连续字节、幂等及已装补丁reload失败续接均通过；PG权限/原UUID/并发/失败/原账目另核。旧OpenRC缺boot状态/锁目录的容器夹具失败由最新来源闭环，历史产品apk版本读取及官方apk-new保留问题已修，确切日志留本地。最终类型/相关守卫/server与双前端build、Chrome三宽三语/深浅44px和旧会话保护已通过。
+分支 `codex/alpine-ssh-security` 核验源码 `536594ec9f58cc210715f1a1514c63659f24f1af`，同来源 42089071874（原仓库 Actions 运行 #42089071874；未迁移） 八job全部终态success且逐job日志/checkout已核。AMD64六分支3.19–3.24与3.22 ARM64真实官方签名修订、原密码新登录、错误/长/空密码拒绝、原SSH/SFTP连续字节、幂等及已装补丁reload失败续接均通过；PG权限/原UUID/并发/失败/原账目另核。旧OpenRC缺boot状态/锁目录的容器夹具失败由最新来源闭环，历史产品apk版本读取及官方apk-new保留问题已修，确切日志留本地。最终类型/相关守卫/server与双前端build、Chrome三宽三语/深浅44px和旧会话保护已通过。
 
 新安装先核补丁，既有客户使用管理员详情页显式维护，保持原密码/主机密钥/配置，无普通OTA自动客户扫描。仅标准OpenRC、同版本修订且原登记attempt/endpointHash/UUID完整的运行独占实例可维护；恢复或换机后的缺失/旧身份不放宽。跨版本、旧restart钩子、自定义配置或任务/恢复冲突拒绝。源码与一次性Docker证据不代表生产客户已更新、全VM/PAM配置/全体公网零中断或完整网关灾备通过；本轮没有main合并、OTA或新tag/Release，不恢复v1.8.3监控。详情见HANDOFF与[维护指南](docs/alpine-ssh-security-maintenance.md)。`.taste-skill/`保留。
 
@@ -270,7 +270,7 @@ v1.8.3于21:27:53Z公开发布，六资产实际下载独立核hash/大小/API d
 
 Owner已授权整理、修复、代码复核、推送和新版本发行；稳定v1.8.2不移动，本次不代做生产OTA、清数据库隔离或操作客户网络。旧v1.8.2监控已删除。
 
-候选 `2a7f80ff99826c7c12bba3be817c791870375118` 已推，PR [#5](https://github.com/mastalee928/payincus/pull/5)。2026-11-04T18:42Z：CI41887788857九jobsuccess，仅Pool综合job未终态；预览41887784640双构建success/AMD64209守卫已核，双首装恢复未终态，无新失败。实际PR checkout `df8181d4b9bef24d51889168361a23247059bdb2` 与候选tree一致，成功job原始日志归档复用。main未推进、v1.8.3未打tag/正式发行；plan/status及本线程 `payincus-v1-8-3` 监控继续核验。阶段文档不单独提交，不将部分成功当成发行通过。
+候选 `2a7f80ff99826c7c12bba3be817c791870375118` 已推，PR #5（原仓库 PR #5；未迁移）。2026-11-04T18:42Z：CI41887788857九jobsuccess，仅Pool综合job未终态；预览41887784640双构建success/AMD64209守卫已核，双首装恢复未终态，无新失败。实际PR checkout `df8181d4b9bef24d51889168361a23247059bdb2` 与候选tree一致，成功job原始日志归档复用。main未推进、v1.8.3未打tag/正式发行；plan/status及本线程 `payincus-v1-8-3` 监控继续核验。阶段文档不单独提交，不将部分成功当成发行通过。
 
 18:43Z预览已四必需job终态success/Release skipped，逐job完整来源、209守卫/240迁移、双原生首装完整备份恢复/回退续接及完整性拒绝断言通过，`preview-verified.json`归档，不再查或重跑；仅候选CI41887788857未终态。发行与生产/完整灾备证据继续分开。
 
@@ -456,7 +456,7 @@ A原 `1.1.1.1` 核验换至 `1.1.1.2`，B接到 `1.1.1.1` 的隔离模拟通过�
 
 ## 2026-10-27 v1.7.7 阶段发行复审
 
-- 当前阶段已正式发布[v1.7.7](https://github.com/mastalee928/payincus/releases/tag/v1.7.7)，源码ef12578eaa99a943808a162b0548a2be868a40f2；CI40446366307、双架构预览40446366982、正式流程40447477254全部成功。两架构完整包首装与隔离备份恢复通过，公开资产校验通过；发行不代表生产已OTA或完整灾备目标完成。
+- 当前阶段已正式发布[v1.7.7](https://github.com/masta-lee/mastaincus/tree/v1.7.7)（旧版发行资产未迁移，仅链接标签源码），源码ef12578eaa99a943808a162b0548a2be868a40f2；CI40446366307、双架构预览40446366982、正式流程40447477254全部成功。两架构完整包首装与隔离备份恢复通过，公开资产校验通过；发行不代表生产已OTA或完整灾备目标完成。
 
 - Owner再次授权代码复审后发版。当前阶段发行独立导航、本机/外部选择、外部/备用候选准备安装、持久错误及IPv4-only回归；不声明完整接管恢复可用。源码、CI、双架构预览、正式资产结果分别写入HANDOFF。
 - 复审补同步远端检查总预算及数据库回归，避免超出页面等待仍继续；已有安装候选继续原任务，本机Python具体预检错误完整透传。其他身份、签名、资源保留与IPv6守卫不放宽。

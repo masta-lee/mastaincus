@@ -56,12 +56,40 @@ export async function verifySystemUpdateDownloads(): Promise<void> {
       assert.equal(requests.length, 3)
       await empty()
     }
-    for (const status of [401, 403, 404, 206]) {
+    for (const status of [401, 403, 206]) {
       intercept(() => new Response('', { status }))
       await assert.rejects(downloadSystemUpdateArtifact(artifact, destination, options), new RegExp(`HTTP ${status}`))
       assert.equal(requests.length, 1, 'permanent or partial responses are not retried')
       await empty()
     }
+    for (const input of [
+      { artifact, options: { ...options, token: undefined } },
+      { artifact: { ...artifact, apiUrl: undefined }, options },
+      { artifact: { ...artifact, url: artifact.apiUrl! }, options }
+    ]) {
+      intercept(() => new Response('', { status: 404 }))
+      await assert.rejects(downloadSystemUpdateArtifact(input.artifact, destination, input.options), /HTTP 404/)
+      assert.equal(requests.length, 1, 'unbound, anonymous or asset API 404 remains permanent')
+      await empty()
+    }
+    intercept(() => new Response('', { status: 404 }))
+    await assert.rejects(downloadSystemUpdateArtifact(artifact, destination, options), /HTTP 404/)
+    assert.deepEqual(requests.map(r => r.url), [artifact.url, artifact.apiUrl], 'a private browser 404 permits exactly one official API fallback')
+    await empty()
+    for (const arch of ['amd64', 'arm64']) {
+      intercept(url => url === artifact.url ? new Response('', { status: 404 })
+        : url === artifact.apiUrl ? new Response(null, { status: 302, headers: { location: cdn } })
+          : new Response(payload))
+      await downloadSystemUpdateArtifact({ ...artifact, arch }, destination, options)
+      assert.deepEqual(await readFile(destination), payload)
+      assert.deepEqual(requests.map(r => r.url), [artifact.url, artifact.apiUrl, cdn])
+      assert.equal(requests[1].headers.get('authorization'), 'Bearer fixture-release-token')
+      assert.equal(requests[2].headers.get('authorization'), null, 'private API fallback must not leak the token to the asset CDN')
+      await rm(destination)
+    }
+    intercept(url => url === artifact.url ? new Response('', { status: 404 }) : Response.json({ version: 'v1.8.4' }))
+    assert.deepEqual(await fetchReleaseJson(artifact.url, artifact.apiUrl, options), { version: 'v1.8.4' }, 'private JSON manifests use the same metadata-bound API fallback')
+    assert.equal(requests[1].headers.get('accept'), 'application/octet-stream')
     for (const body of [Buffer.from('bad'), Buffer.alloc(payload.length), Buffer.alloc(payload.length + 1)]) {
       intercept(() => new Response(body))
       await assert.rejects(downloadSystemUpdateArtifact(artifact, destination, options), /size mismatch|sha256 mismatch|exceeds expected size/)
@@ -149,7 +177,7 @@ export async function verifySystemUpdateDownloads(): Promise<void> {
     intercept(() => new Response('x'.repeat(4 * 1024 * 1024 + 1)))
     await assert.rejects(fetchReleaseJson(manifestUrl, undefined, options), /size limit/)
     await empty()
-    console.log('OTA download regression passed: 504 API fallback, credentials, integrity, retries, real disconnects/timeouts and metadata binding')
+    console.log('OTA download regression passed: private 404/504 API fallback, credentials, integrity, retries, real disconnects/timeouts and metadata binding')
   } finally {
     globalThis.fetch = originalFetch
     if (oldRepository === undefined) delete process.env.SYSTEM_UPDATE_RELEASE_REPOSITORY

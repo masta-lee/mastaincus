@@ -3,8 +3,13 @@ import{mkdtempSync,mkdirSync,writeFileSync,readFileSync,rmSync,symlinkSync,linkS
 import{join}from'node:path'
 import{tmpdir}from'node:os'
 import{execFileSync}from'node:child_process'
-import{verifyInstalledCandidate}from'./finalize-verified-owner-candidate.mjs'
+import{verifyInstalledCandidate,assertRepositoryConfigurationMigration}from'./finalize-verified-owner-candidate.mjs'
 import{sealedRuntimeLinks}from'./sealed-runtime-links.mjs'
+const originalConfig=Buffer.from('SYSTEM_UPDATE_RELEASE_REPOSITORY="MASTALEE928/PAYINCUS" # retired\r\nINCUDAL_AGENT_RELEASE_REPOSITORY=mastalee928/payincus\r\nJWT_SECRET=fixture-unchanged\r\nGITHUB_REPOSITORY=custom/agent\r\n')
+const migratedConfig=Buffer.from('SYSTEM_UPDATE_RELEASE_REPOSITORY=masta-lee/mastaincus\nINCUDAL_AGENT_RELEASE_REPOSITORY=masta-lee/mastaincus\nJWT_SECRET=fixture-unchanged\r\nGITHUB_REPOSITORY=custom/agent\r\n')
+assertRepositoryConfigurationMigration(originalConfig,migratedConfig)
+for(const changed of['JWT_SECRET=fixture-changed','GITHUB_REPOSITORY=wrong/agent'])assert.throws(()=>assertRepositoryConfigurationMigration(originalConfig,Buffer.from(migratedConfig.toString().replace(changed.startsWith('JWT')?'JWT_SECRET=fixture-unchanged':'GITHUB_REPOSITORY=custom/agent',changed))))
+assert.throws(()=>assertRepositoryConfigurationMigration(originalConfig,Buffer.concat([migratedConfig,Buffer.from('NEW_AUTHORITY=wrong\n')])))
 if(process.platform==='linux'&&process.getuid()===0){
  const root=mkdtempSync(join(tmpdir(),'incudal-postflight-'));try{
   const source=join(root,'source'),app=join(root,'app'),archive=join(root,'candidate.tar.gz'),version='v1.8.14-test.abcdef1'

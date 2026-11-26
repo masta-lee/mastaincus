@@ -13,26 +13,26 @@ v1.8.4已正式发行并完成下列同来源CI、双架构首装与公开资产
 
 ## 既有本机及原生证据
 
-本机专项已分别覆盖真实PG/Fastify/JWT、权限/资金/锁竞争/故障回滚、受信HTTPS协议边界、Vue/Chrome三语/深浅/多尺寸/触摸。详细范围见[邮箱](admin-user-email.md)、[改期](admin-instance-expiry.md)、[网关](gateway-recheck-2026-11-09.md)、[自动续费](auto-renew-retention-2026-11-08.md)、[安全维护](automatic-security-hardening.md)。同线程原生Alpine专项已覆盖AMD64六分支与ARM64 3.22，最终历史运行[42426418362](https://github.com/mastalee928/payincus/actions/runs/42426418362)；新版仍核自身来源CI。
+本机专项已分别覆盖真实PG/Fastify/JWT、权限/资金/锁竞争/故障回滚、受信HTTPS协议边界、Vue/Chrome三语/深浅/多尺寸/触摸。详细范围见[邮箱](admin-user-email.md)、[改期](admin-instance-expiry.md)、[网关](gateway-recheck-2026-11-09.md)、[自动续费](auto-renew-retention-2026-11-08.md)、[安全维护](automatic-security-hardening.md)。同线程原生Alpine专项已覆盖AMD64六分支与ARM64 3.22，最终历史运行42426418362（原仓库 Actions 运行 #42426418362；未迁移）；新版仍核自身来源CI。
 
 ## 正式发行证据
 
 - 正式源码：`2c3201122bfface31b7c20e6497437b5814ce699`；tree：`512e37424d51cf66fab1a7ade5c3ca2323fd94de`。
-- 候选PR实际checkout：`3cb612ea094764fb679e921c4ae130d7caa6d3a9`，独立核tree相同；[PR #6](https://github.com/mastalee928/payincus/pull/6)合入main的提交与正式源码一致。
+- 候选PR实际checkout：`3cb612ea094764fb679e921c4ae130d7caa6d3a9`，独立核tree相同；PR #6（原仓库 PR #6；未迁移）合入main的提交与正式源码一致。
 - 注释稳定tag对象：`6a516f547ba52b3816450e1041cdf5b945f8eda4`，解引用到上述源码；后续验证文档提交不移动tag。
-- [v1.8.4 Release](https://github.com/mastalee928/payincus/releases/tag/v1.8.4)公开时间：`2026-11-08T23:40:17Z`，非draft、非prerelease，panel latest=v1.8.4；说明已写入并回读一致。
+- [v1.8.4 Release](https://github.com/masta-lee/mastaincus/tree/v1.8.4)（旧版发行资产未迁移，仅链接标签源码）公开时间：`2026-11-08T23:40:17Z`，非draft、非prerelease，panel latest=v1.8.4；说明已写入并回读一致。
 
 | 工作流 | 事件 | 运行 | 结果 |
 |---|---|---|---|
-| Agent Build & Release | pull_request | [42512962052](https://github.com/mastalee928/payincus/actions/runs/42512962052) | success |
-| CI | pull_request | [42512962099](https://github.com/mastalee928/payincus/actions/runs/42512962099) | success |
-| Alpine SSH security | pull_request | [42512962116](https://github.com/mastalee928/payincus/actions/runs/42512962116) | success |
-| Agent Build & Release | workflow_dispatch | [42523460346](https://github.com/mastalee928/payincus/actions/runs/42523460346) | success |
-| Build & Release | workflow_dispatch | [42523751752](https://github.com/mastalee928/payincus/actions/runs/42523751752) | success |
-| Alpine SSH security | push | [42524993258](https://github.com/mastalee928/payincus/actions/runs/42524993258) | success |
-| CI | push | [42524993262](https://github.com/mastalee928/payincus/actions/runs/42524993262) | success |
-| Agent Build & Release | push | [42524993286](https://github.com/mastalee928/payincus/actions/runs/42524993286) | success |
-| Build & Release | push | [42535118475](https://github.com/mastalee928/payincus/actions/runs/42535118475) | success |
+| Agent Build & Release | pull_request | 42512962052（原仓库 Actions 运行 #42512962052；未迁移） | success |
+| CI | pull_request | 42512962099（原仓库 Actions 运行 #42512962099；未迁移） | success |
+| Alpine SSH security | pull_request | 42512962116（原仓库 Actions 运行 #42512962116；未迁移） | success |
+| Agent Build & Release | workflow_dispatch | 42523460346（原仓库 Actions 运行 #42523460346；未迁移） | success |
+| Build & Release | workflow_dispatch | 42523751752（原仓库 Actions 运行 #42523751752；未迁移） | success |
+| Alpine SSH security | push | 42524993258（原仓库 Actions 运行 #42524993258；未迁移） | success |
+| CI | push | 42524993262（原仓库 Actions 运行 #42524993262；未迁移） | success |
+| Agent Build & Release | push | 42524993286（原仓库 Actions 运行 #42524993286；未迁移） | success |
+| Build & Release | push | 42535118475（原仓库 Actions 运行 #42535118475；未迁移） | success |
 
 候选与main CI各十job全部终态成功，逐job核实际checkout及归档日志；Alpine九job与Agent关联运行全部独立核验。预览四必需job成功且发布步骤skipped；正式五job独立成功，不以预览替代正式。213守卫、241迁移、AMD64/ARM64原生首装、唯一后台、双前端、公开Agent、完整备份/预检/恢复/改变后回退续接、SQL ZIP完整性及旧CRLF历史/错误来源拒绝均核实际日志。首装OSS仍为本地传输替身。
 
@@ -49,7 +49,7 @@ v1.8.4已正式发行并完成下列同来源CI、双架构首装与公开资产
 | `incudal-v1.8.4-ota-manifest.json` | 996 | `09ea4f0ab3fdfcc8dcb7dd6d579a15e89eda6b5798b620838b2642a9517aa397` |
 | `ota-manifest.json` | 996 | `09ea4f0ab3fdfcc8dcb7dd6d579a15e89eda6b5798b620838b2642a9517aa397` |
 
-Agent [v1.0.5](https://github.com/mastalee928/payincus/releases/tag/agent-v1.0.5)同源码发布，AMD64/ARM64二进制与LICENSE三资产实际下载核API digest/大小、ELF/版本/boot_id；main重复发布路径核同源同hash后跳过，不覆盖。原v1.0.4稳定tag和三资产摘要、大小、更新时间保持原基线。
+Agent [v1.0.5](https://github.com/masta-lee/mastaincus/tree/agent-v1.0.5)（旧版发行资产未迁移，仅链接标签源码）同源码发布，AMD64/ARM64二进制与LICENSE三资产实际下载核API digest/大小、ELF/版本/boot_id；main重复发布路径核同源同hash后跳过，不覆盖。原v1.0.4稳定tag和三资产摘要、大小、更新时间保持原基线。
 
 ## 本轮失败及修复闭环
 

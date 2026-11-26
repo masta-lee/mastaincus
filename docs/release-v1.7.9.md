@@ -19,4 +19,4 @@
 
 这是阶段发行，不代表原 327 项全部精修验收完成，也不代表生产已更新。完整独立 OSS 新机恢复、网关接管/切回、千台与 72 小时灾备仍需各自验收；数据库快照之后的账目和撤销信息须按外部证据核对后再解除恢复保护。
 
-正式发行：[面板 v1.7.9](https://github.com/mastalee928/payincus/releases/tag/v1.7.9)（面板 latest）与 [Agent v1.0.4](https://github.com/mastalee928/payincus/releases/tag/agent-v1.0.4)。面板完整源码为 `4c24d4fd9ecdbc68b78f869862a53acc849ef2ab`；[main CI](https://github.com/mastalee928/payincus/actions/runs/41293280568) 七任务与[正式发行](https://github.com/mastalee928/payincus/actions/runs/41293344545)五任务全部通过。公开双架构包、SHA256、OTA清单和签名源码身份已下载核验，详情见[发行证据](release-v1.7.9-verification.json)。
+正式发行：[面板 v1.7.9](https://github.com/masta-lee/mastaincus/tree/v1.7.9)（旧版发行资产未迁移，仅链接标签源码）（面板 latest）与 [Agent v1.0.4](https://github.com/masta-lee/mastaincus/tree/agent-v1.0.4)（旧版发行资产未迁移，仅链接标签源码）。面板完整源码为 `4c24d4fd9ecdbc68b78f869862a53acc849ef2ab`；main CI（原仓库 Actions 运行 #41293280568；未迁移） 七任务与正式发行（原仓库 Actions 运行 #41293344545；未迁移）五任务全部通过。公开双架构包、SHA256、OTA清单和签名源码身份已下载核验，详情见[发行证据](release-v1.7.9-verification.json)。

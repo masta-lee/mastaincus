@@ -54,6 +54,6 @@ Python 导入可能留下 `__pycache__`，严格包覆盖检查会拒绝。受�
 
 ## 成功记录的边界
 
-`7dd0887e80fc8d6317bf456f699e6f142c4eb94d` 的预览 [39952149465](https://github.com/mastalee928/payincus/actions/runs/39952149465) 通过 AMD64/ARM64 构建、全新安装、唯一后台/双端登录/机器池/Agent、身份登记、备份预检/恢复/回滚/续跑、完整数据库/ZIP和迁移兼容检查。OSS transport 在首装演练中使用本地替身；真实云OSS、DNS换机、主备写者隔离和72小时离线要求分别验收。
+`7dd0887e80fc8d6317bf456f699e6f142c4eb94d` 的预览 39952149465（原仓库 Actions 运行 #39952149465；未迁移） 通过 AMD64/ARM64 构建、全新安装、唯一后台/双端登录/机器池/Agent、身份登记、备份预检/恢复/回滚/续跑、完整数据库/ZIP和迁移兼容检查。OSS transport 在首装演练中使用本地替身；真实云OSS、DNS换机、主备写者隔离和72小时离线要求分别验收。
 
 这次预览的 Release job 是 skipped，没有通过它发布正式版本。原失败运行保留在 `HANDOFF.md`；新的运行以当前 job结论、提交和实际 artifact 为准。

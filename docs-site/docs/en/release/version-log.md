@@ -8,58 +8,533 @@ This page is generated from Git tags and commits to show system version history.
 
 ## Latest Release State / 最新发布状态
 
-- Latest Release Commit / 最新发布提交: `ef12578ea`
-- Commit date / 提交日期: 2026-10-27
-- Commit subject / 提交说明: feat: clarify gateway setup and preserve remote installation failures
-- Latest tag / 最新 tag: `v1.7.7`
+- Latest Release Commit / 最新发布提交: `ced7c10cd`
+- Commit date / 提交日期: 2026-11-20
+- Commit subject / 提交说明: chore: prepare v1.8.14 and Agent v1.0.16 after single E2 acceptance
+- Latest tag / 最新 tag: `v1.8.14`
 
 ## Unreleased Changes / 未发布变更
 
 ### Other Changes / 其他变更
 
-- chore: remove retired public auth shell and styling composable `d1cf5d98a`
-- chore: remove unused legacy backup policy row types `f09033855`
-- chore: remove unused lazy image and virtual list components `77bb816f4`
-- chore: remove unreferenced database optimization wrappers `996d3db0e`
-- docs: record pushed checkpoints and passing CI evidence `92fe0b036`
-- docs: record verified v1.7.7 release and remaining gateway scope `0e8010371`
+- chore: back up security work and recovery validation [skip ci] `d6c0a04d6`
+- test: select the installed PostgreSQL service in release admission `259e5e642`
+- test: cover original Alpine library paths in listener reload regression `d4963ec34`
+- test: isolate legacy lock ownership before platform installation `9ab2c4bca`
+- docs: record legacy package migration acceptance and remaining runtime checks `1c9725008`
+- security: journal APK world ownership and preserve interrupted install constraints `e516cab84`
+- security: restrict failed installation diagnostics to safe service states `249c66977`
+- security: activate exact Node and PostgreSQL patches with durable recovery `353b32d42`
+- test: preserve exact sealed links with bounded bulk inspection `0241f3057`
+- test: await shared refresh admission and record incident password decision `8684c9d83`
+- test: protect candidate tools during native old-worker upgrade checks `9359256ae`
+- security: verify sealed runtime before automatic maintenance and retain tamper evidence `7d255476e`
+- security: record static tampering and verify original signed recovery `d6e6dd281`
+- test: preserve live stock during signed candidate receipt renewal `773a77e8b`
+- test: keep legacy source acceptance independent of Ubuntu setup `ddb14d6e7`
+- test: exercise legacy pool security sources on both architectures `fe83a5971`
+- docs: close security phase and record outstanding work and validation `62f2985bf`
+- test: observe real refresh request admission before switching accounts `0f3d555a4`
+- ci: cancel superseded PR checks without cancelling independent previews `64ef6bfec`
+- test: activate the actual mapped Incus LXC dependency `8362c93b9`
+- test: verify loaded TLS library activation through original Incus permit `05a32a2b9`
+- test: capture Debian IPv6 boot ordering failure before cleanup `26bd7a95d`
+- docs: record native restore success and remaining security validation `71d3d80d7`
+- docs: record complete guard run and pending native restore validation `067f57d93`
+- test: verify signed Agent upgrade lookup deadlines `4f75d6872`
+- test: register real sessions in administrator email regression `15c9aad68`
+- docs: record startup success and remaining restore integrity checks `15b4202ee`
+- test: verify full recovery state with sealed wallet transactions `f56c62229`
+- test: exercise sealed sessions notifications and recovery accounting `226539f25`
+- test: classify rejected migration runtime without exposing data `fe05c5a5a`
+- docs: record financial audit source push and release hold `a5251f0ca`
+- docs: close v1.8.14 validation with final main CI success `a9cb89d1b`
+- docs: record v1.8.14 publication public assets and restored E2 evidence `ecdb8666b`
 
 ### Fixes and Stability / 修复与稳定性
 
-- fix: serialize init command toggles and reject obsolete list results `85d2068b7`
-- fix: serialize init command form saves and isolate stale callbacks `0b35de615`
-- fix: bind init command details to target and session lifetime `eaf703fb3`
-- fix: isolate init command selector requests by distro and session `80f109e20`
-- fix: serialize public ticket close and reopen authorization `a77c89173`
-- fix: revalidate public ticket reply credentials before writing `97c929ee3`
-- fix: revalidate public ticket creation credentials in transaction `66f5a6694`
-- fix: classify ticket image failures and release upstream streams `3fd997196`
-- fix: constrain ticket identifiers to database integer bounds `bb35a0a9c`
-- fix: commit ticket notifications and audit atomically `57723738a`
-- fix: bind ticket object links to current ownership and administrator `510e903a7`
-- fix: authorize internal ticket notes in the write transaction `4ef8b029b`
-- fix: authorize ticket message deletion with its attachment manifest `23358c275`
-- fix: serialize ticket status changes with current authorization `fadec0462`
-- fix: recheck current ticket reply authorization `d29ca3a7f`
-- fix: recheck current web session when creating tickets `e244d8fab`
-- fix: revalidate ticket instance association in the write transaction `eaef6ea6a`
-- fix: bound ticket pagination and numeric search queries `84f8464c9`
-- fix: reject restore rollback without persisted copy identity `5e3d3a186`
-- fix: preserve restore identity and unresolved recovery copies `f6571c6df`
-- fix: require confirmed stop before restoring instance backups `f8dd60c9b`
-- fix: bind restore queue authorization and execution attempts `1299ce6eb`
-- docs: confirm passing CI for all backup repair checkpoints `fb5e14aa9`
-- docs: record pushed backup fixes and restore recovery requirements `f9e7e9fca`
-- fix: bound restore streams and preserve remote failure states `5e63e8e95`
-- fix: confirm backup deletion under current instance authorization `5a8f9e53c`
-- fix: persist isolated upload attempts and enforce retry backoff `8d73ab341`
-- fix: bind backup uploads to current authorization and target identity `eac0b0689`
-- fix: preserve Incus identity and bound backup export streams `7a38eca0c`
-- fix: isolate backup upload files by task identity `8465e9d60`
-- fix: declare Markdown guard runtime dependency `437ff0217`
-- fix: checkpoint review repairs and durable resource recovery `c277ba30a`
+- fix: diagnose APK failures and exercise original musl recovery `94de16db4`
+- fix: recover musl transactions and verify all project operations `1ba6cd397`
+- fix: preserve effective database settings and await initial connection `30c6c9215`
+- fix: activate installed runtime libraries through guarded maintenance `870132ddd`
+- fix: preserve backup collation and complete signed controller verification `c33060c99`
+- fix: align backup recovery waits with backend service budgets `f92a77b79`
+- fix: activate reviewed legacy gateway DNS and retain database patch receipts `f7d3ea07a`
+- fix: validate completed SSH policy before loading replaced libraries `a241daf21`
+- fix: inspect original SSH listener libraries after policy upgrades `0f5f0140f`
+- fix: verify SSH loaded libraries and isolate shared database runtime maintenance `298e3c586`
+- fix: align independent Python split and activate managed DNS interpreter `f5b1455fd`
+- fix: include installed OpenSSL provider in complete security plans `b07702777`
+- fix: distinguish transient instance verification locks from active tasks `2e7886a80`
+- fix: verify complete sealed records across inherited locales `934c025be`
+- fix: adopt legacy empty platform lock without splitting authority `ea8d331c8`
+- fix: verify stopped host occupancy before requesting maintenance `fe1df1de2`
+- fix: align reviewed old Python groups before signed host maintenance `69d94fead`
+- fix: recover reviewed Alpine Python split without maintenance loops `84cfdeb6d`
+- fix: provide root task environment and recover sealed legacy preflight failures `cc89bbd25`
+- fix: preserve known legacy close-timeout evidence before verified owner update `500058391`
+- fix: drain legacy controller safely before owner candidate worker `9ae84f38c`
+- fix: preserve installed seal locale and refresh fixture admission `8b79885ad`
+- docs: preserve failed runtime fixture evidence and verified recovery `20752c1bb`
+- fix: distinguish absent historical maintenance from unsafe migration state `f4726f6bb`
+- fix: migrate confirmed legacy Alpine package constraints once per enrolled host `6cd1eb7b5`
+- fix: align Alpine Python split packages before guest initialization `3861d4283`
+- fix: drain background work before Fastify timed pre-close hooks `780cafa83`
+- fix: budget complete security seal verification and business readiness `1446d230b`
+- fix: budget backend migration startup and full maintenance restart `b8623a06e`
+- fix: publish PostgreSQL local policy readable under strict umask `51483a28d`
+- fix: drain accepted backend work and idle connections before safe maintenance `fbecfb23c`
+- docs: verify all pool hosts and two natural patrol cycles after Agent repair `b64a37ae5`
+- fix: retry transient signed Agent heartbeats before liveness expiry `fa8bcac09`
+- fix: finalize original OTA seal only after signed full-package verification `1f24cbf50`
+- fix: inspect expired host receipts before early renewal backlog `994fff285`
+- fix: verify exact candidate upgrade and same-version backup restore `22d1ab347`
+- fix: renew valid hardening receipts before read-only checks expire `9995256fd`
+- fix: include installed rsync companion in signed security updates `e470547b9`
+- fix: verify candidate readability before atomic version deployment `4e29f8b67`
+- fix: deploy signed pool repair without changing controller configuration `535a326e9`
+- fix: validate legacy pool repositories through signed HTTPS `f084a9b46`
+- docs: record live pool repair and security hot-update evidence `9280d2ac2`
+- fix: avoid duplicate unbounded APT initialization `19eba5f2f`
+- fix: allow bounded first-boot package initialization to finish `af1252d9e`
+- fix: retain occupied-host proof during compatibility maintenance `5d04cf8d2`
+- fix: keep compatibility fences from starving host hardening `10927334e`
+- fix: scope database hardening to current application objects `f6fc30215`
+- fix: revalidate completed SSH policy journals and resume unavailable pool hosts `fc353af0e`
+- test: make firewall packet fixture independent of neighbor setup timing `1c2929811`
+- fix: await recovery and alert work on close and return ticket cycle completion `e248359e0`
+- fix: drain scheduled billing and background work during backend shutdown `8d7f5bd6a`
+- fix: drain resources during protected startup shutdown and stop further claims `1b4e603dd`
+- fix: await in-flight resource workers before closing the backend `fd45b0841`
+- fix: inventory database clients and libraries from one complete package snapshot `5625b32df`
+- fix: bound system command cleanup to current process group `ea53b35d4`
+- fix: enforce package authentication during managed clock installation `cfcc9f1a5`
+- fix: bind managed clock policy and ignore exited foreign command processes `79698802a`
+- fix: keep host security stages independent and settle native fixture operations `1bdbf0e86`
+- fix: activate and recover fenced Alpine clock patches and retire IPv6 boot cycles `23f97e60a`
+- fix: continue independent service patch activation after one component fails `de1b9e044`
+- fix: persist bounded security maintenance retries without repeated repository work `12f3d2689`
+- fix: activate signed managed clock patches with original slew policy `3e829ae64`
+- fix: bound system maintenance child cleanup without rejecting exited zombies `96fe9f31e`
+- fix: activate patched standard SSH listener without dropping existing sessions `56a7bd9f2`
+- fix: run constrained system security patches with durable activation receipts `142c0b0aa`
+- fix: distinguish exited zombies from live package command children `6468a24cd`
+- fix: refuse incomplete host package command child groups `8ca2c4205`
+- fix: bound host command cleanup and retry verified CI artifact downloads safely `0d4ef9c91`
+- fix: reverify current guest maintenance baseline after pool resale `57111e2e8`
+- fix: verify complete Debian tool package transactions and exact versions `3765e45b3`
+- fix: pin Incus repository key and remove mutable root shortcut downloads `e72523e70`
+- fix: repair only broken host tools without reinstalling healthy services `9284f2b57`
+- fix: keep Alpine package inventory separate from cache diagnostics `a09eba5a4`
+- fix: preserve AppArmor patchability across signed maintenance installs `ecd62ee74`
+- fix: cover system libc and clock helper packages in security inventory `cb22d5db5`
+- fix: verify managed DNS patch activation through original Incus service `fdba0018c`
+- fix: preserve future security updates when provisioning Alpine tools `7e0a00c51`
+- fix: activate Alpine LXCFS patches only under verified empty host fence `f2aed14af`
+- fix: accept ordered dated certificate updates without major bypass `3a257527c`
+- fix: verify original package constraints after security transaction `64d08b008`
+- fix: maintain image and network utility security dependencies `4f84205e1`
+- fix: track Debian runtime library security revisions `4d8c233a4`
+- fix: include actual Incus runtime libraries in security upkeep `b40b3f302`
+- fix: recheck package authority after acquiring maintenance lock `0e3772fd0`
+- fix: verify complete Debian package changes and native TLS fixture path `403447a96`
+- fix: preserve administrator package constraints across future patches `a28757071`
+- fix: verify Incus readiness against kernel peer identity and loaded libraries `dc7ea8151`
+- fix: reuse verified package index within bounded host security update `fe2feec6d`
+- fix: bound live Incus status verification allocation `17edf2259`
+- fix: bind security updates to the complete installed package plan `e0870893c`
+- fix: compare full running Alpine kernel patch identity `3220c38aa`
+- fix: continue same-binary recovery after a lost restart reply `d4185d45c`
+- fix: resume original Incus activation after later daemon exit `cfbf1d20a`
+- fix: recheck live Incus activation in status receipts `2e4fca784`
+- fix: verify running Incus before marking compatibility activated `df871c21d`
+- fix: pin PostgreSQL repository signing identity `3e6ab0e1f`
+- fix: reverify loaded system patches during scheduled inventory `ada70b2f2`
+- test: initialize independent restore target and authenticated workflow fixtures `e6a1123e1`
+- fix: distinguish installed host patches from loaded code `dc73df332`
+- fix: reject conflicting security updates and enforce package authentication `7ab624817`
+- fix: normalize public schema comments before types and functions `88a7fec7b`
+- fix: prevent code cache writes during staging database migrations `611712274`
+- fix: apply exact schema equivalence to preview and final restore `0b17fd1b1`
+- fix: compare restored schemas across exact owner comment changes `537d35909`
+- fix: bootstrap SCRAM without exposing passwords and diagnose restore integrity `31b64bf51`
+- fix: disable writable Prisma config caches in root migrations `6296687ff`
+- fix: harden active flat runtime with an existing release directory `3320f6b24`
+- fix: preserve security wrappers and validate signed preview inputs `7802ab1dd`
+- fix: isolate startup probes and attest loaded security patches `2bcb2dc55`
+- fix: preserve readonly installer environment and legacy worker path `82238c8d7`
+- docs: record security repair source and preview validation `35a77f4cf`
+- fix: harden authentication storage and signed upgrades `aec5f0f8d`
+- fix: seal financial records and preserve verified recovery accounting `5f02d45fa`
+
+### Improvements and Adjustments / 改进与调整
+
+- test: make notification tampering checks deterministic `7f9dd2bbb`
+- docs: record trusted update and actual pool test evidence `faa340513`
+- chore: prepare security Agent 6 for authorized controller testing `f90c00028`
+- docs: record signed pool update and exact incident containment evidence `1b6381fcd`
 
 ## Historical Versions / 历史版本
+
+## v1.8.14
+
+- Release commit / 发布提交: `ced7c10cd`
+- Commit date / 提交日期: 2026-11-20
+- Commit subject / 提交说明: chore: prepare v1.8.14 and Agent v1.0.16 after single E2 acceptance
+
+### Improvements and Adjustments / 改进与调整
+
+- chore: prepare v1.8.14 and Agent v1.0.16 after single E2 acceptance `ced7c10cd`
+- test: prepare OpenRC state directory before pre-mount receipt `50494eb61`
+
+### Other Changes / 其他变更
+
+- test: validate release upgrades from current v1.8.13 baseline `8d057df55`
+- test: enforce private disk capacity with actual extent allocation `27037725f`
+- test: run exited PID retirement guards as root on both native architectures `458d7481e`
+- test: wait for exact daemon exit before raft recovery restart `29c5fecb8`
+- test: distinguish retained raft history from preallocated writer segments `a89cb871b`
+- test: distinguish daemon heap defaults from reclaimed edge page flags `8daa1fc2f`
+- build: require explicit verified Incus compatibility build source `e9e706287`
+- test: verify real daemon Go heap page defaults before pressure acceptance `5f5f53d0c`
+- test: verify compiled daemon memory defaults on native heap mappings `eda4954ed`
+- test: compare daemon memory budgets and guest isolation under pressure `5dc9a54db`
+- docs: record E2 memory pressure failure and verified restoration `bd47d0a3b`
+- docs: close final CI evidence for host memory optimization `5d8f00512`
+- docs: confirm repeatable dual-architecture memory pressure validation `4c1a2dc13`
+- docs: record strict memory pressure results and staged deployment plan `7548978ab`
+- test: rebuild pinned daemon for durable future memory validation `aa61333f0`
+- test: preserve pre-mounted delegated cgroups during OpenRC setup `20a9c0d68`
+- test: charge all daemon startup pages inside the aggregate host budget `1afbb48f7`
+- test: identify exact tool and LXCFS failures in full Agent pressure setup `2bb47ba31`
+- test: include OpenRC daemon memory in aggregate pressure accounting `00a37f813`
+- test: contain root LXC guest inside disposable aggregate pressure cgroup `973301e29`
+- test: preserve native LXC cgroup view and assert aggregate memory containment `2a0708f3b`
+- test: retain native container startup diagnostics in pressure runtime `b8eedb470`
+- test: install official AppArmor include files in isolated memory runtime `d8a6d7f0e`
+- test: validate full Agent and customer memory under constrained host budget `f36cc1ec8`
+- docs: record verified v1.8.13 public release `2adb513be`
+- docs: record v1.8.13 candidate and live acceptance `0790631b6`
+
+### Fixes and Stability / 修复与稳定性
+
+- fix: refresh memory policy boot receipt before honoring later operator changes `aa24a6ec3`
+- fix: persist verified small standalone host memory reserves with operator overrides `1a48096b0`
+- fix: retire unchanged exited daemon PID receipts before OpenRC startup `ef665ca5d`
+- fix: retry transient image catalog and stream failures within original deadlines `74bd6a3f6`
+- test: verify compacted raft rollback crash and previous snapshot recovery `49ed6f930`
+- fix: bound standalone raft retention and verify aged database recovery `89898c647`
+- fix: confirm daemon startup readiness and original executable identity `5ec48e8d1`
+- fix: isolate native daemon page policy and restore customer inheritance `13c4c3e58`
+- fix: apply isolated automatic Go memory defaults in the paired Incus daemon `9524a9f18`
+- fix: defer busy protocol acknowledgements without losing signed heartbeats `6f73b86db`
+- fix: avoid repeated Incus CLI allocation for local read-only reconciliation `e671a5cef`
+- fix: avoid host network lock stalls on repeated signed heartbeats `658e3ef24`
+- test: retain one native cgroup mount while delegating OpenRC fixture `fdd2f9b9f`
+- test: expose matching runner kernel modules to native memory fixture `4c9718a2a`
+- test: retain full Agent readiness receipts before fixture failure `2fc9c55ae`
+- test: load native AppArmor profiles before memory pressure fixture `5595ec719`
+- fix: stream Incus verification and apply persistent Agent memory budget `97ae0734b`
+
+## v1.8.13
+
+- Release commit / 发布提交: `629dca1f6`
+- Commit date / 提交日期: 2026-11-15
+- Commit subject / 提交说明: fix: keep expiry renewal available from instance detail
+
+- 单台、批量、公共 API 与系统续费统一排入一次自动开机任务，确认原客机 Running 后更新状态；重复请求不重复扣款，用户主动关机与手动封禁保持。
+- 系统到期封停时详情页续费可用；IPv4/IPv6 字体、字号、颜色、位置和复制统一，移除两端建站入口。
+- 管理员删除用户改为同栏线条图标，悬停显示“删除用户”；删除进度和完成刷新保留列表，修复闪烁，保留原生确认及错误重试。
+
+验收：本地225全量与最终补充对应类型/守卫/双端构建、完整CI、双架构实际Incus、双首装和六v1.8.12原worker升级/回滚再升级通过，实际双包签名和产物边界核过。正式发行前已将同源码候选热更新至授权主控，实际单台与批量续费确认Stopped→Running/原UUID/每台一次扣款；管理员专用账户删除不闪烁，容器/磁盘/转发全部删除并回池。ARM线上库存被现有实例占用，本轮使用双架构原生CI证据，未改现有ARM已付账期。
+
+完整OSS公网灾备目标的未验范围继续保留。
+
+## v1.8.12
+
+- Release commit / 发布提交: `fc284676c`
+- Commit date / 提交日期: 2026-11-15
+- Commit subject / 提交说明: Merge pull request #16 from mastalee928/codex/account-notification-reinstall-fixes
+
+
+- 修复注册接口专用限流未生效；同一公网来源过去24小时成功注册最多3个，可在后台调整，IPv6按/64统计。
+- 管理员增加删除用户入口，浏览器原生最终确认。先清理实例并核验机器回池，再清余额、账单和账户；拥有宿主机或套餐者需先转交资源。
+- 客户TG通知去除宿主名、OCI账户及内网地址；管理员告警保留详细分行信息，修复特殊字符、长度和发送结果检查。
+- 实例重装后自动显示新SSH密码，无需刷新；旧请求不会覆盖新凭据。
+
+## v1.8.11
+
+- Release commit / 发布提交: `b463d9e1e`
+- Commit date / 提交日期: 2026-11-15
+- Commit subject / 提交说明: fix: prune marked image cache before paid guest creation
+
+### Fixes and Stability / 修复与稳定性
+
+- fix: prune marked image cache before paid guest creation `b463d9e1e`
+- fix: release optimized image volumes to preserve customer disk headroom `e994f835f`
+- fix: wake pool recovery promptly and expose verified readiness progress `7b688d55f`
+- fix: support older disk tools and verify real isolated pool cleanup `649d88706`
+- fix: isolate customer disk filesystems from host pool capacity `a5a0d38f0`
+- fix: publish verified tag builds after skipped preview dependency `f5dec0b2e`
+
+### Other Changes / 其他变更
+
+- docs: record successful candidate upgrade and ongoing disk acceptance `03f1eb443`
+- test: verify isolated disk exhaustion and current-version upgrade `2560637e8`
+- docs: record v1.8.10 publication and final acceptance `90391b5c1`
+
+## v1.8.10
+
+- Release commit / 发布提交: `928293100`
+- Commit date / 提交日期: 2026-11-14
+- Commit subject / 提交说明: fix: keep verified heartbeats out of the maintenance lane
+
+修复 AMD64／ARM64 实例创建、重装、停启与初始化续接，覆盖当前可选镜像。
+撤除 Debian 11 和 Ubuntu 25.10；镜像保存于主控独立持久库，更新程序不重复下载。
+修正 E2／ARM1C 实际内存和磁盘单位，补齐旧实例资源视图与 sysinfo。
+修复 Btrfs 重装残留及缺失卷登记、Alpine 重启后 DNS 丢失，后台覆盖现有和未来宿主。
+修复 SSH 握手二次错误导致后端退出、已完成心跳误占维护锁及未发送重装请求的自动续接。
+保留管理员独占当前实例续费价、删除回池原定价、第三方开通失败真实退款到账户余额及到期停删修复。
+创建过程中不显示多余 IPv6 配置提示，成功后的地址展示保持。
+配套 Agent v1.0.14；双架构原生、旧版升级／回滚、完整镜像操作及候选热更新验收通过。
+
+## v1.8.9
+
+- Release commit / 发布提交: `73337d2c8`
+- Commit date / 提交日期: 2026-11-13
+- Commit subject / 提交说明: Merge pull request #12 from mastalee928/codex/fix-v1.8.9-provisioning
+
+### Fixes and Stability / 修复与稳定性
+
+- Merge pull request #12 from mastalee928/codex/fix-v1.8.9-provisioning `73337d2c8`
+- fix(initialization): prepare SSH runtime directory before validation `8297d04c8`
+- fix(ssh): normalize current OpenSSH effective-policy output case `3f7697d8c`
+- fix(initialization): verify complete SSH effective configuration `a22ee366d`
+- fix(initialization): persist precise SSH setup failure receipt `87f402b91`
+- fix(initialization): retain precise password and SSH setup stages `526b346e2`
+- fix(initialization): provide system executable paths for cloud-init `2ad8d7ccc`
+- fix(incus): continue original operations after bounded wait expires `87f3d5130`
+- fix(initialization): remove invalid cloud user field and persist failing stage `4dd32d0ff`
+- fix(agent): reinstall exact installed Debian tool versions `fd38a82fd`
+- fix(agent): distinguish APT architecture from installed versions `c836ff3b6`
+- fix(agent): avoid unrelated upgrades in host tool repairs `c10edf843`
+- fix(provisioning): seed trusted CA and resume cleanup-blocked restores `dd8ea8ecc`
+- fix(provisioning): accept verified legacy tool exit and preserve VM boundary `654b82a95`
+- fix(validation): probe unsquashfs version and update lifecycle fixtures `6b94494fa`
+- fix(provisioning): repair host unpack tools and fence delivery cleanup `0dcb2d24b`
+- docs(expiry): record pushed fix and pending CI evidence [skip ci] `2edcf1d31`
+- fix(expiry): enforce current instance deadlines and verified cleanup `5b13db743`
+- docs(release): record verified v1.8.8 upgrade and rollback [skip ci] `3801dafb7`
+
+### Other Changes / 其他变更
+
+- test(snapshot): await rejected transaction release before next control `d3aa8ca23`
+- test(provisioning): exit after verified native cleanup completes `de246805e`
+- test(provisioning): isolate all six guest families on both architectures `81d827ec8`
+- test(initialization): inspect bounded effective SSH policy output `87e023912`
+- docs(provisioning): record native passes and pending Debian initialization `b19077a83`
+- test(provisioning): capture guest schema and required script execution `d6b546ff3`
+- test(provisioning): permit isolated Incus bridge through Docker forwarding `4cd262713`
+- test(provisioning): collect live sanitized guest initialization diagnostics `628705698`
+- docs(ota): preserve v1.8.7 incident and release prevention gates [skip ci] `7dc5d22a2`
+
+## v1.8.8
+
+- Release commit / 发布提交: `a7d7d841a`
+- Commit date / 提交日期: 2026-11-12
+- Commit subject / 提交说明: Merge pull request #11 from mastalee928/codex/fix-v1.8.8-upgrade
+
+- 修复 v1.8.6 升级时旧网关组件清单被误拒、安装失败自动回滚的问题，保留原平台身份与密钥。
+- 补齐升级后半程失败时的新旧组件回退兼容，自动恢复旧版后可再次升级。
+- 完整包含主控/网关持续校时、签名心跳和固定 Incus 响应的时间偏差处理；约 14 秒正常时差不会再按旧逻辑误判防护回执。
+- 保留管理员当前单实例续费价、用户无改价入口、删除回池原定价、宿主 BBR 兜底、到期实际 Stopped 和到截止日删除的前版修复。
+- 发行增加双架构完整包逐文件校验、两种首装和六种真实旧版升级验收，包含已迁移回滚状态以及故障注入后自动回滚再升级。
+
+配套 Agent v1.0.7。本次发布不代表已替管理员升级生产主控；从管理端正常执行版本更新。原 v1.8.7 已执行的新增迁移会保留，正常迁移流程不会重复添加字段，无需手动改数据库或重建网关身份。
+
+## v1.8.7
+
+- Release commit / 发布提交: `41077946d`
+- Commit date / 提交日期: 2026-11-12
+- Commit subject / 提交说明: Merge pull request #10 from mastalee928/codex/release-v1.8.7
+
+fix: five-minute patrol resumes trusted host repairs and original lifecycle tasks
+fix: verify actual Incus Stopped at expiry; delete guest, disk, snapshot and forwards after 72-hour retention
+fix: machine-pool host BBR automatic repair and normal-sales fallback; customer instances unchanged
+fix: current IPv6 state, legacy SLAAC cleanup, continuous controller/gateway clock and onboarding receipts
+
+## v1.8.6
+
+- Release commit / 发布提交: `00b39869a`
+- Commit date / 提交日期: 2026-11-11
+- Commit subject / 提交说明: fix(ssh): preserve leading zero bytes in Ed25519 key generation
+
+- 修复非特权加固后接入任务被普通巡检反复推迟、已完成回执未入可售池等问题，沿原任务自动续接。库存、公开目录和锁定分配器统一核当前防护、客户占用与清理状态。
+- 纯净 Alpine／Debian 自动准备依赖、准确时间、ipinfo 当地时区、支持时启用 BBR、保留现有并补足至少 1 GiB 磁盘 swap；包锁、下载和网络暂时失败按阶段退避。SSH 密码加密保存，完成接入后清理不再需要的凭据。
+- 配套 Agent v1.0.6，在宿主客户网络入口隔离 OCI metadata、私有管理网络和已识别主控／网关地址，保留正常公网、密码登录与业务端口；管理验收连接按已识别来源转换。规则漂移自动修复，防护失败不发布可售回执。
+- 双架构支持旧 nftables 的原子规则加载；systemd／OpenRC 在防护恢复前阻止 Incus 启动，成功后自动续接。保留客户原身份、网络、磁盘与计费状态。
+- 修复 SSH 依赖生成 Ed25519 密钥时误删零前缀、偶发阻断网关初始化的问题；保留原有密钥身份与密码登录。
+- 保留本轮实例生命周期、重装原身份、IPv6 预占及失败清理回池修复。累计 241 个数据库迁移。
+
+自动维护仅执行已验收的系统方案，无法确认身份、未知残留或未验收引导方案时继续保护并显示具体原因。当前自动修改引导的原生放行范围为 Alpine／GRUB／AMD64；ARM64／其他布局不能用模拟结果冒充启动验收。公开门户和公开域名不是隐藏对象，也不承诺公网地址绝对保密。
+
+本次为软件发行，未代部署生产。完整纯净宿主原生端到端、真实客户公网／全端口、真实 OSS 全新 B 灾备、独立备用及千台／72 小时验收分别保留范围。
+
+验证记录：https://github.com/mastalee928/payincus/blob/main/docs/release-v1.8.6-validation.md
+网页升级与检查：https://github.com/mastalee928/payincus/blob/main/docs/release-v1.8.6-owner-click-test.md
+
+## v1.8.5
+
+- Release commit / 发布提交: `e7faf22a0`
+- Commit date / 提交日期: 2026-11-09
+- Commit subject / 提交说明: release: prepare v1.8.5 homepage layout and reliable update downloads
+
+- 暂时下载失败最多三次尝试，必要时切换同Release官方资产API；完整流超时、官方HTTPS与凭据隔离、大小/SHA256核验保持。
+- 原地图地理/地区购买目标、支付权限及网关身份保持。累计241迁移，无新增迁移；Agent保持v1.0.5。
+- 新版下载器安装后生效，旧版本首次升级仍由当前下载器执行。发行不代表生产已升级，本次未代生产OTA。
+
+[验证记录](https://github.com/mastalee928/payincus/blob/main/docs/release-v1.8.5-validation.md) · [网页升级与检查](https://github.com/mastalee928/payincus/blob/main/docs/release-v1.8.5-owner-click-test.md)
+
+双架构首装的OSS传输为本地替身。真实OSS全新B灾备、独立备用、原客户公网与千台/72小时验收仍未完成。
+
+## v1.8.4
+
+- Release commit / 发布提交: `2c3201122`
+- Commit date / 提交日期: 2026-11-09
+- Commit subject / 提交说明: fix(incus): share transaction connection in owned mutation clients
+
+- **SSH 与实例隔离**：适用 Alpine 官方 OpenSSH 安全修订，保留原密码登录、主机密钥和配置核验；加强非特权、危险配置和设备门禁。已有/新接入宿主增加持久安全检查、适用补丁及详细状态。
+- **自动续费**：余额不足不再关闭自动续费意愿；系统到期暂停保留期内，充值足额后补续，五分钟巡检兜底。多台按到期时间和实例ID顺序逐笔处理，允许部分续费；截止或删除后不续费、不补扣。系统到期暂停补续后按原身份自动开机，恢复重试不重复收费。
+- **管理员操作**：新增修改实例准确到期时间，以及用户邮箱旁细线铅笔编辑。独立管理员鉴权、并发/旧表单保护及审计；改期不扣费退款，改邮箱使旧Web会话和验证码失效，密码/2FA/余额/实例保持。
+- **网关**：已配置本机网关仅只读重新检查，阻止旧计划与重复确认重写配置。
+- **首页**：切洲自动聚焦；手机“全部”隐藏城市文字，选洲显示就近名称；修正新加坡西部等名称、密集布局、缩放和触摸，指定标题/品牌/导航局部禁选。
+- **双架构**：面板 AMD64/ARM64，Agent 独立 v1.0.5增加启动标识上报。新增宿主维护状态迁移，累计241个迁移。
+
+自动重启方案的原生系统/架构白名单仍为空：未完成验收的内核/AppArmor准备、宿主重启与真实客户恢复不会自动放行。内存优化实验默认关闭；不能把部分SSH补丁成功当成宿主全部防护就绪。
+
+正常升级由管理员在网页“版本更新”执行；本次发行未代做生产OTA、重启、改账号或DNS/OSS恢复。首装OSS是本地传输替身；真实OSS全新B灾备、独立备用、真实客户公网持续观察、近千台/72小时及真实iOS/Android仍需各自验收。
+
+[网页升级与检查](https://github.com/mastalee928/payincus/blob/main/docs/release-v1.8.4-owner-click-test.md) · [验证记录](https://github.com/mastalee928/payincus/blob/main/docs/release-v1.8.4-validation.md)
+
+## v1.8.3
+
+- Release commit / 发布提交: `1ac022b56`
+- Commit date / 提交日期: 2026-11-05
+- Commit subject / 提交说明: test: stabilize mobile hint touch coordinates before v1.8.3 release
+
+- 再次隔离自动创建新的只读身份/库存核验；不重放旧删除授权，未知残留和客户保护保持。首次开通失败原因与时间持久保存。
+- 转移最终数据库提交有限重试，耗尽后保留阶段、退避并按原授权自动续接；原身份/资源保护与手续费一次保持，完成通知新用户。
+- 工单显示当前公网IPv4，管理员详情显示OCI账号名称；普通用户不返回该账号字段。
+- 首页随窗口宽高调整地图并保持底部可达；保留地图、球体和三态主题。
+- 自动续费说明支持悬停、键盘与手机点击；转移期间显示状态并限制重复PUSH和冲突操作。
+- 创建实例标签使用实际网站名称/副标题；余额支付项显示该账户当前金额。
+
+网页升级与检查：[owner指南](https://github.com/mastalee928/payincus/blob/main/docs/release-v1.8.3-owner-click-test.md)。正常升级不用OSS还原。无新迁移（累计240）；Agent保持v1.0.4。
+
+验证范围：同来源CI、双架构正式首装与恢复、六公开资产独立hash/大小/OTA和受信签名核验。首装OSS为本地传输替身。未代做生产OTA、改隔离、DNS/OCI地址或客户操作；真实OSS新B完整灾备、原Agent客户公网、独立备用、千台/72小时仍需独立验收。稳定旧tag不移动。
+
+## v1.8.2
+
+- Release commit / 发布提交: `b70a9f56b`
+- Commit date / 提交日期: 2026-11-04
+- Commit subject / 提交说明: fix: resolve localized host IP logs in standalone runtime checks
+
+- 已在机器池的 IP 直接显示已有宿主。尚未建立正式宿主的失败任务在重装后使用当前 root 密码重新核验系统，旧管理登记按身份精确清理；隐藏任务历史保留现用宿主管理连接。
+- 同一 OCI 宿主删除原公网 IP 后附加新 IP，沿原管理和 Agent 身份发现、核验并更新地址。短暂断网自动退避续接；A 释放旧地址后 B 可复用，B 使用自己的 SSH 身份。保留客户实例、磁盘、账期和余额。
+- 购买页切换洲或地区立即清除失效配置、镜像和数量，移除旧配置残影；CPU、内存和磁盘统一横排居中，显示“库存:N”。首页支持跟随系统、亮色、暗色。
+- 修正本机双层代理后的真实来源 IP 记录，保持转发头防伪造；历史记录不改写。
+- OSS 保留宿主清理回执与现用管理路由；直接购买和购物车付款流程沿用 v1.8.1。Agent 保持 v1.0.4。
+
+升级与检查步骤：[v1.8.2 网页流程](https://github.com/mastalee928/payincus/blob/main/docs/release-v1.8.2-owner-click-test.md)。管理员在“版本更新”检查并更新至 v1.8.2，等待自动备份、240 项迁移及重启完成。正常更新无需 OSS 还原。
+
+发行验证按实际源码 CI、双架构预览及正式构建/首装、公开安装包和 OTA 清单分别保存。安装包含用户端、管理员端和受信签名网关组件；Linux AMD64/ARM64 包提供独立 SHA256 校验。
+
+本轮不操作生产升级、恢复、DNS、OCI IP 或客户实例。隔离 PG/真实不同 SSH 身份与 Linux 命名空间验证的范围单独记录；首装 OSS 使用本地传输替身。真实 OCI 换 IP 后原 Agent/客户公网持续连接、独立真实 OSS 新 B 灾备、近千台与72小时仍未验收。
+
+## v1.8.1
+
+- Release commit / 发布提交: `bc860dcbd`
+- Commit date / 提交日期: 2026-11-03
+- Commit subject / 提交说明: fix: wait for recovery operation lock handoff before starting queued tasks
+
+主控兼网关沿用原固定域名。先将域名指向新机器，再保存 OSS 资料、选择完整备份包并点击还原，后台自动预检、恢复、连接和续接。
+
+- 恢复所选备份时点的数据和原控制、WireGuard、SSH、Incus、Agent 身份。
+- 恢复中断和回执丢失可自动续接，进度持续保存，不要求逐台填写参数或人工补账。
+- 核验原宿主和实例，保留原停止状态；仅在原身份及网络一致时补齐缺失转发，保护客户磁盘与归属。
+- 修复恢复期间等待暂停的 Agent 状态所造成的互等，结束还原仍核验原 Agent 当前心跳。
+- 清理待安装网关配置中已确认删除的 Peer，保留现用宿主绑定。
+- 修复恢复命令退出、文件权限、数据库回退身份、启动限流和维护锁交接，避免中断后错误卡住。
+
+新生成真实 OSS 备份已在本机隔离导入，135 表、7075 行摘要、119 序列一致，236→238 迁移通过；28 台宿主原 HMAC 身份认证验证通过。支付、恢复、界面及同提交发行证据见仓库的 [验证记录](https://github.com/mastalee928/payincus/blob/main/docs/release-v1.8.1-validation.md)。
+
+这不是生产升级或完整灾备验收声明。真实备份样本没有在用客户实例；独立 OSS 新 B、原宿主实际隧道重连、客户持续连接、千台真机与 72 小时仍未验收。面板备份不包含客户磁盘或未备份的后续交易；原数据确实缺失时保持具体失败与保护，不伪造恢复成功。
+
+Agent 保持 v1.0.4。本版不自动更换生产系统 Node.js，也不代替 owner 执行生产还原。
+
+## v1.8.0
+
+- Release commit / 发布提交: `85323d5fe`
+- Commit date / 提交日期: 2026-11-02
+- Commit subject / 提交说明: test: satisfy pool stock readiness before exercising row lock race
+
+- 机器池默认展示宿主库存，防滥用设置移至次级标签。
+- 宿主公网 IPv6 位于“公网 IP / OCI 账号”下一行，仅显示地址，无复制按钮。
+- 检查与恢复展示后台自动处理进度，关闭页面后任务继续，不依靠重复点击或再次确认推进已受理任务。
+- 自动操作保存宿主/实例、处理步骤、原因、结果、次数及下次重试。历史到期巡检 JSON 转为可读摘要，正常开始显示“已开始”，正在清理不误报完成。
+
+管理员在“系统更新”选择 **v1.8.0**。配套 Agent 仍为 **v1.0.4**；已正常运行的该版本无需重新安装。更新成功后先观察历史宿主自动恢复，再使用测试实例验证换机、删除和库存。
+
+[完整主控网页点击实测流程](https://github.com/mastalee928/payincus/blob/v1.8.0/docs/release-v1.8.0-owner-click-test.md)
+
+本次发行不代替生产更新与 owner 实测。首装 OSS 传输演练使用一次性机器本地替身；完整独立 OSS 新机恢复、网关接管、近千台和72小时验收仍未完成。实际验证证据与范围见 HANDOFF.md。
+
+## v1.7.9
+
+- Release commit / 发布提交: `4c24d4fd9`
+- Commit date / 提交日期: 2026-11-01
+- Commit subject / 提交说明: fix(backup): keep gateway restore inputs within confined directory
+
+- 后台统一管理屏蔽 BT、屏蔽挖矿、屏蔽测速三个全局开关。已有宿主自动同步，新宿主继承；提供异常汇总、搜索分页和一键重试全部异常。策略覆盖受管客户实例转发流量，保留宿主自身出站及管理链路。
+- Agent 持久保存策略、失败退避和实际应用状态；版本、能力及回执校验避免旧主控、旧组件或迟到响应误报成功。旧备份落后于宿主保护时明确提示冲突，由管理员核对并保存统一策略。
+- 主控兼网关、独立网关和备用网关支持在后台更换绑定域名，保留原身份并跟踪排队、实际应用与核验结果；执行期间重新检查管理员授权，安全故障可重试，身份或 DNS 冲突保留明确失败原因。
+- 修复备份恢复保护标记先于回退日志写入，以及回退已恢复网关文件但未同步内核时重试误跳过的问题。回退继续保留恢复保护，核对完成后才恢复营业。旧库还原升级保留历史身份、失败记录及金额；导入或迁移失败保留隔离和回退依据。
+- 修复 Ubuntu 26.04 网关回退临时配置目录受限的问题；私有配置保持严格权限，解析完成后才重建网络，失败继续保留恢复保护。
+- 机器池购买重新核对会话、价格、镜像、SSH 密钥及锁后的宿主架构。创建任务保存原身份和操作标记；不确定的远端结果保留库存，确认清理及退款结清后再释放，避免误删或重复出售。
+- 购物车改善跨标签页保存、结算重试和页面切换时的迟到响应处理。充值请求丢失响应后可找回原订单，重复点击保留原支付意图；购买选择器先显示实例名称和数量，再选择系统。
+- 续费请求持久记录结果，重试不重复扣款；支付回调绑定商户、发票和币种并使用精确金额比较。已取消订单的迟到付款通过受保护的对账流程处理。
+- 宿主入口协议可选择 TCP 或 TCP+UDP，并支持批量保存；TCP 仅作为新表单默认选项。Agent 报告在落库前重新核对实例和宿主归属。
+- 终端重连在总期限内重新核验权限并取消在途连接，修复相关审计锁竞争；工单自动关闭与回复删除串行处理，部分失败保留结果。
+- 首页增加独立亮色主题，改善超宽屏和密集地区地图显示；保留三语地区购买行为。账户、订单及管理页面继续完善旧回执隔离、分页和草稿保护。
+- 新安装及构建使用 Node.js 24 LTS；已有后端保留 Node.js 22.12+ 兼容，普通 OTA 不自动升级系统 Node。CI Actions 运行时与前端格式警告同步修正。
+
+防滥用使用明文特征匹配，宽匹配可能影响含相关词的正常流量，也不能识别全部加密或隧道流量；能力不足或执行失败会显示待处理状态。启用前应按业务核对策略，实际生效以宿主回执为准。
+
+这是阶段发行，不代表原 327 项全部精修验收完成，也不代表生产已更新。完整独立 OSS 新机恢复、网关接管/切回、千台与 72 小时灾备仍需各自验收；数据库快照之后的账目和撤销信息须按外部证据核对后再解除恢复保护。
+
+## v1.7.8
+
+- Release commit / 发布提交: `c77b68c5a`
+- Commit date / 提交日期: 2026-10-31
+- Commit subject / 提交说明: fix(homepage): label available regions with collision avoidance
+
+
+修复事务连接泄漏，收紧用户销毁验证与重装、重建的安全门禁，并改善账户、实例和管理界面的请求处理。
+
+- 修复 Prisma 7.1.0 事务申请超时后，迟到连接执行 BEGIN 却无人回滚归还的问题。保留原连接池配置；补丁通过冻结依赖安装进入发行包，验证重复超时后的连接回收、回滚失败及正常事务。
+- 快照创建、恢复、删除及批量配置的配额与宿主查询复用当前事务连接，避免连接池繁忙时持有事务又等待另一条连接。
+- 创建准备阶段的 IPv6 地址查重复用当前事务，避免等待另一条连接，并读取当前事务已登记的地址。
+- 首页适配21:9、32:9等超宽屏与不同窗口高度，地图等比缩放，导航、标题和筛选对齐；边缘浮窗自动避开节点，保持地区可点击。
+- 地图名称按全部地区的实时库存显示，可售地区默认优先有名称，选中或聚焦地区优先；字号保持可读并自动避让，放大后补充其他地区名称，支持简体、繁体和英文。
+- 托管实例创建失败的清理期限包含连接申请和行锁等待；超时取消后保留实例、库存及地址，防止事务结束后继续执行远端删除却无法结算数据库。
+- 用户自行销毁实例必须验证当前账户邮箱，验证码绑定账户、会话、邮箱及本次实例集合，一次使用；同一账户每 60 秒最多发送一次。管理员删除免邮箱验证码；用户自行销毁不退款。
+- 重装、重建任务持久保存原操作授权，执行前及连接宿主后重新核对账户、权限、实例、宿主、选定镜像、公钥及初始化内容，拒绝过期或发生变化的任务。
+- 重装、重建必须确认实例停止及快照清理，读取、删除或复查失败时中止；重建遇到状态接口 404 时再次核实原实例确实不存在，保留未确认的快照记录。
+- 修复快照、备份删除与恢复并发时的验证锁等待，以及续费、资源配额等操作的当前权限和事务边界；失败回执保留具体原因。
+- 改善用户及管理页的重复提交、旧请求回填、草稿保护、缓存页面生命周期与移动端交互；仅隐藏用户左侧购物车导航，保留购物车功能。
+- 保留机器池一机一卖、完整 TCP/UDP 端口、客户 IPv6 以及现有财务和库存保护。
+
+这是阶段修复版本。原 327 项清单包含部分完成和待运行验收，不能据此声明全部精修结束。完整网关迁移、备用接管、切回、新 IP 主控 OSS 恢复后宿主重连与公网整机灾备仍需独立验收；本版发布不代表生产系统已更新。
 
 ## v1.7.7
 
@@ -264,7 +739,7 @@ DD 前先升级新版、补装已有宿主固定域名重连，并制作含新�
 - 执行器要求标准 Linux/systemd 部署和本机 PostgreSQL；恢复要求相同应用版本、迁移历史和 PG 大版本。平台备份不包含客户 VPS 磁盘或外部图床/邮箱原件。
 - 换 IP 后需人工核对域名、第三方回调、网关身份和节点连接，WireGuard 自动重连不在本版范围内。
 - 严格按份数保留暂不支持启用/曾启用版本控制、WORM 或启用生命周期规则的桶。
-- 从旧版升级后应检查备份执行器是否已安装；旧 OTA 进程可能不会调用新版新增的安装步骤，详见 [部署说明](https://mastalee928.github.io/payincus/deployment/oss-backup)。
+- 从旧版升级后应检查备份执行器是否已安装；旧 OTA 进程可能不会调用新版新增的安装步骤，详见 [部署说明](https://masta-lee.github.io/mastaincus/deployment/oss-backup)。
 - **真实阿里云 OSS 权限、云端上传和云端故障场景尚待专用测试桶验收。** 本地 SDK 回归与 CI 的本地存储替身不替代该证据。
 
 ### 验证
@@ -447,7 +922,7 @@ UPAY Pro 支付渠道及 DNS、HTTPS 收银台修复。
 
 ### v1.6.1 主机池与独占实例交付
 
-本仓库首个独立维护版本，包含机器池与独占交付的完整源码。发行源码为 [737c6863a36c](https://github.com/mastalee928/payincus/commit/737c6863a36c436de8f9071e1831015f285b872b)，[正式发布工作流](https://github.com/mastalee928/payincus/actions/runs/38789679660) 已通过双架构全新安装验证并发布安装包。
+本仓库首个独立维护版本，包含机器池与独占交付的完整源码。发行源码为 [737c6863a36c](https://github.com/masta-lee/mastaincus/commit/737c6863a36c436de8f9071e1831015f285b872b)，正式发布工作流（原仓库 Actions 运行 #38789679660；未迁移） 已通过双架构全新安装验证并发布安装包。
 
 ### 新增
 
@@ -463,7 +938,7 @@ UPAY Pro 支付渠道及 DNS、HTTPS 收银台修复。
 
 - 用户端显示公网 IPv4 和实际分配的 IPv6，流量显示无限；隐藏宿主机内部名称、虚拟化类型、带宽及端口转发操作。管理端仍显示宿主机名称。
 - 购买结果显示逐台交付状态、实际 SSH 命令和遮盖的密码；支持重新进入订单查看进度。
-- 安装、面板 OTA 和 Agent 的默认发布来源改为 `mastalee928/payincus`，保留原项目许可证与版权。
+- 安装、面板 OTA 和 Agent 的默认发布来源改为 `masta-lee/mastaincus`，保留原项目许可证与版权。
 - 一键安装支持配置 WireGuard 管理网关；已有安装可用 `--configure-host-pool` 补配。OTA 同步网关程序并保留密钥与 peer。
 - 修复预装 PostgreSQL 未启动、Node.js 只存在于用户环境、SSH 私钥权限顺序导致的新安装失败；服务使用经过检查的系统运行时。
 - 发布工作流在 Linux amd64 和 arm64 临时机器上执行真实安装、数据库迁移、管理员登录、双端访问与网关连接验证，安装失败则阻止发布。
@@ -471,7 +946,7 @@ UPAY Pro 支付渠道及 DNS、HTTPS 收银台修复。
 ### 升级与验证
 
 - 新增主机池结算与独占交付迁移，包含单机占用、备用机预占与故障隔离保护。升级前备份数据库和持久配置。
-- 配套 [Agent v1.0.2](https://github.com/mastalee928/payincus/releases/tag/agent-v1.0.2) 已发布，支持协议切换和 Alpine OpenRC 管理。
+- 配套 [Agent v1.0.2](https://github.com/masta-lee/mastaincus/tree/agent-v1.0.2)（旧版发行资产未迁移，仅链接标签源码） 已发布，支持协议切换和 Alpine OpenRC 管理。
 - 已完成普通用户测试余额购买、公网 SSH、TCP/UDP 切换和两台 Alpine 的无备份故障换机实测；通过类型检查、守卫、隔离数据库集成测试及双端构建。
 - Ubuntu 24.04 amd64 / arm64 全新安装验证通过：207 条数据库迁移、唯一后端、双端页面、随机管理员密码登录、机器池 API、固定指纹 SSH 网关及重复配置检查。
 - 本轮未真机验收外部支付、客户公网 IPv6、异地备份恢复；无备份换机不会恢复旧磁盘数据。旧机彻底不可访问时，需要运维确认关闭或隔离，系统不能远程保证旧实例停止。

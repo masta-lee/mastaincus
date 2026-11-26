@@ -1,17 +1,17 @@
 # v1.8.2 发行验证记录
 
-2026-11-05：正式发行、全部关联CI及公开资产核验完成。源码 `b70a9f56b9a06d72c0d91c6bebd984db9e7c68c5`，tree `2dd572ace1f390f84dc23ac18dd0374ba3fe8d1c`；[PR #4](https://github.com/mastalee928/payincus/pull/4) 精确快进main，注释tag对象 `5973f499c0cc82a9318c7e321886446c3729a9a0` 固定指向该源码。
+2026-11-05：正式发行、全部关联CI及公开资产核验完成。源码 `b70a9f56b9a06d72c0d91c6bebd984db9e7c68c5`，tree `2dd572ace1f390f84dc23ac18dd0374ba3fe8d1c`；PR #4（原仓库 PR #4；未迁移） 精确快进main，注释tag对象 `5973f499c0cc82a9318c7e321886446c3729a9a0` 固定指向该源码。
 
-[v1.8.2 Release](https://github.com/mastalee928/payincus/releases/tag/v1.8.2) 于2026-11-04T15:29:15Z发布，非draft/prerelease，panel latest=v1.8.2。文档后续更新不移动稳定tag或重新打包。下述隔离恢复遗漏已确认，发行通过不代表该遗漏已修复。
+[v1.8.2 Release](https://github.com/masta-lee/mastaincus/tree/v1.8.2)（旧版发行资产未迁移，仅链接标签源码） 于2026-11-04T15:29:15Z发布，非draft/prerelease，panel latest=v1.8.2。文档后续更新不移动稳定tag或重新打包。下述隔离恢复遗漏已确认，发行通过不代表该遗漏已修复。
 
 ## Actions实际结果
 
 | 运行 | 终态与来源 |
 | --- | --- |
-| [候选CI 41835355829](https://github.com/mastalee928/payincus/actions/runs/41835355829) | 十job success；实际PR checkout `99a887abbb7412ae35f682f586b98162a84c160c`，tree同候选 |
-| [双架构预览41835346983](https://github.com/mastalee928/payincus/actions/runs/41835346983) | 四必需job success，Release预期skipped；完整checkout同正式源码 |
-| [main CI41855600457](https://github.com/mastalee928/payincus/actions/runs/41855600457) | 十job success；每job实际checkout同完整正式源码 |
-| [正式41855613144](https://github.com/mastalee928/payincus/actions/runs/41855613144) | 五job success；双原生构建、双首装与Release独立核同来源 |
+| 候选CI 41835355829（原仓库 Actions 运行 #41835355829；未迁移） | 十job success；实际PR checkout `99a887abbb7412ae35f682f586b98162a84c160c`，tree同候选 |
+| 双架构预览41835346983（原仓库 Actions 运行 #41835346983；未迁移） | 四必需job success，Release预期skipped；完整checkout同正式源码 |
+| main CI41855600457（原仓库 Actions 运行 #41855600457；未迁移） | 十job success；每job实际checkout同完整正式源码 |
+| 正式41855613144（原仓库 Actions 运行 #41855613144；未迁移） | 五job success；双原生构建、双首装与Release独立核同来源 |
 
 最终同SHA关联运行查询只发现以上四运行，全部终态；无新增Agent/Pages运行。209完整守卫、240迁移、唯一后台、双前端、公开Agent、备份预检/还原/改变后回退续接、SQL/ZIP完整性、旧版CRLF迁移和拒绝条件通过。main完整Pool业务步骤及日志已核，复用此前九job成功日志。
 

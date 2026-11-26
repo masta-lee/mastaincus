@@ -1,6 +1,6 @@
 # v1.8.6 网页升级与自动接入检查
 
-由管理员自行操作，先核[正式Release](https://github.com/mastalee928/payincus/releases/tag/v1.8.6)和[最终验证记录](release-v1.8.6-validation.md)。正式软件及资产核验已完成，本次未代升级生产。
+由管理员自行操作，先核[正式Release](https://github.com/masta-lee/mastaincus/tree/v1.8.6)（旧版发行资产未迁移，仅链接标签源码）和[最终验证记录](release-v1.8.6-validation.md)。正式软件及资产核验已完成，本次未代升级生产。
 
 ## 升级
 

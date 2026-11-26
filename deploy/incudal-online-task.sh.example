@@ -155,13 +155,26 @@ verify_git_control() {
       find "${INSTALL_DIR}/.git/hooks" -xdev -type f -perm /111 -print -quit | grep -q .; then
     fail "executable Git hooks are forbidden for root OTA"
   fi
-  local origin
+  local origin raw_origin
+  local origin_values=()
+  mapfile -t origin_values < <(/usr/bin/git -C "$INSTALL_DIR" config --local --get-all remote.origin.url 2>/dev/null)
+  [[ "${#origin_values[@]}" -eq 1 ]] || fail "Git origin must have exactly one configured URL"
+  raw_origin="${origin_values[0]}"
+  [[ "$raw_origin" == "https://github.com/masta-lee/mastaincus.git" || "$raw_origin" == "https://github.com/mastalee928/payincus.git" ]] || fail "Git origin is not the trusted repository"
   origin="$(/usr/bin/git -C "$INSTALL_DIR" remote get-url origin 2>/dev/null)" || fail "Git origin is missing"
-  [[ "$origin" == "https://github.com/mastalee928/payincus.git" ]] || fail "Git origin is not the trusted repository"
+  [[ "$origin" == "$raw_origin" ]] || fail "Git origin URL rewriting is forbidden"
+  [[ "$(/usr/bin/git -C "$INSTALL_DIR" ls-remote --get-url https://github.com/masta-lee/mastaincus.git)" == "https://github.com/masta-lee/mastaincus.git" ]] || fail "Git source URL rewriting is forbidden"
   if /usr/bin/git -C "$INSTALL_DIR" config --local --get-regexp \
       '^(core\.hooksPath|core\.fsmonitor|filter\..*\.(clean|smudge|process)|diff\..*\.command)$' \
       >/dev/null 2>&1; then
     fail "executable Git configuration is forbidden for root OTA"
+  fi
+  # The retired origin is an exact legacy identity, never a download fallback.
+  # Read-only verification leaves it untouched; an authorized OTA migrates it
+  # only after a successful worker, immediately before its normal postflight.
+  if [[ "${1:-}" == migrate-retired-origin && "$raw_origin" == "https://github.com/mastalee928/payincus.git" ]]; then
+    /usr/bin/git -C "$INSTALL_DIR" remote set-url origin "https://github.com/masta-lee/mastaincus.git"
+    [[ "$(/usr/bin/git -C "$INSTALL_DIR" remote get-url origin)" == "https://github.com/masta-lee/mastaincus.git" ]] || fail "Git origin migration failed"
   fi
 }
 
@@ -266,6 +279,7 @@ run_task() {
 
   apply_secure_ownership
   if [[ "$status" -eq 0 ]]; then
+    verify_git_control migrate-retired-origin
     write_manifest
   fi
   return "$status"

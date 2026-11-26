@@ -69,7 +69,11 @@ async function transfer<T>(url: string, apiUrl: string | undefined, accept: stri
       }
       if (response.status !== 200 || !response.body) {
         const message = `Failed to download OTA artifact: HTTP ${response.status}`
-        if (transientStatuses.has(response.status)) throw new RetryableDownloadError(message)
+        // Private browser_download_url endpoints hide even authorized assets
+        // behind 404. Only a metadata-bound asset API and a supplied token can
+        // take this one-way fallback; an API 404 remains a permanent failure.
+        const privateBrowserFallback = response.status === 404 && !!options.token && !!apiUrl && start.hostname === 'github.com'
+        if (transientStatuses.has(response.status) || privateBrowserFallback) throw new RetryableDownloadError(message)
         throw new Error(message)
       }
       return await consume(response, controller.signal)

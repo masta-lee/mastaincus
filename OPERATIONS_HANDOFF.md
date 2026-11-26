@@ -1,3 +1,5 @@
+2026-11-27 00:05+08:00仓库替代接续：新唯一masta-lee/mastaincus，d6c0a04d原22分支/206tag已备份；原v1.8.14六正式资产/latest和配套Agent16四资产已迁移，原包/校验/二进制字节不变，两OTA清单只改URL（605ec85f…），Agent仅补原身份签名元数据。新源码已精修旧默认/alias-only/原子env失败保护、raw/effective Git、成功后origin、旧worker备份前source迁移和原包新装helper；实际生产下载代码新私有repo两完整原包+真实CDN无token、Agent公共路由两完整原二进制/签名均自然0，未接数据库/主控/客户。相关3/3、front2/2、Bash r4、前后端/文档build自然0；233全量仍在途，原6+新4双架构旧worker/新installer预览待跑。owner已明确批准公开，仍待已知历史候选复核/本轮提交推送main/实际公开和匿名回读，不把批准记完成。原kernel真实boot/回退/补丁、旧组件来源、双PG矩阵/新完整包与主控新备份本机模拟恢复/最终热更新发行未完；本轮无生产/客户/密码/新正式版本。报告docs/github-backup-mastaincus-2026-11-26.md，以下为阶段历史。
+
 2026-11-26 15:52+08:00接续优先：当前产品Python f2693318…/测试b43922f6…已冻结，PG先持久native launch再核受信psql，原unit/argv/工具Before-Expected/SQL前后/journal终段均补齐；不是旧r4草稿状态。根任务当前完整本机206/45skip及对应守卫、原B9专项、完整Linux206/0skip/0fail/275.895s全自然0，原B/PG88982/出站隔离保持。首轮Linux8错误为新fixture客户端在/tmp01777，被产品守卫正确拒绝；只改测试目录，旧1eff/错误和基线留存。下一步仍须真实内核boot/回退/后续patch、旧组件可信来源、更新绑定当前源码的双PG矩阵、完整来源包/主控新备份本机完整模拟恢复，才可原流程热更/发行；不能把上述Linux守卫当真实双PG或整机灾备完成。C项目清3.336GB及仓库外Go5.760GB已实做，在用本机PG11036/数据/程序勿删；旧PG目录递归清理被审批拒绝未执行。无新生产/客户/密码/Git提交推送/发行，jimmasta仅申诉禁止上传。报告docs/local-cleanup-and-security-progress-2026-11-26.md，以下为历史。
 
 2026-11-26 14:54+08:00接续优先：产品恢复r5c已落盘07b172b1…/753881d0…，Linux3420的197/0skip及当前全量233/233均已核自然0，原B/PG88982保持；旧r4未落盘文字为历史，不再按草稿状态接手。新独审发现真实PG start后psql缺失会丢失独立launch、不能续接，当前两Python由recovery_final_code_review独占最小修订，主任务统一审查并重跑新源码相关验收；不得以旧197/233覆盖新补丁。AMD3394b仍exit2/degraded，3412只读debugfs因inode bitmap checksum没有读到cloud-init原因，不放宽非零或重派旧盘。双PG矩阵/当前完整包/主控新备份本机完整模拟恢复和内核实际boot/回退仍待；本机PG11036及原数据/程序勿清。项目清3.336GB、仓库外Go5.760GB已实做，14:54C余15.67GiB。无新生产/客户/密码/Git提交推送/发行，jimmasta只申诉禁止上传。报告docs/local-cleanup-and-security-progress-2026-11-26.md，以下为历史。
@@ -226,7 +228,7 @@ v1.8.14和Agent v1.0.16已正式公开，双首装、六个当前v1.8.13原worke
 - 自动引导维护原生白名单仍仅Alpine／GRUB／AMD64。ARM／Debian需要未验收方案时保持具体阻断，不能以源码或模拟通过宣称任意宿主均可自动可售。本轮没有连接生产，真实OSS新B、独立备用、客户公网与千台72小时范围保持。
 
 
-适用仓库：[mastalee928/payincus](https://github.com/mastalee928/payincus)。当前版本与验证证据以 [HANDOFF.md](HANDOFF.md) 为准。此文件只包含可公开的运维规则；实际地址、账号、凭据和备份证据另存于维护者内部记录。
+适用仓库：[mastalee928/payincus](https://github.com/masta-lee/mastaincus)。当前版本与验证证据以 [HANDOFF.md](HANDOFF.md) 为准。此文件只包含可公开的运维规则；实际地址、账号、凭据和备份证据另存于维护者内部记录。
 
 ## 2026-11-10 自动对接三轮复审（未发行）
 
@@ -262,13 +264,13 @@ v1.8.14和Agent v1.0.16已正式公开，双首装、六个当前v1.8.13原worke
 
 ## v1.8.5 当前发行范围
 
-[v1.8.5正式包](https://github.com/mastalee928/payincus/releases/tag/v1.8.5)已包含OTA下载504有限重试/官方asset API备用、完整流超时/完整性核验，以及首页底部地区卡居中/短窗口避让/手机菜单互斥。双架构首装、恢复和实际公开资产已核，详见[验证记录](docs/release-v1.8.5-validation.md)与[网页升级检查](docs/release-v1.8.5-owner-click-test.md)。
+[v1.8.5正式包](https://github.com/masta-lee/mastaincus/tree/v1.8.5)（旧版资产未迁移）已包含OTA下载504有限重试/官方asset API备用、完整流超时/完整性核验，以及首页底部地区卡居中/短窗口避让/手机菜单互斥。双架构首装、恢复和实际公开资产已核，详见[验证记录](docs/release-v1.8.5-validation.md)与[网页升级检查](docs/release-v1.8.5-owner-click-test.md)。
 
 新下载器安装新版后用于后续更新；旧端首次下载仍用当前下载器，不能把包内修复说成旧端已部署。Agent保持v1.0.5，累计241迁移未增加；生产升级事实另核。其余原生自动重启/真实OSS新B/独立备用/客户公网/千台72小时缺口保持。
 
 ## v1.8.4 历史发行范围
 
-[v1.8.4正式包](https://github.com/mastalee928/payincus/releases/tag/v1.8.4)及Agent v1.0.5已完成同源码CI、双架构首装和实际公开资产核验；准确来源/运行/摘要见[验证记录](docs/release-v1.8.4-validation.md)。本手册下方此前“下一版/未发行”描述的本线程SSH、隔离/维护、自动续费、管理员改期/改邮箱、网关只读检查已收入本包，生产部署事实另核，不能据发行推断目标已升级。按[网页升级与检查](docs/release-v1.8.4-owner-click-test.md)验目标结果。
+[v1.8.4正式包](https://github.com/masta-lee/mastaincus/tree/v1.8.4)（旧版资产未迁移）及Agent v1.0.5已完成同源码CI、双架构首装和实际公开资产核验；准确来源/运行/摘要见[验证记录](docs/release-v1.8.4-validation.md)。本手册下方此前“下一版/未发行”描述的本线程SSH、隔离/维护、自动续费、管理员改期/改邮箱、网关只读检查已收入本包，生产部署事实另核，不能据发行推断目标已升级。按[网页升级与检查](docs/release-v1.8.4-owner-click-test.md)验目标结果。
 
 本版原生自动重启白名单仍为空、内存实验默认关闭；持久维护阻断不会因等待超时自动消失，禁止手工清保护。进程上限及备份删除的维护检查复用原事务连接，单连接失败/重试与门禁独立验证。完整OSS新B灾备、独立备用、客户公网和72小时仍未验收。
 
@@ -356,7 +358,7 @@ ORDER BY xact_start NULLS LAST;
 ## 安装与来源
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/mastalee928/payincus/main/scripts/install-panel.sh -o install-panel.sh
+curl -fsSL https://raw.githubusercontent.com/masta-lee/mastaincus/main/scripts/install-panel.sh -o install-panel.sh
 sudo bash install-panel.sh
 ```
 

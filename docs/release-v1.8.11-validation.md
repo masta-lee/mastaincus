@@ -4,9 +4,9 @@
 
 最终完成：v1.8.11/Agent1.0.15均正式公开，六面板/三Agent资产重新下载、digest/size/SHA/OTA与原pin签名/内容核验通过；main CI43626317398最终29/29 success。主控运行同产品源码候选preview-b463d9e，正常热更新任务52与现场全镜像/缓存/回池原价重卖已通过，正式tar未重复OTA。本次目标完成；下面“进行中”为各阶段记录。
 
-2026-11-15 02:23北京时间，PR15已精确快进合并，main和v1.8.11 tag解引用为上述source。正式面板运行[43626345677](https://github.com/mastalee928/payincus/actions/runs/43626345677)，Agent正式运行[43626317373](https://github.com/mastalee928/payincus/actions/runs/43626317373)，main CI[43626317398](https://github.com/mastalee928/payincus/actions/runs/43626317398)已启动；均需继续核终态，当前尚未公开正式包。
+2026-11-15 02:23北京时间，PR15已精确快进合并，main和v1.8.11 tag解引用为上述source。正式面板运行43626345677（原仓库 Actions 运行 #43626345677；未迁移），Agent正式运行43626317373（原仓库 Actions 运行 #43626317373；未迁移），main CI43626317398（原仓库 Actions 运行 #43626317398；未迁移）已启动；均需继续核终态，当前尚未公开正式包。
 
-2026-11-15 02:40北京时间，正式面板43626345677全部通过并公开[v1.8.11](https://github.com/mastalee928/payincus/releases/tag/v1.8.11)，发布UTC18:40:19；Agent43626317373全部通过并公开[v1.0.15](https://github.com/mastalee928/payincus/releases/tag/agent-v1.0.15)，发布UTC18:29:04。Agent三资产下载/API digest/大小/原候选SHA逐项核验通过，AMD 27885720B/2887348d133dee22974cba14aafe8848e5ecd44e23de584cb9352ee3f70a542e，ARM25297048B/cca366ce67913697140a457641f03570514cb449c6212c5698df22b6af91de5c。两正式面板tar已独立原pin/签名/source/243迁移与修复模块核过；六公开资产下载验digest/OTA清单继续，main CI仍需核終態。
+2026-11-15 02:40北京时间，正式面板43626345677全部通过并公开[v1.8.11](https://github.com/masta-lee/mastaincus/tree/v1.8.11)（旧版发行资产未迁移，仅链接标签源码），发布UTC18:40:19；Agent43626317373全部通过并公开v1.0.15 （原仓库 Release agent-v1.0.15；旧资产未迁移，已复制标签中无该版本），发布UTC18:29:04。Agent三资产下载/API digest/大小/原候选SHA逐项核验通过，AMD 27885720B/2887348d133dee22974cba14aafe8848e5ecd44e23de584cb9352ee3f70a542e，ARM25297048B/cca366ce67913697140a457641f03570514cb449c6212c5698df22b6af91de5c。两正式面板tar已独立原pin/签名/source/243迁移与修复模块核过；六公开资产下载验digest/OTA清单继续，main CI仍需核終態。
 
 2026-11-15 02:42北京时间，六公开资产重新下载核API digest、size、SHA256、checksum与双OTA清单一致；latest=v1.8.11。两个公开tar再次逐项核原pin签名、source、权限、243迁移、磁盘/缓存/回池模块和用户无改价入口通过。AMD64 214592974B / `7e2493acabfec9580d76f14476e08dd879ad2aa7d829c01ae528f0803cc70717`，ARM64 213806945B / `9c99e15c930a9612cd0adaa37fb7594d580285ccda7a1d16f479be2f30688cb7`；OTA994B / `3cc0315c9a6c4a2a849ab4ef101d84a7169219694eb89ddce6cc3662b67e2537`。同来源PR CI已29/29通过，main重复CI尾段继续核；公开包发布和目标候选部署均已完成对应范围。
 
@@ -14,8 +14,8 @@ Owner 明确继续本批是避免浪费更多时间精力，不代表同意或�
 
 ## 已完成的源码和包验证
 
-- 同来源 CI [43620442938](https://github.com/mastalee928/payincus/actions/runs/43620442938) 29/29 成功；Agent [43620443073](https://github.com/mastalee928/payincus/actions/runs/43620443073)、14 项 Incus 兼容原生 [43620443021](https://github.com/mastalee928/payincus/actions/runs/43620443021)、Alpine [43620442851](https://github.com/mastalee928/payincus/actions/runs/43620442851) 成功。
-- 完整包预览 [43620438563](https://github.com/mastalee928/payincus/actions/runs/43620438563) 双架构构建、双首装和六种原 v1.8.10 worker 升级通过，覆盖正常升级、已迁移原子布局、后半程失败回滚再升级；公开 Release 预期 skipped。
+- 同来源 CI 43620442938（原仓库 Actions 运行 #43620442938；未迁移） 29/29 成功；Agent 43620443073（原仓库 Actions 运行 #43620443073；未迁移）、14 项 Incus 兼容原生 43620443021（原仓库 Actions 运行 #43620443021；未迁移）、Alpine 43620442851（原仓库 Actions 运行 #43620442851；未迁移） 成功。
+- 完整包预览 43620438563（原仓库 Actions 运行 #43620438563；未迁移） 双架构构建、双首装和六种原 v1.8.10 worker 升级通过，覆盖正常升级、已迁移原子布局、后半程失败回滚再升级；公开 Release 预期 skipped。
 - 两实际候选 tar 独立核原签名公钥、双架构组件、完整 source、243 迁移、root 属主、双前端边界及本批磁盘/回池模块。用户包无修改续费价入口，程序包不含大镜像库。
 - 缓存清理覆盖已受管池的创建/重装前后和后台分批维护。只处理精确 image 缓存卷，保留客户卷、底层快照、自定义卷、主控持久镜像与宿主原始镜像。实际 PostgreSQL + mTLS 验证占用/任务/身份/授权/回执丢失与完整重装换机；创建前新客机尚不存在仍可清缓存，宿主身份改变零请求。
 - 恢复弹窗“核验”在“关闭”左侧；重复点击、失败重试、旧宿主回执、关闭窗口、焦点/Escape、三语、手机/桌面、深浅主题均经真实浏览器；按钮需要当前有效管理员会话并续接原任务，不重置删除授权。

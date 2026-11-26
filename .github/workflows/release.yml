@@ -394,7 +394,7 @@ jobs:
         run: sudo env INCUDAL_DRAIN_NATIVE_TEST=disposable INCUDAL_DRAIN_APP=/opt/incudal node scripts/test-backend-service-drain.mjs
 
   legacy-upgrade:
-    name: 旧版在线升级验证 (${{ matrix.arch }}, ${{ matrix.scenario }})
+    name: 旧版在线升级验证 (${{ matrix.arch }}, ${{ matrix.scenario }}, ${{ matrix.installer_source || 'legacy' }})
     needs: [build, preview-agent]
     if: always() && needs.build.result == 'success' && (github.ref_type == 'tag' || needs.preview-agent.result == 'success')
     runs-on: ${{ matrix.runner }}
@@ -421,6 +421,22 @@ jobs:
           - arch: arm64
             runner: ubuntu-24.04-arm
             scenario: rollback
+          - arch: amd64
+            runner: ubuntu-latest
+            scenario: clean
+            installer_source: current
+          - arch: arm64
+            runner: ubuntu-24.04-arm
+            scenario: clean
+            installer_source: current
+          - arch: amd64
+            runner: ubuntu-latest
+            scenario: rollback
+            installer_source: current
+          - arch: arm64
+            runner: ubuntu-24.04-arm
+            scenario: rollback
+            installer_source: current
     permissions:
       contents: read
     steps:
@@ -447,7 +463,7 @@ jobs:
           test "$(printf '%s\n' "$package" | wc -l)" = 1
           preview_agent=''
           if [[ '${{ github.ref_type }}' != tag ]]; then preview_agent="$PWD/preview-agent"; fi
-          sudo env GITHUB_ACTIONS=true RUNNER_ENVIRONMENT=github-hosted INCUDAL_AGENT_RELEASE_TOKEN=${{ github.token }} INCUDAL_PREVIEW_AGENT_DIR="$preview_agent" \
+          sudo env GITHUB_ACTIONS=true RUNNER_ENVIRONMENT=github-hosted UPGRADE_DRILL_INSTALLER_SOURCE='${{ matrix.installer_source || 'legacy' }}' INCUDAL_AGENT_RELEASE_TOKEN=${{ github.token }} INCUDAL_PREVIEW_AGENT_DIR="$preview_agent" \
             bash scripts/smoke-legacy-online-upgrade.sh "$package" "$PWD/old-artifact/incudal-v1.8.14-linux-${{ matrix.arch }}.tar.gz" '${{ matrix.scenario }}'
 
   # ===== 首装与旧版升级验证成功后才发布 Release =====

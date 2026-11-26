@@ -74,8 +74,8 @@ description: PayIncus 部署、运营、开发与 OTA 文档
       <p>源码、问题反馈与部署体验。</p>
     </div>
     <div class="docs-home-links">
-      <a class="docs-home-link" href="https://github.com/mastalee928/payincus"><span class="docs-home-link-index">GH</span><span><strong>GitHub</strong><small>查看源码、Release 和问题记录。</small></span></a>
-      <a class="docs-home-link" href="https://github.com/mastalee928/payincus/issues"><span class="docs-home-link-index">IS</span><span><strong>Issues</strong><small>在本仓库反馈问题和功能建议。</small></span></a>
+      <a class="docs-home-link" href="https://github.com/masta-lee/mastaincus"><span class="docs-home-link-index">GH</span><span><strong>GitHub</strong><small>查看源码、Release 和问题记录。</small></span></a>
+      <a class="docs-home-link" href="https://github.com/masta-lee/mastaincus/issues"><span class="docs-home-link-index">IS</span><span><strong>Issues</strong><small>在本仓库反馈问题和功能建议。</small></span></a>
       <a class="docs-home-link" href="/payincus/demo"><span class="docs-home-link-index">DE</span><span><strong>部署体验</strong><small>在自己的测试环境中部署和体验。</small></span></a>
     </div>
   </section>

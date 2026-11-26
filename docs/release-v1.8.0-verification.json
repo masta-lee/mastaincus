@@ -1,13 +1,13 @@
 {
   "verifiedAt": "2026-11-01T22:15:58.922374+00:00",
   "panelVersion": "v1.8.0",
-  "panelRelease": "https://github.com/mastalee928/payincus/releases/tag/v1.8.0",
+  "panelRelease": "https://github.com/masta-lee/mastaincus/tree/v1.8.0",
   "publishedAt": "2026-11-01T20:24:32Z",
   "panelSourceCommit": "85323d5fe7ddbbf80ca0e9258308bca395ddcd23",
   "panelSourceTree": "74e1756ef7d6d85b62b4a092c0c8be718bc6b16e",
   "panelTagObject": "554aa2855b65e5aad7986ff5c2751f4c70d6bbac",
   "panelLatest": "v1.8.0",
-  "pullRequest": "https://github.com/mastalee928/payincus/pull/2",
+  "pullRequest": "原仓库 PR #2（历史记录，未迁移）",
   "candidateActualCheckout": "5b67c37b7430ea41cc8ee010d7f559bac0a2c67e",
   "mainActualCheckout": "85323d5fe7ddbbf80ca0e9258308bca395ddcd23",
   "candidateMergeTreeEqualsSourceTree": true,
@@ -20,7 +20,7 @@
       "headBranch": "codex/release-v1.8.0",
       "status": "completed",
       "conclusion": "success",
-      "url": "https://github.com/mastalee928/payincus/actions/runs/41335981487"
+      "url": "原仓库 Actions 运行 41335981487（历史记录，未迁移）"
     },
     {
       "databaseId": 41335998256,
@@ -30,7 +30,7 @@
       "headBranch": "codex/release-v1.8.0",
       "status": "completed",
       "conclusion": "success",
-      "url": "https://github.com/mastalee928/payincus/actions/runs/41335998256"
+      "url": "原仓库 Actions 运行 41335998256（历史记录，未迁移）"
     },
     {
       "databaseId": 41335981541,
@@ -40,7 +40,7 @@
       "headBranch": "codex/release-v1.8.0",
       "status": "completed",
       "conclusion": "success",
-      "url": "https://github.com/mastalee928/payincus/actions/runs/41335981541"
+      "url": "原仓库 Actions 运行 41335981541（历史记录，未迁移）"
     },
     {
       "databaseId": 41345869226,
@@ -50,7 +50,7 @@
       "headBranch": "main",
       "status": "completed",
       "conclusion": "success",
-      "url": "https://github.com/mastalee928/payincus/actions/runs/41345869226"
+      "url": "原仓库 Actions 运行 41345869226（历史记录，未迁移）"
     },
     {
       "databaseId": 41345894421,
@@ -60,7 +60,7 @@
       "headBranch": "v1.8.0",
       "status": "completed",
       "conclusion": "success",
-      "url": "https://github.com/mastalee928/payincus/actions/runs/41345894421"
+      "url": "原仓库 Actions 运行 41345894421（历史记录，未迁移）"
     },
     {
       "databaseId": 41345869211,
@@ -70,7 +70,7 @@
       "headBranch": "main",
       "status": "completed",
       "conclusion": "success",
-      "url": "https://github.com/mastalee928/payincus/actions/runs/41345869211"
+      "url": "原仓库 Actions 运行 41345869211（历史记录，未迁移）"
     }
   ],
   "allTaskRuns": [
@@ -82,7 +82,7 @@
       "headBranch": "codex/release-v1.8.0",
       "status": "completed",
       "conclusion": "failure",
-      "url": "https://github.com/mastalee928/payincus/actions/runs/41330334475"
+      "url": "原仓库 Actions 运行 41330334475（历史记录，未迁移）"
     },
     {
       "databaseId": 41330334491,
@@ -92,7 +92,7 @@
       "headBranch": "codex/release-v1.8.0",
       "status": "completed",
       "conclusion": "success",
-      "url": "https://github.com/mastalee928/payincus/actions/runs/41330334491"
+      "url": "原仓库 Actions 运行 41330334491（历史记录，未迁移）"
     },
     {
       "databaseId": 41330352460,
@@ -102,7 +102,7 @@
       "headBranch": "codex/release-v1.8.0",
       "status": "completed",
       "conclusion": "failure",
-      "url": "https://github.com/mastalee928/payincus/actions/runs/41330352460"
+      "url": "原仓库 Actions 运行 41330352460（历史记录，未迁移）"
     },
     {
       "databaseId": 41331026840,
@@ -112,7 +112,7 @@
       "headBranch": "codex/release-v1.8.0",
       "status": "completed",
       "conclusion": "success",
-      "url": "https://github.com/mastalee928/payincus/actions/runs/41331026840"
+      "url": "原仓库 Actions 运行 41331026840（历史记录，未迁移）"
     },
     {
       "databaseId": 41331035120,
@@ -122,7 +122,7 @@
       "headBranch": "codex/release-v1.8.0",
       "status": "completed",
       "conclusion": "success",
-      "url": "https://github.com/mastalee928/payincus/actions/runs/41331035120"
+      "url": "原仓库 Actions 运行 41331035120（历史记录，未迁移）"
     },
     {
       "databaseId": 41331026864,
@@ -132,7 +132,7 @@
       "headBranch": "codex/release-v1.8.0",
       "status": "completed",
       "conclusion": "failure",
-      "url": "https://github.com/mastalee928/payincus/actions/runs/41331026864"
+      "url": "原仓库 Actions 运行 41331026864（历史记录，未迁移）"
     },
     {
       "databaseId": 41333517189,
@@ -142,7 +142,7 @@
       "headBranch": "codex/release-v1.8.0",
       "status": "completed",
       "conclusion": "success",
-      "url": "https://github.com/mastalee928/payincus/actions/runs/41333517189"
+      "url": "原仓库 Actions 运行 41333517189（历史记录，未迁移）"
     },
     {
       "databaseId": 41333514151,
@@ -152,7 +152,7 @@
       "headBranch": "codex/release-v1.8.0",
       "status": "completed",
       "conclusion": "success",
-      "url": "https://github.com/mastalee928/payincus/actions/runs/41333514151"
+      "url": "原仓库 Actions 运行 41333514151（历史记录，未迁移）"
     },
     {
       "databaseId": 41333517268,
@@ -162,7 +162,7 @@
       "headBranch": "codex/release-v1.8.0",
       "status": "completed",
       "conclusion": "failure",
-      "url": "https://github.com/mastalee928/payincus/actions/runs/41333517268"
+      "url": "原仓库 Actions 运行 41333517268（历史记录，未迁移）"
     },
     {
       "databaseId": 41335981487,
@@ -172,7 +172,7 @@
       "headBranch": "codex/release-v1.8.0",
       "status": "completed",
       "conclusion": "success",
-      "url": "https://github.com/mastalee928/payincus/actions/runs/41335981487"
+      "url": "原仓库 Actions 运行 41335981487（历史记录，未迁移）"
     },
     {
       "databaseId": 41335998256,
@@ -182,7 +182,7 @@
       "headBranch": "codex/release-v1.8.0",
       "status": "completed",
       "conclusion": "success",
-      "url": "https://github.com/mastalee928/payincus/actions/runs/41335998256"
+      "url": "原仓库 Actions 运行 41335998256（历史记录，未迁移）"
     },
     {
       "databaseId": 41335981541,
@@ -192,7 +192,7 @@
       "headBranch": "codex/release-v1.8.0",
       "status": "completed",
       "conclusion": "success",
-      "url": "https://github.com/mastalee928/payincus/actions/runs/41335981541"
+      "url": "原仓库 Actions 运行 41335981541（历史记录，未迁移）"
     },
     {
       "databaseId": 41345869226,
@@ -202,7 +202,7 @@
       "headBranch": "main",
       "status": "completed",
       "conclusion": "success",
-      "url": "https://github.com/mastalee928/payincus/actions/runs/41345869226"
+      "url": "原仓库 Actions 运行 41345869226（历史记录，未迁移）"
     },
     {
       "databaseId": 41345894421,
@@ -212,7 +212,7 @@
       "headBranch": "v1.8.0",
       "status": "completed",
       "conclusion": "success",
-      "url": "https://github.com/mastalee928/payincus/actions/runs/41345894421"
+      "url": "原仓库 Actions 运行 41345894421（历史记录，未迁移）"
     },
     {
       "databaseId": 41345869211,
@@ -222,7 +222,7 @@
       "headBranch": "main",
       "status": "completed",
       "conclusion": "success",
-      "url": "https://github.com/mastalee928/payincus/actions/runs/41345869211"
+      "url": "原仓库 Actions 运行 41345869211（历史记录，未迁移）"
     }
   ],
   "resolvedHistoricalFailures": [
@@ -653,7 +653,7 @@
   ],
   "agentNotLatest": true,
   "agentDownloadEvidenceReused": "logs/release-v1.7.9-agent-after-main-verified.json",
-  "ownerBrowserTest": "https://github.com/mastalee928/payincus/blob/v1.8.0/docs/release-v1.8.0-owner-click-test.md",
+  "ownerBrowserTest": "https://github.com/masta-lee/mastaincus/blob/v1.8.0/docs/release-v1.8.0-owner-click-test.md",
   "localEvidence": [
     {
       "path": "logs/release-v1.8.0-candidate-ci-verified.json",
@@ -712,5 +712,13 @@
     "seventyTwoHourAcceptance": false,
     "all327ReviewItemsAccepted": false
   },
-  "recordCommitPolicy": "Documentation only, skip CI; keep stable release tag and published asset source unchanged."
+  "recordCommitPolicy": "Documentation only, skip CI; keep stable release tag and published asset source unchanged.",
+  "repositoryMigration": {
+    "date": "2026-11-26",
+    "currentRepository": "masta-lee/mastaincus",
+    "originalRepositoryIdentifier": "mastalee928/payincus",
+    "presentationOnly": true,
+    "historicalActionsAndPrIdsNotMigrated": true,
+    "historicalReleaseAssetsNotMigrated": true
+  }
 }

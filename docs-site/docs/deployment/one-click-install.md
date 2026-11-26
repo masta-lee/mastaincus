@@ -5,6 +5,8 @@ description: 使用经过校验的 GitHub Release 在 Debian 或 Ubuntu 上部�
 
 # 一键安装
 
+新仓库当前为私有，源码、raw 安装入口和发行资产需要有仓库访问权限的 GitHub 身份；下面的匿名下载示例在该阶段不能直接使用。GitHub Pages 目标地址尚未部署，可先阅读 `docs-site/docs/` 中的文档源码。
+
 <p class="doc-lead">使用官方安装脚本在新服务器上部署 PayIncus。脚本负责依赖、数据库、环境变量、systemd 和外部访问入口。</p>
 
 <div class="doc-meta">
@@ -32,7 +34,7 @@ description: 使用经过校验的 GitHub Release 在 Debian 或 Ubuntu 上部�
 ## 安装命令
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/mastalee928/payincus/main/scripts/install-panel.sh -o install-panel.sh
+curl -fsSL https://raw.githubusercontent.com/masta-lee/mastaincus/main/scripts/install-panel.sh -o install-panel.sh
 sudo bash install-panel.sh
 ```
 
@@ -77,7 +79,7 @@ Cloudflare Tunnel 适合无公网 IP 或希望隐藏网站源站的服务器。�
 下载当前安装脚本后运行：
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/mastalee928/payincus/main/scripts/install-panel.sh -o install-panel.sh
+curl -fsSL https://raw.githubusercontent.com/masta-lee/mastaincus/main/scripts/install-panel.sh -o install-panel.sh
 
 # 配置两端域名、Nginx 和 cloudflared；重启唯一后端使地址生效
 sudo bash install-panel.sh --configure-cf-tunnel
@@ -134,7 +136,7 @@ CF Tunnel 只负责网站访问，机器池 WireGuard / SSH 管理网关仍需�
 sudo bash install-panel.sh --configure-host-pool
 ```
 
-可通过 `ONBOARDING_PUBLIC_HOST`、`ONBOARDING_MANAGEMENT_ADDRESS`、`ONBOARDING_WG_PORT`、`ONBOARDING_CONTROL_SSH_PORT` 指定地址和端口。已有网关密钥与 peer 会保留。分离部署或自定义网关见[机器池配置](https://github.com/mastalee928/payincus/blob/main/docs/host-pool.md)。
+可通过 `ONBOARDING_PUBLIC_HOST`、`ONBOARDING_MANAGEMENT_ADDRESS`、`ONBOARDING_WG_PORT`、`ONBOARDING_CONTROL_SSH_PORT` 指定地址和端口。已有网关密钥与 peer 会保留。分离部署或自定义网关见[机器池配置](https://github.com/masta-lee/mastaincus/blob/main/docs/host-pool.md)。
 
 ## 升级和卸载
 

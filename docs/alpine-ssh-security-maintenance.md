@@ -2,7 +2,7 @@
 
 采用 Alpine 当前分支的官方签名 OpenSSH 安全修订，保留用户原密码、主机密钥、端口和 SSH 配置，不关闭密码认证，不强制切换 PAM。依据 [OpenSSH 10.6p2 公告](https://www.openssh.com/releasenotes.html)和 Alpine stable 分支的 `main/openssh/pw.patch`；不能只看 SSH banner 判断是否已修补。
 
-本轮是源码修复和隔离验证，生产宿主及客户实例未执行更新。原SSH修复已推至 [codex/alpine-ssh-security 分支](https://github.com/mastalee928/payincus/tree/codex/alpine-ssh-security)，未合并 main 或发布新安装包；现有 v1.8.3 包不包含本轮改动。11-07按owner要求新增了未提交的持久自动维护队列；后续包含该队列的新版将自动逐机检查与维护适用SSH补丁，原手动入口继续保留，范围和未验收门槛见[自动加固](automatic-security-hardening.md)。
+本轮是源码修复和隔离验证，生产宿主及客户实例未执行更新。原SSH修复已推至 [codex/alpine-ssh-security 分支](https://github.com/masta-lee/mastaincus/tree/codex/alpine-ssh-security)，未合并 main 或发布新安装包；现有 v1.8.3 包不包含本轮改动。11-07按owner要求新增了未提交的持久自动维护队列；后续包含该队列的新版将自动逐机检查与维护适用SSH补丁，原手动入口继续保留，范围和未验收门槛见[自动加固](automatic-security-hardening.md)。
 
 ## 新安装
 
@@ -36,7 +36,7 @@ Alpine 容器和 VM 的初始化先安装并检查官方补丁；检查缺失或
 
 ## 实际验证
 
-核验源码 `536594ec9f58cc210715f1a1514c63659f24f1af`，tree `1e33905a88c63b89f919761071b03a52cc5b9f81`。[Actions 42089071874](https://github.com/mastalee928/payincus/actions/runs/42089071874) 八 job 全部终态 success，逐 job 实际 checkout 和完整结果日志独立核验。
+核验源码 `536594ec9f58cc210715f1a1514c63659f24f1af`，tree `1e33905a88c63b89f919761071b03a52cc5b9f81`。Actions 42089071874（原仓库 Actions 运行 #42089071874；未迁移） 八 job 全部终态 success，逐 job 实际 checkout 和完整结果日志独立核验。
 
 七项原生 Linux Docker 检查分别运行上述架构/分支：签名旧包升级、原密码新登录、错误/300与1024字符/空密码及不存在账户拒绝、原 SSH 字节流和持续 SFTP 文件 SHA256 完整、幂等，以及已装补丁但 reload 失败后重新执行并核新二进制。每项持续传输1,048,576–1,769,472字节。另一个 PG job 核管理员会话、原 UUID、真实 advisory 竞争与任务冲突、失败续接、客户/账目保持和初始化守卫。
 

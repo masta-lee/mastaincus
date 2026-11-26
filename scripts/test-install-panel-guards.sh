@@ -6,6 +6,59 @@ REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 source "$REPO_ROOT/scripts/install-panel.sh"
 
 WORK_DIR="$(mktemp -d)"
+cat > "$WORK_DIR/legacy-helper-original" <<'LEGACY_HELPER'
+#!/usr/bin/env bash
+[[ "${1:-}" == "https://github.com/mastalee928/payincus.git" ]] || exit 1
+[[ "${2:-}" == fixed-identity ]] || exit 1
+LEGACY_HELPER
+cp "$WORK_DIR/legacy-helper-original" "$WORK_DIR/legacy-helper"
+normalize_legacy_online_task_helper "$WORK_DIR/legacy-helper"
+bash "$WORK_DIR/legacy-helper" https://github.com/masta-lee/mastaincus.git fixed-identity
+if bash "$WORK_DIR/legacy-helper" https://github.com/mastalee928/payincus.git fixed-identity ||
+    bash "$WORK_DIR/legacy-helper" https://untrusted.invalid/repository.git fixed-identity ||
+    bash "$WORK_DIR/legacy-helper" https://github.com/masta-lee/mastaincus.git wrong-identity; then
+    echo 'legacy deployment helper lost its exact repository or identity gate' >&2; exit 1
+fi
+cp "$REPO_ROOT/deploy/incudal-online-task.sh.example" "$WORK_DIR/current-helper"
+normalize_legacy_online_task_helper "$WORK_DIR/current-helper"
+cmp "$REPO_ROOT/deploy/incudal-online-task.sh.example" "$WORK_DIR/current-helper"
+# Exercise the unchanged Git gate with real local Git configuration. This
+# fixture isolates URL handling; native root ownership is verified separately.
+sed -n '/^verify_git_control() {/,/^}/p' "$REPO_ROOT/deploy/incudal-online-task.sh.example" |
+    sed 's#/usr/bin/git#git#g' > "$WORK_DIR/git-origin-gate.sh"
+bash -s -- "$WORK_DIR" <<'GIT_ORIGIN_GUARD'
+    set -euo pipefail
+    test_work="$1"
+    export GIT_CONFIG_NOSYSTEM=1 GIT_CONFIG_GLOBAL="$test_work/isolated-git-config"
+    : > "$GIT_CONFIG_GLOBAL"
+    source "$test_work/git-origin-gate.sh"
+    INSTALL_DIR="$test_work/git-origin-fixture"
+    git init --quiet "$INSTALL_DIR"
+    fail() { printf '%s\n' "$*" >&2; exit 1; }
+    find() { :; }
+    current_origin=https://github.com/masta-lee/mastaincus.git
+    retired_origin=https://github.com/mastalee928/payincus.git
+    git -C "$INSTALL_DIR" remote add origin "$current_origin"
+    verify_git_control
+    git -C "$INSTALL_DIR" remote set-url origin "$retired_origin"
+    verify_git_control
+    [[ "$(git -C "$INSTALL_DIR" config --local --get remote.origin.url)" == "$retired_origin" ]]
+    verify_git_control migrate-retired-origin
+    [[ "$(git -C "$INSTALL_DIR" config --local --get remote.origin.url)" == "$current_origin" ]]
+    git -C "$INSTALL_DIR" remote set-url origin https://untrusted.invalid/project.git
+    git -C "$INSTALL_DIR" config "url.${retired_origin}.insteadOf" https://untrusted.invalid/project.git
+    [[ "$(git -C "$INSTALL_DIR" remote get-url origin)" == "$retired_origin" ]]
+    if (verify_git_control migrate-retired-origin) > /dev/null 2>&1; then echo 'rewritten custom raw origin accepted' >&2; exit 1; fi
+    [[ "$(git -C "$INSTALL_DIR" config --local --get remote.origin.url)" == https://untrusted.invalid/project.git ]]
+    git -C "$INSTALL_DIR" config --unset "url.${retired_origin}.insteadOf"
+    git -C "$INSTALL_DIR" remote set-url origin "$current_origin"
+    git -C "$INSTALL_DIR" config --add remote.origin.url https://untrusted.invalid/second.git
+    if (verify_git_control) > /dev/null 2>&1; then echo 'multiple raw origin URLs accepted' >&2; exit 1; fi
+    git -C "$INSTALL_DIR" config --unset-all remote.origin.url
+    git -C "$INSTALL_DIR" config remote.origin.url "$retired_origin"
+    git -C "$INSTALL_DIR" config 'url.https://untrusted.invalid/source.git.insteadOf' "$current_origin"
+    if (verify_git_control) > /dev/null 2>&1; then echo 'source fetch URL rewrite accepted' >&2; exit 1; fi
+GIT_ORIGIN_GUARD
 if declare -f start_service | grep -q 'journalctl'; then
     echo 'startup diagnostics cannot publish raw secret-bearing journal output' >&2; exit 1
 fi
@@ -71,7 +124,7 @@ grep -Fq "proxy_pass http://127.0.0.1:${DEFAULT_PORT};" "$WORK_DIR/nginx-script-
 grep -Fq 'proxy_set_header X-Forwarded-Host $incudal_forwarded_host;' "$WORK_DIR/nginx-script-token-location.conf"
 # A fresh file used to discard the supplied token even though upgrades populated
 # empty values. Exercise both paths without real credentials or system ownership.
-declare -f generate_env ensure_env_keys get_env_value set_env_if_missing set_env_value set_env_if_value gen_secret gen_password > "$WORK_DIR/env-functions.sh"
+declare -f generate_env ensure_env_keys get_env_value env_file_identity write_env_atomically set_env_if_missing set_env_value set_env_if_value get_release_repository_default migrate_release_repository gen_secret gen_password > "$WORK_DIR/env-functions.sh"
 # Installer paths are intentionally readonly. Run the unchanged functions in a
 # separate shell so test paths cannot weaken those production constants.
 bash -s -- "$WORK_DIR" "$WORK_DIR/env-functions.sh" <<'ENV_GUARD'
@@ -80,7 +133,7 @@ bash -s -- "$WORK_DIR" "$WORK_DIR/env-functions.sh" <<'ENV_GUARD'
     source "$2"
     DEFAULT_PORT=3001
     INSTALL_DIR=/opt/incudal
-    GITHUB_REPO=mastalee928/payincus
+    GITHUB_REPO=masta-lee/mastaincus
     RUN_USER=incudal
     log() { printf '%s\n' "$*"; }
     info() { printf '%s\n' "$*"; }
@@ -111,7 +164,91 @@ bash -s -- "$WORK_DIR" "$WORK_DIR/env-functions.sh" <<'ENV_GUARD'
     chown() { :; }
     generate_env guard_db guard_redis guard_admin installer@example.invalid > /dev/null 2>&1
     [[ -z "$(get_env_value INCUDAL_AGENT_RELEASE_TOKEN)" ]]
+    ENV_FILE="$token_work/retired-repositories.env"
+    cat > "$ENV_FILE" <<'RETIRED_ENV'
+SYSTEM_UPDATE_RELEASE_REPOSITORY="mastalee928/payincus" # retired default
+INCUDAL_AGENT_RELEASE_REPOSITORY='  MASTALEE928/PAYINCUS  '
+GITHUB_REPO=  mastalee928/payincus
+GITHUB_REPOSITORY=custom/agent-source
+SYSTEM_UPDATE_RELEASE_TOKEN=guard-retained-update-token
+INCUDAL_AGENT_RELEASE_TOKEN=guard-retained-agent-token
+ENCRYPTION_KEY=guard-retained-key
+OTHER_SOURCE=mastalee928/payincus
+RETIRED_ENV
+    cp "$ENV_FILE" "$ENV_FILE.before"
+    for repository_key in SYSTEM_UPDATE_RELEASE_REPOSITORY INCUDAL_AGENT_RELEASE_REPOSITORY GITHUB_REPO GITHUB_REPOSITORY; do
+        migrate_release_repository "$repository_key" > /dev/null
+    done
+    for repository_key in SYSTEM_UPDATE_RELEASE_REPOSITORY INCUDAL_AGENT_RELEASE_REPOSITORY GITHUB_REPO; do
+        [[ "$(get_env_value "$repository_key")" == masta-lee/mastaincus ]]
+    done
+    [[ "$(get_env_value GITHUB_REPOSITORY)" == custom/agent-source ]]
+    cmp <(grep -Ev '^(SYSTEM_UPDATE_RELEASE_REPOSITORY|INCUDAL_AGENT_RELEASE_REPOSITORY|GITHUB_REPO)=' "$ENV_FILE.before") \
+        <(grep -Ev '^(SYSTEM_UPDATE_RELEASE_REPOSITORY|INCUDAL_AGENT_RELEASE_REPOSITORY|GITHUB_REPO)=' "$ENV_FILE")
+    cp "$ENV_FILE" "$ENV_FILE.expected"
+    migrate_release_repository SYSTEM_UPDATE_RELEASE_REPOSITORY > /dev/null
+    cmp "$ENV_FILE" "$ENV_FILE.expected"
+    for custom_source in custom/panel-source mastalee928/payincus-other mastalee928/payincus/extra; do
+        printf 'SYSTEM_UPDATE_RELEASE_REPOSITORY=%s\n' "$custom_source" > "$ENV_FILE"
+        cp "$ENV_FILE" "$ENV_FILE.expected"
+        migrate_release_repository SYSTEM_UPDATE_RELEASE_REPOSITORY > /dev/null
+        cmp "$ENV_FILE" "$ENV_FILE.expected"
+    done
+    ENV_FILE="$token_work/custom-alias-only.env"
+    printf '%s\n' 'GITHUB_REPO="custom/panel"' "GITHUB_REPOSITORY='custom/agent'" 'JWT_SECRET=guard-retained-jwt' 'COOKIE_SECRET=guard-retained-cookie' 'ENCRYPTION_KEY=guard-retained-encryption' > "$ENV_FILE"
+    ensure_env_keys > /dev/null
+    [[ "$(get_env_value SYSTEM_UPDATE_RELEASE_REPOSITORY)" == custom/panel ]]
+    [[ "$(get_env_value INCUDAL_AGENT_RELEASE_REPOSITORY)" == custom/agent ]]
+    grep -Fxq 'GITHUB_REPO="custom/panel"' "$ENV_FILE"
+    grep -Fxq "GITHUB_REPOSITORY='custom/agent'" "$ENV_FILE"
+    for failed_command in awk cat chmod mv; do
+        ENV_FILE="$token_work/atomic-failure-${failed_command}.env"
+        printf '%s\n' 'JWT_SECRET=guard-retained-atomic-key' 'SYSTEM_UPDATE_RELEASE_REPOSITORY=mastalee928/payincus' > "$ENV_FILE"
+        cp "$ENV_FILE" "$ENV_FILE.expected"
+        (
+            case "$failed_command" in
+                awk) awk() { if [[ ${1:-} == -v ]]; then printf 'partial edit\n'; return 71; else command awk "$@"; fi; } ;;
+                cat) cat() { printf 'partial read\n'; return 72; } ;;
+                chmod) chmod() { return 73; } ;;
+                mv) mv() { return 74; } ;;
+            esac
+            if [[ "$failed_command" == cat ]]; then
+                if set_env_value NEW_SETTING fixture 'fixture setting' > /dev/null 2>&1; then echo 'partial environment copy was accepted' >&2; exit 1; fi
+            elif migrate_release_repository SYSTEM_UPDATE_RELEASE_REPOSITORY > /dev/null 2>&1; then
+                echo 'failed environment replacement was accepted' >&2; exit 1
+            fi
+        )
+        cmp "$ENV_FILE" "$ENV_FILE.expected"
+        [[ -z "$(find "$token_work" -maxdepth 1 -name "$(basename "$ENV_FILE").incudal-env.*" -print -quit)" ]]
+    done
 ENV_GUARD
+
+# The standalone initializer must migrate existing defaults too, not only the
+# full installer. Keep credentials and custom sources, then verify idempotency.
+cat > "$WORK_DIR/init-repositories.env" <<'INIT_ENV'
+SYSTEM_UPDATE_RELEASE_REPOSITORY=mastalee928/payincus
+INCUDAL_AGENT_RELEASE_REPOSITORY="MASTALEE928/PAYINCUS"
+GITHUB_REPOSITORY=custom/agent-source
+JWT_SECRET=guard-retained-jwt
+COOKIE_SECRET=guard-retained-cookie
+ENCRYPTION_KEY=guard-retained-encryption
+INIT_ENV
+env ENV_FILE="$WORK_DIR/init-repositories.env" bash "$REPO_ROOT/scripts/init-env.sh" > "$WORK_DIR/init-repositories.log" 2>&1
+grep -Fxq 'SYSTEM_UPDATE_RELEASE_REPOSITORY=masta-lee/mastaincus' "$WORK_DIR/init-repositories.env"
+grep -Fxq 'INCUDAL_AGENT_RELEASE_REPOSITORY=masta-lee/mastaincus' "$WORK_DIR/init-repositories.env"
+for retained in 'GITHUB_REPOSITORY=custom/agent-source' 'JWT_SECRET=guard-retained-jwt' 'COOKIE_SECRET=guard-retained-cookie' 'ENCRYPTION_KEY=guard-retained-encryption'; do
+    grep -Fxq "$retained" "$WORK_DIR/init-repositories.env"
+done
+cp "$WORK_DIR/init-repositories.env" "$WORK_DIR/init-repositories.expected"
+env ENV_FILE="$WORK_DIR/init-repositories.env" bash "$REPO_ROOT/scripts/init-env.sh" >> "$WORK_DIR/init-repositories.log" 2>&1
+cmp "$WORK_DIR/init-repositories.env" "$WORK_DIR/init-repositories.expected"
+! grep -Fq guard-retained "$WORK_DIR/init-repositories.log"
+printf '%s\n' 'GITHUB_REPO="custom/panel"' "GITHUB_REPOSITORY='custom/agent'" > "$WORK_DIR/init-alias-only.env"
+env ENV_FILE="$WORK_DIR/init-alias-only.env" bash "$REPO_ROOT/scripts/init-env.sh" > "$WORK_DIR/init-alias-only.log" 2>&1
+grep -Fxq 'SYSTEM_UPDATE_RELEASE_REPOSITORY=custom/panel' "$WORK_DIR/init-alias-only.env"
+grep -Fxq 'INCUDAL_AGENT_RELEASE_REPOSITORY=custom/agent' "$WORK_DIR/init-alias-only.env"
+grep -Fxq 'GITHUB_REPO="custom/panel"' "$WORK_DIR/init-alias-only.env"
+grep -Fxq "GITHUB_REPOSITORY='custom/agent'" "$WORK_DIR/init-alias-only.env"
 
 # Invalid existing credentials must fail before package/service changes and keep
 # every byte of the existing configuration. Run only unchanged installer code.

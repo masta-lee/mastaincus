@@ -39,9 +39,9 @@ Owner 提供的 IP 在 2026-11-13 21:17 至23:32北京时间有11条成功注册
 
 ## 最终候选与主控验收
 
-产品来源 `8cd82d858791ac78e60664ef5aa290104ea3bd01`，本地225全套通过后最后creating补修对应mTLS/类型/补偿/到期守卫通过。最后同来源完整CI[43666672521](https://github.com/mastalee928/payincus/actions/runs/43666672521)29/29成功，实际Incus job132667469473与全部本批注册/清理/TG步骤通过；Alpine[43666672557](https://github.com/mastalee928/payincus/actions/runs/43666672557)成功。
+产品来源 `8cd82d858791ac78e60664ef5aa290104ea3bd01`，本地225全套通过后最后creating补修对应mTLS/类型/补偿/到期守卫通过。最后同来源完整CI43666672521（原仓库 Actions 运行 #43666672521；未迁移）29/29成功，实际Incus job132667469473与全部本批注册/清理/TG步骤通过；Alpine43666672557（原仓库 Actions 运行 #43666672557；未迁移）成功。
 
-无tag预览[43666670130](https://github.com/mastalee928/payincus/actions/runs/43666670130)双构建、双首装、六种真实v1.8.11原worker升级全部success，Release预期skipped。两实际tar均独立原pin、签名、完整source、244迁移、新模块和用户无删账户/改价入口通过。证据`account-final-arm-verification2.log`与`account-final-amd-verification.log`。
+无tag预览43666670130（原仓库 Actions 运行 #43666670130；未迁移）双构建、双首装、六种真实v1.8.11原worker升级全部success，Release预期skipped。两实际tar均独立原pin、签名、完整source、244迁移、新模块和用户无删账户/改价入口通过。证据`account-final-arm-verification2.log`与`account-final-amd-verification.log`。
 
 主控候选任务54于2026-11-15 10:43:25北京时间success：`preview-8cd82d8`，备份`/opt/incudal.bak.20261115024109`；原worker/平台签名身份、DB支付就绪、唯一backend、双前端/API/WS、日志凭据扫描通过，244迁移。Owner自行此前更新了正式1.8.11，故此热更起点实际v1.8.11。更新前后#49–52原UUID、密码摘要、价格10/无改价、账期及镜像库完整清单保持。34host online/poolFaulted=false。
 
@@ -51,4 +51,4 @@ Owner 提供的 IP 在 2026-11-13 21:17 至23:32北京时间有11条成功注册
 
 TG真外部群/用户未额外发测试消息，客户/管理员所有发送管道的真实payload＋本地HTTP超时及平台API回执已有专项与最终CI；此范围明确。正式发行后仅需验证公开资产，无需再次OTA相同产品代码。
 
-来源3ad63ecde847204fa1942472e819bc505de311de已推[草稿PR16](https://github.com/mastalee928/payincus/pull/16)。CI43664559570实际Incus job132660955563已success，真实Running客机/快照/LVM卷/forward删除→可售→余额账单账户删除日志完整；本批PG/注册HTTP/TG集成步骤132660955628也success，其余分片仍运行。预览43664562150双构建成功，两实际tar独立原签名、完整source、244迁移、新模块及用户无删除/改价入口通过。六旧worker在升级动作前失败：仍固定断言v1.8.10，而工作流已下载真实v1.8.11；修演练脚本从已校验旧包读取baseline版本、回滚同一baseline，不跳守卫。新预览待。主控未部署，正式未发行。
+来源3ad63ecde847204fa1942472e819bc505de311de已推草稿PR16（原仓库 PR #16；未迁移）。CI43664559570实际Incus job132660955563已success，真实Running客机/快照/LVM卷/forward删除→可售→余额账单账户删除日志完整；本批PG/注册HTTP/TG集成步骤132660955628也success，其余分片仍运行。预览43664562150双构建成功，两实际tar独立原签名、完整source、244迁移、新模块及用户无删除/改价入口通过。六旧worker在升级动作前失败：仍固定断言v1.8.10，而工作流已下载真实v1.8.11；修演练脚本从已校验旧包读取baseline版本、回滚同一baseline，不跳守卫。新预览待。主控未部署，正式未发行。

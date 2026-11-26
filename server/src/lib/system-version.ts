@@ -103,9 +103,11 @@ async function runGit(args: string[], cwd = getProjectRoot()): Promise<string | 
 }
 
 function getReleaseRepository(): string {
-  return process.env.SYSTEM_UPDATE_RELEASE_REPOSITORY ||
-    process.env.GITHUB_REPO ||
-    'mastalee928/payincus'
+  const repository = process.env.SYSTEM_UPDATE_RELEASE_REPOSITORY?.trim() ||
+    process.env.GITHUB_REPO?.trim() ||
+    'masta-lee/mastaincus'
+  // Existing installations keep their credentials and custom repositories.
+  return repository.toLowerCase() === 'mastalee928/payincus' ? 'masta-lee/mastaincus' : repository
 }
 
 export function getReleaseToken(): string | null {

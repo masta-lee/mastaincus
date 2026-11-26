@@ -1,20 +1,20 @@
 # v1.8.3 修复与发行验证
 
-状态：**已正式发行，发行核验完成**。[v1.8.3 Release](https://github.com/mastalee928/payincus/releases/tag/v1.8.3) 于 `2026-11-04T21:27:53Z` 公开发布，非草稿、非预发行；核验时 panel latest 为 v1.8.3。候选和 main CI 各十个 job、预览四个必需 job、正式构建/首装/发布五个 job 均已终态通过，六项公开资产已实际下载核验。本次未代做生产升级或解除隔离，生产受影响流程仍须按[网页检查指南](release-v1.8.3-owner-click-test.md)验收。
+状态：**已正式发行，发行核验完成**。[v1.8.3 Release](https://github.com/masta-lee/mastaincus/tree/v1.8.3)（旧版发行资产未迁移，仅链接标签源码） 于 `2026-11-04T21:27:53Z` 公开发布，非草稿、非预发行；核验时 panel latest 为 v1.8.3。候选和 main CI 各十个 job、预览四个必需 job、正式构建/首装/发布五个 job 均已终态通过，六项公开资产已实际下载核验。本次未代做生产升级或解除隔离，生产受影响流程仍须按[网页检查指南](release-v1.8.3-owner-click-test.md)验收。
 
 ## 正式来源与运行
 
 - 完整源码：`1ac022b567ee959d0d44df70462c73e9683f08d6`。
 - 源码 tree：`c75c12e4313dba81d1b17a29f8c5b95c12fec09b`。
-- main 从 `6ddd67d8c38099f5c29aebd890c131bea6113b02` 精确非 force 快进；[PR #5](https://github.com/mastalee928/payincus/pull/5) 于 `2026-11-04T21:16:01Z` 合并，mergeCommit 同完整源码。
+- main 从 `6ddd67d8c38099f5c29aebd890c131bea6113b02` 精确非 force 快进；PR #5（原仓库 PR #5；未迁移） 于 `2026-11-04T21:16:01Z` 合并，mergeCommit 同完整源码。
 - 注释 tag `v1.8.3` 对象：`bc0639ba9ece29ce334c7ed56cfc6c8a345a7926`，解引用同完整源码。后续文档提交不改变 tag、安装包或源码来源。
 
 | 运行 | 终态与实际来源 |
 |---|---|
-| [候选 CI 41894899709](https://github.com/mastalee928/payincus/actions/runs/41894899709) | 十个 job success；实际 PR checkout `df33a8fc35f3c0c18d58f8593c04d2d1ba456f73`，独立核 tree 与正式源码一致 |
-| [双架构预览 41894888749](https://github.com/mastalee928/payincus/actions/runs/41894888749) | 四个必需 job success，Release 预期 skipped；实际 checkout 同完整源码 |
-| [main CI 41914468073](https://github.com/mastalee928/payincus/actions/runs/41914468073) | 十个 job 全部 success；每个实际 checkout 同完整源码，最终日志于 `2026-11-04T23:09:02Z` 核验 |
-| [正式 Build & Release 41914476956](https://github.com/mastalee928/payincus/actions/runs/41914476956) | 双构建、双原生首装和发布共五个 job success；每个实际 checkout 同完整源码 |
+| 候选 CI 41894899709（原仓库 Actions 运行 #41894899709；未迁移） | 十个 job success；实际 PR checkout `df33a8fc35f3c0c18d58f8593c04d2d1ba456f73`，独立核 tree 与正式源码一致 |
+| 双架构预览 41894888749（原仓库 Actions 运行 #41894888749；未迁移） | 四个必需 job success，Release 预期 skipped；实际 checkout 同完整源码 |
+| main CI 41914468073（原仓库 Actions 运行 #41914468073；未迁移） | 十个 job 全部 success；每个实际 checkout 同完整源码，最终日志于 `2026-11-04T23:09:02Z` 核验 |
+| 正式 Build & Release 41914476956（原仓库 Actions 运行 #41914476956；未迁移） | 双构建、双原生首装和发布共五个 job success；每个实际 checkout 同完整源码 |
 
 最后按完整 SHA 发现的关联运行仅上述四项，全部终态 success，无新增 Agent/Pages 运行或未处理发行失败。候选、预览、正式、main 逐 job 原始日志及摘要均已归档；预览没有代替正式首装。
 

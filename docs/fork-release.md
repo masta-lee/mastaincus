@@ -1,21 +1,23 @@
 # 安装与发布
 
-维护仓库为 `mastalee928/payincus`。该仓库已解除 GitHub Fork 关系，独立开发、发布和部署；引入外部改动仍需经过审查和测试。原 BSD 3-Clause 许可证及版权声明继续保留，发行包携带 `LICENSE`。
+以下旧版本发行状态和运行编号属于原仓库历史记录。当前维护仓库已迁移，除原 v1.8.14 正式资产外，旧版资产尚未迁移；标签源码保留，不据此声称新仓库有这些旧发行包或运行记录。
+
+维护仓库为 `masta-lee/mastaincus`。该仓库已解除 GitHub Fork 关系，独立开发、发布和部署；引入外部改动仍需经过审查和测试。原 BSD 3-Clause 许可证及版权声明继续保留，发行包携带 `LICENSE`。
 
 ## 发布来源
 
 | 用途 | 来源 |
 | --- | --- |
-| 源码与问题跟踪 | `https://github.com/mastalee928/payincus` |
-| 新安装脚本 | `https://raw.githubusercontent.com/mastalee928/payincus/main/scripts/install-panel.sh` |
+| 源码与问题跟踪 | `https://github.com/masta-lee/mastaincus` |
+| 新安装脚本 | `https://raw.githubusercontent.com/masta-lee/mastaincus/main/scripts/install-panel.sh` |
 | 面板发行包与 OTA manifest | 本仓库 `v*` Release |
 | 宿主机 Agent | 本仓库 `agent-v*` Release |
 
 本仓库的安装器、后端默认配置、部署模板和文档均使用以上仓库。既有主控的 `.env` 不会因更新源码自动改变，需明确设置：
 
 ```dotenv
-SYSTEM_UPDATE_RELEASE_REPOSITORY=mastalee928/payincus
-INCUDAL_AGENT_RELEASE_REPOSITORY=mastalee928/payincus
+SYSTEM_UPDATE_RELEASE_REPOSITORY=masta-lee/mastaincus
+INCUDAL_AGENT_RELEASE_REPOSITORY=masta-lee/mastaincus
 ```
 
 生产服务保持单个后端进程。先备份数据库、配置与证书，再更新。修改仓库地址不会生成发行包；没有可用 Release 时，新安装和在线更新不能完成。
@@ -32,16 +34,16 @@ INCUDAL_AGENT_RELEASE_REPOSITORY=mastalee928/payincus
 
 `HANDOFF.md` 记录当前源码、发行与主控验证状态。上游历史运行记录已归档，不能用来证明本仓库的 Actions、Release 或当前主控已经验证。2026-10-15 已完成直接部署及双机换机验收，详细运行证据另存于维护者工作区内部，不随公开发行包发布。
 
-## 已发布版本
+## 原仓库历史发行记录
 
-- 面板 [v1.6.7](https://github.com/mastalee928/payincus/releases/tag/v1.6.7)，发行源码 `fa716ee699e4ff77400b21bd093968c8be5f0dbc`，已设为面板 latest。管理端机器池面板改版（行操作菜单、地区筛选 chips、紧凑行展示公网 IPv4 与 OCI 账号）；45 个区域名称英/繁三语化，客户实例页面显示 OCI 机型名；实例详情「重置密码」替换升级入口，销毁弹窗精简并明示无退款；实例卡去「网络 / 流量」行、概览实例行显示国旗与区域名、IPv6 复制按钮贴地址；钱包「推荐计划」Tab 暂时隐藏，余额明细文案改「购买实例」并对存量记录执行迁移；订单详情抽屉头部遮挡修复。
-- 面板 [v1.6.6](https://github.com/mastalee928/payincus/releases/tag/v1.6.6)，发行源码 `9f1a14a799a9600a4aa6a3c84f9cffa7d68ad087`，已设为面板 latest。用户绑定官方站点 Bot 后默认接收开通、续费、自动续费失败、充值到账与失败、临期 T-3/T-2/T-1 与已到期等私聊通知（个人设置与 Bot 内均可开关），定时通知按用户每轮聚合避免轰炸；管理端新增工单 / 宿主机 / 财务 / 实例四类分类告警 Bot；管理员可在用户管理页直接建号；仪表盘实例卡片展示机型规格。
-- 面板 [v1.6.5](https://github.com/mastalee928/payincus/releases/tag/v1.6.5)，发行源码 `3fb8a0eb9dd95088addf221e538a9eeac4e687f3`，已设为面板 latest。Windows 侧守卫套件改由 Node runner 逐条执行（消除超长命令串被截断的假绿）、源码按 LF 检出、前端与根脚本走 cross-env；面板读取 GitHub Agent Release 遇限流会退避重试并保留旧清单，全新安装验证改用带 token 的方式安装。
-- 面板 [v1.6.4](https://github.com/mastalee928/payincus/releases/tag/v1.6.4)，发行源码 `41d87820504977ffb24f895ab6c735a67f17fdaa`，已设为面板 latest。购物车结算可选账户余额或后台已启用的在线支付渠道（到账后由余额完成扣款与开通）；用户端导航改为「创建实例 / 我的实例」、创建实例入口直达选购页、下线「福利」入口（页面保留）；支付回调验签与来源校验纳入守卫。
-- 面板 [v1.6.3](https://github.com/mastalee928/payincus/releases/tag/v1.6.3)，发行源码 `f8d2ca450e01a10a54ae5f57b75e4f80821371dd`，已设为面板 latest。修复后台在线更新任务未能启动时的失败可见性与阻塞问题（含可取消未启动任务），并包含购物车与开通结果页界面精修、实例高级配置仅限管理员。
-- 面板 [v1.6.2](https://github.com/mastalee928/payincus/releases/tag/v1.6.2)，发行源码 `2b81ce66e99c0941df8f579f085be59ce909541f`，已设为面板 latest。包含多 IPv6、首页与 45 区域选购、购物车及 UPAY Pro 更新。
-- [正式发布工作流](https://github.com/mastalee928/payincus/actions/runs/38878414833) 已完成 Linux amd64 / arm64 的构建与全新安装验证，包含 209 条数据库迁移、IPv6 数据字段、唯一后端、双端访问、管理员登录、机器池 API、SSH 管理网关及正式 Agent 下载和执行。
+- 面板 [v1.6.7](https://github.com/masta-lee/mastaincus/tree/v1.6.7)（旧版发行资产未迁移，仅链接标签源码），发行源码 `fa716ee699e4ff77400b21bd093968c8be5f0dbc`，已设为面板 latest。管理端机器池面板改版（行操作菜单、地区筛选 chips、紧凑行展示公网 IPv4 与 OCI 账号）；45 个区域名称英/繁三语化，客户实例页面显示 OCI 机型名；实例详情「重置密码」替换升级入口，销毁弹窗精简并明示无退款；实例卡去「网络 / 流量」行、概览实例行显示国旗与区域名、IPv6 复制按钮贴地址；钱包「推荐计划」Tab 暂时隐藏，余额明细文案改「购买实例」并对存量记录执行迁移；订单详情抽屉头部遮挡修复。
+- 面板 [v1.6.6](https://github.com/masta-lee/mastaincus/tree/v1.6.6)（旧版发行资产未迁移，仅链接标签源码），发行源码 `9f1a14a799a9600a4aa6a3c84f9cffa7d68ad087`，已设为面板 latest。用户绑定官方站点 Bot 后默认接收开通、续费、自动续费失败、充值到账与失败、临期 T-3/T-2/T-1 与已到期等私聊通知（个人设置与 Bot 内均可开关），定时通知按用户每轮聚合避免轰炸；管理端新增工单 / 宿主机 / 财务 / 实例四类分类告警 Bot；管理员可在用户管理页直接建号；仪表盘实例卡片展示机型规格。
+- 面板 [v1.6.5](https://github.com/masta-lee/mastaincus/tree/v1.6.5)（旧版发行资产未迁移，仅链接标签源码），发行源码 `3fb8a0eb9dd95088addf221e538a9eeac4e687f3`，已设为面板 latest。Windows 侧守卫套件改由 Node runner 逐条执行（消除超长命令串被截断的假绿）、源码按 LF 检出、前端与根脚本走 cross-env；面板读取 GitHub Agent Release 遇限流会退避重试并保留旧清单，全新安装验证改用带 token 的方式安装。
+- 面板 [v1.6.4](https://github.com/masta-lee/mastaincus/tree/v1.6.4)（旧版发行资产未迁移，仅链接标签源码），发行源码 `41d87820504977ffb24f895ab6c735a67f17fdaa`，已设为面板 latest。购物车结算可选账户余额或后台已启用的在线支付渠道（到账后由余额完成扣款与开通）；用户端导航改为「创建实例 / 我的实例」、创建实例入口直达选购页、下线「福利」入口（页面保留）；支付回调验签与来源校验纳入守卫。
+- 面板 [v1.6.3](https://github.com/masta-lee/mastaincus/tree/v1.6.3)（旧版发行资产未迁移，仅链接标签源码），发行源码 `f8d2ca450e01a10a54ae5f57b75e4f80821371dd`，已设为面板 latest。修复后台在线更新任务未能启动时的失败可见性与阻塞问题（含可取消未启动任务），并包含购物车与开通结果页界面精修、实例高级配置仅限管理员。
+- 面板 [v1.6.2](https://github.com/masta-lee/mastaincus/tree/v1.6.2)（旧版发行资产未迁移，仅链接标签源码），发行源码 `2b81ce66e99c0941df8f579f085be59ce909541f`，已设为面板 latest。包含多 IPv6、首页与 45 区域选购、购物车及 UPAY Pro 更新。
+- 正式发布工作流（原仓库 Actions 运行 #38878414833；未迁移） 已完成 Linux amd64 / arm64 的构建与全新安装验证，包含 209 条数据库迁移、IPv6 数据字段、唯一后端、双端访问、管理员登录、机器池 API、SSH 管理网关及正式 Agent 下载和执行。
 - 公开安装包的实际 SHA256、大小、OTA manifest、版本与源码提交均已核对；两种架构均携带原 LICENSE。
-- [Agent v1.0.3](https://github.com/mastalee928/payincus/releases/tag/agent-v1.0.3) 已发布，包含 Linux amd64 / arm64 二进制。发布前通过 Go 测试及真实隔离网络中的双 IPv6 数据包、协议限制、地址变更与恢复验收；不占用面板 latest。
+- [Agent v1.0.3](https://github.com/masta-lee/mastaincus/tree/agent-v1.0.3)（旧版发行资产未迁移，仅链接标签源码） 已发布，包含 Linux amd64 / arm64 二进制。发布前通过 Go 测试及真实隔离网络中的双 IPv6 数据包、协议限制、地址变更与恢复验收；不占用面板 latest。
 
-新安装使用 README 的一键安装命令即可获取本仓库最新稳定发行包。`v1.6.7` 已设为面板 latest；测试主控已载入 v1.6.7 同源内容（发布前经内部热替换上机、双端 index.html 与发行包逐字节核对），面板 OTA 正式升级待执行。两台测试宿主已自动升级到正式 Agent `v1.0.3`，心跳、IPv6 和端口策略正常。
+原仓库该阶段的新安装使用 README 的一键安装命令获取当时的稳定发行包。`v1.6.7` 当时设为面板 latest；测试主控已载入 v1.6.7 同源内容（发布前经内部热替换上机、双端 index.html 与发行包逐字节核对），面板 OTA 正式升级待执行。两台测试宿主已自动升级到正式 Agent `v1.0.3`，心跳、IPv6 和端口策略正常。

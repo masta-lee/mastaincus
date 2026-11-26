@@ -8,7 +8,7 @@ Owner截图实测qa1811-resale-arm-01/#51续费成功后只有已停止，要求
 
 本地真实PG+受信HTTPS测试（非原生Incus）覆盖AMD/ARM元数据、单台/批量/PAT实际路由、重复请求、连续不同续费、取消保持、autostart恢复、六次暂时故障恢复/丢回执只核验、离线、restore hold、实际行锁竞争/手动封禁、后续停止/删除/转移/身份/安全配置，以及账务整事务回滚。日志`manual-renewal-autostart-integration.log`、`manual-renewal-resume-final-verification.log`。对应types/build、6相关到期/改价/路由守卫通过。
 
-新增CI双架构原生Incus流程：真实Running容器自然到期→Stopped→关闭autoRenew情况下手动续费→正常轻任务claim/worker→原UUID Running且单扣一次→正常删除回池。独立busybox镜像原生/sbin/init启动，无raw.lxc覆盖；原身份/隔离守卫完整。[43679907784](https://github.com/mastalee928/payincus/actions/runs/43679907784)来源98b7a3ad的AMD job132708067750、ARM job132708067915均success；ARM日志`manual-renew-native-arm-final.log`明确包含上述闭环及原systemd/Agent重连。该运行其余集成分片尚待终态，不能把局部job成功作为完整CI通过。
+新增CI双架构原生Incus流程：真实Running容器自然到期→Stopped→关闭autoRenew情况下手动续费→正常轻任务claim/worker→原UUID Running且单扣一次→正常删除回池。独立busybox镜像原生/sbin/init启动，无raw.lxc覆盖；原身份/隔离守卫完整。43679907784（原仓库 Actions 运行 #43679907784；未迁移）来源98b7a3ad的AMD job132708067750、ARM job132708067915均success；ARM日志`manual-renew-native-arm-final.log`明确包含上述闭环及原systemd/Agent重连。该运行其余集成分片尚待终态，不能把局部job成功作为完整CI通过。
 
 ARM前两次原生CI分别因夹具宿主仍登记E2、实例仍使用200CPU而失败，尚未执行续费专项；已按真实ARM1C规格修正夹具，没有放宽生产容量/隔离保护。失败日志已核，旧轮43679492768/43679818814定向取消，最新轮继续核。后续发行预览改用当前公开v1.8.12双包的原worker作六升级场景，旧包动态版本解析保持。此流程修改的repository/system-update守卫已过，实际升级尚待新预览。
 

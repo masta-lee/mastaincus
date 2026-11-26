@@ -6,7 +6,9 @@ repo=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
 candidate=$(readlink -f -- "${1:?new release archive required}")
 old=$(readlink -f -- "${2:?official baseline archive required}")
 scenario=${3:-clean}
+installer_source=${UPGRADE_DRILL_INSTALLER_SOURCE:-legacy}
 [[ $scenario == clean || $scenario == migrated-atomic || $scenario == rollback ]] || exit 1
+[[ $installer_source == legacy || $installer_source == current ]] || exit 1
 export UPGRADE_DRILL_SCENARIO="$scenario"
 test -s "$candidate"; test -s "$old"; test -s "$old.sha256"
 (cd "$(dirname "$old")"; sha256sum --check "$(basename "$old").sha256")
@@ -49,7 +51,26 @@ trap report_failure ERR
 chmod go-w /opt
 install -d -m 755 /tmp/incudal
 cp "$old" "$old.sha256" /tmp/incudal/
-tar -xOf "$old" ./scripts/install-panel.sh > "$work/old-install.sh"
+if [[ "$installer_source" == current ]]; then
+  # Bind the new installer to the actual signed candidate, while installing the
+  # unchanged original published baseline package in this disposable runner.
+  node --input-type=module - "$candidate" "$repo" <<'SIGNED_INSTALLER'
+import assert from 'node:assert/strict'
+import {readFileSync} from 'node:fs'
+import {execFileSync} from 'node:child_process'
+import {createHash} from 'node:crypto'
+import {pathToFileURL} from 'node:url'
+const [archive,repo]=process.argv.slice(2)
+const {verifyPanelDigest}=await import(pathToFileURL(repo+'/scripts/panel-package-signature.mjs').href)
+const metadata=JSON.parse(execFileSync('tar',['-xOf',archive,'./version.json'],{encoding:'utf8'}))
+const arch=process.arch==='arm64'?'arm64':'amd64',hash=createHash('sha256').update(readFileSync(archive)).digest('hex')
+assert.ok(verifyPanelDigest(metadata.version,arch,hash,readFileSync(archive+'.sig','utf8').trim()))
+console.log('Signed current installer source verified against the actual candidate')
+SIGNED_INSTALLER
+  tar -xOf "$candidate" ./scripts/install-panel.sh > "$work/old-install.sh"
+else
+  tar -xOf "$old" ./scripts/install-panel.sh > "$work/old-install.sh"
+fi
 printf 'installer@example.invalid\n3\n' | ONBOARDING_PUBLIC_HOST=gateway.example.com \
   bash "$work/old-install.sh" > "$work/old-install.log" 2>&1
 systemctl is-active --quiet incudal-backend
