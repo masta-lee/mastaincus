@@ -1,6 +1,6 @@
 # Owner 要求 — 所有项目对话首先读取
 
-更新：2026-11-26。此文件记录 owner 明确要求，适用于 PayIncus / Incudal 的所有 AI agent、新对话、接手对话和压缩恢复。**先读本文件，再读 AGENTS.md、OPERATIONS_HANDOFF.md 与 HANDOFF.md。** 不得要求 owner 在新对话重复这些要求。
+更新：2026-11-27。此文件记录 owner 明确要求，适用于 PayIncus / Incudal 的所有 AI agent、新对话、接手对话和压缩恢复。**先读本文件，再读 AGENTS.md、OPERATIONS_HANDOFF.md 与 HANDOFF.md。** 不得要求 owner 在新对话重复这些要求。
 
 本文件规定目标和验收条件，不是完成声明。实现状态与验证证据记入 HANDOFF.md、GATEWAY_PROGRESS.md；不得因已有大量测试通过而跳过未完成要求。与旧方案、旧界面文案冲突时，以 owner 最新明确要求为准，并同步更新本文件。
 

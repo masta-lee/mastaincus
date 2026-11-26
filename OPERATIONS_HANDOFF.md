@@ -1,3 +1,11 @@
+2026-11-27 03:58+08:00仓库替代root后验缺口已修：实际rollback可先恢复old-only helper，当前新launcher随后迁raw origin到new，下一root任务曾需另一次backend restart。已在原成功write_manifest之后以父链/单链接root0755和env-i补一次normalizer，不加seal/锁/改原包身份。root helper51ebb2d3…、repo guard/语法/独审过，最终107 r3完整193数据/OTA自然0；r2及首轮107失败分别保留。原14worker实际duplicate文案finished已精确修fixture。两个current rollback场景新增真实root rollback@task＋不再restart的update@同task，身份/原seal/template/rolled_back保持，Linux17非发行jobs仍待；公开下载/原14与Agent资产证据保持。当前22文件准备提交推送/main同步及无tag预览/Pages，不提前正式发行/生产/密码/客户操作。原kernel/来源/双PG/主控新备份完整模拟恢复缺口继续保留；最新准备又确认3408矩阵整链绑定旧2bc251而非当前f269，不能直接当当前验收。2字节0仍被自动审批blocked by policy拒删/勿commit，原孤儿HTTPfixture已身份核验停止。详见docs/github-backup-mastaincus-2026-11-26.md，以下为阶段历史。
+
+2026-11-27 03:20+08:00仓库替代本机第107项已自然exit0：最终193组Bash/dotenv配置、真实OTA断线/超时/重试/元数据绑定及更新守卫全部通过，五文件SHA与冻结交接一致。原完整233轮232通过/107失败仍保留；本轮仅最小修复并重跑107，当前覆盖全部有通过证据，不伪称原轮233/233。当前21文件准备阶段提交推送/main同步与完整无tag17非发行job预览、Pages；新repo首次45858915574失败、非root夹具与公开变量修复待新CI实证。完整root oneshot/公网与原安全余项仍保留，本轮无生产/客户/密码/新正式发行。两份已结束本机守卫的孤儿HTTP fixture经身份核验后已停止，文件未删；2字节0仍因自动审批blocked by policy拒删而保留/勿commit。报告docs/github-backup-mastaincus-2026-11-26.md，以下为阶段历史。
+
+2026-11-27 02:55+08:00仓库替代最终本机收尾：masta-lee/mastaincus已PUBLIC、main/分支ed39a374；原v1.8.14六资产/latest及Agent16四资产、匿名raw/main/双完整包/生产Agent三路由两原二进制和原签名均过，原身份/资产不重建。当前21变更已完整独审：dotenv真实规则/CRLF-noLF-quote-冒号-pureLF凭据保护、持久root helper BasePost/清env/原seal与raw origin/目录FD原子写入、实际原tar Gate及加载Post/After/restart回归已接线。Bash r4完整692.160s自然0，rootrepo/platformbackup/split/语法/文档构建过，秘密增量无真实值/私钥/强token命中。新233首轮自然1/232过：唯一107的colon-bare-CRLF后验误拒已0067ea63归一＋原UTF16映射修，281参考及独审12手工期望过；当前只重跑107含193组（logs/mastaincus-final-system-update-guards-20261127-r2.log），其余232无需重复，尚未终态。待107自然0后保存推送本批、main同步并手动新完整无tag预览/Pages；新repo首次45858915574失败保留，原17非发行jobs双首装/六legacy+四current仍待，不能写已实机全过。Root full oneshot/公网与原kernel boot/回退/旧来源/双PG矩阵/新真实备份完整模拟恢复/最终主控热更和新发行缺口仍保留。自动审批拒精确删2字节0（blocked by policy），留存/勿commit。无生产/客户/密码/新正式版。报告docs/github-backup-mastaincus-2026-11-26.md，以下为阶段历史。
+
+2026-11-27仓库替代最新：ed39a3746c203e3c544dd9c400f1d3dacd249da6已推新唯一masta-lee/mastaincus的main／工作分支；仓库PUBLIC、原v1.8.14六资产/latest及Agent16四资产可匿名下载。raw/main与来源相同、生产OTA两完整原包SHA/size保持；生产Agent公共三路由及两完整原二进制/原Ed25519签名自然0，无token／DB／主控／客户。迁移本机233/233自然0（15m35），公开前已知C01–C17／29blobs／7日志分类闭合、范围边界留存。首次新完整预览45858915574已failure：AMD232/233，非root Linux fixture19errors2fail；ARM构建过但缺公钥variable，原Secret已有，现已补原公钥。首装/十旧升级因依赖skipped未验收；fixture正在修，不放宽产品。独审新确认合法export/键空白dotenv及无末行LF迁移漏点，源码最小修中；文档生成旧blob链接与运维env例子已修、文档守卫过。下一步合并对应修复/守卫、阶段推送并新来源完整预览、核双首装/六原旧worker＋四新installer回滚终态和包；原内核boot/回退/来源、双PG矩阵/主控新备份完整本机模拟恢复/最终热更及新发行仍未完。本轮无生产／客户／密码／新正式版。报告docs/github-backup-mastaincus-2026-11-26.md，以下为阶段历史。
+
 2026-11-27 00:05+08:00仓库替代接续：新唯一masta-lee/mastaincus，d6c0a04d原22分支/206tag已备份；原v1.8.14六正式资产/latest和配套Agent16四资产已迁移，原包/校验/二进制字节不变，两OTA清单只改URL（605ec85f…），Agent仅补原身份签名元数据。新源码已精修旧默认/alias-only/原子env失败保护、raw/effective Git、成功后origin、旧worker备份前source迁移和原包新装helper；实际生产下载代码新私有repo两完整原包+真实CDN无token、Agent公共路由两完整原二进制/签名均自然0，未接数据库/主控/客户。相关3/3、front2/2、Bash r4、前后端/文档build自然0；233全量仍在途，原6+新4双架构旧worker/新installer预览待跑。owner已明确批准公开，仍待已知历史候选复核/本轮提交推送main/实际公开和匿名回读，不把批准记完成。原kernel真实boot/回退/补丁、旧组件来源、双PG矩阵/新完整包与主控新备份本机模拟恢复/最终热更新发行未完；本轮无生产/客户/密码/新正式版本。报告docs/github-backup-mastaincus-2026-11-26.md，以下为阶段历史。
 
 2026-11-26 15:52+08:00接续优先：当前产品Python f2693318…/测试b43922f6…已冻结，PG先持久native launch再核受信psql，原unit/argv/工具Before-Expected/SQL前后/journal终段均补齐；不是旧r4草稿状态。根任务当前完整本机206/45skip及对应守卫、原B9专项、完整Linux206/0skip/0fail/275.895s全自然0，原B/PG88982/出站隔离保持。首轮Linux8错误为新fixture客户端在/tmp01777，被产品守卫正确拒绝；只改测试目录，旧1eff/错误和基线留存。下一步仍须真实内核boot/回退/后续patch、旧组件可信来源、更新绑定当前源码的双PG矩阵、完整来源包/主控新备份本机完整模拟恢复，才可原流程热更/发行；不能把上述Linux守卫当真实双PG或整机灾备完成。C项目清3.336GB及仓库外Go5.760GB已实做，在用本机PG11036/数据/程序勿删；旧PG目录递归清理被审批拒绝未执行。无新生产/客户/密码/Git提交推送/发行，jimmasta仅申诉禁止上传。报告docs/local-cleanup-and-security-progress-2026-11-26.md，以下为历史。
@@ -228,7 +236,7 @@ v1.8.14和Agent v1.0.16已正式公开，双首装、六个当前v1.8.13原worke
 - 自动引导维护原生白名单仍仅Alpine／GRUB／AMD64。ARM／Debian需要未验收方案时保持具体阻断，不能以源码或模拟通过宣称任意宿主均可自动可售。本轮没有连接生产，真实OSS新B、独立备用、客户公网与千台72小时范围保持。
 
 
-适用仓库：[mastalee928/payincus](https://github.com/masta-lee/mastaincus)。当前版本与验证证据以 [HANDOFF.md](HANDOFF.md) 为准。此文件只包含可公开的运维规则；实际地址、账号、凭据和备份证据另存于维护者内部记录。
+适用仓库：[masta-lee/mastaincus](https://github.com/masta-lee/mastaincus)。当前版本与验证证据以 [HANDOFF.md](HANDOFF.md) 为准。此文件只包含可公开的运维规则；实际地址、账号、凭据和备份证据另存于维护者内部记录。
 
 ## 2026-11-10 自动对接三轮复审（未发行）
 
@@ -373,8 +381,8 @@ sudo bash install-panel.sh
 源码、发行包和更新源均应使用自己的仓库：
 
 ```dotenv
-SYSTEM_UPDATE_RELEASE_REPOSITORY=mastalee928/payincus
-INCUDAL_AGENT_RELEASE_REPOSITORY=mastalee928/payincus
+SYSTEM_UPDATE_RELEASE_REPOSITORY=masta-lee/mastaincus
+INCUDAL_AGENT_RELEASE_REPOSITORY=masta-lee/mastaincus
 INCUDAL_AGENT_RELEASE_DIR=
 ```
 

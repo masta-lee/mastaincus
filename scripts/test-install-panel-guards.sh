@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
 set -Eeuo pipefail
+trap 'printf "INSTALL_GUARD_FAILED line=%s\n" "$LINENO" >&2' ERR
 
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 # shellcheck source=install-panel.sh
@@ -124,11 +125,12 @@ grep -Fq "proxy_pass http://127.0.0.1:${DEFAULT_PORT};" "$WORK_DIR/nginx-script-
 grep -Fq 'proxy_set_header X-Forwarded-Host $incudal_forwarded_host;' "$WORK_DIR/nginx-script-token-location.conf"
 # A fresh file used to discard the supplied token even though upgrades populated
 # empty values. Exercise both paths without real credentials or system ownership.
-declare -f generate_env ensure_env_keys get_env_value env_file_identity write_env_atomically set_env_if_missing set_env_value set_env_if_value get_release_repository_default migrate_release_repository gen_secret gen_password > "$WORK_DIR/env-functions.sh"
+declare -f generate_env ensure_env_keys env_dotenv_data get_env_value env_file_identity write_env_atomically set_env_if_missing set_env_value set_env_if_value get_release_repository_default migrate_release_repository gen_secret gen_password > "$WORK_DIR/env-functions.sh"
 # Installer paths are intentionally readonly. Run the unchanged functions in a
 # separate shell so test paths cannot weaken those production constants.
 bash -s -- "$WORK_DIR" "$WORK_DIR/env-functions.sh" <<'ENV_GUARD'
-    set -euo pipefail
+    set -Eeuo pipefail
+    trap 'printf "INSTALL_ENV_GUARD_FAILED line=%s\n" "$LINENO" >&2' ERR
     token_work="$1"
     source "$2"
     DEFAULT_PORT=3001
@@ -180,7 +182,7 @@ RETIRED_ENV
         migrate_release_repository "$repository_key" > /dev/null
     done
     for repository_key in SYSTEM_UPDATE_RELEASE_REPOSITORY INCUDAL_AGENT_RELEASE_REPOSITORY GITHUB_REPO; do
-        [[ "$(get_env_value "$repository_key")" == masta-lee/mastaincus ]]
+        [[ "$(env_dotenv_data repository "$repository_key")" == masta-lee/mastaincus ]]
     done
     [[ "$(get_env_value GITHUB_REPOSITORY)" == custom/agent-source ]]
     cmp <(grep -Ev '^(SYSTEM_UPDATE_RELEASE_REPOSITORY|INCUDAL_AGENT_RELEASE_REPOSITORY|GITHUB_REPO)=' "$ENV_FILE.before") \
@@ -201,6 +203,37 @@ RETIRED_ENV
     [[ "$(get_env_value INCUDAL_AGENT_RELEASE_REPOSITORY)" == custom/agent ]]
     grep -Fxq 'GITHUB_REPO="custom/panel"' "$ENV_FILE"
     grep -Fxq "GITHUB_REPOSITORY='custom/agent'" "$ENV_FILE"
+    ENV_FILE="$token_work/exported-alias-and-multiline.env"
+    cat > "$ENV_FILE" <<'EXPORTED_ALIAS_ENV'
+export GITHUB_REPO = "custom/panel"
+export GITHUB_REPOSITORY = 'custom/agent'
+JWT_SECRET="fixture-first
+GITHUB_REPO=mastalee928/payincus
+fixture-last"
+COOKIE_SECRET=guard-retained-cookie
+ENCRYPTION_KEY=guard-retained-encryption
+EXPORTED_ALIAS_ENV
+    ensure_env_keys > /dev/null
+    [[ "$(get_env_value SYSTEM_UPDATE_RELEASE_REPOSITORY)" == custom/panel ]]
+    [[ "$(get_env_value INCUDAL_AGENT_RELEASE_REPOSITORY)" == custom/agent ]]
+    [[ "$(get_env_value JWT_SECRET)" == $'fixture-first\nGITHUB_REPO=mastalee928/payincus\nfixture-last' ]]
+    grep -Fxq 'export GITHUB_REPO = "custom/panel"' "$ENV_FILE"
+    grep -Fxq "export GITHUB_REPOSITORY = 'custom/agent'" "$ENV_FILE"
+    # A real trailing LF is credential data. Shell substitution must not turn
+    # newline-only secrets into missing values or a suffixed password/port into
+    # an exact insecure/default value during the full installer repair path.
+    set_env_value JWT_SECRET $'\n' fixture > /dev/null
+    set_env_value ADMIN_PASSWORD $'admin123\n' fixture > /dev/null
+    set_env_value PORT $'3000\n' fixture > /dev/null
+    cp "$ENV_FILE" "$ENV_FILE.expected"
+    ensure_env_keys > /dev/null
+    cmp "$ENV_FILE" "$ENV_FILE.expected"
+    [[ "$(get_env_value JWT_SECRET && printf '\037')" == $'\n\n\037' ]]
+    [[ "$(get_env_value ADMIN_PASSWORD && printf '\037')" == $'admin123\n\n\037' ]]
+    [[ "$(get_env_value PORT && printf '\037')" == $'3000\n\n\037' ]]
+    set_env_value ADMIN_PASSWORD admin123 fixture > /dev/null
+    ensure_env_keys > /dev/null
+    [[ "$(get_env_value ADMIN_PASSWORD)" != admin123 ]]
     for failed_command in awk cat chmod mv; do
         ENV_FILE="$token_work/atomic-failure-${failed_command}.env"
         printf '%s\n' 'JWT_SECRET=guard-retained-atomic-key' 'SYSTEM_UPDATE_RELEASE_REPOSITORY=mastalee928/payincus' > "$ENV_FILE"
@@ -235,7 +268,7 @@ ENCRYPTION_KEY=guard-retained-encryption
 INIT_ENV
 env ENV_FILE="$WORK_DIR/init-repositories.env" bash "$REPO_ROOT/scripts/init-env.sh" > "$WORK_DIR/init-repositories.log" 2>&1
 grep -Fxq 'SYSTEM_UPDATE_RELEASE_REPOSITORY=masta-lee/mastaincus' "$WORK_DIR/init-repositories.env"
-grep -Fxq 'INCUDAL_AGENT_RELEASE_REPOSITORY=masta-lee/mastaincus' "$WORK_DIR/init-repositories.env"
+grep -Fxq 'INCUDAL_AGENT_RELEASE_REPOSITORY="masta-lee/mastaincus"' "$WORK_DIR/init-repositories.env"
 for retained in 'GITHUB_REPOSITORY=custom/agent-source' 'JWT_SECRET=guard-retained-jwt' 'COOKIE_SECRET=guard-retained-cookie' 'ENCRYPTION_KEY=guard-retained-encryption'; do
     grep -Fxq "$retained" "$WORK_DIR/init-repositories.env"
 done

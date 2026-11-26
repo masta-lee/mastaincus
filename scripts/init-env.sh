@@ -32,12 +32,169 @@ gen_secret() {
     printf 'A1!%s' "$(openssl rand -hex 64)" | cut -c "1-${1:-48}"
 }
 
+env_dotenv_data() {
+    local operation="$1" key="$2" value="${3-}" last_byte
+    [[ -f "$ENV_FILE" && ! -L "$ENV_FILE" ]] || return 1
+    last_byte="$(tail -c 1 -- "$ENV_FILE" | od -An -tu1)" || return 1
+    last_byte="${last_byte//[[:space:]]/}"
+    # Parse data with the base-system tools available before Node installation.
+    # Values are never shell code or command arguments. Keep the original bytes,
+    # including CRLF/no final LF, and skip complete quoted credential blocks.
+    cat -- "$ENV_FILE" | INCUDAL_ENV_WRITE_VALUE="$value" LC_ALL=C awk -v BINMODE=3 \
+        -v operation="$operation" -v key="$key" -v final_byte="$last_byte" '
+        function fail() {
+            print "Environment data parsing failed; original configuration retained." > "/dev/stderr"
+            exit 65
+        }
+        function ws(s, p, c, b) {
+            c = substr(s, p, 1)
+            if (c != "" && c ~ /[[:space:]]/) return 1
+            if (substr(s, p, 2) == "\302\240") return 2
+            b = substr(s, p, 3)
+            if (b == "\357\273\277" || b == "\341\232\200" ||
+                b == "\342\200\250" || b == "\342\200\251" || b == "\342\200\257" ||
+                b == "\342\201\237" || b == "\343\200\200" ||
+                (substr(b, 1, 2) == "\342\200" && substr(b, 3, 1) ~ /^[\200-\212]$/)) return 3
+            return 0
+        }
+        function skip_space(s, p, n) { while ((n = ws(s, p)) > 0) p += n; return p }
+        function trim_end(s, end, start, n) {
+            while (end >= start) {
+                if (ws(s, end) == 1) end--
+                else if (end - 1 >= start && ws(s, end - 1) == 2) end -= 2
+                else if (end - 2 >= start && ws(s, end - 2) == 3) end -= 3
+                else break
+            }
+            return end
+        }
+        function trim(s, start, end) { start = skip_space(s, 1); end = trim_end(s, length(s), start); return substr(s, start, end - start + 1) }
+        function line_end(s, p, c) { while (p <= length(s)) { c = substr(s, p, 1); if (c == "\r" || c == "\n") break; p++ } return p }
+        function next_line(s, p) { p = line_end(s, p); if (substr(s, p, 2) == "\r\n") return p + 2; return p + 1 }
+        function record_end(s, p, c, b) {
+            while (p <= length(s)) {
+                c = substr(s, p, 1); b = substr(s, p, 3)
+                if (c == "\r" || c == "\n" || b == "\342\200\250" || b == "\342\200\251") break
+                p++
+            }
+            return p
+        }
+        function next_record(s, p, b) {
+            p = record_end(s, p); b = substr(s, p, 3)
+            if (b == "\342\200\250" || b == "\342\200\251") return p + 3
+            if (substr(s, p, 2) == "\r\n") return p + 2
+            return p + 1
+        }
+        function quote_end(s, p, q, j, fallback) {
+            # dotenv may backtrack an escaped quote at a valid record tail
+            # into the closing quote. A non-escaped quote cannot be body data.
+            for (j = p + 1; j <= length(s); j++) if (substr(s, j, 1) == q) {
+                if (substr(s, j - 1, 1) != "\\") return quote_tail(s, j + 1) ? j : fallback
+                if (quote_tail(s, j + 1)) fallback = j
+            }
+            return fallback
+        }
+        function quote_tail(s, p, n, c) {
+            while ((n = ws(s, p)) > 0 && record_end(s, p) != p) p += n
+            c = substr(s, p, 1); return c == "" || c == "#" || record_end(s, p) == p
+        }
+        function decoded(s, q) {
+            s = trim(s); q = substr(s, 1, 1)
+            gsub(/\r\n?/, "\n", s)
+            if (length(s) >= 2 && (q == single || q == "\"" || q == "`") && substr(s, length(s), 1) == q) {
+                s = substr(s, 2, length(s) - 2)
+            }
+            # dotenv expands these escapes whenever the value starts with a
+            # double quote, including its legal unquoted-fallback form.
+            if (q == "\"") { gsub(/\\n/, "\n", s); gsub(/\\r/, "\r", s) }
+            return s
+        }
+        function encoded(s, preferred, q) {
+            if (index(s, "\r")) fail()
+            if (preferred != "" && !index(s, preferred) &&
+                (preferred != "\"" || (!index(s, "\\n") && !index(s, "\\r")))) return preferred s preferred
+            q = substr(s, 1, 1)
+            if (trim(s) == s && !index(s, "#") && !index(s, "\n") && q != single && q != "\"" && q != "`") return s
+            if (!index(s, single)) return single s single
+            if (!index(s, "`")) return "`" s "`"
+            if (!index(s, "\"") && !index(s, "\\n") && !index(s, "\\r")) return "\"" s "\""
+            fail()
+        }
+        { raw = raw $0 "\n"; records++ }
+        END {
+            single = sprintf("%c", 39)
+            if (records && final_byte != 10) raw = substr(raw, 1, length(raw) - 1)
+            if (key !~ /^[A-Za-z0-9_.-]+$/ || operation !~ /^(read|repository|presence|set|migrate|needs-migration)$/) fail()
+            cursor = 1
+            while (cursor <= length(raw)) {
+                line = cursor; p = skip_space(raw, cursor)
+                if (substr(raw, p, 1) == "#") { cursor = next_record(raw, p); continue }
+                if (substr(raw, p, 6) == "export" && ws(raw, p + 6)) p = skip_space(raw, p + 6)
+                if (!match(substr(raw, p), /^[A-Za-z0-9_.-]+/)) { cursor = next_record(raw, line); continue }
+                name = substr(raw, p, RLENGTH); p = skip_space(raw, p + RLENGTH)
+                separator = substr(raw, p, 1)
+                if (separator != "=" && !(separator == ":" && ws(raw, p + 1))) { cursor = next_record(raw, line); continue }
+                p++
+                # The colon branch consumes at least one whitespace character.
+                # dotenv normalizes CRLF into one LF before this step.
+                if (separator == ":") p += substr(raw, p, 2) == "\r\n" ? 2 : ws(raw, p)
+                while (ws(raw, p) && substr(raw, p, 1) != "\r" && substr(raw, p, 1) != "\n") p += ws(raw, p)
+                begin = p; look = skip_space(raw, p); q = substr(raw, look, 1); closing = 0; bounded_record = 0
+                if (q == single || q == "\"" || q == "`") closing = quote_end(raw, look, q)
+                if (closing && quote_tail(raw, closing + 1)) { begin = look; finish = closing + 1; bounded_record = 1 }
+                else {
+                    finish = line_end(raw, p)
+                    for (j = p; j < finish; j++) if (substr(raw, j, 1) == "#") { finish = j; bounded_record = 1; break }
+                    finish = trim_end(raw, finish - 1, begin) + 1
+                }
+                count++; names[count] = name; starts[count] = begin; ends[count] = finish
+                values[count] = decoded(substr(raw, begin, finish - begin)); last[name] = count
+                cursor = bounded_record ? next_record(raw, finish) : next_line(raw, finish)
+            }
+            if (operation == "presence") {
+                printf "%d\n", (length(values[last[key]]) > 0)
+            } else if (operation == "read" || operation == "repository") {
+                result = values[last[key]]
+                if (operation == "repository") {
+                    result = trim(result)
+                    if (result != "" && result !~ /^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/) fail()
+                }
+                printf "%s\n", result
+            } else if (operation == "needs-migration") {
+                found = 0
+                for (i = 1; i <= count; i++) if (names[i] == key && tolower(trim(values[i])) == "mastalee928/payincus") found = 1
+                printf "%d\n", found
+            } else if (operation == "migrate") {
+                result = ""; previous = 1
+                for (i = 1; i <= count; i++) if (names[i] == key && tolower(trim(values[i])) == "mastalee928/payincus") {
+                    piece = substr(raw, starts[i], ends[i] - starts[i])
+                    if (!match(tolower(piece), /mastalee928\/payincus/)) fail()
+                    result = result substr(raw, previous, starts[i] - previous) substr(piece, 1, RSTART - 1) \
+                        "masta-lee/mastaincus" substr(piece, RSTART + RLENGTH)
+                    previous = ends[i]
+                }
+                printf "%s", result substr(raw, previous)
+            } else {
+                i = last[key]; preferred = ""
+                if (i) {
+                    piece = substr(raw, starts[i], ends[i] - starts[i]); q = substr(piece, 1, 1)
+                    if (length(piece) >= 2 && (q == single || q == "\"" || q == "`") && substr(piece, length(piece), 1) == q) preferred = q
+                    printf "%s%s%s", substr(raw, 1, starts[i] - 1), encoded(ENVIRON["INCUDAL_ENV_WRITE_VALUE"], preferred), substr(raw, ends[i])
+                } else {
+                    eol = "\n"; p = line_end(raw, 1)
+                    if (substr(raw, p, 2) == "\r\n") eol = "\r\n"
+                    else if (substr(raw, p, 1) == "\r") eol = "\r"
+                    delimiter = raw != "" && substr(raw, length(raw), 1) != "\n" && substr(raw, length(raw), 1) != "\r" ? eol : ""
+                    printf "%s%s%s=%s%s", raw, delimiter, key, encoded(ENVIRON["INCUDAL_ENV_WRITE_VALUE"], ""), eol
+                }
+            }
+        }
+    '
+}
+
 get_env_value() {
     local key="$1"
-    if [[ ! -f "$ENV_FILE" ]]; then
-        return 0
-    fi
-    grep -E "^${key}=" "$ENV_FILE" 2>/dev/null | tail -n 1 | cut -d'=' -f2- || true
+    [[ -f "$ENV_FILE" ]] || return 0
+    env_dotenv_data read "$key"
 }
 
 env_file_identity() {
@@ -69,8 +226,14 @@ set_env_if_missing() {
     local value="$2"
     local label="$3"
     local current
-    current="$(get_env_value "$key")"
-
+    if [[ "$key" == SYSTEM_UPDATE_RELEASE_REPOSITORY || "$key" == INCUDAL_AGENT_RELEASE_REPOSITORY ]]; then
+        current="$(env_dotenv_data repository "$key")" || return 1
+    else
+        current="$(env_dotenv_data presence "$key")" || return 1
+        [[ "$current" != 1 ]] || return 0
+        [[ "$current" == 0 ]] || return 1
+        current=""
+    fi
     if [[ -n "$current" ]]; then
         return 0
     fi
@@ -78,62 +241,33 @@ set_env_if_missing() {
     local tmp_file original_state
     original_state="$(env_file_identity)" || return 1
     tmp_file="$(mktemp "${ENV_FILE}.incudal-env.XXXXXX")" || return 1
-    if grep -qE "^${key}=" "$ENV_FILE" 2>/dev/null; then
-        if ! awk -v key="$key" -v value="$value" '
-            BEGIN { replaced = 0 }
-            $0 ~ "^" key "=" {
-                if (replaced == 0) print key "=" value
-                replaced = 1
-                next
-            }
-            { print }
-        ' "$ENV_FILE" > "$tmp_file"; then rm -f -- "$tmp_file"; return 1; fi
-    else
-        if ! { cat "$ENV_FILE" && printf '\n%s=%s\n' "$key" "$value"; } > "$tmp_file"; then rm -f -- "$tmp_file"; return 1; fi
-    fi
+    if ! env_dotenv_data set "$key" "$value" > "$tmp_file"; then rm -f -- "$tmp_file"; return 1; fi
     write_env_atomically "$tmp_file" "$original_state" || return 1
 
     log "已自动补充 ${label}: ${key}"
 }
 
 get_release_repository_default() {
-    get_env_value "$1" | awk -v fallback="$GITHUB_REPO" '
-        { value = $0 }
-        END {
-            sub(/#.*/, "", value)
-            gsub(/^[[:space:]]+|[[:space:]]+$/, "", value)
-            quote = substr(value, 1, 1)
-            if ((quote == "\"" || quote == "\047") && substr(value, length(value), 1) == quote)
-                value = substr(value, 2, length(value) - 2)
-            gsub(/^[[:space:]]+|[[:space:]]+$/, "", value)
-            if (value == "") print fallback
-            else if (value ~ /^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/) print value
-        }
-    '
+    local alias="$1" primary="${2-}" configured
+    # Respect the effective last primary before inspecting an alias.
+    if [[ -n "$primary" ]]; then
+        configured="$(env_dotenv_data repository "$primary")" || return 1
+        if [[ -n "$configured" ]]; then printf '%s\n' "$configured"; return 0; fi
+    fi
+    configured="$(env_dotenv_data repository "$alias")" || return 1
+    printf '%s\n' "${configured:-$GITHUB_REPO}"
 }
-
 migrate_release_repository() {
-    local key="$1" tmp_file original_state
+    local key="$1" tmp_file original_state migration_needed
     [[ -f "$ENV_FILE" ]] || return 0
+    migration_needed="$(env_dotenv_data needs-migration "$key")" || return 1
+    [[ "$migration_needed" != 0 ]] || return 0
+    [[ "$migration_needed" == 1 ]] || return 1
     original_state="$(env_file_identity)" || return 1
     tmp_file="$(mktemp "${ENV_FILE}.incudal-env.XXXXXX")" || return 1
-    # Read dotenv values as data; retain custom sources and every credential.
-    if ! awk -v key="$key" -v repository="$GITHUB_REPO" '
-        index($0, key "=") == 1 {
-            value = substr($0, length(key) + 2)
-            sub(/#.*/, "", value)
-            gsub(/^[[:space:]]+|[[:space:]]+$/, "", value)
-            quote = substr(value, 1, 1)
-            if ((quote == "\"" || quote == "\047") && substr(value, length(value), 1) == quote)
-                value = substr(value, 2, length(value) - 2)
-            gsub(/^[[:space:]]+|[[:space:]]+$/, "", value)
-            if (tolower(value) == "mastalee928/payincus") {
-                print key "=" repository
-                next
-            }
-        }
-        { print }
-    ' "$ENV_FILE" > "$tmp_file"; then rm -f -- "$tmp_file"; return 1; fi
+    # Replace only actual retired values, retaining quoting and every other
+    # byte. Unmatched files never change identity or announce a migration.
+    if ! env_dotenv_data migrate "$key" > "$tmp_file"; then rm -f -- "$tmp_file"; return 1; fi
     if ! cmp -s "$ENV_FILE" "$tmp_file"; then
         write_env_atomically "$tmp_file" "$original_state" || return 1
         log "已迁移退役的 Release 仓库: ${key}"
@@ -154,6 +288,8 @@ fi
 db_password="$(gen_password 24)"
 redis_password="$(gen_password 24)"
 
+system_repository="$(get_release_repository_default GITHUB_REPO SYSTEM_UPDATE_RELEASE_REPOSITORY)" || exit 1
+agent_repository="$(get_release_repository_default GITHUB_REPOSITORY INCUDAL_AGENT_RELEASE_REPOSITORY)" || exit 1
 set_env_if_missing "NODE_ENV" "production" "运行环境"
 set_env_if_missing "HOST" "127.0.0.1" "后端监听地址"
 set_env_if_missing "PORT" "3001" "后端监听端口"
@@ -169,8 +305,8 @@ set_env_if_missing "SERVE_STATIC_CLIENT" "false" "后端静态文件服务开关
 set_env_if_missing "VITE_API_BASE_URL" "/api" "前端 API 基础路径"
 set_env_if_missing "VITE_CUSTOMER_BASE_URL" "" "管理后台生成客户链接的前端地址"
 set_env_if_missing "VITE_ADMIN_BASE_URL" "" "客户前端管理后台地址"
-set_env_if_missing "SYSTEM_UPDATE_RELEASE_REPOSITORY" "$(get_release_repository_default GITHUB_REPO)" "在线更新 GitHub Release 仓库"
-set_env_if_missing "INCUDAL_AGENT_RELEASE_REPOSITORY" "$(get_release_repository_default GITHUB_REPOSITORY)" "Agent GitHub Release 仓库"
+set_env_if_missing "SYSTEM_UPDATE_RELEASE_REPOSITORY" "$system_repository" "在线更新 GitHub Release 仓库"
+set_env_if_missing "INCUDAL_AGENT_RELEASE_REPOSITORY" "$agent_repository" "Agent GitHub Release 仓库"
 for repository_key in SYSTEM_UPDATE_RELEASE_REPOSITORY INCUDAL_AGENT_RELEASE_REPOSITORY GITHUB_REPO GITHUB_REPOSITORY; do
     migrate_release_repository "$repository_key"
 done

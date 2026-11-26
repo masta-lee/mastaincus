@@ -17,6 +17,7 @@ This page is generated from Git tags and commits to show system version history.
 
 ### Other Changes / 其他变更
 
+- chore: migrate maintained repository to mastaincus [skip ci] `ed39a3746`
 - chore: back up security work and recovery validation [skip ci] `d6c0a04d6`
 - test: select the installed PostgreSQL service in release admission `259e5e642`
 - test: cover original Alpine library paths in listener reload regression `d4963ec34`
@@ -380,8 +381,8 @@ fix: current IPv6 state, legacy SLAAC cleanup, continuous controller/gateway clo
 
 本次为软件发行，未代部署生产。完整纯净宿主原生端到端、真实客户公网／全端口、真实 OSS 全新 B 灾备、独立备用及千台／72 小时验收分别保留范围。
 
-验证记录：https://github.com/mastalee928/payincus/blob/main/docs/release-v1.8.6-validation.md
-网页升级与检查：https://github.com/mastalee928/payincus/blob/main/docs/release-v1.8.6-owner-click-test.md
+验证记录：https://github.com/masta-lee/mastaincus/blob/main/docs/release-v1.8.6-validation.md
+网页升级与检查：https://github.com/masta-lee/mastaincus/blob/main/docs/release-v1.8.6-owner-click-test.md
 
 ## v1.8.5
 
@@ -393,7 +394,7 @@ fix: current IPv6 state, legacy SLAAC cleanup, continuous controller/gateway clo
 - 原地图地理/地区购买目标、支付权限及网关身份保持。累计241迁移，无新增迁移；Agent保持v1.0.5。
 - 新版下载器安装后生效，旧版本首次升级仍由当前下载器执行。发行不代表生产已升级，本次未代生产OTA。
 
-[验证记录](https://github.com/mastalee928/payincus/blob/main/docs/release-v1.8.5-validation.md) · [网页升级与检查](https://github.com/mastalee928/payincus/blob/main/docs/release-v1.8.5-owner-click-test.md)
+[验证记录](https://github.com/masta-lee/mastaincus/blob/main/docs/release-v1.8.5-validation.md) · [网页升级与检查](https://github.com/masta-lee/mastaincus/blob/main/docs/release-v1.8.5-owner-click-test.md)
 
 双架构首装的OSS传输为本地替身。真实OSS全新B灾备、独立备用、原客户公网与千台/72小时验收仍未完成。
 
@@ -414,7 +415,7 @@ fix: current IPv6 state, legacy SLAAC cleanup, continuous controller/gateway clo
 
 正常升级由管理员在网页“版本更新”执行；本次发行未代做生产OTA、重启、改账号或DNS/OSS恢复。首装OSS是本地传输替身；真实OSS全新B灾备、独立备用、真实客户公网持续观察、近千台/72小时及真实iOS/Android仍需各自验收。
 
-[网页升级与检查](https://github.com/mastalee928/payincus/blob/main/docs/release-v1.8.4-owner-click-test.md) · [验证记录](https://github.com/mastalee928/payincus/blob/main/docs/release-v1.8.4-validation.md)
+[网页升级与检查](https://github.com/masta-lee/mastaincus/blob/main/docs/release-v1.8.4-owner-click-test.md) · [验证记录](https://github.com/masta-lee/mastaincus/blob/main/docs/release-v1.8.4-validation.md)
 
 ## v1.8.3
 
@@ -429,7 +430,7 @@ fix: current IPv6 state, legacy SLAAC cleanup, continuous controller/gateway clo
 - 自动续费说明支持悬停、键盘与手机点击；转移期间显示状态并限制重复PUSH和冲突操作。
 - 创建实例标签使用实际网站名称/副标题；余额支付项显示该账户当前金额。
 
-网页升级与检查：[owner指南](https://github.com/mastalee928/payincus/blob/main/docs/release-v1.8.3-owner-click-test.md)。正常升级不用OSS还原。无新迁移（累计240）；Agent保持v1.0.4。
+网页升级与检查：[owner指南](https://github.com/masta-lee/mastaincus/blob/main/docs/release-v1.8.3-owner-click-test.md)。正常升级不用OSS还原。无新迁移（累计240）；Agent保持v1.0.4。
 
 验证范围：同来源CI、双架构正式首装与恢复、六公开资产独立hash/大小/OTA和受信签名核验。首装OSS为本地传输替身。未代做生产OTA、改隔离、DNS/OCI地址或客户操作；真实OSS新B完整灾备、原Agent客户公网、独立备用、千台/72小时仍需独立验收。稳定旧tag不移动。
 
@@ -445,7 +446,7 @@ fix: current IPv6 state, legacy SLAAC cleanup, continuous controller/gateway clo
 - 修正本机双层代理后的真实来源 IP 记录，保持转发头防伪造；历史记录不改写。
 - OSS 保留宿主清理回执与现用管理路由；直接购买和购物车付款流程沿用 v1.8.1。Agent 保持 v1.0.4。
 
-升级与检查步骤：[v1.8.2 网页流程](https://github.com/mastalee928/payincus/blob/main/docs/release-v1.8.2-owner-click-test.md)。管理员在“版本更新”检查并更新至 v1.8.2，等待自动备份、240 项迁移及重启完成。正常更新无需 OSS 还原。
+升级与检查步骤：[v1.8.2 网页流程](https://github.com/masta-lee/mastaincus/blob/main/docs/release-v1.8.2-owner-click-test.md)。管理员在“版本更新”检查并更新至 v1.8.2，等待自动备份、240 项迁移及重启完成。正常更新无需 OSS 还原。
 
 发行验证按实际源码 CI、双架构预览及正式构建/首装、公开安装包和 OTA 清单分别保存。安装包含用户端、管理员端和受信签名网关组件；Linux AMD64/ARM64 包提供独立 SHA256 校验。
 
@@ -466,7 +467,7 @@ fix: current IPv6 state, legacy SLAAC cleanup, continuous controller/gateway clo
 - 清理待安装网关配置中已确认删除的 Peer，保留现用宿主绑定。
 - 修复恢复命令退出、文件权限、数据库回退身份、启动限流和维护锁交接，避免中断后错误卡住。
 
-新生成真实 OSS 备份已在本机隔离导入，135 表、7075 行摘要、119 序列一致，236→238 迁移通过；28 台宿主原 HMAC 身份认证验证通过。支付、恢复、界面及同提交发行证据见仓库的 [验证记录](https://github.com/mastalee928/payincus/blob/main/docs/release-v1.8.1-validation.md)。
+新生成真实 OSS 备份已在本机隔离导入，135 表、7075 行摘要、119 序列一致，236→238 迁移通过；28 台宿主原 HMAC 身份认证验证通过。支付、恢复、界面及同提交发行证据见仓库的 [验证记录](https://github.com/masta-lee/mastaincus/blob/main/docs/release-v1.8.1-validation.md)。
 
 这不是生产升级或完整灾备验收声明。真实备份样本没有在用客户实例；独立 OSS 新 B、原宿主实际隧道重连、客户持续连接、千台真机与 72 小时仍未验收。面板备份不包含客户磁盘或未备份的后续交易；原数据确实缺失时保持具体失败与保护，不伪造恢复成功。
 
@@ -485,7 +486,7 @@ Agent 保持 v1.0.4。本版不自动更换生产系统 Node.js，也不代替 o
 
 管理员在“系统更新”选择 **v1.8.0**。配套 Agent 仍为 **v1.0.4**；已正常运行的该版本无需重新安装。更新成功后先观察历史宿主自动恢复，再使用测试实例验证换机、删除和库存。
 
-[完整主控网页点击实测流程](https://github.com/mastalee928/payincus/blob/v1.8.0/docs/release-v1.8.0-owner-click-test.md)
+[完整主控网页点击实测流程](https://github.com/masta-lee/mastaincus/blob/v1.8.0/docs/release-v1.8.0-owner-click-test.md)
 
 本次发行不代替生产更新与 owner 实测。首装 OSS 传输演练使用一次性机器本地替身；完整独立 OSS 新机恢复、网关接管、近千台和72小时验收仍未完成。实际验证证据与范围见 HANDOFF.md。
 

@@ -281,6 +281,15 @@ run_task() {
   if [[ "$status" -eq 0 ]]; then
     verify_git_control migrate-retired-origin
     write_manifest
+    # A successful rollback can restore an old-only helper before this process
+    # migrates origin. Reconcile it now, while the current seal is complete,
+    # so the next root task does not depend on another backend restart.
+    local repository_parent repository_startup="${HELPER_DIR}/incudal-repository-source-startup"
+    for repository_parent in / /usr /usr/local /usr/local/libexec "$HELPER_DIR"; do
+      [[ -d "$repository_parent" && ! -L "$repository_parent" && $(/usr/bin/stat -c '%u:%g' "$repository_parent") == 0:0 && -z $(/usr/bin/find "$repository_parent" -maxdepth 0 -perm /022 -print) ]] || fail "untrusted repository startup parent"
+    done
+    [[ -f "$repository_startup" && ! -L "$repository_startup" && $(/usr/bin/stat -c '%u:%g:%a:%h' "$repository_startup") == 0:0:755:1 ]] || fail "untrusted repository startup helper"
+    /usr/bin/env -i PATH=/usr/sbin:/usr/bin:/sbin:/bin LC_ALL=C /usr/bin/bash "$repository_startup"
   fi
   return "$status"
 }

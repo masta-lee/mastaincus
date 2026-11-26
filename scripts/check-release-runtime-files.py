@@ -16,6 +16,7 @@ def check(archive_path, root):
         expected.update({path.relative_to(root).as_posix(): path for path in files})
     for name in ['package.json', 'server/package.json', 'pnpm-lock.yaml', 'pnpm-workspace.yaml',
                  'scripts/ensure-time-sync.py', 'scripts/install-platform-backup.sh',
+                 'scripts/install-panel.sh',
                  'scripts/harden-database.py', 'scripts/migrate-database.sh',
                  'scripts/system-security-inventory.py',
                  'scripts/harden-nginx-logging.py',

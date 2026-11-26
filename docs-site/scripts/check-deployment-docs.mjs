@@ -60,6 +60,17 @@ const changelogGenerator = read('docs-site/scripts/generate-changelog.mjs')
 requireText(changelogGenerator, "--format=%H%x09%cs%x09%s", 'changelog generator')
 requireText(changelogGenerator, 'fullHash.slice(0, 9)', 'changelog generator')
 requireText(changelogGenerator, 'normalizeEmbeddedReleaseNoteHeadings', 'changelog generator')
+for (const path of ['docs-site/docs/release/version-log.md', 'docs-site/docs/en/release/version-log.md']) {
+  const generated = read(path)
+  if (/https:\/\/github\.com\/mastalee928\/payincus\/(?:blob|tree)\//i.test(generated)) {
+    throw new Error(`${path}: regenerated source links still point to the retired repository`)
+  }
+}
+const operations = read('OPERATIONS_HANDOFF.md')
+requireText(operations, 'SYSTEM_UPDATE_RELEASE_REPOSITORY=masta-lee/mastaincus', 'operations handoff')
+requireText(operations, 'INCUDAL_AGENT_RELEASE_REPOSITORY=masta-lee/mastaincus', 'operations handoff')
+rejectText(operations, 'SYSTEM_UPDATE_RELEASE_REPOSITORY=mastalee928/payincus', 'operations handoff')
+rejectText(operations, 'INCUDAL_AGENT_RELEASE_REPOSITORY=mastalee928/payincus', 'operations handoff')
 
 if (existsSync(resolve(repoRoot, 'docs-site/docs/public/CNAME'))) {
   throw new Error('Repository Pages must not claim an upstream custom domain')

@@ -10,8 +10,15 @@ installer_source=${UPGRADE_DRILL_INSTALLER_SOURCE:-legacy}
 [[ $scenario == clean || $scenario == migrated-atomic || $scenario == rollback ]] || exit 1
 [[ $installer_source == legacy || $installer_source == current ]] || exit 1
 export UPGRADE_DRILL_SCENARIO="$scenario"
+export UPGRADE_DRILL_BASELINE_ARCHIVE="$old"
 test -s "$candidate"; test -s "$old"; test -s "$old.sha256"
 (cd "$(dirname "$old")"; sha256sum --check "$(basename "$old").sha256")
+# This migration uses the unchanged original v1.8.14 packages. Keep their
+# independent retained digests, not only a checksum fetched from the same URL.
+case "$(basename "$old"):$(sha256sum "$old" | awk '{print $1}')" in
+  incudal-v1.8.14-linux-amd64.tar.gz:9cfd05408aa6ddd0ec0d7872099c2a0b550d96bce2beb2a063f220f55dd85ee4|incudal-v1.8.14-linux-arm64.tar.gz:03bfb27d636d628048761a44e3bdca8f5d55b1f33183e2466465dfdd98657eaf) ;;
+  *) printf '%s\n' 'Original upgrade baseline identity mismatch.' >&2; exit 1 ;;
+esac
 UPGRADE_DRILL_BASELINE_VERSION=$(tar -xOf "$old" ./version.json | python3 -c 'import json,sys,re; version=json.load(sys.stdin)["version"]; assert re.fullmatch(r"v\d+\.\d+\.\d+", version); print(version)')
 export UPGRADE_DRILL_BASELINE_VERSION
 work=$(mktemp -d /root/incudal-upgrade-drill-XXXXXX)
@@ -42,7 +49,7 @@ for p in paths:
     text=p.read_text(errors='replace')
     for secret in sorted(secrets,key=len,reverse=True):text=text.replace(secret,'[redacted]')
     for line in text.splitlines()[-60:]:
-        if re.search(r'ERROR|FATAL|Error|error|失败|PROVISIONING_REJECTED|DATABASE_|AUTHENTICATION_|FINANCIAL_|Database security|Auto rollback|System update completed|Production readiness verification passed|Backend health is ready',line):
+        if re.search(r'ERROR|FATAL|Error|error|失败|PROVISIONING_REJECTED|DATABASE_|AUTHENTICATION_|FINANCIAL_|INCUDAL_RETIRED_HELPER|INCUDAL_REPOSITORY_STARTUP|Database security|Auto rollback|System update completed|Production readiness verification passed|Backend health is ready',line):
             print(p.name+': '+line[:500])
 PY
 }
@@ -74,6 +81,13 @@ fi
 printf 'installer@example.invalid\n3\n' | ONBOARDING_PUBLIC_HOST=gateway.example.com \
   bash "$work/old-install.sh" > "$work/old-install.log" 2>&1
 systemctl is-active --quiet incudal-backend
+if [[ "$installer_source" == current ]]; then
+  # The first real startup has already rerun the old backup hook. Repeat a
+  # normal service restart so a one-time post-install correction cannot pass.
+  stage=current-installer-restart
+  systemctl restart incudal-backend
+  systemctl is-active --quiet incudal-backend
+fi
 python3 "$repo/scripts/test-database-ownership-scope.py"
 # Retained test/restore databases are legitimate old-install inputs. The new
 # role migration must preserve them instead of requiring deletion or globally
@@ -205,6 +219,8 @@ fi
   /usr/local/libexec/incudal/incudal-online-task seal
 )
 stage=post-upgrade-verification
+systemctl restart incudal-backend
+systemctl is-active --quiet incudal-backend
 node "$repo/scripts/smoke-legacy-online-upgrade.mjs" after "$candidate"
 if tar -xOf "$candidate" ./version.json | python3 -c 'import json,sys,re; sys.exit(0 if re.fullmatch(r"v1\.8\.14-test\.[a-f0-9]{7}",json.load(sys.stdin)["version"]) else 1)'; then
   candidate_version=$(tar -xOf "$candidate" ./version.json | python3 -c 'import json,sys; print(json.load(sys.stdin)["version"])')
@@ -217,6 +233,20 @@ if tar -xOf "$candidate" ./version.json | python3 -c 'import json,sys,re; sys.ex
   INCUDAL_OWNER_CANDIDATE_DEPLOY=authorized-test node "$work/owner-candidate-tools/apply-verified-owner-candidate.mjs" "$candidate" "$candidate_version" --preflight
   candidate_task=$(python3 -c 'import json; print(json.load(open("/root/incudal-legacy-upgrade.json"))["taskId"])')
   INCUDAL_OWNER_CANDIDATE_DEPLOY=authorized-test node "$work/owner-candidate-tools/finalize-verified-owner-candidate.mjs" "$candidate" "$candidate_version" "$candidate_task"
+fi
+if [[ $scenario == rollback && $installer_source == current ]]; then
+  stage=actual-root-postflight-rollback
+  node "$repo/scripts/smoke-legacy-online-upgrade.mjs" root-rollback-prepare "$candidate"
+  root_rollback_task=$(python3 -c 'import json; print(json.load(open("/root/incudal-legacy-upgrade.json"))["taskId"])')
+  # Queue the genuine root unit behind a normal backend startup. Its worker
+  # performs another real restart; no candidate HTTP adapter is involved.
+  systemctl restart --no-block incudal-backend
+  systemctl start "incudal-online-rollback@${root_rollback_task}.service"
+  node "$repo/scripts/smoke-legacy-online-upgrade.mjs" root-rollback-wait "$candidate"
+  # A completed task is intentionally replayed only to exercise the next real
+  # launcher and the old worker's duplicate guard. Do not restart in between.
+  systemctl start "incudal-online-update@${root_rollback_task}.service"
+  node "$repo/scripts/smoke-legacy-online-upgrade.mjs" root-duplicate-after "$candidate"
 fi
 test "$(ss -ltnp 'sport = :3001' | tail -n +2 | wc -l)" = 1
 test "$(runuser -u postgres -- psql -X -At -d postgres -c "SELECT datdba=(SELECT oid FROM pg_roles WHERE rolname='incudal') FROM pg_database WHERE datname='incudal_retained_upgrade_test'")" = t

@@ -50,6 +50,11 @@ assert.ok(rootHelper.includes('config --local --get-all remote.origin.url') && r
 assert.ok(rootHelper.includes('executable Git configuration is forbidden for root OTA') &&
   rootHelper.indexOf('executable Git configuration is forbidden for root OTA') < rootHelper.indexOf('remote set-url origin'),
   'origin migration must retain the root Git executable-configuration gate')
+const taskPostflight = rootHelper.match(/if \[\[ "\$status" -eq 0 \]\]; then[\s\S]*?\n  fi\n  return "\$status"/)?.[0]
+assert.ok(taskPostflight && taskPostflight.indexOf('write_manifest') < taskPostflight.indexOf('/usr/bin/env -i') &&
+  taskPostflight.includes("== 0:0:755:1") && taskPostflight.includes('untrusted repository startup parent') &&
+  taskPostflight.includes('/usr/bin/env -i PATH=/usr/sbin:/usr/bin:/sbin:/bin LC_ALL=C /usr/bin/bash "$repository_startup"'),
+  'successful root postflight must normalize a restored old helper after sealing the migrated origin, with protected paths and a clean environment')
 for (const path of ['scripts/apply-verified-owner-candidate.mjs', 'scripts/smoke-legacy-online-upgrade.mjs']) {
   assert.match(read(path), /process\.env\.SYSTEM_UPDATE_RELEASE_REPOSITORY\s*=\s*'masta-lee\/mastaincus'/,
     `${path} must send the original worker to the replacement repository`)
@@ -71,6 +76,27 @@ assert.ok(workflow.includes('- fresh-install'), 'Release must wait for fresh ins
 assert.ok(workflow.includes("if: always() && startsWith(github.ref, 'refs/tags/v') && needs.build.result == 'success' && needs.fresh-install.result == 'success' && needs.legacy-upgrade.result == 'success'"),
   'formal publication must survive the intentionally skipped preview-agent dependency but reject any failed build/install/upgrade gate')
 const installer = read('scripts/install-panel.sh')
+const backupInstaller = read('scripts/install-platform-backup.sh')
+const legacyDrill = read('scripts/smoke-legacy-online-upgrade.sh')
+const legacyWorkerDrill = read('scripts/smoke-legacy-online-upgrade.mjs')
+assert.ok(installer.includes('ExecStartPost=+/usr/bin/env -i PATH=/usr/sbin:/usr/bin:/sbin:/bin LC_ALL=C /usr/bin/bash /usr/local/libexec/incudal/incudal-repository-source-startup') &&
+  backupInstaller.includes('/usr/bin/env -i PATH=/usr/sbin:/usr/bin:/sbin:/bin LC_ALL=C HOME=/var/cache/incudal-ota /usr/bin/bash "$repository_installer" --install-repository-startup-guard'),
+  'new installations and original-worker updates must keep repository correction across old startup hooks')
+for (const path of ['deploy/incudal-online-update@.service.example', 'deploy/incudal-online-rollback@.service.example']) {
+  assert.ok(/^After=.*\bincudal-backend\.service$/m.test(read(path)), `${path} must wait for the backend startup helper before admitting an update`)
+}
+assert.ok(legacyDrill.includes('stage=current-installer-restart') &&
+  legacyWorkerDrill.includes('await verifyRootLauncherGitGate()') &&
+  legacyWorkerDrill.includes("helper.toString('utf8').match(/^verify_git_control"),
+  'legacy regression must exercise a real normal restart and the exact shipped root launcher Git gate')
+assert.ok(legacyDrill.includes('stage=actual-root-postflight-rollback') &&
+  legacyDrill.includes('"incudal-online-rollback@${root_rollback_task}.service"') &&
+  legacyDrill.includes('"incudal-online-update@${root_rollback_task}.service"') &&
+  legacyWorkerDrill.includes('root-rollback-prepare') && legacyWorkerDrill.includes('root-rollback-wait') &&
+  legacyWorkerDrill.includes('root duplicate task must preserve the completed rollback'),
+  'rollback regression must use the real root units and admit the next duplicate worker without an extra backend restart')
+assert.ok(read('scripts/check-release-runtime-files.py').includes("'scripts/install-panel.sh'"),
+  'the startup hook installer must be compared against its actual package bytes')
 assert.ok(installer.includes('configure_host_pool_gateway'), 'installer must configure the management gateway')
 assert.ok(installer.includes('--configure-host-pool'), 'existing installations need an explicit gateway setup entry')
 assert.ok(installer.includes('python3 openssh-client openssh-server wireguard-tools'), 'installer must install gateway dependencies')

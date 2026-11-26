@@ -50,6 +50,412 @@ normalize_legacy_online_task_helper() {
     fi
 }
 
+repository_startup_guard_identity() {
+    local file="$1" metadata digest
+    [[ -f "$file" && ! -L "$file" && $(stat -c '%u:%g:%a:%h' "$file") == 0:0:755:1 ]] || return 1
+    metadata="$(stat -c '%d:%i:%u:%g:%a:%h' "$file")" || return 1
+    digest="$(sha256sum "$file" | awk '{print $1}')" || return 1
+    [[ "$digest" =~ ^[a-f0-9]{64}$ && "$(stat -c '%d:%i:%u:%g:%a:%h' "$file")" == "$metadata" ]] || return 1
+    printf '%s:%s' "$metadata" "$digest"
+}
+
+install_repository_startup_guard() {
+    (
+    local PATH=/usr/sbin:/usr/bin:/sbin:/bin
+    export PATH
+    unset BASH_ENV ENV LD_PRELOAD LD_LIBRARY_PATH PYTHONPATH PYTHONHOME NODE_OPTIONS NODE_PATH
+    local directory=/usr/local/libexec/incudal target temporary before current parent parent_before expected_hash
+    target="$directory/incudal-repository-source-startup"
+    for parent in / /usr /usr/local /usr/local/libexec; do
+        if [[ ! -e "$parent" && ! -L "$parent" ]]; then install -d -o root -g root -m 0755 "$parent" || return 1; fi
+        [[ -d "$parent" && ! -L "$parent" && $(stat -c '%u:%g' "$parent") == 0:0 && -z $(find "$parent" -maxdepth 0 -perm /022 -print) ]] || return 1
+    done
+    if [[ -e "$directory" || -L "$directory" ]]; then
+        [[ -d "$directory" && ! -L "$directory" && $(stat -c '%u:%g' "$directory") == 0:0 && -z $(find "$directory" -maxdepth 0 -perm /022 -print) ]] || return 1
+    else
+        install -d -o root -g root -m 0755 "$directory" || return 1
+    fi
+    parent_before="$(for parent in / /usr /usr/local /usr/local/libexec "$directory"; do stat -c '%d:%i:%u:%g:%a' "$parent" || exit 1; done)" || return 1
+    before=missing
+    if [[ -e "$target" || -L "$target" ]]; then
+        before="$(repository_startup_guard_identity "$target")" || return 1
+    fi
+    temporary="$(mktemp "$directory/.repository-source.XXXXXX")" || return 1
+    if ! cat > "$temporary" <<'INCUDAL_REPOSITORY_SOURCE_SCRIPT'
+#!/usr/bin/bash
+# Restore only the sealed runtime launcher for its verified repository; no arguments.
+# The systemd caller must use /usr/bin/env -i BEFORE starting this Bash program.
+set -Eeuo pipefail
+[[ $# -eq 0 && $EUID -eq 0 ]] || { printf '%s\n' INCUDAL_RETIRED_HELPER_REFUSED >&2; exit 1; }
+exec /usr/bin/env -i PATH=/usr/sbin:/usr/bin:/sbin:/bin LC_ALL=C HOME=/var/cache/incudal-ota \
+  /usr/bin/python3 -I -B - <<'INCUDAL_RETIRED_HELPER_PY'
+import hashlib
+import os
+import posixpath
+import re
+import secrets
+import stat
+import subprocess
+import sys
+
+ROOT = '/opt/incudal'
+SEALS = '/var/lib/incudal-ota/manifests'
+HELPERS = '/usr/local/libexec/incudal'
+HOME = '/var/cache/incudal-ota'
+SOURCE = 'deploy/incudal-online-task.sh.example'
+TARGET = 'incudal-online-task'
+OLD = b'https://github.com/mastalee928/payincus.git'
+NEW = b'https://github.com/masta-lee/mastaincus.git'
+GIT = '/usr/bin/git'
+OFLAGS = os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK | os.O_CLOEXEC
+FACTS = ('st_dev', 'st_ino', 'st_mode', 'st_uid', 'st_gid', 'st_nlink', 'st_size', 'st_mtime_ns', 'st_ctime_ns')
+DIRECTORY_FACTS = ('st_dev', 'st_ino', 'st_mode', 'st_uid', 'st_gid')
+
+def refuse():
+    raise ValueError('INCUDAL_RETIRED_HELPER_REFUSED')
+
+def facts(info, fields=FACTS):
+    return tuple(getattr(info, key) for key in fields)
+
+def protected(info, directory=False, modes=None):
+    if info.st_uid != 0 or info.st_gid != 0 or info.st_mode & 0o022:
+        refuse()
+    if directory:
+        if not stat.S_ISDIR(info.st_mode): refuse()
+    elif not stat.S_ISREG(info.st_mode) or info.st_nlink != 1:
+        refuse()
+    if modes is not None and stat.S_IMODE(info.st_mode) not in modes: refuse()
+
+def read_fd(fd, size):
+    os.lseek(fd, 0, os.SEEK_SET)
+    blocks, total = [], 0
+    while total <= size:
+        block = os.read(fd, min(262144, size + 1 - total))
+        if not block: break
+        blocks.append(block); total += len(block)
+    if total != size: refuse()
+    return b''.join(blocks)
+
+class Directory:
+    def __init__(self, name, parent=None):
+        self.name = name
+        self.fd = os.open(name if parent is None else posixpath.basename(name),
+                          os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW | os.O_CLOEXEC,
+                          **({} if parent is None else {'dir_fd': parent.fd}))
+        try:
+            self.initial = os.fstat(self.fd)
+            protected(self.initial, directory=True)
+            self.check()
+        except BaseException:
+            os.close(self.fd); raise
+
+    def check(self):
+        current, named = os.fstat(self.fd), os.lstat(self.name)
+        protected(current, directory=True)
+        protected(named, directory=True)
+        if facts(current, DIRECTORY_FACTS) != facts(self.initial, DIRECTORY_FACTS) or \
+           facts(named, DIRECTORY_FACTS) != facts(self.initial, DIRECTORY_FACTS): refuse()
+
+    def close(self): os.close(self.fd)
+
+class File:
+    def __init__(self, name, parent, limit, modes):
+        self.name, self.parent, self.leaf, self.limit = name, parent, posixpath.basename(name), limit
+        self.fd = os.open(self.leaf, OFLAGS, dir_fd=parent.fd)
+        try:
+            self.initial = os.fstat(self.fd)
+            self.named = os.stat(self.leaf, dir_fd=parent.fd, follow_symlinks=False)
+            protected(self.initial, modes=modes)
+            protected(self.named, modes=modes)
+            if (self.initial.st_dev, self.initial.st_ino) != (self.named.st_dev, self.named.st_ino) or \
+               not 0 <= self.initial.st_size <= limit: refuse()
+            self.raw = self.read()
+            self.sha = hashlib.sha256(self.raw).hexdigest()
+            self.check()
+        except BaseException:
+            os.close(self.fd); raise
+
+    def read(self):
+        return read_fd(self.fd, self.initial.st_size)
+
+    def check(self):
+        self.parent.check()
+        if facts(os.fstat(self.fd)) != facts(self.initial) or \
+           facts(os.stat(self.leaf, dir_fd=self.parent.fd, follow_symlinks=False)) != facts(self.named): refuse()
+        if hasattr(self, 'sha') and hashlib.sha256(self.read()).hexdigest() != self.sha: refuse()
+        if facts(os.fstat(self.fd)) != facts(self.initial): refuse()
+
+    def close(self): os.close(self.fd)
+
+def runtime():
+    current = ROOT + '/current'
+    try: info = os.lstat(current)
+    except FileNotFoundError: return ROOT, None
+    if not stat.S_ISLNK(info.st_mode) or info.st_uid != 0 or info.st_gid != 0 or info.st_nlink != 1: refuse()
+    link = os.readlink(current)
+    app = os.path.realpath(current)
+    if not re.fullmatch(re.escape(ROOT) + r'/releases/[A-Za-z0-9._+-]{1,160}', app): refuse()
+    return app, (facts(info), link)
+
+def source_digest(raw):
+    matches = []
+    for line in raw.splitlines(keepends=True):
+        row = re.fullmatch(rb'(\\?)([a-f0-9]{64})  (.+)\n', line)
+        if row is None: refuse()
+        name = row[3].decode('utf-8', 'surrogateescape')
+        if posixpath.normpath(name) == SOURCE:
+            if row[1] or line != row[2] + b'  ./' + SOURCE.encode() + b'\n': refuse()
+            matches.append(row[2].decode('ascii'))
+    if len(matches) != 1: refuse()
+    return matches[0]
+
+def git_snapshot():
+    root = ROOT + '/.git'
+    records, count = [], 0
+    for base, dirs, files in os.walk(root, followlinks=False):
+        for name in [base] + [posixpath.join(base, part) for part in dirs + files]:
+            info = os.lstat(name); count += 1
+            if count > 65536 or info.st_uid != 0 or info.st_gid != 0 or info.st_mode & 0o022 or \
+               not (stat.S_ISDIR(info.st_mode) or stat.S_ISREG(info.st_mode)): refuse()
+            if name.startswith(root + '/hooks/') and stat.S_ISREG(info.st_mode) and info.st_mode & 0o111: refuse()
+            records.append((name, facts(info)))
+    if not records: refuse()
+    return sorted(records)
+
+def git_query(args, missing=False):
+    result = subprocess.run([GIT, '-C', ROOT, *args], stdin=subprocess.DEVNULL,
+        stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, timeout=15, check=False,
+        env={'PATH': '/usr/sbin:/usr/bin:/sbin:/bin', 'HOME': HOME, 'LC_ALL': 'C', 'GIT_OPTIONAL_LOCKS': '0'})
+    if result.returncode == 1 and missing and not result.stdout: return None
+    if result.returncode != 0 or len(result.stdout) > 65536: refuse()
+    return result.stdout
+
+def origin():
+    dangerous = r'^(core\.hooksPath|core\.fsmonitor|filter\..*\.(clean|smudge|process)|diff\..*\.command|include\.path|includeIf\..*\.path)$'
+    if git_query(['config', '--get-regexp', dangerous], missing=True) is not None: refuse()
+    raw = git_query(['config', '--local', '--get-all', 'remote.origin.url'])
+    if raw not in (OLD + b'\n', NEW + b'\n'): refuse()
+    if git_query(['remote', 'get-url', 'origin']) != raw: refuse()
+    for fixed in (OLD, NEW):
+        if git_query(['ls-remote', '--get-url', fixed.decode('ascii')]) != fixed + b'\n': refuse()
+    return raw[:-1]
+
+def main():
+    if os.geteuid() != 0: refuse()
+    directories, files, temporary, temporary_fd = {}, [], None, None
+    def directory(name):
+        if name not in directories:
+            parent = None if name == '/' else directory(posixpath.dirname(name))
+            directories[name] = Directory(name, parent)
+        return directories[name]
+    def hold(name, limit, modes):
+        item = File(name, directory(posixpath.dirname(name)), limit, modes); files.append(item); return item
+    try:
+        directory(ROOT); directory(ROOT + '/.git'); directory(SEALS); helper_dir = directory(HELPERS); directory(HOME)
+        app, current = runtime(); directory(app); directory(app + '/deploy')
+        key = hashlib.sha256(app.encode('utf-8')).hexdigest()
+        manifest = hold(SEALS + '/' + key + '.sha256', 64 * 1024 * 1024, {0o600, 0o644})
+        hold(SEALS + '/' + key + '.sha256.links', 16 * 1024 * 1024, {0o600, 0o644})
+        source = hold(app + '/' + SOURCE, 1024 * 1024, {0o644, 0o755})
+        if source.sha != source_digest(manifest.raw): refuse()
+        installed = hold(HELPERS + '/' + TARGET, 1024 * 1024, {0o755})
+        # Hold both mandatory local Git configuration and any active global inputs.
+        hold(ROOT + '/.git/config', 1024 * 1024, {0o600, 0o644})
+        for name in ('/etc/gitconfig', HOME + '/.gitconfig', HOME + '/.config/git/config'):
+            try: os.lstat(name)
+            except FileNotFoundError: continue
+            hold(name, 1024 * 1024, {0o600, 0o644})
+        git_before = git_snapshot(); raw_origin = origin()
+        convertible = OLD in source.raw and NEW not in source.raw
+        converted = source.raw.replace(OLD, NEW) if convertible else source.raw
+        if installed.raw not in (source.raw, converted): refuse()
+        wanted = converted if raw_origin == NEW else source.raw
+        def recheck(check_installed=True):
+            if runtime() != (app, current): refuse()
+            for item in directories.values(): item.check()
+            for item in files:
+                if check_installed or item is not installed: item.check()
+            if git_snapshot() != git_before or origin() != raw_origin: refuse()
+        if installed.raw == wanted:
+            recheck(); return
+        temporary = '.incudal-online-task.repository-' + secrets.token_hex(16)
+        temporary_fd = os.open(temporary, os.O_RDWR | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW | os.O_CLOEXEC,
+                               0o600, dir_fd=helper_dir.fd)
+        offset = 0
+        while offset < len(wanted):
+            count = os.write(temporary_fd, wanted[offset:])
+            if count <= 0: refuse()
+            offset += count
+        os.fchown(temporary_fd, 0, 0); os.fchmod(temporary_fd, 0o755); os.fsync(temporary_fd)
+        temporary_info = os.fstat(temporary_fd)
+        protected(temporary_info, modes={0o755})
+        if temporary_info.st_size != len(wanted): refuse()
+        if read_fd(temporary_fd, len(wanted)) != wanted: refuse()
+        named = os.stat(temporary, dir_fd=helper_dir.fd, follow_symlinks=False)
+        if (named.st_dev, named.st_ino) != (temporary_info.st_dev, temporary_info.st_ino): refuse()
+        recheck()
+        os.replace(temporary, TARGET, src_dir_fd=helper_dir.fd, dst_dir_fd=helper_dir.fd)
+        temporary = None
+        os.fsync(helper_dir.fd)
+        recheck(check_installed=False)
+        final = os.stat(TARGET, dir_fd=helper_dir.fd, follow_symlinks=False)
+        protected(final, modes={0o755})
+        if (final.st_dev, final.st_ino) != (temporary_info.st_dev, temporary_info.st_ino) or final.st_size != len(wanted): refuse()
+        if read_fd(temporary_fd, len(wanted)) != wanted: refuse()
+    finally:
+        errors = False
+        if temporary is not None and temporary_fd is not None:
+            try:
+                ours = os.fstat(temporary_fd); named = os.stat(temporary, dir_fd=helper_dir.fd, follow_symlinks=False)
+                if (ours.st_dev, ours.st_ino) == (named.st_dev, named.st_ino) and \
+                   stat.S_ISREG(named.st_mode) and named.st_uid == 0 and named.st_nlink == 1:
+                    os.unlink(temporary, dir_fd=helper_dir.fd)
+            except FileNotFoundError: pass
+            except OSError: errors = True
+        if temporary_fd is not None:
+            try: os.close(temporary_fd)
+            except OSError: errors = True
+        for item in reversed(files):
+            try: item.close()
+            except OSError: errors = True
+        for item in reversed(list(directories.values())):
+            try: item.close()
+            except OSError: errors = True
+        if errors: refuse()
+
+try:
+    main()
+except Exception:
+    print('INCUDAL_RETIRED_HELPER_REFUSED', file=sys.stderr)
+    raise SystemExit(1)
+INCUDAL_RETIRED_HELPER_PY
+INCUDAL_REPOSITORY_SOURCE_SCRIPT
+    then rm -f -- "$temporary"; return 1; fi
+    current=missing
+    if [[ -e "$target" || -L "$target" ]]; then
+        current="$(repository_startup_guard_identity "$target")" || { rm -f -- "$temporary"; return 1; }
+    fi
+    if [[ "$current" != "$before" ]] ||
+        ! /usr/bin/env -i PATH=/usr/sbin:/usr/bin:/sbin:/bin /usr/bin/bash -n "$temporary" ||
+        ! chown root:root "$temporary" || ! chmod 0755 "$temporary" || ! sync -f "$temporary"; then
+        rm -f -- "$temporary"; return 1
+    fi
+    expected_hash="$(sha256sum "$temporary" | awk '{print $1}')" || { rm -f -- "$temporary"; return 1; }
+    current=missing
+    if [[ -e "$target" || -L "$target" ]]; then
+        current="$(repository_startup_guard_identity "$target")" || { rm -f -- "$temporary"; return 1; }
+    fi
+    if [[ "$current" != "$before" || "$(for parent in / /usr /usr/local /usr/local/libexec "$directory"; do stat -c '%d:%i:%u:%g:%a' "$parent" || exit 1; done)" != "$parent_before" ]]; then rm -f -- "$temporary"; return 1; fi
+    if [[ "$before" != missing ]] && cmp -s -- "$temporary" "$target"; then
+        rm -f -- "$temporary"
+    elif ! mv -T -- "$temporary" "$target"; then
+        rm -f -- "$temporary"; return 1
+    fi
+    sync -f "$directory" || return 1
+    [[ "$(for parent in / /usr /usr/local /usr/local/libexec "$directory"; do stat -c '%d:%i:%u:%g:%a' "$parent" || exit 1; done)" == "$parent_before" ]] || return 1
+    current="$(repository_startup_guard_identity "$target")" || return 1
+    [[ "${current##*:}" == "$expected_hash" ]] || return 1
+    /usr/bin/env -i PATH=/usr/sbin:/usr/bin:/sbin:/bin LC_ALL=C /usr/bin/python3 -I -B - '/usr/bin/env -i PATH=/usr/sbin:/usr/bin:/sbin:/bin LC_ALL=C /usr/bin/bash /usr/local/libexec/incudal/incudal-repository-source-startup' <<'INCUDAL_REPOSITORY_STARTUP_UNITS'
+import hashlib,os,re,secrets,stat,sys
+DIRECTORY='/etc/systemd/system'
+POST='+'+sys.argv[1]
+FIELDS=('st_dev','st_ino','st_uid','st_gid','st_mode','st_nlink','st_size','st_mtime_ns','st_ctime_ns')
+def facts(info):return tuple(getattr(info,key)for key in FIELDS)
+def refused():raise ValueError('INCUDAL_REPOSITORY_STARTUP_UNITS_REFUSED')
+def safe_file(info):
+    if not stat.S_ISREG(info.st_mode)or info.st_uid!=0 or info.st_nlink!=1 or info.st_mode&0o022 or info.st_size>1048576:refused()
+def read(fd,size):
+    os.lseek(fd,0,os.SEEK_SET);chunks=[];total=0
+    while total<=size:
+        part=os.read(fd,min(65536,size+1-total))
+        if not part:break
+        chunks.append(part);total+=len(part)
+    if total!=size:refused()
+    return b''.join(chunks)
+def present(raw,section,key,wanted):
+    current='';values=[]
+    for line in raw.decode('utf8').splitlines():
+        text=line.strip()
+        if text.startswith(('#',';')):continue
+        heading=re.fullmatch(r'\[([^\]]+)\]',text)
+        if heading:current=heading[1];continue
+        if current!=section or '='not in text:continue
+        name,value=text.split('=',1)
+        if name.strip()!=key:continue
+        value=value.strip()
+        if not value:values=[]
+        else:values.append(value)
+    return wanted in (' '.join(values).split()if key=='After'else values)
+def update(directory,name,section,key,wanted,check_parents):
+    fd=None;temporary=None;output_fd=None
+    try:
+        try:fd=os.open(name,os.O_RDONLY|os.O_NOFOLLOW|os.O_NONBLOCK|os.O_CLOEXEC,dir_fd=directory)
+        except FileNotFoundError:return
+        before=os.fstat(fd);named=os.stat(name,dir_fd=directory,follow_symlinks=False);safe_file(before);safe_file(named)
+        if facts(before)!=facts(named):refused()
+        raw=read(fd,before.st_size)
+        if b'\0'in raw:refused()
+        if present(raw,section,key,wanted):
+            if facts(os.fstat(fd))!=facts(before)or facts(os.stat(name,dir_fd=directory,follow_symlinks=False))!=facts(named)or read(fd,before.st_size)!=raw:refused()
+            check_parents()
+            return
+        eol=b'\r\n'if b'\r\n'in raw else b'\n'
+        delimiter=eol if raw and not raw.endswith((b'\r',b'\n'))else b''
+        payload=raw+delimiter+eol+('['+section+']').encode()+eol+(key+'='+wanted).encode()+eol
+        temporary='.'+name+'.repository-'+secrets.token_hex(16)
+        output_fd=os.open(temporary,os.O_RDWR|os.O_CREAT|os.O_EXCL|os.O_NOFOLLOW|os.O_CLOEXEC,0o600,dir_fd=directory)
+        offset=0
+        while offset<len(payload):
+            written=os.write(output_fd,payload[offset:])
+            if written<=0:refused()
+            offset+=written
+        os.fchown(output_fd,before.st_uid,before.st_gid);os.fchmod(output_fd,stat.S_IMODE(before.st_mode));os.fsync(output_fd)
+        proposed=os.fstat(output_fd);safe_file(proposed)
+        if read(output_fd,len(payload))!=payload:refused()
+        if facts(os.fstat(fd))!=facts(before)or facts(os.stat(name,dir_fd=directory,follow_symlinks=False))!=facts(named)or read(fd,before.st_size)!=raw:refused()
+        if facts(os.stat(temporary,dir_fd=directory,follow_symlinks=False))!=facts(proposed):refused()
+        check_parents()
+        os.replace(temporary,name,src_dir_fd=directory,dst_dir_fd=directory);temporary=None;os.fsync(directory)
+        check_parents()
+        final=os.stat(name,dir_fd=directory,follow_symlinks=False);safe_file(final)
+        if(final.st_dev,final.st_ino,final.st_uid,final.st_gid,stat.S_IMODE(final.st_mode))!=(proposed.st_dev,proposed.st_ino,before.st_uid,before.st_gid,stat.S_IMODE(before.st_mode))or read(output_fd,len(payload))!=payload:refused()
+        check_parents()
+    finally:
+        if temporary is not None and output_fd is not None:
+            try:
+                owned=os.fstat(output_fd);named=os.stat(temporary,dir_fd=directory,follow_symlinks=False)
+                if(owned.st_dev,owned.st_ino)==(named.st_dev,named.st_ino)and stat.S_ISREG(named.st_mode)and named.st_uid==0 and named.st_nlink==1:os.unlink(temporary,dir_fd=directory)
+            except FileNotFoundError:pass
+        if output_fd is not None:os.close(output_fd)
+        if fd is not None:os.close(fd)
+def main():
+    if os.geteuid()!=0 or len(sys.argv)!=2:refused()
+    directories=[];parent=None
+    try:
+        for name in ['/','/etc','/etc/systemd',DIRECTORY]:
+            fd=os.open(name if parent is None else os.path.basename(name),os.O_RDONLY|os.O_DIRECTORY|os.O_NOFOLLOW|os.O_CLOEXEC,**({}if parent is None else{'dir_fd':parent}))
+            info=os.fstat(fd);named=os.lstat(name)
+            if not stat.S_ISDIR(info.st_mode)or info.st_uid!=0 or info.st_mode&0o022 or(info.st_dev,info.st_ino)!=(named.st_dev,named.st_ino):os.close(fd);refused()
+            directories.append((name,fd,info));parent=fd
+        def check_parents():
+            for path,fd,initial in directories:
+                now=os.lstat(path)
+                opened=os.fstat(fd)
+                expected=(initial.st_dev,initial.st_ino,initial.st_uid,initial.st_gid,initial.st_mode)
+                if(now.st_dev,now.st_ino,now.st_uid,now.st_gid,now.st_mode)!=expected or(opened.st_dev,opened.st_ino,opened.st_uid,opened.st_gid,opened.st_mode)!=expected:refused()
+        for name,section,key,wanted in [('incudal-backend.service','Service','ExecStartPost',POST),('incudal-online-update@.service','Unit','After','incudal-backend.service'),('incudal-online-rollback@.service','Unit','After','incudal-backend.service')]:
+            check_parents()
+            update(parent,name,section,key,wanted,check_parents)
+        check_parents()
+    finally:
+        for _,fd,_ in reversed(directories):os.close(fd)
+try:main()
+except Exception:
+    print('INCUDAL_REPOSITORY_STARTUP_UNITS_REFUSED',file=sys.stderr);raise SystemExit(1)
+INCUDAL_REPOSITORY_STARTUP_UNITS
+    )
+}
+
 install_verified_root_helpers_from_archive() {
     local tar_file="$1"
     local helper entry tmp
@@ -145,12 +551,169 @@ prompt_initial_admin_email() {
     printf '%s' "$input"
 }
 
+env_dotenv_data() {
+    local operation="$1" key="$2" value="${3-}" last_byte
+    [[ -f "$ENV_FILE" && ! -L "$ENV_FILE" ]] || return 1
+    last_byte="$(tail -c 1 -- "$ENV_FILE" | od -An -tu1)" || return 1
+    last_byte="${last_byte//[[:space:]]/}"
+    # Parse data with the base-system tools available before Node installation.
+    # Values are never shell code or command arguments. Keep the original bytes,
+    # including CRLF/no final LF, and skip complete quoted credential blocks.
+    cat -- "$ENV_FILE" | INCUDAL_ENV_WRITE_VALUE="$value" LC_ALL=C awk -v BINMODE=3 \
+        -v operation="$operation" -v key="$key" -v final_byte="$last_byte" '
+        function fail() {
+            print "Environment data parsing failed; original configuration retained." > "/dev/stderr"
+            exit 65
+        }
+        function ws(s, p, c, b) {
+            c = substr(s, p, 1)
+            if (c != "" && c ~ /[[:space:]]/) return 1
+            if (substr(s, p, 2) == "\302\240") return 2
+            b = substr(s, p, 3)
+            if (b == "\357\273\277" || b == "\341\232\200" ||
+                b == "\342\200\250" || b == "\342\200\251" || b == "\342\200\257" ||
+                b == "\342\201\237" || b == "\343\200\200" ||
+                (substr(b, 1, 2) == "\342\200" && substr(b, 3, 1) ~ /^[\200-\212]$/)) return 3
+            return 0
+        }
+        function skip_space(s, p, n) { while ((n = ws(s, p)) > 0) p += n; return p }
+        function trim_end(s, end, start, n) {
+            while (end >= start) {
+                if (ws(s, end) == 1) end--
+                else if (end - 1 >= start && ws(s, end - 1) == 2) end -= 2
+                else if (end - 2 >= start && ws(s, end - 2) == 3) end -= 3
+                else break
+            }
+            return end
+        }
+        function trim(s, start, end) { start = skip_space(s, 1); end = trim_end(s, length(s), start); return substr(s, start, end - start + 1) }
+        function line_end(s, p, c) { while (p <= length(s)) { c = substr(s, p, 1); if (c == "\r" || c == "\n") break; p++ } return p }
+        function next_line(s, p) { p = line_end(s, p); if (substr(s, p, 2) == "\r\n") return p + 2; return p + 1 }
+        function record_end(s, p, c, b) {
+            while (p <= length(s)) {
+                c = substr(s, p, 1); b = substr(s, p, 3)
+                if (c == "\r" || c == "\n" || b == "\342\200\250" || b == "\342\200\251") break
+                p++
+            }
+            return p
+        }
+        function next_record(s, p, b) {
+            p = record_end(s, p); b = substr(s, p, 3)
+            if (b == "\342\200\250" || b == "\342\200\251") return p + 3
+            if (substr(s, p, 2) == "\r\n") return p + 2
+            return p + 1
+        }
+        function quote_end(s, p, q, j, fallback) {
+            # dotenv may backtrack an escaped quote at a valid record tail
+            # into the closing quote. A non-escaped quote cannot be body data.
+            for (j = p + 1; j <= length(s); j++) if (substr(s, j, 1) == q) {
+                if (substr(s, j - 1, 1) != "\\") return quote_tail(s, j + 1) ? j : fallback
+                if (quote_tail(s, j + 1)) fallback = j
+            }
+            return fallback
+        }
+        function quote_tail(s, p, n, c) {
+            while ((n = ws(s, p)) > 0 && record_end(s, p) != p) p += n
+            c = substr(s, p, 1); return c == "" || c == "#" || record_end(s, p) == p
+        }
+        function decoded(s, q) {
+            s = trim(s); q = substr(s, 1, 1)
+            gsub(/\r\n?/, "\n", s)
+            if (length(s) >= 2 && (q == single || q == "\"" || q == "`") && substr(s, length(s), 1) == q) {
+                s = substr(s, 2, length(s) - 2)
+            }
+            # dotenv expands these escapes whenever the value starts with a
+            # double quote, including its legal unquoted-fallback form.
+            if (q == "\"") { gsub(/\\n/, "\n", s); gsub(/\\r/, "\r", s) }
+            return s
+        }
+        function encoded(s, preferred, q) {
+            if (index(s, "\r")) fail()
+            if (preferred != "" && !index(s, preferred) &&
+                (preferred != "\"" || (!index(s, "\\n") && !index(s, "\\r")))) return preferred s preferred
+            q = substr(s, 1, 1)
+            if (trim(s) == s && !index(s, "#") && !index(s, "\n") && q != single && q != "\"" && q != "`") return s
+            if (!index(s, single)) return single s single
+            if (!index(s, "`")) return "`" s "`"
+            if (!index(s, "\"") && !index(s, "\\n") && !index(s, "\\r")) return "\"" s "\""
+            fail()
+        }
+        { raw = raw $0 "\n"; records++ }
+        END {
+            single = sprintf("%c", 39)
+            if (records && final_byte != 10) raw = substr(raw, 1, length(raw) - 1)
+            if (key !~ /^[A-Za-z0-9_.-]+$/ || operation !~ /^(read|repository|presence|set|migrate|needs-migration)$/) fail()
+            cursor = 1
+            while (cursor <= length(raw)) {
+                line = cursor; p = skip_space(raw, cursor)
+                if (substr(raw, p, 1) == "#") { cursor = next_record(raw, p); continue }
+                if (substr(raw, p, 6) == "export" && ws(raw, p + 6)) p = skip_space(raw, p + 6)
+                if (!match(substr(raw, p), /^[A-Za-z0-9_.-]+/)) { cursor = next_record(raw, line); continue }
+                name = substr(raw, p, RLENGTH); p = skip_space(raw, p + RLENGTH)
+                separator = substr(raw, p, 1)
+                if (separator != "=" && !(separator == ":" && ws(raw, p + 1))) { cursor = next_record(raw, line); continue }
+                p++
+                # The colon branch consumes at least one whitespace character.
+                # dotenv normalizes CRLF into one LF before this step.
+                if (separator == ":") p += substr(raw, p, 2) == "\r\n" ? 2 : ws(raw, p)
+                while (ws(raw, p) && substr(raw, p, 1) != "\r" && substr(raw, p, 1) != "\n") p += ws(raw, p)
+                begin = p; look = skip_space(raw, p); q = substr(raw, look, 1); closing = 0; bounded_record = 0
+                if (q == single || q == "\"" || q == "`") closing = quote_end(raw, look, q)
+                if (closing && quote_tail(raw, closing + 1)) { begin = look; finish = closing + 1; bounded_record = 1 }
+                else {
+                    finish = line_end(raw, p)
+                    for (j = p; j < finish; j++) if (substr(raw, j, 1) == "#") { finish = j; bounded_record = 1; break }
+                    finish = trim_end(raw, finish - 1, begin) + 1
+                }
+                count++; names[count] = name; starts[count] = begin; ends[count] = finish
+                values[count] = decoded(substr(raw, begin, finish - begin)); last[name] = count
+                cursor = bounded_record ? next_record(raw, finish) : next_line(raw, finish)
+            }
+            if (operation == "presence") {
+                printf "%d\n", (length(values[last[key]]) > 0)
+            } else if (operation == "read" || operation == "repository") {
+                result = values[last[key]]
+                if (operation == "repository") {
+                    result = trim(result)
+                    if (result != "" && result !~ /^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/) fail()
+                }
+                printf "%s\n", result
+            } else if (operation == "needs-migration") {
+                found = 0
+                for (i = 1; i <= count; i++) if (names[i] == key && tolower(trim(values[i])) == "mastalee928/payincus") found = 1
+                printf "%d\n", found
+            } else if (operation == "migrate") {
+                result = ""; previous = 1
+                for (i = 1; i <= count; i++) if (names[i] == key && tolower(trim(values[i])) == "mastalee928/payincus") {
+                    piece = substr(raw, starts[i], ends[i] - starts[i])
+                    if (!match(tolower(piece), /mastalee928\/payincus/)) fail()
+                    result = result substr(raw, previous, starts[i] - previous) substr(piece, 1, RSTART - 1) \
+                        "masta-lee/mastaincus" substr(piece, RSTART + RLENGTH)
+                    previous = ends[i]
+                }
+                printf "%s", result substr(raw, previous)
+            } else {
+                i = last[key]; preferred = ""
+                if (i) {
+                    piece = substr(raw, starts[i], ends[i] - starts[i]); q = substr(piece, 1, 1)
+                    if (length(piece) >= 2 && (q == single || q == "\"" || q == "`") && substr(piece, length(piece), 1) == q) preferred = q
+                    printf "%s%s%s", substr(raw, 1, starts[i] - 1), encoded(ENVIRON["INCUDAL_ENV_WRITE_VALUE"], preferred), substr(raw, ends[i])
+                } else {
+                    eol = "\n"; p = line_end(raw, 1)
+                    if (substr(raw, p, 2) == "\r\n") eol = "\r\n"
+                    else if (substr(raw, p, 1) == "\r") eol = "\r"
+                    delimiter = raw != "" && substr(raw, length(raw), 1) != "\n" && substr(raw, length(raw), 1) != "\r" ? eol : ""
+                    printf "%s%s%s=%s%s", raw, delimiter, key, encoded(ENVIRON["INCUDAL_ENV_WRITE_VALUE"], ""), eol
+                }
+            }
+        }
+    '
+}
+
 get_env_value() {
     local key="$1"
-    if [[ ! -f "$ENV_FILE" ]]; then
-        return 0
-    fi
-    grep -E "^${key}=" "$ENV_FILE" 2>/dev/null | tail -n 1 | cut -d'=' -f2- || true
+    [[ -f "$ENV_FILE" ]] || return 0
+    env_dotenv_data read "$key"
 }
 
 env_file_identity() {
@@ -184,8 +747,14 @@ set_env_if_missing() {
     local value="$2"
     local label="$3"
     local current
-    current="$(get_env_value "$key")"
-
+    if [[ "$key" == SYSTEM_UPDATE_RELEASE_REPOSITORY || "$key" == INCUDAL_AGENT_RELEASE_REPOSITORY ]]; then
+        current="$(env_dotenv_data repository "$key")" || return 1
+    else
+        current="$(env_dotenv_data presence "$key")" || return 1
+        [[ "$current" != 1 ]] || return 0
+        [[ "$current" == 0 ]] || return 1
+        current=""
+    fi
     if [[ -n "$current" ]]; then
         return 0
     fi
@@ -193,19 +762,7 @@ set_env_if_missing() {
     local tmp_file original_state
     original_state="$(env_file_identity)" || return 1
     tmp_file="$(mktemp "${ENV_FILE}.incudal-env.XXXXXX")" || return 1
-    if grep -qE "^${key}=" "$ENV_FILE" 2>/dev/null; then
-        if ! awk -v key="$key" -v value="$value" '
-            BEGIN { replaced = 0 }
-            $0 ~ "^" key "=" && replaced == 0 {
-                print key "=" value
-                replaced = 1
-                next
-            }
-            { print }
-        ' "$ENV_FILE" > "$tmp_file"; then rm -f -- "$tmp_file"; return 1; fi
-    else
-        if ! { cat "$ENV_FILE" && printf '\n%s=%s\n' "$key" "$value"; } > "$tmp_file"; then rm -f -- "$tmp_file"; return 1; fi
-    fi
+    if ! env_dotenv_data set "$key" "$value" > "$tmp_file"; then rm -f -- "$tmp_file"; return 1; fi
     write_env_atomically "$tmp_file" "$original_state" || return 1
 
     log "已自动补充 ${label}: ${key}"
@@ -219,65 +776,33 @@ set_env_value() {
     local tmp_file original_state
     original_state="$(env_file_identity)" || return 1
     tmp_file="$(mktemp "${ENV_FILE}.incudal-env.XXXXXX")" || return 1
-    if grep -qE "^${key}=" "$ENV_FILE" 2>/dev/null; then
-        if ! awk -v key="$key" -v value="$value" '
-            BEGIN { replaced = 0 }
-            $0 ~ "^" key "=" && replaced == 0 {
-                print key "=" value
-                replaced = 1
-                next
-            }
-            { print }
-        ' "$ENV_FILE" > "$tmp_file"; then rm -f -- "$tmp_file"; return 1; fi
-    else
-        if ! { cat "$ENV_FILE" && printf '\n%s=%s\n' "$key" "$value"; } > "$tmp_file"; then rm -f -- "$tmp_file"; return 1; fi
-    fi
+    if ! env_dotenv_data set "$key" "$value" > "$tmp_file"; then rm -f -- "$tmp_file"; return 1; fi
     write_env_atomically "$tmp_file" "$original_state" || return 1
 
     log "已更新 ${label}: ${key}"
 }
 
 get_release_repository_default() {
-    # A missing primary setting must inherit its existing alias, rather than
-    # silently changing an administrator's custom Release source.
-    get_env_value "$1" | awk -v fallback="$GITHUB_REPO" '
-        { value = $0 }
-        END {
-            sub(/#.*/, "", value)
-            gsub(/^[[:space:]]+|[[:space:]]+$/, "", value)
-            quote = substr(value, 1, 1)
-            if ((quote == "\"" || quote == "\047") && substr(value, length(value), 1) == quote)
-                value = substr(value, 2, length(value) - 2)
-            gsub(/^[[:space:]]+|[[:space:]]+$/, "", value)
-            if (value == "") print fallback
-            else if (value ~ /^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/) print value
-        }
-    '
+    local alias="$1" primary="${2-}" configured
+    # Respect the effective last primary before inspecting an alias.
+    if [[ -n "$primary" ]]; then
+        configured="$(env_dotenv_data repository "$primary")" || return 1
+        if [[ -n "$configured" ]]; then printf '%s\n' "$configured"; return 0; fi
+    fi
+    configured="$(env_dotenv_data repository "$alias")" || return 1
+    printf '%s\n' "${configured:-$GITHUB_REPO}"
 }
-
 migrate_release_repository() {
-    local key="$1" tmp_file original_state
+    local key="$1" tmp_file original_state migration_needed
     [[ -f "$ENV_FILE" ]] || return 0
+    migration_needed="$(env_dotenv_data needs-migration "$key")" || return 1
+    [[ "$migration_needed" != 0 ]] || return 0
+    [[ "$migration_needed" == 1 ]] || return 1
     original_state="$(env_file_identity)" || return 1
     tmp_file="$(mktemp "${ENV_FILE}.incudal-env.XXXXXX")" || return 1
-    # Treat the old default as data, including quoted dotenv values. Never source
-    # the file or rewrite custom repositories, tokens or any other setting.
-    if ! awk -v key="$key" -v repository="$GITHUB_REPO" '
-        index($0, key "=") == 1 {
-            value = substr($0, length(key) + 2)
-            sub(/#.*/, "", value)
-            gsub(/^[[:space:]]+|[[:space:]]+$/, "", value)
-            quote = substr(value, 1, 1)
-            if ((quote == "\"" || quote == "\047") && substr(value, length(value), 1) == quote)
-                value = substr(value, 2, length(value) - 2)
-            gsub(/^[[:space:]]+|[[:space:]]+$/, "", value)
-            if (tolower(value) == "mastalee928/payincus") {
-                print key "=" repository
-                next
-            }
-        }
-        { print }
-    ' "$ENV_FILE" > "$tmp_file"; then rm -f -- "$tmp_file"; return 1; fi
+    # Replace only actual retired values, retaining quoting and every other
+    # byte. Unmatched files never change identity or announce a migration.
+    if ! env_dotenv_data migrate "$key" > "$tmp_file"; then rm -f -- "$tmp_file"; return 1; fi
     if ! cmp -s "$ENV_FILE" "$tmp_file"; then
         write_env_atomically "$tmp_file" "$original_state" || return 1
         log "已迁移退役的 Release 仓库: ${key}"
@@ -291,7 +816,9 @@ set_env_if_value() {
     local new_value="$3"
     local label="$4"
     local current
-    current="$(get_env_value "$key")"
+    current="$(get_env_value "$key" && printf '\037')" || return 1
+    current="${current%$'\037'}"
+    current="${current%$'\n'}"
 
     if [[ "$current" == "$expected_current" ]]; then
         set_env_value "$key" "$new_value" "$label"
@@ -302,6 +829,9 @@ ensure_env_keys() {
     if [[ ! -f "$ENV_FILE" ]]; then
         return 0
     fi
+    local system_repository agent_repository
+    system_repository="$(get_release_repository_default GITHUB_REPO SYSTEM_UPDATE_RELEASE_REPOSITORY)" || return 1
+    agent_repository="$(get_release_repository_default GITHUB_REPOSITORY INCUDAL_AGENT_RELEASE_REPOSITORY)" || return 1
 
     set_env_if_missing "NODE_ENV" "production" "运行环境"
     set_env_if_missing "HOST" "127.0.0.1" "后端监听地址"
@@ -314,7 +844,9 @@ ensure_env_keys() {
     set_env_if_missing "ADMIN_EMAIL" "admin@payincus.local" "管理员初始邮箱"
     set_env_if_missing "ADMIN_PASSWORD" "$(gen_password 16)" "管理员初始密码"
     local current_admin_password
-    current_admin_password="$(get_env_value "ADMIN_PASSWORD")"
+    current_admin_password="$(get_env_value "ADMIN_PASSWORD" && printf '\037')" || return 1
+    current_admin_password="${current_admin_password%$'\037'}"
+    current_admin_password="${current_admin_password%$'\n'}"
     if [[ -z "$current_admin_password" || "$current_admin_password" == "admin123" ]]; then
         set_env_value "ADMIN_PASSWORD" "$(gen_password 16)" "管理员初始密码"
     fi
@@ -325,10 +857,10 @@ ensure_env_keys() {
     set_env_if_missing "SYSTEM_UPDATE_ALLOWED_ADMIN_IDS" "" "允许执行在线更新的管理员 ID"
     set_env_if_missing "SYSTEM_UPDATE_LOG_DIR" "${INSTALL_DIR}/update-logs" "在线更新日志目录"
     set_env_if_missing "SYSTEM_UPDATE_STARTED_BY_USER_ID" "" "命令行更新任务发起管理员 ID"
-    set_env_if_missing "SYSTEM_UPDATE_RELEASE_REPOSITORY" "$(get_release_repository_default GITHUB_REPO)" "在线更新 GitHub Release 仓库"
+    set_env_if_missing "SYSTEM_UPDATE_RELEASE_REPOSITORY" "$system_repository" "在线更新 GitHub Release 仓库"
     set_env_if_missing "SYSTEM_UPDATE_RELEASE_TOKEN" "" "在线更新私有 Release Token"
     set_env_if_missing "SYSTEM_UPDATE_APPLY_MODE" "auto" "在线更新应用模式"
-    set_env_if_missing "INCUDAL_AGENT_RELEASE_REPOSITORY" "$(get_release_repository_default GITHUB_REPOSITORY)" "Agent GitHub Release 仓库"
+    set_env_if_missing "INCUDAL_AGENT_RELEASE_REPOSITORY" "$agent_repository" "Agent GitHub Release 仓库"
     local repository_key
     for repository_key in SYSTEM_UPDATE_RELEASE_REPOSITORY INCUDAL_AGENT_RELEASE_REPOSITORY GITHUB_REPO GITHUB_REPOSITORY; do
         migrate_release_repository "$repository_key"
@@ -1298,6 +1830,7 @@ ExecStartPre=+/usr/bin/bash ${app_dir}/scripts/migrate-database.sh
 
 # 启动主程序
 ExecStart=/usr/bin/node ${app_dir}/server/dist/app.js
+ExecStartPost=+/usr/bin/env -i PATH=/usr/sbin:/usr/bin:/sbin:/bin LC_ALL=C /usr/bin/bash /usr/local/libexec/incudal/incudal-repository-source-startup
 
 # 优雅关闭
 KillMode=mixed
@@ -1329,6 +1862,8 @@ SyslogIdentifier=${SERVICE_NAME}
 [Install]
 WantedBy=multi-user.target
 EOF
+
+    install_repository_startup_guard || return 1
 
     systemctl daemon-reload
     systemctl enable "$SERVICE_NAME" >/dev/null 2>&1
@@ -1378,7 +1913,7 @@ create_online_update_service() {
 [Unit]
 Description=PayIncus online update task %i
 Documentation=https://github.com/${GITHUB_REPO}
-After=network.target postgresql.service redis-server.service
+After=network.target postgresql.service redis-server.service incudal-backend.service
 Requires=postgresql.service redis-server.service
 
 [Service]
@@ -1400,7 +1935,7 @@ EOF
 [Unit]
 Description=PayIncus online update rollback task %i
 Documentation=https://github.com/${GITHUB_REPO}
-After=network.target postgresql.service redis-server.service
+After=network.target postgresql.service redis-server.service incudal-backend.service
 Requires=postgresql.service redis-server.service
 
 [Service]
@@ -2389,6 +2924,10 @@ main() {
     check_root
 
     case "${1:-}" in
+        --install-repository-startup-guard)
+            [[ $# -eq 1 ]] || return 1
+            install_repository_startup_guard
+            ;;
         --migrate-release-repository)
             [[ $# -eq 1 && -f "$ENV_FILE" && ! -L "$ENV_FILE" ]] || { error "需要现有受管环境配置"; return 1; }
             local repository_key

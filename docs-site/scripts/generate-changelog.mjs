@@ -175,6 +175,10 @@ function normalizeTagNote(value) {
 
 function normalizeProductWording(value) {
   return value
+    // Historical tag bodies are immutable; their copied source links must use
+    // the maintained repository whenever this page is regenerated. Actions,
+    // issues and release assets require separate migration evidence.
+    .replace(/https:\/\/github\.com\/mastalee928\/payincus\/(?=(?:blob|tree)\/)/gi, 'https://github.com/masta-lee/mastaincus/')
     .replace(/插件中心/g, '扩展中心')
     .replace(/\bPlugin Center\b/g, 'Extension Center')
     .replace(/\bPlugin center\b/g, 'Extension center')

@@ -1,8 +1,8 @@
 # mastaincus 仓库替代与原正式资产迁移
 
-Owner确认原仓库已退出，masta-lee/mastaincus 是今后唯一维护、安装和发行仓库。2026-11-27 owner明确批准公开，沿用无需token的安装和更新；源代码／历史候选复核、主分支同步及实际公开回读分别记录，不把批准当成已完成。
+Owner确认原仓库已退出，masta-lee/mastaincus 是今后唯一维护、安装和发行仓库。2026-11-27 owner明确批准公开，沿用无需token的安装和更新。仓库已公开；GitHub回读为PUBLIC，main及工作分支均为迁移提交ed39a3746c203e3c544dd9c400f1d3dacd249da6。匿名下载已通过，双架构安装／升级／回滚预览尚未通过，不能据公开和下载成功宣布整条迁移验收完成。
 
-原源码备份 d6c0a04d675af0061d21276b947e3638e116346c 已推送并回读：22分支、206原标签共228 refs与本机一致；本轮另迁移配套 agent-v1.0.16 标签至原来源 ced7c10cd17de34107b7281f8846702609ab4f32。当前迁移补丁待阶段提交，原Git历史和v1.8.14 tag提交不变。
+原源码备份 d6c0a04d675af0061d21276b947e3638e116346c 已推送并回读：22分支、206原标签共228 refs与本机一致；本轮另迁移配套 agent-v1.0.16 标签至原来源 ced7c10cd17de34107b7281f8846702609ab4f32。迁移补丁已在ed39a374提交推送，原Git历史和v1.8.14 tag提交不变。
 
 原正式 [v1.8.14](https://github.com/masta-lee/mastaincus/releases/tag/v1.8.14) 已在新仓库正式/latest。两架构安装包和两份SHA256校验文件保持原字节；两份OTA清单仅改 artifacts.url，完整版本、来源、大小和包hash保持。新清单SHA256为605ec85f3329ced07a8c5ea1e7a790043a1d8eb074e57c2d9678274a11a323cd。原包没有重建、重新seal或加入未发布修复。
 
@@ -12,8 +12,24 @@ Owner确认原仓库已退出，masta-lee/mastaincus 是今后唯一维护、安
 
 实际新私有仓库测试（公开前）：生产OTA代码先复现网页404，再修为有token且metadata绑定时单向转官方资产API；API404仍永久失败。通过同一生产代码完整下载原AMD64/ARM64包，214617555／213831970B和完整SHA全部一致，真实CDN请求未携带凭据。Agent实际公共下载路由分别取原manifest及两架构完整二进制／Ed25519校验自然0；独立临时Fastify inject，无数据库、主控或客户操作。此处token只在本机测试进程内使用，未写主控或源码。
 
-本机仓库选择器、相关3守卫、前端route/i18n、双端构建／dist边界、后端构建、文档检查／构建、Bash安装守卫自然0。Bash首次新fixture缺少set_env_value第三个label导致nounset，修正fixture后r4完整通过；旧失败与脱敏诊断保留。当前233全量仍运行；新仓库双架构真实首装／升级预览待运行。原6个历史worker clean／migrated-atomic／rollback保留，新增4个新installer安装原包后clean／rollback场景，覆盖两架构，不删除旧门槛。
+本机仓库选择器、相关3守卫、前端route/i18n、双端构建／dist边界、后端构建、文档检查／构建、Bash安装守卫自然0。Bash首次新fixture缺少set_env_value第三个label导致nounset，修正fixture后r4完整通过；旧失败与脱敏诊断保留。迁移来源全量233项已实际执行并全部通过，15分35秒，日志logs/github-mastaincus-full-guards-20261126.log。
 
-历史Actions／PR／issue运行没有迁移，保留无链接原编号；旧版资产未迁移的链接改为已复制源码tag并明确范围。原版权保留。公开前源码与已知历史候选复核继续，泛化匹配数不冒充凭据泄漏数或绝对无泄漏证明。
+公开后的匿名实证：raw/main安装脚本逐字节等于当前来源；生产OTA元数据与原AMD64、ARM64完整包流分别为214617555、213831970字节，SHA256与原资产一致。生产Agent公共install.sh／manifest.json／binary路由通过临时Fastify实际执行，原v1.0.16两个完整二进制为27955352、25362584字节，SHA256与原Ed25519签名全部通过。请求无Authorization／Cookie，未配置token；数据库为不可连接的本机哨兵，无主控／客户操作。日志为logs/github-mastaincus-anonymous-downloads-20261127.log与logs/mastaincus-anonymous-agent-20261127.log，后者已核自然退出0。
+
+首次新仓库完整预览[45858915574](https://github.com/masta-lee/mastaincus/actions/runs/45858915574)已终态failure：AMD64执行233项、232通过，system-security-planner的非root Linux夹具在受管路径检查前失败（19 errors／2 failures）；ARM64前后端构建通过，但网关签名阶段缺少公开变量GATEWAY_COMPONENT_SIGNING_PUBLIC_KEY。原私钥Secret已存在，已补原发行公钥变量；测试夹具继续最小修正，不放宽生产路径／权限核验。首装／升级job因此skipped，不能记通过。原失败日志保留在logs/mastaincus-preview-45858915574-failed.log，修复后在新提交重新运行。原6个历史worker clean／migrated-atomic／rollback保留，新增4个新installer安装原包后clean／rollback场景，覆盖两架构，不删除旧门槛。
+
+历史Actions／PR／issue运行没有迁移，保留无链接原编号；旧版资产未迁移的链接改为已复制源码tag并明确范围。原版权保留。公开前已知候选C01–C17、29个测试历史blobs、7日志272组／3343次语义分类全部闭合，未发现真实部署凭据；原泛化规则13334个完整位置未保存，不能声称逐项全部排除，详细边界见logs/github-mastaincus-public-weak-closure-20261127.md。二次有效指向检查发现自动版本日志会从历史tag再次生成8个退役blob链接，以及运维手册两env示例仍为旧源；已精确修正文档生成器的已复制blob／tree链接及示例，加入生成结果守卫，原tag不修改。
+
+本轮独立审视确认导出／键侧空白的合法dotenv源写法未被识别，会遮盖自定义alias；AWK迁移会给没有末行换行的文件补LF，导致精确配置核验拒绝。已修为读取真实dotenv数据规则、只替换退役token，保留其余字节、引号、注释、CRLF／CR／末行状态及有效末条配置。进一步修复尾反斜杠、多行／未闭合引号回退、Unicode行分隔、colon后至少一个空白、纯换行非空凭据及精确默认比较；不source／eval配置。32组独立dotenv对照及14组colon／presence实际探针通过，最终完整Bash安装守卫r4自然0／692.160秒，产品源码前后一致。Node批量守卫的单调用15秒预算被真实16.31／20.31秒的成功场景拦下，原超时保留；仅测试预算改60秒，负例要求真实拒绝。
+
+新源码首次完整233项实际执行232通过、1失败，28分36秒自然exit1；唯一失败为system-update-guards导入的Node数据矩阵，准确定位colon-bare-next-line-CRLF：Bash迁移已与显式字节oracle一致，后验validator却直接在原CRLF上匹配，而dotenv先归一，导致误拒。已最小改为归一匹配后按原UTF-16 offset只替ASCII退休token，保留全部原字节。当前finalizer SHA0067ea636f1d143d40598f51d7ed87b9f56262e6b2db0dc41f247ba5b6921a81，实际函数281/281参考与篡改检查自然0，额外独立12组手工字节期望自然0；未减断言。产品Bash及已经通过的Bash源码保持，根任务仅重跑受影响system-update-guards，不再同时启动独立同源轮。该重跑于2026-11-27 03:20+08:00自然exit0，完整193组Bash/dotenv数据、OTA真实断线／超时／重试／元数据绑定和更新守卫全部通过；五文件最终SHA与冻结记录一致。日志为logs/mastaincus-final-system-update-guards-20261127-r2.log。当前233项覆盖由原232项自然通过和第107项修复后重跑构成，不伪称首次全量为零失败；原107及独立r3/r4/r5失败保留。
+
+持久旧helper修复已接入新安装与当前包升级钩子：旧v1.8.14启动脚本每次复制只信旧仓库的helper，安装结束补一次会在首次start／后续restart被覆盖。固定受限normalizer在base ExecStartPost执行，读取原seal及唯一raw／effective origin；旧origin保留原helper，新origin才精确转换URL，当前双URLhelper保持字节。原tar／sealed模板／seal与管理身份不修改，不取原OTA持有的全局锁。安装程序同目录原子生成助手并同步目录，发布unit前后核原文件／父目录／目标hash，UnitWriter保持原unit字节、属主和模式，逐步及no-op核heldFD／named父链。启动与升级回调清环境，root任务的After包含backend；不新增backend drop-in。独立36模型、Bash／Python语法和集成只读审视通过；仍须真实Linux／systemd验收。
+
+旧包预览另补真实首启后的正常restart、执行已安装且与原tar绑定的Git门禁，并回读实际ExecStartPost完成及两任务unit的After；正常升级完成后再次restart，回滚也核同一门禁。worker仍为原JS、PG／迁移／systemd／回滚真实运行，候选HTTP传输仍由既有本地适配器提供，不能因此声称原root oneshot完整排队和公网传输全部实证。原包基线SHA单独固定，实际tar校验新增install-panel.sh，防止钩子依赖漏包。仓库、platform-backup、split三专项自然0；最终新提交／完整17个非发行job预览仍待。
+
+完整root入口补查确认一个后验缺口：新launcher执行rollback时，原14启动钩子恢复old-only helper，BasePost在raw origin为old时正确保留它；随后当前进程成功迁至new并write_manifest，下一root任务却仍被旧helper拒绝，直到后台再次重启。已在原成功postflight的write_manifest之后，以受保护父链／root:root0755单链接检查和env-i调用一次固定normalizer；失败分支不迁移，不新增seal或平台锁，原tar／模板／身份不修改。对应root helper SHA51ebb2d3a9a1c65b4db6176ceddad4a976dd57af56f4d3837e9c3982f356f50e，仓库守卫／语法／独审通过，最终system-update-guards r3于03:58+08:00自然0，完整193数据及OTA回归再次通过。只读原14真实worker确认重复任务文案为“already claimed or finished”，已精确修测试期望，保留原worker。两个current-installer rollback原生场景另排真实root单元：将该隔离原子布局的全局origin设为精确old并正常seal→后台启动时排队真实rollback@task→实际内部restart及postflight→不再重启就检查原helper Git gate并执行真实update@同task，核原worker拒绝重复及身份／rolled_back保持。未发布的候选正向下载仍由本地HTTP适配；新增真实root回滚及下一任务尚待同来源CI实证，不冒充完整公网候选热更新。
+
+当前22个变更文件的秘密增量检查无已保存私有值、完整私钥或强令牌命中；6个连接URL与9个字面字段候选逐项均为运行时读取／生成表达式、注释样例或隔离fixture，未发现部署凭据。历史复核与本轮增量是两种独立证据。Pages已配置Actions部署、本机文档构建／链接守卫过，最终源码站点尚待推送后执行。两份已结束Bash守卫留下的本机HTTP fixture经父进程缺失、PID／创建时间／脚本路径核验后停止，未触及在跑第107项、文件或平台；结果为logs/mastaincus-ended-http-fixtures-20261127.json。测试产生的2字节文件0精确删除被自动审批blocked by policy拒绝，未绕过；文件保留且不纳入提交。
 
 原安全余项仍保留：双架构内核实际启动／回退及后续补丁、旧组件可信来源、多版本真实PostgreSQL恢复矩阵、当前完整包／主控新备份本机完整模拟恢复，随后才可原流程可信热更新／目标主控测试和条件式新版本发行。当前迁移未部署生产、操作客户或更换SSH密码。旧源码R5全量233、当前Python f2693318／b43922f6的Linux206及本机206证据分别保留，不覆盖新增迁移验证。

@@ -7,7 +7,7 @@ import { createReadStream } from 'node:fs'
 import { readFile, writeFile, realpath, lstat } from 'node:fs/promises'
 import { createRequire } from 'node:module'
 import { Readable } from 'node:stream'
-import { execFile } from 'node:child_process'
+import { execFile, execFileSync } from 'node:child_process'
 import { promisify } from 'node:util'
 import { resolve } from 'node:path'
 import { verifyPanelDigest } from './panel-package-signature.mjs'
@@ -17,10 +17,10 @@ assert.equal(process.env.GITHUB_ACTIONS, 'true')
 assert.equal(process.env.RUNNER_ENVIRONMENT, 'github-hosted')
 assert.equal(process.platform, 'linux'); assert.equal(process.getuid(), 0)
 const [mode, archiveArg] = process.argv.slice(2)
-assert.ok(['migrate', 'before', 'worker', 'rolled-back', 'after'].includes(mode))
+assert.ok(['migrate', 'before', 'worker', 'rolled-back', 'after', 'root-rollback-prepare', 'root-rollback-wait', 'root-duplicate-after'].includes(mode))
 const archive = resolve(archiveArg), stateFile = '/root/incudal-legacy-upgrade.json'
 const atomic = await lstat('/opt/incudal/current').then(info => info.isSymbolicLink()).catch(() => false)
-const app = await realpath(atomic ? '/opt/incudal/current' : '/opt/incudal')
+let app = await realpath(atomic ? '/opt/incudal/current' : '/opt/incudal')
 const require = createRequire(app + '/server/package.json')
 const env = require('dotenv').parse(await readFile('/opt/incudal/.env'))
 const exec = promisify(execFile)
@@ -31,7 +31,85 @@ const { Client } = require('pg')
 const baseline = process.env.UPGRADE_DRILL_BASELINE_VERSION
 assert.match(baseline || '', /^v\d+\.\d+\.\d+$/)
 
-if (mode === 'migrate') {
+async function verifyRootLauncherGitGate() {
+  const sourcePath=app+'/deploy/incudal-online-task.sh.example',helperPath='/usr/local/libexec/incudal/incudal-online-task'
+  const [source,helper]=await Promise.all([readFile(sourcePath),readFile(helperPath)])
+  for(const path of [sourcePath,helperPath]) {
+    const info=await lstat(path)
+    assert.ok(info.isFile()&&!info.isSymbolicLink()&&info.uid===0&&info.gid===0&&info.nlink===1&&!(info.mode&0o022),'root launcher must retain protected original metadata')
+  }
+  const archiveSource=['before','rolled-back','root-rollback-wait','root-duplicate-after'].includes(mode)?process.env.UPGRADE_DRILL_BASELINE_ARCHIVE:archive
+  assert.ok(archiveSource,'original baseline archive must remain available for independent helper comparison')
+  const expectedSource=execFileSync('tar',['-xOf',archiveSource,'./deploy/incudal-online-task.sh.example'],{maxBuffer:1024*1024})
+  assert.ok(source.equals(expectedSource),'startup must never change the sealed deployment template')
+  const old='https://github.com/mastalee928/payincus.git',current='https://github.com/masta-lee/mastaincus.git'
+  const raw=execFileSync('/usr/bin/git',['-C','/opt/incudal','config','--local','--get-all','remote.origin.url'],{encoding:'utf8'}).trim()
+  assert.ok([old,current].includes(raw),'root launcher requires one exact maintained or retired origin')
+  const expected=raw===current&&source.includes(Buffer.from(old))&&!source.includes(Buffer.from(current))
+    ?Buffer.from(source.toString('utf8').replaceAll(old,current)):source
+  assert.ok(helper.equals(expected),'installed helper must follow the actual origin after every startup and rollback')
+  const declaration=helper.toString('utf8').match(/^verify_git_control\(\) \{[\s\S]*?^\}/m)?.[0]
+  assert.ok(declaration,'execute the exact shipped launcher gate, not a fixture replacement')
+  execFileSync('/usr/bin/env',['-i','PATH=/usr/sbin:/usr/bin:/sbin:/bin','HOME=/var/cache/incudal-ota','LC_ALL=C','/usr/bin/bash','-s'],{
+    input:'set -euo pipefail\nINSTALL_DIR=/opt/incudal\nfail() { printf "%s\\n" "ROOT_LAUNCHER_GIT_GATE_REFUSED" >&2; exit 1; }\n'+declaration+'\nverify_git_control\n',
+    stdio:['pipe','pipe','pipe'],timeout:30000
+  })
+  const startup='/usr/local/libexec/incudal/incudal-repository-source-startup'
+  if(await lstat(startup).then(info=>info.isFile()).catch(()=>false)) {
+    const post=execFileSync('/usr/bin/systemctl',['show','incudal-backend.service','--property=ExecStartPost','--value'],{encoding:'utf8'})
+    const entry=[...post.matchAll(/\{[^}]*\}/g)].map(match=>match[0]).find(text=>text.includes(startup))
+    assert.ok(entry?.includes('argv[]=/usr/bin/env -i PATH=/usr/sbin:/usr/bin:/sbin:/bin LC_ALL=C /usr/bin/bash '+startup+' ;')&&/code=exited\s*;\s*status=0/.test(entry),'actual root startup correction must complete through the loaded backend unit')
+    for(const unit of ['incudal-online-update@.service','incudal-online-rollback@.service']) {
+      const after=execFileSync('/usr/bin/systemctl',['show',unit,'--property=After','--value'],{encoding:'utf8'})
+      assert.ok(after.trim().split(/\s+/).includes('incudal-backend.service'),'actual loaded root task unit must wait for backend startup: '+unit)
+    }
+  }
+  console.log('PASS exact shipped root launcher Git gate and unchanged sealed template after actual service startup')
+}
+
+if (mode === 'root-rollback-prepare') {
+  const state=JSON.parse(await readFile(stateFile))
+  assert.ok(atomic && state.atomic && process.env.UPGRADE_DRILL_SCENARIO==='rollback' && process.env.UPGRADE_DRILL_INSTALLER_SOURCE==='current')
+  await verifyRootLauncherGitGate()
+  assert.equal(JSON.parse(await readFile(app+'/version.json')).version,state.candidateVersion)
+  const client=new Client({connectionString:env.DATABASE_URL});await client.connect()
+  try {
+    const task=(await client.query('SELECT status,backup_path FROM system_update_tasks WHERE id=$1',[state.taskId])).rows[0]
+    assert.equal(task.status,'success');assert.equal(task.backup_path,state.oldApp)
+  }finally{await client.end()}
+  assert.equal(execFileSync('/usr/bin/git',['-C','/opt/incudal','config','--local','--get-all','remote.origin.url'],{encoding:'utf8'}).trim(),'https://github.com/masta-lee/mastaincus.git')
+  // Only this disposable fixture's exact legacy origin changes. The original
+  // old archive, rollback release, runtime and identities stay unchanged.
+  execFileSync('/usr/bin/git',['-C','/opt/incudal','remote','set-url','origin','https://github.com/mastalee928/payincus.git'])
+  execFileSync('/usr/local/libexec/incudal/incudal-online-task',['seal'],{stdio:'pipe',timeout:180000})
+  state.rootRollbackUnit='incudal-online-rollback@'+state.taskId+'.service'
+  await writeFile(stateFile,JSON.stringify(state),{mode:0o600})
+  console.log('PASS exact legacy-origin fixture for actual root rollback; original candidate and rollback archive unchanged')
+} else if (mode === 'root-rollback-wait' || mode === 'root-duplicate-after') {
+  const state=JSON.parse(await readFile(stateFile))
+  // systemctl start in the shell waits for the actual oneshot's natural exit.
+  // Successful inactive units may be garbage-collected, so do not rely on a
+  // transient InvocationID/timestamp surviving after that completed job.
+  const unit=mode==='root-rollback-wait'?state.rootRollbackUnit:'incudal-online-update@'+state.taskId+'.service'
+  const output=execFileSync('/usr/bin/systemctl',['show',unit,'--property=Result,ExecMainStatus,Job,ExecStart'],{encoding:'utf8'})
+  assert.match(output,/^Result=success$/m);assert.match(output,/^ExecMainStatus=0$/m);assert.match(output,/^Job=0$/m)
+  assert.ok(output.includes('argv[]=/usr/local/libexec/incudal/incudal-online-task '+(mode==='root-rollback-wait'?'rollback':'update')+' '+state.taskId+' ;'),'actual root unit must retain the shipped launcher and task argument')
+  if(mode==='root-rollback-wait')assert.ok((await readFile('/opt/incudal/update-logs/system-update-'+state.taskId+'-rollback.log','utf8')).includes('Rollback completed successfully'))
+  else assert.ok((await readFile('/opt/incudal/update-logs/system-update-'+state.taskId+'.log','utf8')).trimEnd().endsWith('System update task '+state.taskId+' is already claimed or finished; skipping duplicate worker'),'actual next root unit must enter the original completed-task guard')
+  app=await realpath('/opt/incudal/current')
+  assert.equal(app,state.oldApp)
+  assert.equal(execFileSync('/usr/bin/git',['-C','/opt/incudal','config','--local','--get-all','remote.origin.url'],{encoding:'utf8'}).trim(),'https://github.com/masta-lee/mastaincus.git')
+  await verifyRootLauncherGitGate()
+  const client=new Client({connectionString:env.DATABASE_URL});await client.connect()
+  try{
+    const task=(await client.query('SELECT status FROM system_update_tasks WHERE id=$1',[state.taskId])).rows[0]
+    assert.equal(task.status,'rolled_back','root duplicate task must preserve the completed rollback')
+    for(const file of identities)assert.equal(hash(await readFile(file)),state.original[file],'actual root rollback must preserve controller/network/environment identity: '+file)
+  }finally{await client.end()}
+  assert.equal(JSON.parse(await readFile(app+'/version.json')).version,state.baseline)
+  execFileSync('/usr/bin/systemctl',['is-active','--quiet','incudal-backend'])
+  console.log(mode==='root-rollback-wait'?'PASS actual root rollback, internal backend restart and immediate migrated-helper gate without another restart':'PASS next actual root update unit reached the original duplicate-worker guard without another restart')
+} else if (mode === 'migrate') {
   const candidateRequire = createRequire(archive + '/server/package.json')
   const cliMetadata = candidateRequire.resolve('prisma/package.json')
   const metadata = JSON.parse(await readFile(cliMetadata))
@@ -40,6 +118,7 @@ if (mode === 'migrate') {
   console.log('PASS rollback-state setup: actual candidate Prisma migrations applied while old runtime stays installed')
 } else if (mode === 'before') {
   assert.equal(JSON.parse(await readFile(app + '/version.json')).version, baseline)
+  await verifyRootLauncherGitGate()
   const client = new Client({ connectionString: env.DATABASE_URL }); await client.connect()
   try {
     const admin = (await client.query("SELECT id FROM users WHERE role='admin' ORDER BY id LIMIT 1")).rows[0]
@@ -104,6 +183,7 @@ if (mode === 'migrate') {
   // Same platform maintenance lock as the root wrapper is held by the shell.
   await import(app + '/server/dist/scripts/run-system-update-task.js')
 } else if (mode === 'rolled-back') {
+  await verifyRootLauncherGitGate()
   const state = JSON.parse(await readFile(stateFile))
   const client = new Client({ connectionString: env.DATABASE_URL }); await client.connect()
   try {
@@ -118,6 +198,7 @@ if (mode === 'migrate') {
     console.log('PASS actual old worker recovered after post-install failure: old runtime and component enrollment restored, original identities preserved')
   } finally { await client.end() }
 } else {
+  await verifyRootLauncherGitGate()
   const state = JSON.parse(await readFile(stateFile))
   const client = new Client({ connectionString: env.DATABASE_URL }); await client.connect()
   try {

@@ -11,10 +11,30 @@ import { createRequire } from 'node:module'
 import { verifyPanelDigest } from './panel-package-signature.mjs'
 export function assertRepositoryConfigurationMigration(before,after){
 const original=before.toString('utf8');assert.ok(Buffer.from(original).equals(before),'REPOSITORY_CONFIG_ENCODING_INVALID')
-const expected=original.replace(/^(SYSTEM_UPDATE_RELEASE_REPOSITORY|INCUDAL_AGENT_RELEASE_REPOSITORY|GITHUB_REPO|GITHUB_REPOSITORY)=([^\r\n]*)(\r?)$/gm,(line,key,raw)=>{
- let value=raw.split('#')[0].trim();if(value.length>=2&&['"',"'"].includes(value[0])&&value.at(-1)===value[0])value=value.slice(1,-1).trim()
- return value.toLowerCase()==='mastalee928/payincus'?key+'=masta-lee/mastaincus':line
-})
+// Match dotenv after its CR/CRLF normalization, then map UTF-16 offsets back
+// to the original text. Only a selected retired token changes; credential
+// blocks, quotes, comments, original line endings and final-line state remain.
+let normalized='';const positions=[]
+for(let i=0;i<original.length;i++){
+ positions.push(i)
+ if(original[i]==='\r'){normalized+='\n';if(original[i+1]==='\n')i++}else normalized+=original[i]
+}
+positions.push(original.length)
+const records=/^\s*(?:export\s+)?([\w.-]+)(?:\s*=\s*?|:\s+?)(\s*'(?:\\'|[^'])*'|\s*"(?:\\"|[^"])*"|\s*`(?:\\`|[^`])*`|[^#\r\n]+)?\s*(?:#.*)?$/gm
+const replacements=[]
+for(const match of normalized.matchAll(records)){
+ const [line,key,raw='']=match
+ if(!['SYSTEM_UPDATE_RELEASE_REPOSITORY','INCUDAL_AGENT_RELEASE_REPOSITORY','GITHUB_REPO','GITHUB_REPOSITORY'].includes(key))continue
+ let value=raw.trim();const quote=value[0]
+ value=value.replace(/^(['"`])([\s\S]*)\1$/gm,'$2')
+ if(quote==='"')value=value.replace(/\\n/g,'\n').replace(/\\r/g,'\r')
+ if(value.trim().toLowerCase()!=='mastalee928/payincus')continue
+ const token=/mastalee928\/payincus/i.exec(raw);assert.ok(token,'REPOSITORY_MIGRATION_TOKEN_MISSING')
+ const start=match.index+line.indexOf(raw)+token.index
+ replacements.push([positions[start],positions[start+token[0].length]])
+}
+let expected=original
+for(const [start,end]of replacements.reverse())expected=expected.slice(0,start)+'masta-lee/mastaincus'+expected.slice(end)
 assert.ok(Buffer.from(expected).equals(after),'REPOSITORY_MIGRATION_CHANGED_UNRELATED_CONFIGURATION')
 }
 export function migrateCandidateRepositoryConfiguration(archive,version){

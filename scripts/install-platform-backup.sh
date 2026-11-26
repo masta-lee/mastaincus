@@ -7,6 +7,9 @@ root=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd -P)
 for file in "$root/deploy/incudal-online-task.sh.example" "$root/deploy/incudal-systemctl-wrapper.sh.example" "$root/deploy/incudal-platform-backup@.service.example"; do
   [[ -f "$file" && ! -L "$file" && $(stat -c %u "$file") == 0 ]] || { echo 'Untrusted helper source.' >&2; exit 1; }
 done
+repository_installer="$root/scripts/install-panel.sh"
+[[ -f "$repository_installer" && ! -L "$repository_installer" && $(stat -c '%u:%h' "$repository_installer") == 0:1 && -z $(find "$repository_installer" -perm /022 -print -quit) ]] || { echo 'Untrusted repository startup guard installer.' >&2; exit 1; }
+grep -Fq -- '--install-repository-startup-guard)' "$repository_installer" || { echo 'Repository startup guard is missing from the verified package.' >&2; exit 1; }
 # An unsupported DB/Node patch must fail before any persistent service/helper
 # replacement, so an installed old worker can still roll back normally.
 if [[ -f "$root/scripts/harden-database.py" && ! -e /var/lib/incudal-backup/recovery-hold.json && -f /opt/incudal/.env ]] && /usr/bin/pg_isready -q -d incudal; then
@@ -90,6 +93,10 @@ ExecStartPost=+/usr/local/libexec/incudal/incudal-online-task recovery-ready
 ExecStartPre=+/usr/bin/bash -lc 'if [ ! -e /var/lib/incudal-backup/recovery-hold.json ]; then /usr/bin/bash $work_dir/scripts/migrate-database.sh; fi'
 EOF
 chmod 0644 /etc/systemd/system/incudal-backend.service.d/platform-backup.conf
+# Keep the normalizer in the base unit: a historical backup hook replaces its
+# own drop-in on every boot and would remove a correction added only there.
+# This installs code and unit ordering; it never executes a task or reseals.
+/usr/bin/env -i PATH=/usr/sbin:/usr/bin:/sbin:/bin LC_ALL=C HOME=/var/cache/incudal-ota /usr/bin/bash "$repository_installer" --install-repository-startup-guard
 if [[ -f "$root/scripts/migrate-database.sh" && -f "$root/scripts/harden-database.py" ]]; then
   # Preserve this verified security runtime across physical/atomic rollback.
   # Copy code and dependencies only; never copy .env, certs or user uploads.

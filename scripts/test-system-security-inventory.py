@@ -2431,18 +2431,50 @@ class RuntimeRecoveryPsql(unittest.TestCase):
     @contextlib.contextmanager
     def client_files(self,root=None,major=16,real_files=None):
         # SQL probing and client decisions remain product code. Client bytes
-        # live on disk; Linux uses real FD/permission checks. Windows adapts
-        # Unix executable mode/parent ownership only, never the SQL probe.
+        # live on disk; Linux keeps real FD/permission/inode checks. A non-root
+        # runner models root ownership only for these payloads and their exact
+        # parents, never its identity, other files or executable/parent modes.
+        # Windows adapts Unix modes/parents only, never the SQL probe.
         import hashlib
-        real_path=pathlib.Path;real_open=os.open;real_lstat=os.lstat
+        real_path=pathlib.Path;real_open=os.open;real_lstat=os.lstat;real_fstat=os.fstat
         if real_files is None:real_files=module.runtime_database_client_files
-        directory=tempfile.TemporaryDirectory(dir='/root'if sys.platform=='linux'and os.geteuid()==0 else str(root)if root is not None else None)
-        physical_root=(type(root)if root is not None else real_path)(directory.name);folder=physical_root/'usr/lib/postgresql'/str(major)/'bin';folder.mkdir(mode=0o755,parents=True)
+        physical_path=type(root)if root is not None else real_path
+        parent=('/root'if os.geteuid()==0 else str(physical_path.home()))if sys.platform=='linux'else str(root)if root is not None else None
+        directory=tempfile.TemporaryDirectory(dir=parent)
+        physical_root=physical_path(directory.name);folder=physical_root/'usr/lib/postgresql'/str(major)/'bin';folder.mkdir(mode=0o755,parents=True)
+        for parent in folder.parents:
+            if parent==physical_root:break
+            parent.chmod(0o755)
         logical=module.runtime_database_client_paths(major);physical={name:folder/name for name in logical};mapping={logical[name]:physical[name]for name in logical};modes={name:0o755 for name in logical}
         program=physical_root/'usr/lib/postgresql/16/bin/postgres';program.parent.mkdir(mode=0o755,parents=True,exist_ok=True);program.write_bytes(b'physical postgres inode fixture');program.chmod(0o755);mapping['/usr/lib/postgresql/16/bin/postgres']=program;modes['postgres']=0o755
+        for parent in program.parent.parents:
+            if parent==physical_root:break
+            parent.chmod(0o755)
         originals={name:('original bound '+name).encode()for name in logical}
         for name,file in physical.items():file.write_bytes(originals[name]);file.chmod(0o755)
         def mapped(value):return mapping.get(os.fspath(value),value)
+        payload_paths={os.path.abspath(os.fspath(value))for value in mapping.values()}
+        parent_paths={os.path.abspath(os.fspath(parent))for value in mapping.values()for parent in value.parents}
+        owner=os.geteuid()if sys.platform=='linux'else None;readlink=os.readlink
+        owners={}
+        if owner:
+            for selected in payload_paths|parent_paths:
+                info=real_lstat(selected)
+                if info.st_uid==owner:owners[selected]=(info.st_uid,info.st_gid)
+        def root_owner(info,selected):
+            if owners.get(selected)!=(info.st_uid,info.st_gid):return info
+            fields={name:getattr(info,name)for name in dir(info)if name.startswith('st_')};fields.update(st_uid=0,st_gid=0)
+            return types.SimpleNamespace(**fields)
+        def lstat(value,*args,**kwargs):
+            physical=mapped(value);info=real_lstat(physical,*args,**kwargs)
+            selected=os.path.abspath(os.fspath(physical))
+            return root_owner(info,selected)if owner and selected in payload_paths|parent_paths else info
+        def fstat(fd):
+            info=real_fstat(fd)
+            try:physical=readlink('/proc/self/fd/'+str(fd))
+            except OSError:return info
+            selected=os.path.abspath(physical)
+            return root_owner(info,selected)if selected in payload_paths else info
         def path(*parts):
             key=str(pathlib.PurePosixPath(*[str(part)for part in parts]))
             return mapping[key]if key in mapping else real_path(*parts)
@@ -2460,7 +2492,8 @@ class RuntimeRecoveryPsql(unittest.TestCase):
             else:raise AssertionError(kind)
         def restore(name):physical[name].write_bytes(originals[name]);physical[name].chmod(0o755);modes[name]=0o755
         with contextlib.ExitStack()as stack:
-            stack.enter_context(patch.object(module.pathlib,'Path',side_effect=path));stack.enter_context(patch.object(module.os,'open',side_effect=lambda value,*args,**kwargs:real_open(mapped(value),*args,**kwargs)));stack.enter_context(patch.object(module.os,'lstat',side_effect=lambda value,*args,**kwargs:real_lstat(mapped(value),*args,**kwargs)));stack.enter_context(patch.object(module,'runtime_database_client_files',new=real_files))
+            stack.enter_context(patch.object(module.pathlib,'Path',side_effect=path));stack.enter_context(patch.object(module.os,'open',side_effect=lambda value,*args,**kwargs:real_open(mapped(value),*args,**kwargs)));stack.enter_context(patch.object(module.os,'lstat',side_effect=lstat));stack.enter_context(patch.object(module,'runtime_database_client_files',new=real_files))
+            if owner:stack.enter_context(patch.object(module.os,'fstat',side_effect=fstat))
             if sys.platform=='win32':stack.enter_context(patch.object(module,'runtime_payload_parents',return_value=[]));stack.enter_context(patch.object(module,'runtime_payload_regular',side_effect=regular))
             try:yield logical,physical,change,restore
             finally:directory.cleanup()
@@ -2512,6 +2545,24 @@ class RuntimeRecoveryPsql(unittest.TestCase):
         options={'shared_read_only':shared}
         if 'journal'in inspect.signature(function).parameters:options['journal']=journal
         return function(**options)
+
+    def test_client_fixture_keeps_real_fd_unlisted_owner_and_permission_rejection(self):
+        with self.client_files()as(logical,physical,change,restore):
+            native=physical['psql'].stat();fd=os.open(logical['psql'],os.O_RDONLY)
+            try:
+                observed=os.fstat(fd)
+                for field in ['st_dev','st_ino','st_mode','st_nlink','st_size','st_mtime_ns','st_ctime_ns']:
+                    self.assertEqual(getattr(observed,field),getattr(native,field),field)
+                self.assertEqual(observed.st_uid,0)
+            finally:os.close(fd)
+            unlisted=physical['psql'].with_name('unlisted');unlisted.write_bytes(b'unlisted owner remains real')
+            with unlisted.open('rb')as stream:
+                for field in ['st_uid','st_gid']:self.assertEqual(getattr(os.fstat(stream.fileno()),field),getattr(unlisted.stat(),field))
+            for field in ['st_uid','st_gid']:self.assertEqual(getattr(unlisted.lstat(),field),getattr(unlisted.stat(),field))
+            module.runtime_database_client_files(16)
+            if sys.platform=='linux':physical['psql'].parent.chmod(0o775)
+            else:change('psql','not-executable')
+            with self.assertRaisesRegex(ValueError,'CLIENT_UNCONFIRMED'):module.runtime_database_client_files(16)
 
     def test_real_psql_missing_mode_and_original_hash_drift_refuse_queries(self):
         real_probe=module.database_runtime_proof
