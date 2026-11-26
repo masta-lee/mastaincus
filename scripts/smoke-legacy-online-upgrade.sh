@@ -19,7 +19,6 @@ case "$(basename "$old"):$(sha256sum "$old" | awk '{print $1}')" in
   incudal-v1.8.14-linux-amd64.tar.gz:9cfd05408aa6ddd0ec0d7872099c2a0b550d96bce2beb2a063f220f55dd85ee4|incudal-v1.8.14-linux-arm64.tar.gz:03bfb27d636d628048761a44e3bdca8f5d55b1f33183e2466465dfdd98657eaf) ;;
   *) printf '%s\n' 'Original upgrade baseline identity mismatch.' >&2; exit 1 ;;
 esac
-/usr/bin/env -i PATH=/usr/sbin:/usr/bin:/sbin:/bin LC_ALL=C /usr/bin/python3 -I -B "$repo/scripts/test-repository-startup-normalizer.py" "$old"
 UPGRADE_DRILL_BASELINE_VERSION=$(tar -xOf "$old" ./version.json | python3 -c 'import json,sys,re; version=json.load(sys.stdin)["version"]; assert re.fullmatch(r"v\d+\.\d+\.\d+", version); print(version)')
 export UPGRADE_DRILL_BASELINE_VERSION
 work=$(mktemp -d /root/incudal-upgrade-drill-XXXXXX)
@@ -82,6 +81,9 @@ fi
 printf 'installer@example.invalid\n3\n' | ONBOARDING_PUBLIC_HOST=gateway.example.com \
   bash "$work/old-install.sh" > "$work/old-install.log" 2>&1
 systemctl is-active --quiet incudal-backend
+# The genuine installer has now supplied the fixed system Node used by root
+# tasks. Pre-install build fixtures instead select setup-node explicitly.
+/usr/bin/env -i PATH=/usr/sbin:/usr/bin:/sbin:/bin LC_ALL=C /usr/bin/python3 -I -B "$repo/scripts/test-repository-startup-normalizer.py" "$old"
 if [[ "$installer_source" == current ]]; then
   # The first real startup has already rerun the old backup hook. Repeat a
   # normal service restart so a one-time post-install correction cannot pass.

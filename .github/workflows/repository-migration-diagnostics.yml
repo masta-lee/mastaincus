@@ -178,4 +178,4 @@ jobs:
                             'systemNodeExists': pathlib.Path('/usr/bin/node').exists(),
                             'systemNodeExecutable': os.access('/usr/bin/node', os.X_OK)}))
           PY
-          sudo /usr/bin/env -i PATH=/usr/sbin:/usr/bin:/sbin:/bin LC_ALL=C /usr/bin/python3 -I -B scripts/test-repository-startup-normalizer.py
+          sudo /usr/bin/env -i PATH=/usr/sbin:/usr/bin:/sbin:/bin LC_ALL=C /usr/bin/python3 -I -B scripts/test-repository-startup-normalizer.py --node "$(readlink -f "$(command -v node)")"

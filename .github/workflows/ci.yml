@@ -180,7 +180,7 @@ jobs:
           pnpm --filter server test:sample-seed-safety
           pnpm --filter server type-check:sample-seed
           node scripts/test-repository-source-guards.mjs
-          sudo /usr/bin/env -i PATH=/usr/sbin:/usr/bin:/sbin:/bin LC_ALL=C /usr/bin/python3 -I -B scripts/test-repository-startup-normalizer.py
+          sudo /usr/bin/env -i PATH=/usr/sbin:/usr/bin:/sbin:/bin LC_ALL=C /usr/bin/python3 -I -B scripts/test-repository-startup-normalizer.py --node "$(readlink -f "$(command -v node)")"
           pnpm --filter server test:host-install-inputs
           bash scripts/test-install-panel-guards.sh
           node scripts/test-agent-installer.mjs

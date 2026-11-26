@@ -121,6 +121,9 @@ assert.ok(workflow.includes('/usr/bin/python3 -I -B scripts/test-repository-star
   legacyDrill.includes('scripts/test-repository-startup-normalizer.py" "$old"') &&
   read('scripts/run-tests.mjs').includes("['test:repository-startup-normalizer', 'requires native Linux root;"),
   'actual Linux normalizer transition and refusal checks must run for both new and original package paths and remain explicitly classified')
+assert.ok(workflow.includes('test-repository-startup-normalizer.py --node "$(readlink -f "$(command -v node)")"') &&
+  legacyDrill.indexOf('systemctl is-active --quiet incudal-backend') < legacyDrill.indexOf('scripts/test-repository-startup-normalizer.py" "$old"'),
+  'pre-install native fixtures must use the declared build Node; genuine installed-worker regression must retain its actual system interpreter')
 assert.ok(legacyDrill.includes('stage=actual-root-postflight-rollback') &&
   legacyDrill.includes('"incudal-online-rollback@${root_rollback_task}.service"') &&
   legacyDrill.includes('"incudal-online-update@${root_rollback_task}.service"') &&

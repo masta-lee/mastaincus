@@ -5,6 +5,7 @@ The optional original archive adds the exact v1.8.13/v1.8.14 helper bytes.
 Only four fixed path constants are mapped; identity, Git and file checks run.
 """
 import contextlib
+import argparse
 import hashlib
 import io
 import json
@@ -204,7 +205,7 @@ def case(stage, label, source=CURRENT, seal='valid', atomic=False, origin=NEW,
     print('PASS repository startup:', label, flush=True)
 
 
-def root_task_gate(stage, label, mode, seal_state):
+def root_task_gate(stage, label, mode, seal_state, node):
     """Execute the mapped actual root wrapper with positive and refusal controls.
 
     Its own constants and maintenance paths point only into this new fixture.
@@ -243,6 +244,10 @@ def root_task_gate(stage, label, mode, seal_state):
                      ('/usr/local/libexec/incudal/legacy-database-startup.mjs', str(folder / 'no-legacy-database-startup.mjs'))]:
         assert old in body
         body = body.replace(old, new)
+    # Build runners use setup-node's tool cache before a panel installer has
+    # supplied /usr/bin/node. Only this private wrapper uses the copied tool.
+    assert '/usr/bin/node' in body
+    body = body.replace('/usr/bin/node', str(node))
     driver = folder / 'actual-root-helper.sh'
     write(driver, body.encode(), 0o755)
     def run(action, *args):
@@ -270,6 +275,7 @@ def root_task_gate(stage, label, mode, seal_state):
                               'exitCode': result.returncode, 'workerMarkerExists': marker.exists(),
                               'systemNodeExists': Path('/usr/bin/node').exists(),
                               'systemNodeExecutable': os.access('/usr/bin/node', os.X_OK),
+                              'fixtureNodeExecutable': os.access(node, os.X_OK),
                               'stderrSuffix': result.stderr[-1024:].decode('utf-8', 'replace').replace(str(folder), '<fixture>')}),
                   flush=True)
         assert result.returncode == 99 and marker.read_bytes() == b'executed', label
@@ -282,14 +288,54 @@ def root_task_gate(stage, label, mode, seal_state):
     print('PASS actual root task gate:', label, flush=True)
 
 
+def copy_node(source, stage):
+    """Copy the explicitly selected test tool, without changing a system path."""
+    source = Path(source)
+    assert source.is_absolute()
+    fd = os.open(source, os.O_RDONLY | os.O_NOFOLLOW | os.O_CLOEXEC)
+    fields = ('st_dev', 'st_ino', 'st_uid', 'st_gid', 'st_mode', 'st_nlink',
+              'st_size', 'st_mtime_ns', 'st_ctime_ns')
+    facts = lambda info: tuple(getattr(info, key) for key in fields)
+    target = stage / 'node-fixture'
+    digest = hashlib.sha256()
+    try:
+        before = os.fstat(fd)
+        assert stat.S_ISREG(before.st_mode) and before.st_nlink == 1 and \
+               not before.st_mode & 0o022 and before.st_mode & 0o111 and 0 < before.st_size <= 256 * 1024 * 1024
+        assert facts(source.lstat()) == facts(before)
+        with target.open('xb') as output:
+            os.fchmod(output.fileno(), 0o755)
+            total = 0
+            while True:
+                block = os.read(fd, 1024 * 1024)
+                if not block: break
+                if not total: assert block.startswith(b'\x7fELF')
+                total += len(block)
+                assert total <= before.st_size
+                output.write(block)
+                digest.update(block)
+            assert total == before.st_size
+            output.flush()
+            os.fsync(output.fileno())
+        assert facts(os.fstat(fd)) == facts(before) and facts(source.lstat()) == facts(before)
+    finally:
+        os.close(fd)
+    assert target.stat().st_uid == target.stat().st_gid == 0 and target.stat().st_nlink == 1
+    with target.open('rb') as file: assert hashlib.file_digest(file, 'sha256').hexdigest() == digest.hexdigest()
+    return target, digest.hexdigest()
+
+
 def main():
     assert sys.platform.startswith('linux') and os.geteuid() == 0
     parent = Path('/root').lstat()
     assert stat.S_ISDIR(parent.st_mode) and parent.st_uid == parent.st_gid == 0 and not parent.st_mode & 0o022
-    assert len(sys.argv) in (1, 2)
+    parser = argparse.ArgumentParser()
+    parser.add_argument('legacy_archive', nargs='?')
+    parser.add_argument('--node', default='/usr/bin/node', help='absolute resolved Node from the installed system or current build toolchain')
+    args = parser.parse_args()
     historical = None
-    if len(sys.argv) == 2:
-        with tarfile.open(sys.argv[1], 'r:gz') as archive:
+    if args.legacy_archive is not None:
+        with tarfile.open(args.legacy_archive, 'r:gz') as archive:
             member = archive.getmember('./deploy/incudal-online-task.sh.example')
             assert member.isfile() and member.size == 15127
             historical = archive.extractfile(member).read()
@@ -297,6 +343,7 @@ def main():
     count = 0
     with tempfile.TemporaryDirectory(prefix='incudal-repository-startup-test-', dir='/root') as temp:
         stage = Path(temp)
+        node, node_sha = copy_node(args.node, stage)
         scenarios = [
             ('flat-current-sealed', {}),
             ('flat-current-old-seal', {'seal': 'old'}),
@@ -344,8 +391,9 @@ def main():
             count += 1
         for mode in ('update', 'rollback'):
             for seal_state in ('missing', 'old', 'runtime-changed', 'valid'):
-                root_task_gate(stage, mode + '-' + seal_state, mode, seal_state)
+                root_task_gate(stage, mode + '-' + seal_state, mode, seal_state, node)
                 count += 1
+        with node.open('rb') as file: assert hashlib.file_digest(file, 'sha256').hexdigest() == node_sha
     print('PASS native repository startup:', count, 'cases; only new private roots modified', flush=True)
 
 
