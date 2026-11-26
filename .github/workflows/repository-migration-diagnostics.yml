@@ -5,6 +5,11 @@ name: Repository migration diagnostics
 # this does not build, sign, publish or validate the current product fixes.
 on:
   workflow_dispatch:
+    inputs:
+      current_startup:
+        description: 'Diagnose the current private-root startup wrapper without installing a panel'
+        type: boolean
+        default: false
 
 permissions:
   contents: read
@@ -12,7 +17,7 @@ permissions:
 
 jobs:
   normalizer-native-trace:
-    if: github.repository == 'masta-lee/mastaincus'
+    if: github.repository == 'masta-lee/mastaincus' && !inputs.current_startup
     runs-on: ubuntu-latest
     timeout-minutes: 30
     env:
@@ -148,3 +153,29 @@ jobs:
           path: diagnostic-results/*.json
           if-no-files-found: ignore
           retention-days: 3
+
+  current-startup-wrapper:
+    if: github.repository == 'masta-lee/mastaincus' && inputs.current_startup
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: '24'
+      - name: Record fixed root interpreter availability and run the current fixture
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = '${{ github.sha }}'
+          python3 - <<'PY'
+          import json, os, pathlib
+          print(json.dumps({'phase': 'root-interpreter-environment',
+                            'sourceCommit': '${{ github.sha }}',
+                            'systemNodeExists': pathlib.Path('/usr/bin/node').exists(),
+                            'systemNodeExecutable': os.access('/usr/bin/node', os.X_OK)}))
+          PY
+          sudo /usr/bin/env -i PATH=/usr/sbin:/usr/bin:/sbin:/bin LC_ALL=C /usr/bin/python3 -I -B scripts/test-repository-startup-normalizer.py

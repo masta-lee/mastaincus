@@ -7,6 +7,7 @@ Only four fixed path constants are mapped; identity, Git and file checks run.
 import contextlib
 import hashlib
 import io
+import json
 import os
 from pathlib import Path
 import re
@@ -262,6 +263,15 @@ def root_task_gate(stage, label, mode, seal_state):
     before_seals = {path.name: path.read_bytes() for path in seals.iterdir()}
     result = run(mode, '1')
     if seal_state == 'valid':
+        if result.returncode != 99 or not marker.exists() or marker.read_bytes() != b'executed':
+            # This wrapper has only fixture paths, a literal worker and an empty
+            # environment. Preserve its bounded failure, never live service logs.
+            print(json.dumps({'phase': 'root-fixture-worker-diagnostic', 'label': label,
+                              'exitCode': result.returncode, 'workerMarkerExists': marker.exists(),
+                              'systemNodeExists': Path('/usr/bin/node').exists(),
+                              'systemNodeExecutable': os.access('/usr/bin/node', os.X_OK),
+                              'stderrSuffix': result.stderr[-1024:].decode('utf-8', 'replace').replace(str(folder), '<fixture>')}),
+                  flush=True)
         assert result.returncode == 99 and marker.read_bytes() == b'executed', label
         assert b'trusted manifest' not in result.stderr, label
     else:
