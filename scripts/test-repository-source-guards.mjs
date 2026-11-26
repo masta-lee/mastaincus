@@ -3,6 +3,7 @@ import { readFileSync, existsSync } from 'node:fs'
 import { resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { runInNewContext } from 'node:vm'
+import { createHash } from 'node:crypto'
 
 const root = fileURLToPath(new URL('../', import.meta.url))
 const read = path => readFileSync(resolve(root, path), 'utf8')
@@ -76,6 +77,18 @@ assert.ok(workflow.includes('- fresh-install'), 'Release must wait for fresh ins
 assert.ok(workflow.includes("if: always() && startsWith(github.ref, 'refs/tags/v') && needs.build.result == 'success' && needs.fresh-install.result == 'success' && needs.legacy-upgrade.result == 'success'"),
   'formal publication must survive the intentionally skipped preview-agent dependency but reject any failed build/install/upgrade gate')
 const installer = read('scripts/install-panel.sh')
+const pinnedHelpers = installer.match(/PINNED_STARTUP_HELPERS = frozenset\(\{([\s\S]*?)\}\)/)?.[1]
+assert.ok(pinnedHelpers, 'startup normalization must retain independent complete helper content pins')
+assert.deepEqual([...pinnedHelpers.matchAll(/'([a-f0-9]{64})'/g)].map(match => match[1]).sort(), [
+  createHash('sha256').update(readFileSync(resolve(root, 'deploy/incudal-online-task.sh.example'))).digest('hex'),
+  '15fd9cac0a7af20a2a8499b10637c7d3696c99ef1abe81eacce728134011219a'
+].sort(), 'startup pin updates must follow the exact current helper bytes and original v1.8.13/v1.8.14 helper identity')
+assert.ok(installer.includes('if source.sha not in PINNED_STARTUP_HELPERS:') &&
+  installer.includes('if source.sha != source_digest(manifest.raw): refuse()') &&
+  installer.includes('if installed.raw not in (source.raw, converted): refuse()') &&
+  installer.includes('if runtime() != (app, current): refuse()') &&
+  rootHelper.includes('  verify_manifest\n  verify_git_control\n'),
+  'known exact helpers may normalize during the pre-seal startup transition; unknown helpers, installed bytes, identity and actual root task seals remain guarded')
 assert.ok(installer.includes('VERIFIED_LEGACY_DATABASE_PACKAGE=""') &&
   installer.includes('RELEASE_VERIFIED_THIS_RUN=false\n    VERIFIED_LEGACY_DATABASE_PACKAGE=""') &&
   installer.includes('database_migration_mode()') &&
@@ -100,6 +113,14 @@ assert.ok(legacyDrill.includes('stage=current-installer-restart') &&
   legacyWorkerDrill.includes('await verifyRootLauncherGitGate()') &&
   legacyWorkerDrill.includes("helper.toString('utf8').match(/^verify_git_control"),
   'legacy regression must exercise a real normal restart and the exact shipped root launcher Git gate')
+assert.ok(legacyWorkerDrill.includes("'incudal-online-update@1.service'") &&
+  legacyWorkerDrill.includes("'incudal-online-rollback@1.service'") &&
+  !legacyWorkerDrill.includes("'incudal-online-update@.service'"),
+  'systemd ordering regression must query real service instances rather than invalid template names')
+assert.ok(workflow.includes('/usr/bin/python3 -I -B scripts/test-repository-startup-normalizer.py') &&
+  legacyDrill.includes('scripts/test-repository-startup-normalizer.py" "$old"') &&
+  read('scripts/run-tests.mjs').includes("['test:repository-startup-normalizer', 'requires native Linux root;"),
+  'actual Linux normalizer transition and refusal checks must run for both new and original package paths and remain explicitly classified')
 assert.ok(legacyDrill.includes('stage=actual-root-postflight-rollback') &&
   legacyDrill.includes('"incudal-online-rollback@${root_rollback_task}.service"') &&
   legacyDrill.includes('"incudal-online-update@${root_rollback_task}.service"') &&

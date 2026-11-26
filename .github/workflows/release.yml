@@ -58,7 +58,9 @@ jobs:
           cache-dependency-path: agent/go.mod
 
       - name: 校验一键安装脚本
-        run: bash scripts/test-install-panel-guards.sh
+        run: |
+          bash scripts/test-install-panel-guards.sh
+          sudo /usr/bin/env -i PATH=/usr/sbin:/usr/bin:/sbin:/bin LC_ALL=C /usr/bin/python3 -I -B scripts/test-repository-startup-normalizer.py
 
       # ===== 安装依赖 =====
       - name: 安装全部依赖

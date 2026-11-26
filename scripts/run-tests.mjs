@@ -50,6 +50,7 @@ environment:
  * 新增守卫若不属于这一类，请加进根 package.json 的 `testGuards`，不要加到这里。
  */
 const EXCLUDED_FROM_SUITE = new Map([
+  ['test:repository-startup-normalizer', 'requires native Linux root; actual fixed-path-mapped metadata normalizer in private roots, pre-seal upgrade states and optional authenticated original archive; run in both release architectures'],
   ['test:security-csp-browser', 'requires both built frontend entries and Chrome; actual CSP headers, three locales, working login/theme and inline script rejection'],
   ['test:smtp-security-transport', 'requires disposable local TCP/TLS SMTP listeners and OpenSSL; actual delivery, bad certificate and downgrade rejection, no file/URL access'],
   ['test:request-budget-transport', 'requires disposable local HTTP socket; cancelled upload retains global memory reservation until actual handler completion'],

@@ -85,7 +85,7 @@ install_repository_startup_guard() {
     temporary="$(mktemp "$directory/.repository-source.XXXXXX")" || return 1
     if ! cat > "$temporary" <<'INCUDAL_REPOSITORY_SOURCE_SCRIPT'
 #!/usr/bin/bash
-# Restore only the sealed runtime launcher for its verified repository; no arguments.
+# Restore only an authenticated runtime launcher for its verified repository; no arguments.
 # The systemd caller must use /usr/bin/env -i BEFORE starting this Bash program.
 set -Eeuo pipefail
 [[ $# -eq 0 && $EUID -eq 0 ]] || { printf '%s\n' INCUDAL_RETIRED_HELPER_REFUSED >&2; exit 1; }
@@ -112,6 +112,14 @@ GIT = '/usr/bin/git'
 OFLAGS = os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK | os.O_CLOEXEC
 FACTS = ('st_dev', 'st_ino', 'st_mode', 'st_uid', 'st_gid', 'st_nlink', 'st_size', 'st_mtime_ns', 'st_ctime_ns')
 DIRECTORY_FACTS = ('st_dev', 'st_ino', 'st_mode', 'st_uid', 'st_gid')
+# The original worker restarts before its root postflight writes the new seal.
+# These complete publisher helper bytes authorize metadata normalization,
+# including pre-seal update/rollback windows. Unknown helpers require a seal;
+# every root task continues to verify its entire runtime before execution.
+PINNED_STARTUP_HELPERS = frozenset({
+    '2c2407c17f6997c01e3997fbb040fb302c66a3854346746b08891e9822f1e820',
+    '15fd9cac0a7af20a2a8499b10637c7d3696c99ef1abe81eacce728134011219a',
+})
 
 def refuse():
     raise ValueError('INCUDAL_RETIRED_HELPER_REFUSED')
@@ -261,11 +269,12 @@ def main():
     try:
         directory(ROOT); directory(ROOT + '/.git'); directory(SEALS); helper_dir = directory(HELPERS); directory(HOME)
         app, current = runtime(); directory(app); directory(app + '/deploy')
-        key = hashlib.sha256(app.encode('utf-8')).hexdigest()
-        manifest = hold(SEALS + '/' + key + '.sha256', 64 * 1024 * 1024, {0o600, 0o644})
-        hold(SEALS + '/' + key + '.sha256.links', 16 * 1024 * 1024, {0o600, 0o644})
         source = hold(app + '/' + SOURCE, 1024 * 1024, {0o644, 0o755})
-        if source.sha != source_digest(manifest.raw): refuse()
+        if source.sha not in PINNED_STARTUP_HELPERS:
+            key = hashlib.sha256(app.encode('utf-8')).hexdigest()
+            manifest = hold(SEALS + '/' + key + '.sha256', 64 * 1024 * 1024, {0o600, 0o644})
+            hold(SEALS + '/' + key + '.sha256.links', 16 * 1024 * 1024, {0o600, 0o644})
+            if source.sha != source_digest(manifest.raw): refuse()
         installed = hold(HELPERS + '/' + TARGET, 1024 * 1024, {0o755})
         # Hold both mandatory local Git configuration and any active global inputs.
         hold(ROOT + '/.git/config', 1024 * 1024, {0o600, 0o644})

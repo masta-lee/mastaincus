@@ -59,7 +59,7 @@ async function verifyRootLauncherGitGate() {
     const post=execFileSync('/usr/bin/systemctl',['show','incudal-backend.service','--property=ExecStartPost','--value'],{encoding:'utf8'})
     const entry=[...post.matchAll(/\{[^}]*\}/g)].map(match=>match[0]).find(text=>text.includes(startup))
     assert.ok(entry?.includes('argv[]=/usr/bin/env -i PATH=/usr/sbin:/usr/bin:/sbin:/bin LC_ALL=C /usr/bin/bash '+startup+' ;')&&/code=exited\s*;\s*status=0/.test(entry),'actual root startup correction must complete through the loaded backend unit')
-    for(const unit of ['incudal-online-update@.service','incudal-online-rollback@.service']) {
+    for(const unit of ['incudal-online-update@1.service','incudal-online-rollback@1.service']) {
       const after=execFileSync('/usr/bin/systemctl',['show',unit,'--property=After','--value'],{encoding:'utf8'})
       assert.ok(after.trim().split(/\s+/).includes('incudal-backend.service'),'actual loaded root task unit must wait for backend startup: '+unit)
     }

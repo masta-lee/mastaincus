@@ -534,6 +534,7 @@
     "test:safe-outbound-fetch-guards": "node --import tsx scripts/test-safe-outbound-fetch-guards.ts",
     "test:system-config-value-guards": "node --import tsx scripts/test-system-config-value-guards.ts",
     "test:system-update-guards": "node --import tsx scripts/test-system-update-guards.ts",
+    "test:repository-startup-normalizer": "python3 -I -B ../scripts/test-repository-startup-normalizer.py",
     "test:system-redeem-consistency": "node --import tsx scripts/test-system-redeem-consistency.ts",
     "test:telegram-bind-token-race-guard": "node --import tsx scripts/test-telegram-bind-token-race-guard.ts",
     "test:system-monitor-webhook-guard": "node --import tsx scripts/test-system-monitor-webhook-guard.ts",

@@ -1,8 +1,16 @@
 # mastaincus 仓库替代与原正式资产迁移
 
-Owner确认原仓库已退出，masta-lee/mastaincus 是今后唯一维护、安装和发行仓库。2026-11-27 owner明确批准公开，沿用无需token的安装和更新。仓库已公开；GitHub回读为PUBLIC，main及工作分支均为迁移提交ed39a3746c203e3c544dd9c400f1d3dacd249da6。匿名下载已通过，双架构安装／升级／回滚预览尚未通过，不能据公开和下载成功宣布整条迁移验收完成。
+Owner确认原仓库已退出，masta-lee/mastaincus 是今后唯一维护、安装和发行仓库。2026-11-27 owner明确批准公开，沿用无需token的安装和更新。仓库已公开；main及工作分支最新已推送来源为adcc4b4541f83cddacbcce87347ef16a91ec377d。匿名下载、该来源的双架构全新安装已通过；旧版升级／回滚预览仍失败，不能据公开和下载成功宣布整条迁移验收完成。
 
-2026-11-27 06:18+08:00接续：22文件迁移补丁已在6be2429921fe4ae1e2106a3ecae69b71d232157a提交推送，两远端分支一致；最终本机更新守卫r3自然0。其完整预览45887885319已自然failure：双包、双Incus、候选Agent五job成功；双首装和十旧升级十二job失败；正式Release预期skipped。两实际候选tar已独立验证保留Ed25519、完整SHA、路径／属主、gzip尾和各321份Git运行文件，原14/Agent资产不变；这不代表首装成功。Docs同来源45887892705的build/deploy均success，匿名首页及中英文版本日志HTTP200、无退休有效链接；最终raw/main安装脚本完整SHA与6be相等。所有旧失败分别保留。
+最新完整预览[45897736610](https://github.com/masta-lee/mastaincus/actions/runs/45897736610)已自然终态failure：两个构建、两个Incus构建、候选Agent与两项全新安装共7个job成功，十项旧升级失败，正式Release预期skipped。两份实际候选包独立验证了原签名、完整SHA、路径／属主与各321份运行文件；原v1.8.14与Agent资产不变。原6be及首次新仓库失败保留，不能覆盖为通过。
+
+本轮已将剩余拒绝定位到原worker的seal时序。原13/14四个完整包中的助手均为15127字节、完整SHA256 15fd9cac0a7af20a2a8499b10637c7d3696c99ef1abe81eacce728134011219a；原harden只整理权限，正常更新及autoRollback均先restart，worker返回后才由root wrapper写seal。原生四个私有模型复现平铺新助手＋旧seal的source digest拒绝，以及新atomic路径尚无seal的FileNotFound；两个正确seal控制通过。CI只提供相应restart／rollback阶段和固定拒绝码，模型trace行号不伪称原CI实取。
+
+最小修复仅在固定normalizer中pin当前助手与原13/14的完整内容。已知助手可在缺／旧seal时核其FD、属主、模式、安装字节和原Git身份后归一仓库常量；未知助手仍要原manifest／links与source digest。不会重新seal、放宽真正root update／rollback的整包执行门禁、接受未知助手或替换原平台／网关／SSH／发行身份。当前installer完整SHA e34304194aa49c363c1489d3306c95a2ad99e5dca78503116ca5e6c8c7b3ec18，normalizer为12772字节、SHA 15193bdd6f6ce50af08c66a7510b8cee3864ae07e1ab878818435ba93b21d932；current helper完整SHA仍为2c2407c17f6997c01e3997fbb040fb302c66a3854346746b08891e9822f1e820。旧测试中systemctl show的无效模板名已修为真实@1.service实例。
+
+新增永久Linux回归覆盖known缺／旧seal、unknown与篡改拒绝、named FD／current／Git并发变化及原助手双向精确归一；实际root wrapper有完整seal到测试worker的阳性校准，缺／旧seal或其它runtime篡改须拒绝且不执行worker。测试所有代码、锁、数据库钩子与写入路径映射至新私有目录；被测错误放行也不得加载原B钩子。最终冻结原生45例已自然exit0，198.029秒，37个normalizer场景与8个实际root门禁正负控制全部通过；原B／PG88982／服务／包库／隔离和输入FD身份及完整SHA前后保持，本次214617555字节测试包副本已精确清理，输入摘要与结果保留。日志为logs/mastaincus-normalizer-native-final45-20261127-r1-result.log；本机system-update-guards／platform-backup-guards已自然2/2通过，23分34秒，含193配置数据以及实际OTA下载、断连、超时和子进程回归；同15193本体追加13项Git原生回归也已13/13自然0，覆盖global includeIf/hooks/fsmonitor、完整／仅old URLrewrite、LFS组合、localfilter及global0666；marker不执行、原14atomic归一及配置／原B保持。日志为logs/mastaincus-normalizer-pin-native-20261127-r1-result.log。新来源完整17个非发行job仍待自然终态。守卫日志为logs/test-run-20261127-055944；server类型检查、仓库／pin漂移守卫、语法及清单通过。本轮不发布新正式版、不操作生产或客户。下文05:18阶段原误写06:18，已按21:18 UTC纠正。
+
+2026-11-27 05:18+08:00接续：22文件迁移补丁已在6be2429921fe4ae1e2106a3ecae69b71d232157a提交推送，两远端分支一致；最终本机更新守卫r3自然0。其完整预览45887885319已自然failure：双包、双Incus、候选Agent五job成功；双首装和十旧升级十二job失败；正式Release预期skipped。两实际候选tar已独立验证保留Ed25519、完整SHA、路径／属主、gzip尾和各321份Git运行文件，原14/Agent资产不变；这不代表首装成功。Docs同来源45887892705的build/deploy均success，匿名首页及中英文版本日志HTTP200、无退休有效链接；最终raw/main安装脚本完整SHA与6be相等。所有旧失败分别保留。
 
 该轮失败已经分清两条源码根因。第一，原13/14四个已核完整SHA的真实包均没有harden-database.py/migrate-database.sh，当前installer却无条件调用，Python exit2又被原报告过滤漏掉。现仅在本次完整包验证及精确历史SHA标记同时成立、两脚本真正不存在时，使用原包ORM并以incudal身份迁移，固定env-i/PATH/HOME/ENV_FILE；第一启动的base unit也生成同一无特权／无profile命令。现代包缺失、部分缺失、链接或历史包额外工具都拒绝，验证失败先清标记；不改旧包、凭据、原DB归属或root现代迁移路径。四实际旧包发布者／标记、篡改原包拒绝、初次启动命令和迁移模式正负例本机通过。
 
