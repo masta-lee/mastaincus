@@ -117,11 +117,14 @@ assert.ok(legacyWorkerDrill.includes("'incudal-online-update@1.service'") &&
   legacyWorkerDrill.includes("'incudal-online-rollback@1.service'") &&
   !legacyWorkerDrill.includes("'incudal-online-update@.service'"),
   'systemd ordering regression must query real service instances rather than invalid template names')
-assert.ok(workflow.includes('/usr/bin/python3 -I -B scripts/test-repository-startup-normalizer.py') &&
+assert.ok(workflow.includes('bash scripts/test-repository-startup-toolchain.sh') &&
   legacyDrill.includes('scripts/test-repository-startup-normalizer.py" "$old"') &&
   read('scripts/run-tests.mjs').includes("['test:repository-startup-normalizer', 'requires native Linux root;"),
   'actual Linux normalizer transition and refusal checks must run for both new and original package paths and remain explicitly classified')
-assert.ok(workflow.includes('test-repository-startup-normalizer.py --node "$(readlink -f "$(command -v node)")"') &&
+const nodeFixture = read('scripts/test-repository-startup-toolchain.sh')
+assert.ok(nodeFixture.includes('$(node -p process.execPath)') &&
+  nodeFixture.includes('install -o root -g root -m 0755') &&
+  nodeFixture.includes('== "$source_sha"') && nodeFixture.includes(' --node "$node_dir/node"') &&
   legacyDrill.indexOf('systemctl is-active --quiet incudal-backend') < legacyDrill.indexOf('scripts/test-repository-startup-normalizer.py" "$old"'),
   'pre-install native fixtures must use the declared build Node; genuine installed-worker regression must retain its actual system interpreter')
 assert.ok(legacyDrill.includes('stage=actual-root-postflight-rollback') &&

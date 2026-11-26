@@ -171,11 +171,16 @@ jobs:
         run: |
           set -euo pipefail
           test "$(git rev-parse HEAD)" = '${{ github.sha }}'
-          python3 - <<'PY'
-          import json, os, pathlib
+          python3 - "$(readlink -f "$(node -p process.execPath)")" <<'PY'
+          import json, os, pathlib, stat, sys
+          selected = pathlib.Path(sys.argv[1]).lstat()
           print(json.dumps({'phase': 'root-interpreter-environment',
                             'sourceCommit': '${{ github.sha }}',
                             'systemNodeExists': pathlib.Path('/usr/bin/node').exists(),
-                            'systemNodeExecutable': os.access('/usr/bin/node', os.X_OK)}))
+                            'systemNodeExecutable': os.access('/usr/bin/node', os.X_OK),
+                            'configuredNode': {'regular': stat.S_ISREG(selected.st_mode),
+                                               'mode': oct(stat.S_IMODE(selected.st_mode)),
+                                               'uid': selected.st_uid, 'gid': selected.st_gid,
+                                               'links': selected.st_nlink, 'bytes': selected.st_size}}))
           PY
-          sudo /usr/bin/env -i PATH=/usr/sbin:/usr/bin:/sbin:/bin LC_ALL=C /usr/bin/python3 -I -B scripts/test-repository-startup-normalizer.py --node "$(readlink -f "$(command -v node)")"
+          bash scripts/test-repository-startup-toolchain.sh
