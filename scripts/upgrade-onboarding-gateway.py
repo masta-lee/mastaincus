@@ -19,8 +19,9 @@ import time
 STATE = Path('/var/lib/incudal-onboarding')
 HELPER = Path('/usr/local/sbin/incudal-onboarding-gateway')
 TOOLS = Path('/usr/local/libexec/incudal-onboarding-dns')
-NAMES = {'onboarding-gateway.py', 'refresh-host-gateway-endpoint.py', 'install-host-gateway-dns.sh', 'alpine-ssh-security.sh', 'host-security-maintenance.py'}
+NAMES = {'onboarding-gateway.py', 'refresh-host-gateway-endpoint.py', 'install-host-gateway-dns.sh', 'alpine-ssh-security.sh', 'host-security-maintenance.py', 'host-kernel-maintenance.py'}
 IDENTITY = {'publicKey', 'controlIp', 'network', 'managementSshPublicKey'}
+MAINTENANCE_MODULES = {'host-security-maintenance.py', 'host-kernel-maintenance.py'}
 DEADLINE = None
 
 
@@ -50,12 +51,16 @@ def read(path, limit=65536):
         return raw
 
 
-def command(args):
+def command(args, original_command=None):
     checkpoint()
+    require(original_command in (None, 'status'))
     timeout = min(20, max(0.001, DEADLINE - time.monotonic())) if DEADLINE is not None else 20
+    environment = {'PATH': '/usr/sbin:/usr/bin:/sbin:/bin', 'LC_ALL': 'C'}
+    if original_command is not None:
+        environment['SSH_ORIGINAL_COMMAND'] = original_command
     try:
         result = subprocess.run(args, capture_output=True, timeout=timeout, check=False,
-                            env={'PATH': '/usr/sbin:/usr/bin:/sbin:/bin', 'LC_ALL': 'C'})
+                            env=environment)
     except subprocess.TimeoutExpired:
         raise ValueError('GATEWAY_DNS_UPGRADE_TIMEOUT') from None
     checkpoint()
@@ -70,6 +75,10 @@ def identity():
     key = read(Path('/root/.ssh/incudal-host-management.pub'), 1024).decode().split()
     return {'publicKey': command(['/usr/bin/wg', 'show', 'incudal-mgmt', 'public-key']).decode().strip(),
             'controlIp': str(address.ip), 'network': str(address.network), 'managementSshPublicKey': ' '.join(key[:2])}
+
+
+def helper_status():
+    return json.loads(command(['/usr/bin/python3', '-I', '-B', str(HELPER)], 'status'))
 
 
 def snapshot():
@@ -113,7 +122,8 @@ def upgrade(request):
         raw = base64.b64decode(value, validate=True)
         # Python accepts CRLF during compilation, but a Linux shebang does not.
         # Reject noncanonical scripts before any identity reads or publication.
-        require(0 < len(raw) <= 131072 and b'\0' not in raw and b'\r' not in raw)
+        limit=96*1024 if name=='host-kernel-maintenance.py' else 131072
+        require(0 < len(raw) <= limit and b'\0' not in raw and b'\r' not in raw)
         if name.endswith('.py'):
             compile(raw, name, 'exec')
         sources[name] = raw
@@ -135,12 +145,22 @@ def upgrade(request):
         directories(TOOLS)
         # Publish the protocol-advertising entry point last. Interrupted copies
         # leave the old protocol visible and can be resumed with the same pin.
-        for name in ['refresh-host-gateway-endpoint.py', 'install-host-gateway-dns.sh', 'alpine-ssh-security.sh', 'host-security-maintenance.py', 'onboarding-gateway.py']:
+        for name in ['refresh-host-gateway-endpoint.py', 'install-host-gateway-dns.sh', 'alpine-ssh-security.sh', 'host-kernel-maintenance.py', 'host-security-maintenance.py', 'onboarding-gateway.py']:
             checkpoint()
             target = HELPER if name == 'onboarding-gateway.py' else TOOLS / name
             publish(target, sources[name], 0o755 if target == HELPER else 0o644)
         require(identity() == request['identity'] and snapshot() == before, 'GATEWAY_DNS_HOST_IDENTITY_CHANGED')
         require(all(read(HELPER if name == 'onboarding-gateway.py' else TOOLS / name, 131072) == raw for name, raw in sources.items()))
-        return {'dnsProtocolVersion': 2, 'keysAndRoutesPreserved': True}
     finally:
         os.close(lock)
+    # The new helper takes the same lock for status. Release it before the
+    # independent readback, rather than treating a busy child as verification.
+    status = helper_status()
+    hashes = {name: hashlib.sha256(sources[name]).hexdigest() for name in MAINTENANCE_MODULES}
+    require(type(status) is dict and {name: status.get(name) for name in IDENTITY} == request['identity'],
+            'GATEWAY_DNS_HOST_IDENTITY_CHANGED')
+    require(type(status.get('dnsProtocolVersion')) is int and status['dnsProtocolVersion'] == 2 and
+            type(status.get('maintenanceProtocolVersion')) is int and status['maintenanceProtocolVersion'] == 2 and
+            type(status.get('maintenanceModuleHashes')) is dict and status['maintenanceModuleHashes'] == hashes)
+    return {'dnsProtocolVersion': 2, 'maintenanceProtocolVersion': 2, 'maintenanceModuleHashes': hashes,
+            'keysAndRoutesPreserved': True}

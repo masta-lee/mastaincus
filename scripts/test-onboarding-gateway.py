@@ -7,12 +7,94 @@ import tempfile
 import io
 import base64
 import hashlib
+import os
+import sys
+import types
 import unittest
 from unittest import mock
+
+if os.name=='nt':
+    sys.modules.setdefault('fcntl',types.SimpleNamespace(LOCK_SH=1,LOCK_EX=2,LOCK_NB=4,LOCK_UN=8,flock=lambda *_:None))
 
 spec = importlib.util.spec_from_file_location("gateway", pathlib.Path(__file__).with_name("onboarding-gateway.py"))
 gateway = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(gateway)
+
+
+class MaintenanceCapabilityTests(unittest.TestCase):
+    def test_complete_protected_pair_advertises_full_source_hashes(self):
+        sources = {'host-security-maintenance.py': b'# apparmor module\n',
+                   'host-kernel-maintenance.py': b'# kernel module\n' + b'x' * 70000 + b'\n# final byte\n'}
+        def read(path, limit, complete=False):
+            self.assertEqual(path.parent, gateway.DNS_TOOLS)
+            self.assertEqual(limit, gateway.MAINTENANCE_MODULE_LIMITS[path.name])
+            self.assertTrue(complete)
+            return sources[path.name]
+        with mock.patch.object(gateway, 'read_protected_state', side_effect=read) as reader:
+            self.assertEqual(gateway.maintenance_capability(), {'maintenanceProtocolVersion': 2,
+                'maintenanceModuleHashes': {name: hashlib.sha256(raw).hexdigest() for name, raw in sources.items()}})
+            self.assertEqual(reader.call_count, 2)
+
+    def test_missing_unsafe_partial_or_empty_pair_never_advertises_support(self):
+        for position in [0, 1]:
+            for failure in [FileNotFoundError(), PermissionError(), ValueError('unsafe descriptor')]:
+                reads = [b'# first module\n', b'# second module\n']; reads[position] = failure
+                with self.subTest(position=position, failure=type(failure).__name__), \
+                     mock.patch.object(gateway, 'read_protected_state', side_effect=reads):
+                    self.assertEqual(gateway.maintenance_capability(), {})
+            reads = [b'# first module\n', b'# second module\n']; reads[position] = b''
+            with mock.patch.object(gateway, 'read_protected_state', side_effect=reads):
+                self.assertEqual(gateway.maintenance_capability(), {})
+
+    def test_unsafe_open_descriptor_cannot_create_capability(self):
+        safe = types.SimpleNamespace(st_uid=0, st_mode=0o100644, st_nlink=1, st_size=4)
+        for delta in [{'st_uid': 1000}, {'st_mode': 0o100666}, {'st_nlink': 2}, {'st_mode': 0o010644}, {'st_size': 131073}]:
+            changed = types.SimpleNamespace(**{**vars(safe), **delta})
+            with self.subTest(delta=delta), mock.patch.object(pathlib.Path, 'lstat', return_value=safe), \
+                 mock.patch.object(gateway.os, 'open', return_value=19), mock.patch.object(gateway.os, 'fstat', return_value=changed), \
+                 mock.patch.object(gateway.os, 'close'), mock.patch.object(gateway.os, 'read') as read, \
+                 mock.patch.object(gateway.os, 'O_NOFOLLOW', 0, create=True), mock.patch.object(gateway.os, 'O_NONBLOCK', 0, create=True):
+                self.assertEqual(gateway.maintenance_capability(), {})
+                read.assert_not_called()
+
+    def test_full_descriptor_read_never_hashes_a_short_fragment(self):
+        safe = types.SimpleNamespace(st_uid=0, st_mode=0o100644, st_nlink=1, st_size=9)
+        for chunks, expected in [([b'first', b'last', b'', b'first', b'last', b''], {
+                'maintenanceProtocolVersion': 2, 'maintenanceModuleHashes': {
+                    name: hashlib.sha256(b'firstlast').hexdigest() for name in gateway.MAINTENANCE_MODULE_LIMITS}}),
+                ([b'first', b''], {})]:
+            with mock.patch.object(pathlib.Path, 'lstat', return_value=safe), \
+                 mock.patch.object(gateway.os, 'open', return_value=19), mock.patch.object(gateway.os, 'fstat', return_value=safe), \
+                 mock.patch.object(gateway.os, 'close'), mock.patch.object(gateway.os, 'read', side_effect=chunks), \
+                 mock.patch.object(gateway.os, 'O_NOFOLLOW', 0, create=True), mock.patch.object(gateway.os, 'O_NONBLOCK', 0, create=True):
+                self.assertEqual(gateway.maintenance_capability(), expected)
+
+    def test_missing_pair_preserves_actual_legacy_status_and_identity(self):
+        info = types.SimpleNamespace(st_uid=0, st_mode=0o40700, st_nlink=1, st_size=0)
+        lock_info = types.SimpleNamespace(st_uid=0, st_mode=0o100600, st_nlink=1, st_size=0)
+        lock = mock.MagicMock(); lock.__enter__.return_value = lock; lock.fileno.return_value = 19
+        public = 'ssh-ed25519 ' + base64.b64encode(b'public-fixture').decode()
+        def run(*args):
+            if args[0] == 'ip': return json.dumps([{'addr_info': [{'family': 'inet', 'local': '10.253.240.1', 'prefixlen': 20}]}])
+            self.assertEqual(args, ('wg', 'show', gateway.INTERFACE, 'public-key'))
+            return base64.b64encode(bytes([8]) * 32).decode()
+        for failure in [FileNotFoundError(), ValueError('unsafe module')]:
+            output = io.StringIO()
+            with mock.patch.dict(gateway.os.environ, {'SSH_ORIGINAL_COMMAND': 'status'}), \
+                 mock.patch.object(pathlib.Path, 'mkdir'), mock.patch.object(pathlib.Path, 'lstat', return_value=info), \
+                 mock.patch.object(pathlib.Path, 'read_text', return_value=public), mock.patch.object(gateway.os, 'open', return_value=19), \
+                 mock.patch.object(gateway.os, 'fdopen', return_value=lock), mock.patch.object(gateway.os, 'fstat', return_value=lock_info), \
+                 mock.patch.object(gateway.fcntl, 'flock'), mock.patch.object(gateway, 'run', side_effect=run), \
+                 mock.patch.object(gateway, 'read_protected_state', side_effect=failure), mock.patch.object(gateway.sys, 'stdout', output), \
+                 mock.patch.object(gateway.os, 'O_NOFOLLOW', 0, create=True), mock.patch.object(gateway.os, 'O_NONBLOCK', 0, create=True):
+                gateway.main()
+            result = json.loads(output.getvalue())
+            self.assertEqual(result['dnsProtocolVersion'], 2)
+            self.assertEqual(result['controlIp'], '10.253.240.1')
+            self.assertEqual(result['network'], '10.253.240.0/20')
+            self.assertEqual(result['managementSshPublicKey'], public)
+            self.assertNotIn('maintenanceProtocolVersion', result)
+            self.assertNotIn('maintenanceModuleHashes', result)
 
 
 class RecoveryRouteTests(unittest.TestCase):
@@ -194,6 +276,32 @@ class GatewayTests(unittest.TestCase):
         self.assertEqual(len(assigned), 1000)
         self.assertNotIn(str(self.control.ip), assigned)
         self.assertTrue(all(ipaddress.ip_address(ip) in self.control.network for ip in assigned))
+
+    def test_address_selection_preserves_first_free_and_full_occupied_ranges(self):
+        cases=[
+            ('10.253.240.1/24',[], '10.253.240.2'),
+            ('10.253.240.9/28',['10.253.240.0/29','10.253.240.8/32'],'10.253.240.10'),
+            ('10.253.240.1/24',['10.253.240.0/25','10.253.240.64/26','10.253.240.128/32'],'10.253.240.129'),
+            ('10.253.240.1/24',['10.0.0.0/8'],None),
+            ('10.253.240.1/24',['192.0.2.0/24','2001:db8::/32'],'10.253.240.2'),
+            ('10.253.240.1/24',['10.253.240.2/32','10.253.240.4/30'],'10.253.240.3'),
+            ('10.253.240.0/31',[],'10.253.240.1'),
+            ('10.253.240.1/32',[],None),
+        ]
+        for address,routes,expected in cases:
+            control=ipaddress.ip_interface(address);occupied=[ipaddress.ip_network(route)for route in routes]
+            with self.subTest(address=address,routes=routes):
+                target=gateway.first_available_peer_address(control,occupied)
+                self.assertEqual(None if target is None else str(target),expected)
+        # Different gateway locations and overlapping saved/live reservations
+        # must agree with the original public first-free address contract.
+        for gateway_host in [1,3,7,14]:
+            control=ipaddress.ip_interface('10.253.240.'+str(gateway_host)+'/28')
+            for routes in [[],['10.253.240.0/30'],['10.253.240.4/30','10.253.240.0/29'],
+                           ['10.253.240.1/32','10.253.240.3/32','10.253.240.8/29']]:
+                occupied=[ipaddress.ip_network(route)for route in routes]
+                expected=next((ip for ip in control.network.hosts()if ip!=control.ip and not any(ip in net for net in occupied)),None)
+                self.assertEqual(gateway.first_available_peer_address(control,occupied),expected)
 
     def test_missing_ssh_reply_is_not_reported_as_changed_identity(self):
         from types import SimpleNamespace

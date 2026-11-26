@@ -62,6 +62,7 @@ func TestSecurityPackageCommandDiagnosticsRetainCauseWithoutPrivateOutput(t *tes
 		{"unrecognized option --private-token=secret", "unsupported-option"},
 		{"ERROR: UNTRUSTED https://mirror.invalid/token=secret", "signature-or-content"},
 		{"unable to select packages: private-host", "package-constraints"},
+		{"musl=1.2.6-r3: unable to select package (or its dependencies): private-host", "package-constraints"},
 		{"temporary error: private-dns-name", "network"},
 		{"sensitive unexpected output", "unknown"},
 	} {
@@ -559,9 +560,36 @@ func TestNativeMuslInterruptedOfflineReplay(t *testing.T) {
 			t.Fatal("signed old-musl fixture or durable original plan missing", err)
 		}
 		prepared = *receipt
-		if _, err := verifySecurityRuntimeCache(ctx, receipt); err != nil {
-			t.Fatal("original complete signed cache unavailable before interruption", err)
+		nativeMuslOriginalCandidateCache(t, ctx, receipt)
+		return interruption
+	})
+	cancel()
+	if !called || !errors.Is(err, interruption) {
+		t.Fatal("original prepared pre-dispatch interruption not exercised", called, err)
+	}
+	// Candidate acquisition is an online preparation step. APK 3.0.6 fetch
+	// opens without installed state and never marks its cached packages as
+	// available offline; upgrade/fix do. Exercise fetch on private copies of
+	// the original signed indexes, outside the real installer's 60-second pass.
+	// The original sealed cache and all subsequent installers stay offline.
+	candidateCheck, candidateDone := context.WithTimeout(ctx, 60*time.Second)
+	nativeMuslCandidateFetchGuards(t, candidateCheck, &prepared)
+	candidateDone()
+	pass, cancel = context.WithTimeout(ctx, 60*time.Second)
+	coreInterrupted := false
+	err = repairSecurityPackageTransactionWithInstaller(pass, securityLxcfsTargets, authorize, permit.HostIdentity, func(ctx context.Context, args []string) error {
+		coreInterrupted = true
+		index, offline := -1, false
+		for i, arg := range args {
+			if arg == "upgrade" {
+				index = i
+			}
+			offline = offline || arg == "--no-network"
 		}
+		if index < 0 || !offline {
+			t.Fatal("original core installer did not retain the offline cache")
+		}
+		nativeMuslOriginalCandidateCache(t, ctx, &prepared)
 		// Use the real signed APK, then restore the exact original registered
 		// database snapshot to model the file-before-database durability order.
 		// This is a controlled lost-write projection, not a claimed real reboot.
@@ -573,8 +601,8 @@ func TestNativeMuslInterruptedOfflineReplay(t *testing.T) {
 		return interruption
 	})
 	cancel()
-	if !called || !errors.Is(err, interruption) {
-		t.Fatal("original prepared installation interruption not exercised", called, err)
+	if !coreInterrupted || !errors.Is(err, interruption) {
+		t.Fatal("original offline core installation interruption not exercised", coreInterrupted, err)
 	}
 	output, err := run(ctx, "apk", "info", "-v")
 	partial, parseErr := securityInstalledPackages(string(output))
@@ -586,15 +614,17 @@ func TestNativeMuslInterruptedOfflineReplay(t *testing.T) {
 	fileOrderContinued := false
 	err = repairSecurityPackageTransactionWithInstaller(pass, securityLxcfsTargets, authorize, permit.HostIdentity, func(ctx context.Context, args []string) error {
 		fileOrderContinued = true
-		index := -1
+		index, offline := -1, false
 		for i, arg := range args {
 			if arg == "upgrade" {
 				index = i
 			}
+			offline = offline || arg == "--no-network"
 		}
-		if index < 0 {
+		if index < 0 || !offline {
 			t.Fatal("file-before-database replay did not retain the original upgrade")
 		}
+		nativeMuslOriginalCandidateCache(t, ctx, &prepared)
 		core := append(append([]string(nil), args[:index+1]...), "musl")
 		if _, err := run(ctx, "apk", core...); err != nil {
 			t.Fatal("actual original core replay failed", err)
@@ -683,6 +713,86 @@ func TestNativeMuslInterruptedOfflineReplay(t *testing.T) {
 		t.Fatal("new signed plan did not retain the actual current world", err)
 	}
 	t.Log("PASS actual signed APK with controlled exact before-images: both file/database commit orderings, original cache offline payload repair, complete plan/world confirmation, unchanged installed repeat, real maintenance-before-tool-repair order and private prior evidence")
+}
+
+func nativeMuslOriginalCandidateCache(t *testing.T, ctx context.Context, receipt *securityRuntimeReceipt) string {
+	t.Helper()
+	cache, err := verifySecurityRuntimeCache(ctx, receipt)
+	if err != nil {
+		t.Fatal("original complete signed cache unavailable before interruption", err)
+	}
+	loader, err := verifyCachedSecurityMuslLoader(ctx, cache, receipt.Expected["musl"])
+	if err != nil || loader != receipt.LoaderExpected {
+		t.Fatal("original offline candidate signature or exact loader not confirmed", err)
+	}
+	return cache
+}
+
+func nativeMuslCandidateFetchGuards(t *testing.T, ctx context.Context, receipt *securityRuntimeReceipt) {
+	t.Helper()
+	newCache := func() string {
+		t.Helper()
+		directory, err := os.MkdirTemp("/var/lib/incudal-agent", ".security-packages-*")
+		if err != nil {
+			t.Fatal("disposable candidate-check cache unavailable", err)
+		}
+		t.Cleanup(func() { _ = os.RemoveAll(directory) })
+		return directory
+	}
+	original := nativeMuslOriginalCandidateCache(t, ctx, receipt)
+	indexes := newCache()
+	indexCount := 0
+	for name, want := range receipt.CacheFiles {
+		if name != "repositories" && !(strings.HasPrefix(name, "APKINDEX.") && strings.HasSuffix(name, ".tar.gz")) {
+			continue
+		}
+		data, mode := nativeMuslOriginalFile(t, ctx, filepath.Join(original, name))
+		copyPath := filepath.Join(indexes, name)
+		if err := os.WriteFile(copyPath, data, mode); err != nil {
+			t.Fatal("disposable original signed index copy unavailable", err)
+		}
+		if err := os.Chmod(copyPath, mode); err != nil {
+			t.Fatal("disposable original signed index permissions unavailable", err)
+		}
+		hash, _, err := hashSecurityRuntimeCacheFile(ctx, copyPath)
+		if err != nil || hash != want {
+			t.Fatal("disposable signed index copy differs from the original receipt", err)
+		}
+		if name != "repositories" {
+			indexCount++
+		}
+	}
+	if indexCount == 0 {
+		t.Fatal("original signed indexes missing from the fetch fixture")
+	}
+	base := []string{"--repositories-file", filepath.Join(indexes, "repositories"), "--cache-dir", indexes, "--cache-max-age", "60", "--wait", "5", "--timeout", "15"}
+	version := receipt.Expected["musl"]
+	cache := newCache()
+	if loader, err := fetchSecurityMuslLoader(ctx, base, cache, version); err != nil || loader != receipt.LoaderExpected {
+		t.Fatal("exact original signed musl candidate not fetched during online preparation", err)
+	}
+	if err := os.WriteFile(filepath.Join(cache, "musl-candidate", "unexpected.apk"), []byte("disposable extra candidate"), 0600); err != nil {
+		t.Fatal("disposable extra candidate fixture unavailable", err)
+	}
+	if _, err := verifyCachedSecurityMuslLoader(ctx, cache, version); err == nil {
+		t.Fatal("more than one candidate admitted after successful exact fetch")
+	}
+	empty := newCache()
+	if err := os.Mkdir(filepath.Join(empty, "musl-candidate"), 0700); err != nil {
+		t.Fatal("disposable zero-candidate fixture unavailable", err)
+	}
+	if _, err := verifyCachedSecurityMuslLoader(ctx, empty, version); err == nil {
+		t.Fatal("zero candidates admitted without a signed package")
+	}
+	unavailable := newCache()
+	if _, err := fetchSecurityMuslLoader(ctx, base, unavailable, "1.2.6-r999"); err == nil {
+		t.Fatal("unavailable exact version admitted after solver failure")
+	}
+	if files, err := os.ReadDir(filepath.Join(unavailable, "musl-candidate")); err != nil || len(files) != 0 {
+		t.Fatal("unavailable exact version produced a substitute candidate", err)
+	}
+	nativeMuslOriginalCandidateCache(t, ctx, receipt)
+	t.Log("PASS actual online preparation using copied original signed indexes: exact version and loader accepted; unavailable version, zero files and extra candidate rejected; original sealed cache unchanged")
 }
 
 func nativeMuslOriginalFile(t *testing.T, ctx context.Context, path string) ([]byte, os.FileMode) {

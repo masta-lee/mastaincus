@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict'
 import { randomInt, randomUUID } from 'node:crypto'
+import Fastify from 'fastify'
 
 const url=new URL(process.env.DATABASE_URL||'')
 assert.equal(url.hostname,'127.0.0.1')
@@ -17,12 +18,17 @@ const {hostMaintenanceBlocked}=await import('../src/lib/host-maintenance-gate.js
 const {beginHostMutation,withHostMaintenanceLane}=await import('../src/lib/host-operation-lane.js')
 const {maintenanceWireOperation}=await import('../src/services/host-maintenance-channel.js')
 const {SECURITY_HARDENING_ENABLED_KEY,SECURITY_HARDENING_REVISION}=await import('../src/lib/security-hardening.js')
+const {createAgentBodyHash,createAgentSignature,generateAgentId,generateAgentSecret,hashAgentSecret}=await import('../src/lib/agent-auth.js')
+const {encryptSensitiveData}=await import('../src/lib/security.js')
+const {default:agentRoutes}=await import('../src/routes/agent.js')
 globalThis.setInterval=originalSetInterval
 const prefix='maintenance-'+randomUUID().slice(0,8),recipe=process.env.MAINTENANCE_TEST_BOOTLOADER==='grub'?'alpine-apparmor-grub-v1':'alpine-apparmor-extlinux-v1'
 const policy=await prisma.systemConfig.findUnique({where:{key:SECURITY_HARDENING_ENABLED_KEY}})
 const admin=await prisma.user.create({data:{username:prefix,passwordHash:'fixture',role:'admin'}})
 const batch=await prisma.hostOnboardingBatch.create({data:{id:randomUUID(),name:prefix,accountLabel:prefix,createdById:admin.id,defaults:{}}})
 const hosts:number[]=[]
+const app=Fastify(),originalFetch=globalThis.fetch
+let registeredAgentRoutes=false
 let held=false,losePrepare=false,loseReboot=false,loseRollback=false,loseRestore=false,failBeforeDispatch=false,mutateInventory=false,reportApparmor=true,dependencyInstall=false,foreignOperation=false
 let invalidOperations:unknown=undefined
 let commands:string[]=[],reboots=0,currentBoot=randomUUID(),remotePhase='prepared'
@@ -220,7 +226,7 @@ try {
   assert.equal((await state(amd.id)).maintenance.architecture,'x86_64');assert.equal((await state(amd.id)).maintenance.phase,'waiting-boot')
   for(const [delta,reason] of [[{poolFaulted:true},'HARDENING_HOST_QUARANTINED'],[{publicIpSyncBlocked:true},'HARDENING_PUBLIC_IP_PENDING'],
     [{installPending:true},'HARDENING_INSTALL_PENDING']] as const) {
-    const count=commands.length
+    const count:number=commands.length
     await prisma.host.update({where:{id:amd.id},data:delta})
     await resumeAutomaticHostMaintenance(amd.id,deps)
     assert.equal(commands.length,count,'resume must reacquire current host gates')
@@ -356,6 +362,50 @@ try {
     await resumeAutomaticHostMaintenance(amd.id,deps)
     assert.equal((await state(amd.id)).maintenance.phase,'aborted','expired undispatched intent rolls back its exact original preparation')
   } finally {Date.now=realNow}
+  await reset(amd.id,'x86_64')
+  const secret=generateAgentSecret()
+  const heartbeatAgent=await prisma.hostAgent.update({where:{hostId:amd.id},data:{agentId:generateAgentId(),
+    secretHash:hashAgentSecret(secret),secretEncrypted:encryptSensitiveData(secret),lastSeenAt:null}})
+  for(const name of ['authenticate','authenticateAdmin'])app.decorate(name,async(request:any)=>{
+    request.user={id:admin.id,sid:prefix,iat:Math.floor(Date.now()/1000)+1}
+  })
+  globalThis.fetch=async()=>new Response(JSON.stringify({tag_name:'agent-v1.0.3',assets:[]}),{
+    status:200,headers:{'content-type':'application/json'}})
+  await app.register(agentRoutes,{prefix:'/agent'});registeredAgentRoutes=true
+  let prepared!:()=>void,releasePreparation!:()=>void
+  const preparing=new Promise<void>(resolve=>{prepared=resolve}),gate=new Promise<void>(resolve=>{releasePreparation=resolve})
+  const waitingPrepare=prepareAutomaticHostMaintenance(amd.id,{...deps,command:async(target:any,operation:any)=>{
+    if(operation.action==='prepare'){prepared();await gate}
+    return deps.command(target,operation)
+  }})
+  let heartbeat:Promise<unknown>|undefined,preparationTimer:ReturnType<typeof setTimeout>|undefined,heartbeatTimer:ReturnType<typeof setTimeout>|undefined
+  try{
+    await Promise.race([preparing,waitingPrepare.then(()=>{throw Error('HARDENING_MAINTENANCE_TEST_PREPARE_NOT_REACHED')}),
+      new Promise<never>((_,reject)=>{preparationTimer=setTimeout(()=>reject(Error('HARDENING_MAINTENANCE_TEST_PREPARE_TIMEOUT')),15000)})])
+    clearTimeout(preparationTimer)
+    const payload={version:'maintenance-lock-fixture',runtime:{goos:'linux',goarch:'amd64'},
+      metrics:{heartbeatIntervalSeconds:30,bootId:currentBoot}}
+    const timestamp=String(Date.now()),nonce=randomUUID(),bodyHash=createAgentBodyHash(payload)
+    heartbeat=app.inject({method:'POST',url:'/agent/heartbeat',payload,headers:{
+      'x-incudal-agent-id':heartbeatAgent.agentId,'x-incudal-timestamp':timestamp,'x-incudal-nonce':nonce,
+      'x-incudal-body-sha256':bodyHash,'x-incudal-signature':createAgentSignature(secret,{method:'POST',path:'/agent/heartbeat',timestamp,nonce,bodyHash})
+    }}).then(response=>{
+      if(response.statusCode!==200)assert.fail('HARDENING_MAINTENANCE_TEST_HEARTBEAT_'+
+        (/^AGENT_[A-Z_]+$/.test(response.json().code||'')?response.json().code:'REJECTED'))
+      assert.equal(response.json().ok,true)
+    })
+    await Promise.race([heartbeat,new Promise<never>((_,reject)=>{
+      heartbeatTimer=setTimeout(()=>reject(Error('HARDENING_MAINTENANCE_TEST_HEARTBEAT_LOCKED')),1500)
+    })])
+    const live=await prisma.hostAgent.findUniqueOrThrow({where:{hostId:amd.id}})
+    assert.equal(live.agentId,heartbeatAgent.agentId);assert.equal(live.secretHash,heartbeatAgent.secretHash)
+    assert.ok(live.lastSeenAt);assert.equal(reboots,0)
+  }finally{
+    clearTimeout(preparationTimer);clearTimeout(heartbeatTimer);releasePreparation()
+    await waitingPrepare;await heartbeat?.catch(()=>{})
+  }
+  await arrive(amd.id);await resumeAutomaticHostMaintenance(amd.id,deps)
+  assert.equal((await state(amd.id)).maintenance.phase,'verified')
   await reset(amd.id,'x86_64');failBeforeDispatch=true;await prepareAutomaticHostMaintenance(amd.id,deps)
   await prisma.user.update({where:{id:admin.id},data:{role:'user'}})
   const revoked=commands.length;await resumeAutomaticHostMaintenance(amd.id,deps)
@@ -370,7 +420,10 @@ try {
   const after=await prisma.host.findUniqueOrThrow({where:{id:arm.id}})
   for(const key of ['url','userId','managementSshHost','managementSshPort','managementSshUser','serverCertificate','serverFingerprint'] as const)assert.equal(after[key],arm[key],key+' preserved')
   console.log('PASS isolated PostgreSQL maintenance: AMD64/ARM64, exact protocol, lost prepare/reboot replies, crash-before-dispatch, single reboot, durable global fence, late boot, stale Agent/unknown inventory, restore hold, revoked actor/policy/pin and unchanged host identity; no native reboot acceptance')
+  console.log('PASS actual HMAC liveness during the original AppArmor maintenance preparation; current Agent credentials and original boot recovery retained')
 }finally{
+  globalThis.fetch=originalFetch
+  if(registeredAgentRoutes)await app.close()
   await prisma.host.deleteMany({where:{id:{in:hosts}}})
   await prisma.hostOnboardingBatch.delete({where:{id:batch.id}})
   await prisma.user.delete({where:{id:admin.id}})

@@ -13,6 +13,7 @@ export type HardeningState = {
   remoteRequestId?: string
   incusCompat?: unknown
   maintenance?: unknown
+  kernel?: unknown
   phase?: HardeningPhase; diagnostic?: HardeningDiagnostic
   leaseToken?: string; host?: { apparmor: HardeningCheck; ssh: HardeningCheck; preflight?: HardeningCheck }
   leaseUntil?: string

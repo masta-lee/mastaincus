@@ -15,8 +15,8 @@ const fail=()=>{throw new Error('HARDENING_JOURNAL_CONFLICT')}
 export function readHostMaintenanceIntent(value:unknown):HostMaintenanceIntent {
   const row=object(value)
   if(row.revision!==HOST_MAINTENANCE_REVISION||typeof row.requestId!=='string'||!uuid.test(row.requestId)||
-    typeof row.bootId!=='string'||!uuid.test(row.bootId)||!digest.test(String(row.identityHash))||!digest.test(String(row.prepareHash))||
-    !['x86_64','aarch64'].includes(String(row.architecture))||!['prepared','reboot-intent','waiting-boot','restoring','verified','blocked','aborted'].includes(String(row.phase))||
+    typeof row.bootId!=='string'||!uuid.test(row.bootId)||typeof row.identityHash!=='string'||!digest.test(row.identityHash)||typeof row.prepareHash!=='string'||!digest.test(row.prepareHash)||
+    typeof row.architecture!=='string'||!['x86_64','aarch64'].includes(row.architecture)||typeof row.phase!=='string'||!['prepared','reboot-intent','waiting-boot','restoring','verified','blocked','aborted'].includes(row.phase)||
     typeof row.rebootIssued!=='boolean'||typeof row.recipe!=='string'||!/^[a-z0-9-]{1,80}$/.test(row.recipe)||
     typeof row.startedAt!=='string'||typeof row.deadline!=='string'||!Number.isFinite(Date.parse(row.startedAt))||
     !Number.isFinite(Date.parse(row.deadline))||Date.parse(row.deadline)<=Date.parse(row.startedAt)||
@@ -26,8 +26,8 @@ export function readHostMaintenanceIntent(value:unknown):HostMaintenanceIntent {
     const c=object(value)
     if(![c.id,c.hostId,c.userId].every(n=>Number.isSafeInteger(n)&&Number(n)>0&&Number(n)<=2147483647)||
       typeof c.incusId!=='string'||!/^[a-zA-Z0-9][a-zA-Z0-9_.-]{0,62}$/.test(c.incusId)||
-      !uuid.test(String(c.uuid))||!uuid.test(String(c.attempt))||!digest.test(String(c.identityHash))||
-      !['running','stopped','suspended'].includes(String(c.state)))fail()
+      typeof c.uuid!=='string'||!uuid.test(c.uuid)||typeof c.attempt!=='string'||!uuid.test(c.attempt)||typeof c.identityHash!=='string'||!digest.test(c.identityHash)||
+      typeof c.state!=='string'||!['running','stopped','suspended'].includes(c.state))fail()
     let boot:CustomerBootBaseline['boot']
     if(c.boot!==undefined) {
       const b=object(c.boot)

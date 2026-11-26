@@ -634,7 +634,11 @@ func fetchSecurityMuslLoader(ctx context.Context, base []string, cache, version 
 	if err := os.Mkdir(directory, 0700); err != nil {
 		return "", err
 	}
-	if _, err := runSecurityPackageCommand(ctx, "candidate-fetch", append(append([]string(nil), base...), "fetch", "--output", directory, "musl="+version)...); err != nil {
+	// APK 3.0.6's ordinary exact query compares the full dependency atom with
+	// the package name. The recursive solver parses the exact version correctly.
+	// A solver failure can still return exit 0, so the single signed candidate
+	// and its exact identity remain mandatory below.
+	if _, err := runSecurityPackageCommand(ctx, "candidate-fetch", append(append([]string(nil), base...), "fetch", "--recursive", "--output", directory, "musl="+version)...); err != nil {
 		return "", err
 	}
 	return verifyCachedSecurityMuslLoader(ctx, cache, version)

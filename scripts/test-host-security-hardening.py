@@ -71,9 +71,12 @@ class SecurityTests(unittest.TestCase):
         def execute(command,**options):
             self.calls.append((command,options))
             if command[0]=='ssh-keyscan':return types.SimpleNamespace(stdout=b'known',returncode=0)
-            return types.SimpleNamespace(stdout=json.dumps({'phase':'customers-restored'}).encode(),returncode=0)
+            output=io.StringIO()
+            with redirect_stdout(output):exec(compile(options['input'],'fixed-stdin-fixture','exec'),{'__name__':'__main__'})
+            return types.SimpleNamespace(stdout=output.getvalue().encode(),returncode=0)
         def source(path,*_):
-            if path.name=='host-security-maintenance.py':return b"# fixed-maintenance-source\nif __name__=='__main__':main()"
+            if path.name=='host-security-maintenance.py':return b"def assert_apparmor_idle(value):\n assert value['recipe']=='alpine-kernel-patch-v1'\ndef execute(value):\n assert len(value)==10\n KERNEL_JOURNAL_GUARD(value)\n return {'phase':'customers-restored','recipe':value['recipe']}\nif __name__=='__main__':raise AssertionError('legacy main ran')\n"
+            if path.name=='host-kernel-maintenance.py':return b"def assert_kernel_idle(value):\n assert value['recipe'].startswith('alpine-apparmor-')\ndef execute(value):\n assert len(value)==11\n APPARMOR_JOURNAL_GUARD(value)\n return {'phase':'inspected','recipe':value['recipe']}\nif __name__=='__main__':raise AssertionError('kernel main ran')\n"
             return json.dumps({'managementIp':'10.253.240.2','nodePublicKey':self.peer}).encode()
         with tempfile.TemporaryDirectory() as directory,patch.object(gateway.sys,'stdin',types.SimpleNamespace(buffer=io.BytesIO(json.dumps(request).encode()))), \
             patch.object(gateway.time,'time',return_value=1),patch.object(gateway,'read_protected_state',side_effect=source), \
@@ -93,7 +96,8 @@ class SecurityTests(unittest.TestCase):
         self.assertEqual(len(self.calls),2)
         command,options=self.calls[-1]
         self.assertIn('StrictHostKeyChecking=yes',command)
-        self.assertIn(b'# fixed-maintenance-source',options['input'])
+        self.assertIn(b'incudal-host-security-maintenance.py',options['input'])
+        self.assertIn(b'incudal-host-kernel-maintenance.py',options['input'])
         for delta in [{'name':'../../shadow'},{'state':'Frozen'},{'autostart':True},{'uuid':'changed'},{'password':'override'}]:
             self.calls=[]
             with self.assertRaises(ValueError):self.maintenance_transport({**operation,'customers':[{**customer,**delta}]})
@@ -102,6 +106,21 @@ class SecurityTests(unittest.TestCase):
             self.calls=[]
             with self.assertRaises(ValueError):self.maintenance_transport({**operation,**delta})
             self.assertEqual(self.calls,[])
+
+    def test_fixed_kernel_protocol_stays_separate_from_legacy_customers(self):
+        operation={'action':'inspect','nodeId':self.job,'requestId':self.job,'identityHash':'a'*64,'bootId':self.job,
+            'prepareHash':'0'*64,'recipe':'alpine-kernel-patch-v1','architecture':'aarch64','expiresAt':59000,'customers':[],
+            'expectedPlanHash':None}
+        self.assertEqual(self.maintenance_transport(operation),{'phase':'inspected','recipe':'alpine-kernel-patch-v1'})
+        self.assertEqual(len(self.calls),2)
+        for delta in [{'expectedPlanHash':'b'*64},{'prepareHash':None},{'prepareHash':'b'*64},{'action':'restore-customers'},
+                      {'customers':[{'name':'customer'}]},{'expectedPlanHash':[]},{'script':'override'}]:
+            self.calls=[]
+            with self.assertRaises(ValueError):self.maintenance_transport({**operation,**delta})
+            self.assertEqual(self.calls,[])
+        missing=dict(operation);del missing['expectedPlanHash'];self.calls=[]
+        with self.assertRaises(ValueError):self.maintenance_transport(missing)
+        self.assertEqual(self.calls,[])
 
     def host_script(self, unsafe=False, changed=False, fixed=False, patch_failure=False, architecture='x86_64',
                     memory=262144, pressure=0, disk=268435456, inodes=1024, readonly=False, package_busy=False, boot_changed=False, boot_disabled=False, page_size=None):

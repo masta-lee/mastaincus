@@ -88,6 +88,7 @@ const EXCLUDED_FROM_SUITE = new Map([
   ['test:hardening-saleability', 'requires isolated local PostgreSQL; AMD64/ARM64 hardening reinspection through actual inventory, public catalog, admin route, locked allocator and enrollment; no native boot acceptance'],
   ['test:onboarding-hardening-continuation', 'requires isolated local PostgreSQL; competing schedulers, expired enrollment recovery, original maintenance, both architectures and actual saleability; remote boot is a fixture'],
   ['test:host-security-maintenance', 'requires isolated PostgreSQL; persisted maintenance intent, lost replies/crash continuation, exact fixed protocol, dual architecture, current permissions and no duplicate reboot; transport fixtures do not prove native reboot'],
+  ['test:host-kernel-maintenance', 'requires isolated PostgreSQL; original empty inventory, exact kernel plan, durable mutual exclusion, reply-loss recovery and retained saleability; fixtures do not prove a native kernel boot'],
   ['test:customer-boot-recovery', 'requires isolated local PostgreSQL and OpenSSL; pinned mTLS exact original-instance start, lost receipt, current billing/stop/delete/authority and original password/network/config preservation; not native boot acceptance'],
   ['test:alpine-ssh-maintenance', 'requires isolated PostgreSQL; admin/identity/task fencing, unchanged customer data, original password/session and retry receipts'],
   ['test:alpine-ssh-native', 'requires disposable Linux Docker; signed Alpine backport with continuous real SSH and SFTP sessions'],

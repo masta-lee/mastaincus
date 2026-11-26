@@ -25,6 +25,7 @@ CONFIG = pathlib.Path("/etc/wireguard") / (INTERFACE + ".conf")
 STATE = pathlib.Path("/var/lib/incudal-onboarding")
 MANAGEMENT_PUBLIC_KEY = pathlib.Path("/root/.ssh/incudal-host-management.pub")
 DNS_TOOLS = pathlib.Path('/usr/local/libexec/incudal-onboarding-dns')
+MAINTENANCE_MODULE_LIMITS = {'host-security-maintenance.py': 65536, 'host-kernel-maintenance.py': 96 * 1024}
 
 
 def harden_host(job, control):
@@ -370,13 +371,23 @@ def maintain_host(job, control):
     keys={'managementIp','sshPort','sshFingerprint','nodePublicKey','operation'}
     if not isinstance(request,dict) or set(request)!=keys:raise ValueError('invalid maintenance request')
     operation=request['operation']
-    if not isinstance(operation,dict) or set(operation)!={'action','nodeId','requestId','identityHash','bootId','prepareHash','recipe','architecture','expiresAt','customers'}:raise ValueError('invalid operation')
-    if operation['nodeId']!=job or operation['recipe'] not in ['alpine-apparmor-extlinux-v1','alpine-apparmor-grub-v1'] or operation['action'] not in ['prepare','status','reboot','rollback','restore-customers']:raise ValueError('invalid operation')
+    if not isinstance(operation,dict):raise ValueError('invalid operation')
+    kernel=operation.get('recipe')=='alpine-kernel-patch-v1'
+    fields={'action','nodeId','requestId','identityHash','bootId','prepareHash','recipe','architecture','expiresAt','customers'}
+    if set(operation)!=fields|({'expectedPlanHash'} if kernel else set()):raise ValueError('invalid operation')
+    recipes=['alpine-kernel-patch-v1'] if kernel else ['alpine-apparmor-extlinux-v1','alpine-apparmor-grub-v1']
+    actions=['inspect','prepare','status','reboot','rollback','verify'] if kernel else ['prepare','status','reboot','rollback','restore-customers']
+    if operation['nodeId']!=job or operation['recipe'] not in recipes or operation['action'] not in actions:raise ValueError('invalid operation')
     if type(operation['expiresAt']) is not int or not time.time()*1000<operation['expiresAt']<=time.time()*1000+60000:raise ValueError('expired maintenance')
     if any(not isinstance(operation[key],str) or not re.fullmatch(r'[a-f0-9]{8}-(?:[a-f0-9]{4}-){3}[a-f0-9]{12}',operation[key]) for key in ['nodeId','requestId','bootId']):raise ValueError('invalid identity')
     if not isinstance(operation['identityHash'],str) or not re.fullmatch('[a-f0-9]{64}',operation['identityHash']):raise ValueError('invalid identity')
     if operation['architecture'] not in ['x86_64','aarch64'] or operation['prepareHash'] is not None and (not isinstance(operation['prepareHash'],str) or not re.fullmatch('[a-f0-9]{64}',operation['prepareHash'])):raise ValueError('invalid recipe')
     if not isinstance(operation['customers'],list) or len(operation['customers'])>1:raise ValueError('invalid customer baseline')
+    if kernel:
+        if operation['customers']!=[] or not isinstance(operation['prepareHash'],str):raise ValueError('invalid kernel baseline')
+        if operation['action']=='inspect':
+            if operation['expectedPlanHash'] is not None or operation['prepareHash']!='0'*64:raise ValueError('invalid kernel plan')
+        elif not isinstance(operation['expectedPlanHash'],str) or not re.fullmatch('[a-f0-9]{64}',operation['expectedPlanHash']):raise ValueError('invalid kernel plan')
     for customer in operation['customers']:
         if not isinstance(customer,dict) or set(customer)!={'name','uuid','attempt','state','autostart'} or not isinstance(customer['name'],str) or not re.fullmatch('[a-zA-Z0-9][a-zA-Z0-9_.-]{0,62}',customer['name']) or customer['state'] not in ['running','stopped','suspended']:raise ValueError('invalid customer baseline')
         if customer['autostart'] is not None and customer['autostart'] not in ['true','false','0','1']:raise ValueError('invalid customer baseline')
@@ -388,6 +399,7 @@ def maintain_host(job, control):
     allowed=dict(line.split(maxsplit=1) for line in run('wg','show',INTERFACE,'allowed-ips').splitlines())
     if allowed.get(peer)!=str(address)+'/32':raise ValueError('route mismatch')
     source=read_protected_state(DNS_TOOLS/'host-security-maintenance.py',65536)
+    kernel_source=read_protected_state(DNS_TOOLS/'host-kernel-maintenance.py',96*1024)
     scan=subprocess.run(['ssh-keyscan','-T','5','-p',str(request['sshPort']),'-t','ed25519,rsa,ecdsa',str(address)],capture_output=True,timeout=15,check=False)
     known=verified_host_scan(scan,request['sshFingerprint'])
     with tempfile.TemporaryDirectory(prefix='incudal-maintenance-',dir='/root') as directory:
@@ -397,7 +409,18 @@ def maintain_host(job, control):
           '-p',str(request['sshPort']),'root@'+str(address),'python3 -I -B -']
         encoded=base64.b64encode(json.dumps(operation).encode()).decode()
         # Execute the fixed packaged module, not a caller-provided script.
-        script="REQUEST=__import__('json').loads(__import__('base64').b64decode('"+encoded+"'))\n"+source.decode().replace("if __name__=='__main__':main()", "if __name__=='__main__':\n try:print(json.dumps(execute(REQUEST)))\n except Exception as error:\n  code=str(error);print(json.dumps({'error':code if re.fullmatch('HARDENING_[A-Z_]{1,90}',code) else 'HARDENING_PREPARE_FAILED'}));raise SystemExit(1)")
+        apparmor_encoded=base64.b64encode(source).decode()
+        kernel_encoded=base64.b64encode(kernel_source).decode()
+        script=("import base64,json,re\nREQUEST=json.loads(base64.b64decode("+repr(encoded)+"))\n"
+          "try:\n kernel_scope={'__name__':'incudal_kernel_fixed'}\n"
+          " exec(compile(base64.b64decode("+repr(kernel_encoded)+"),'incudal-host-kernel-maintenance.py','exec'),kernel_scope)\n"
+          " apparmor_scope={'__name__':'incudal_apparmor_fixed'}\n"
+          " exec(compile(base64.b64decode("+repr(apparmor_encoded)+"),'incudal-host-security-maintenance.py','exec'),apparmor_scope)\n"
+          " apparmor_scope['KERNEL_JOURNAL_GUARD']=kernel_scope['assert_kernel_idle']\n"
+          " kernel_scope['APPARMOR_JOURNAL_GUARD']=apparmor_scope['assert_apparmor_idle']\n"
+          " scope=kernel_scope if REQUEST['recipe']=='alpine-kernel-patch-v1' else apparmor_scope\n"
+          " print(json.dumps(scope['execute'](REQUEST)))\n"
+          "except Exception as error:\n code=str(error);print(json.dumps({'error':code if re.fullmatch('HARDENING_[A-Z_]{1,90}',code) else 'HARDENING_PREPARE_FAILED'}));raise SystemExit(1)\n")
         result=subprocess.run(command,input=script.encode(),capture_output=True,timeout=55000/1000,check=False)
         if len(result.stdout)>8192:raise GatewayOperationError('HARDENING_PREPARE_FAILED')
         try:receipt=json.loads(result.stdout,object_pairs_hook=strict_json)
@@ -407,6 +430,18 @@ def maintain_host(job, control):
             permitted=['HARDENING_JOURNAL_CONFLICT','HARDENING_REMOTE_BUSY','HARDENING_PREPARE_FAILED','HARDENING_RECIPE_UNSUPPORTED','HARDENING_RETRY_EXHAUSTED',
               'HARDENING_CONTROL_PLANE_TARGET','HARDENING_BOOT_LAYOUT_UNSUPPORTED','HARDENING_APPARMOR_KERNEL_UNSUPPORTED',
               'HARDENING_APPARMOR_TOOLS_REQUIRED','HARDENING_PREPARE_INCOMPLETE','HARDENING_FILESYSTEM_READONLY','HARDENING_DISK_LOW','HARDENING_MEMORY_LOW','HARDENING_PACKAGE_BUSY','HARDENING_REQUEST_EXPIRED','HARDENING_IDENTITY_CHANGED','HARDENING_CUSTOMER_BOOT_RECOVERY_UNVERIFIED','HARDENING_BUSY','HARDENING_GUEST_RUNTIME_UNSAFE']
+            permitted+=['HARDENING_KERNEL_JOURNAL_CONFLICT','HARDENING_KERNEL_OTHER_JOURNAL_UNKNOWN','HARDENING_KERNEL_OTHER_MAINTENANCE',
+              'HARDENING_KERNEL_PREPARE_FAILED','HARDENING_KERNEL_STEP_TIMEOUT','HARDENING_KERNEL_CHILD_PENDING',
+              'HARDENING_KERNEL_UNTRUSTED_PATH','HARDENING_KERNEL_SOURCE_CHANGED','HARDENING_KERNEL_CACHE_CHANGED',
+              'HARDENING_KERNEL_PLAN_CHANGED','HARDENING_KERNEL_REQUEST_UNKNOWN','HARDENING_KERNEL_BRANCH_UNSUPPORTED',
+              'HARDENING_KERNEL_FLAVOR_AMBIGUOUS','HARDENING_KERNEL_VERSION_UNSUPPORTED','HARDENING_KERNEL_BOOT_LAYOUT_UNSUPPORTED',
+              'HARDENING_KERNEL_BOOT_UNKNOWN','HARDENING_KERNEL_RUNNING_PACKAGE_MISMATCH','HARDENING_KERNEL_SERIES_CHANGE_REQUIRED',
+              'HARDENING_KERNEL_HOST_OCCUPIED','HARDENING_KERNEL_HOST_BUSY','HARDENING_KERNEL_PACKAGE_PLAN_CHANGED',
+              'HARDENING_KERNEL_PACKAGE_SOURCE_UNKNOWN','HARDENING_KERNEL_PACKAGE_POLICY_UNKNOWN','HARDENING_KERNEL_WORLD_CONSTRAINT',
+              'HARDENING_KERNEL_PACKAGE_PAYLOAD_INCOMPLETE','HARDENING_KERNEL_PACKAGE_FORMAT_UNSUPPORTED','HARDENING_KERNEL_TOOLS_REQUIRED',
+              'HARDENING_KERNEL_PREPARE_INCOMPLETE','HARDENING_KERNEL_PREPARE_CHANGED','HARDENING_KERNEL_BOOT_UNCONFIRMED',
+              'HARDENING_KERNEL_REBOOT_UNCONFIRMED','HARDENING_KERNEL_ROLLBACK_INCOMPLETE','HARDENING_KERNEL_ROLLBACK_BOOT_UNCONFIRMED',
+              'HARDENING_KERNEL_CLOCK_UNREADY','HARDENING_KERNEL_DNS_UNREADY','HARDENING_KERNEL_INCUS_UNREADY']
             raise GatewayOperationError(code if code in permitted else 'HARDENING_REMOTE_RESULT_UNKNOWN')
         return receipt
 
@@ -441,7 +476,7 @@ def strict_json(pairs):
     return result
 
 
-def read_protected_state(path, limit):
+def read_protected_state(path, limit, complete=False):
     for parent in [path, *path.parents]:
         info = parent.lstat()
         if info.st_uid != 0 or stat.S_ISLNK(info.st_mode) or info.st_mode & 0o022:
@@ -451,11 +486,36 @@ def read_protected_state(path, limit):
         info = os.fstat(descriptor)
         if not stat.S_ISREG(info.st_mode) or info.st_uid != 0 or info.st_mode & 0o022 or info.st_nlink != 1 or info.st_size > limit:
             raise ValueError('invalid recovery state')
-        content = os.read(descriptor, limit + 1)
-        if len(content) > limit: raise ValueError('invalid recovery state')
+        if complete:
+            parts = []; size = 0
+            while size <= limit:
+                part = os.read(descriptor, min(65536, limit + 1 - size))
+                if not part: break
+                parts.append(part); size += len(part)
+            content = b''.join(parts)
+        else:
+            content = os.read(descriptor, limit + 1)
+        if len(content) > limit or complete and len(content) != info.st_size: raise ValueError('invalid recovery state')
         return content
     finally:
         os.close(descriptor)
+
+
+def maintenance_capability():
+    # DNS v2 also exists in older helpers. Only a complete, protected pair can
+    # advertise maintenance support; the controller compares both full hashes
+    # with its packaged templates before dispatching a kernel operation.
+    hashes = {}
+    try:
+        for name, limit in MAINTENANCE_MODULE_LIMITS.items():
+            raw = read_protected_state(DNS_TOOLS / name, limit, complete=True)
+            if not raw:
+                return {}
+            hashes[name] = hashlib.sha256(raw).hexdigest()
+    except (OSError, ValueError):
+        # A missing/unsafe module must not break legacy DNS or gateway status.
+        return {}
+    return {'maintenanceProtocolVersion': 2, 'maintenanceModuleHashes': hashes}
 
 
 def install_host_dns(job, control, gateway_public):
@@ -975,6 +1035,28 @@ def retire_peer(job, control):
     return {'nodeId': job, 'registrationRetired': True}
 
 
+def first_available_peer_address(control, occupied):
+    # Preserve IPv4Network.hosts() and first-fit ordering without comparing
+    # every candidate against every occupied route for each new registration.
+    network=control.network
+    if network.version!=4:raise ValueError('invalid management network')
+    edge=1 if network.prefixlen<31 else 0
+    first,last=int(network.network_address)+edge,int(network.broadcast_address)-edge
+    intervals=[(int(control.ip),int(control.ip))]
+    for subnet in occupied:
+        if not isinstance(subnet,(ipaddress.IPv4Network,ipaddress.IPv6Network)):
+            raise ValueError('invalid occupied route')
+        if subnet.version!=4:continue
+        start=max(first,int(subnet.network_address));end=min(last,int(subnet.broadcast_address))
+        if start<=end:intervals.append((start,end))
+    target=first
+    for start,end in sorted(intervals):
+        if target<start:break
+        if target<=end:target=end+1
+        if target>last:return None
+    return ipaddress.IPv4Address(target) if target<=last else None
+
+
 def register_peer(job, public_key, control, config, live_peers):
     for journal in (STATE / 'retired').glob(job + '-*.json'):
         retired = json.loads(read_protected_state(journal, 4096), object_pairs_hook=strict_json)
@@ -1004,7 +1086,7 @@ def register_peer(job, public_key, control, config, live_peers):
     else:
         if public_key in peers:
             raise ValueError("peer already belongs to another registration")
-        target = next((ip for ip in control.network.hosts() if ip != control.ip and not any(ip in net for net in occupied)), None)
+        target = first_available_peer_address(control, occupied)
         if target is None:
             raise ValueError("management network full")
     marker = "# incudal-onboarding " + job
@@ -1105,6 +1187,8 @@ def main():
             print(json.dumps(harden_host(args[1], control))); return
         if route_request:
             print(json.dumps(restore_saved_peer(args[1], control, result['publicKey']))); return
+        if args in (["status"], ["peers"], ["recovery-state"]):
+            result.update(maintenance_capability())
         if args[0] == "recovery-state":
             result['recovery'] = read_recovery_state(control)
         if args[0] == "peers":

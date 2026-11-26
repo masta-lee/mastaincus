@@ -170,6 +170,20 @@ assert.equal(hostMaintenanceBlocked({maintenance:{...intent,phase:'verified',reb
 assert.equal(hostRebootMaintenanceBlocked({maintenance:{...intent,phase:'verified',rebootIssued:true},incusCompat:{phase:'pending'}}),false)
 assert.equal(hostMaintenanceBlocked({maintenance:{...intent,phase:'verified',rebootIssued:true},incusCompat:{phase:'pending'}}),true,'compatibility still blocks this host but not unrelated inspections')
 assert.equal(hostMaintenanceBlocked({maintenance:{...intent,phase:'verified',rebootIssued:false}}),true)
+for (const delta of [{identityHash:[intent.identityHash]},{prepareHash:[intent.prepareHash]},{architecture:['aarch64']},{phase:['verified']}]) {
+  assert.throws(()=>readHostMaintenanceIntent({...intent,...delta}),/HARDENING_JOURNAL_CONFLICT/)
+  assert.equal(hostMaintenanceBlocked({maintenance:{...intent,phase:'verified',rebootIssued:true,...delta}}),true,'array coercion cannot turn malformed legacy data into terminal proof')
+}
+for(const delta of [{uuid:[baseline.uuid]},{attempt:[baseline.attempt]},{identityHash:[baseline.identityHash]},{state:['running']}]) {
+  assert.throws(()=>readHostMaintenanceIntent({...intent,customers:[{...baseline,...delta}]}),/HARDENING_JOURNAL_CONFLICT/)
+}
+const kernelIntent = {...intent,recipe:'alpine-kernel-patch-v1',customers:[],expectedPlanHash:'c'.repeat(64)}
+assert.equal(hostMaintenanceBlocked({maintenance:{...kernelIntent,phase:'verified',rebootIssued:true}}),false)
+assert.equal(hostMaintenanceBlocked({maintenance:{...kernelIntent,phase:'aborted',rebootIssued:false}}),false)
+for (const delta of [{expectedPlanHash:null},{customers:[baseline]},{extra:'unknown'},{architecture:[]},{phase:'unknown'}]) {
+  assert.equal(hostMaintenanceBlocked({maintenance:{...kernelIntent,phase:'verified',rebootIssued:true,...delta}}),true,'incomplete or unrecognized kernel terminals never release stock')
+}
+assert.equal(hostMaintenanceBlocked({maintenance:{...intent,recipe:'unknown-recipe',phase:'verified',rebootIssued:true}}),true)
 assert.equal(nextMaintenanceAction({...intent,rebootIssued:true,phase:'blocked'},{...proof,bootId:'new',remotePhase:'reboot-intent'},now+120001),'restore','late proven boot allows verification, never another reboot')
 for (const value of [null,'malformed',[],{instances:'private-token'},{instances:[null,4,{instanceId:'secret'}]},
   {host:[],diagnostic:{phase:'secret-phase',reason:'secret-raw',action:'private'},environment:{architecture:'private-key',memoryAvailableKiB:'secret'}}]) {
@@ -199,11 +213,30 @@ const gateway = source('../scripts/onboarding-gateway.py')
 assert.ok(gateway.includes("request['managementIp'] != str(address)") && gateway.includes("request['nodePublicKey'] != peer"))
 assert.ok(gateway.includes("alpine_ssh_security_update update") && gateway.includes("all(safe(guest)") && gateway.includes("command + ['id -u']"))
 assert.doesNotMatch(host, /rc-service incus|reboot|security\.privileged.*true|--allow-untrusted|chpasswd/)
+for (const path of ['src/services/host-security-maintenance.ts', 'src/services/host-kernel-maintenance.ts']) {
+  const maintenance = source(path)
+  const locks = maintenance.split('\n').filter(line => /SELECT id FROM hosts .*FOR /.test(line))
+  assert.ok(locks.length > 0 && locks.every(line => line.includes('FOR NO KEY UPDATE')),
+    'bounded non-key maintenance must permit current signed Agent liveness while holding mutation authority')
+}
+assert.ok(source('src/services/host-security-maintenance.ts').includes('SELECT id FROM instances WHERE id=${customer.id} FOR UPDATE'),
+  'customer lifecycle serialization remains exclusive')
+assert.ok(source('src/lib/host-agent-credentials.ts').includes('SELECT id FROM hosts WHERE id = ${hostId} FOR UPDATE'),
+  'credential rotation still excludes maintenance and obsolete Agent reports')
 const queue = source('src/services/security-hardening-queue.ts')
 assert.ok(queue.includes('INSTANCE_OPERATION_LOCK_NAMESPACE') && queue.includes('hasActiveTransferWorkflow') && queue.includes('assertNoPendingSnapshotOperations'))
 assert.ok(queue.includes('saved.uuid !== uuid') && queue.includes('saved.endpointHash !== managedCleanupEndpointHash(client)'))
 assert.ok(queue.includes('currentState(host.securityHardening).leaseToken !== leaseToken'))
 assert.ok(queue.includes('take: 50') && queue.includes('state.nextCheckAt'))
+// Injected PG probes exercise host/customer permits. The default-only AppArmor
+// prepare branch also needs a source guard against issuing a second boot plan.
+assert.ok(queue.includes('const inspectOnly = Boolean(active)') && queue.includes('options.inspectOnly === true || renewal'))
+assert.ok(queue.includes('!inspectOnly && !exhausted'), 'forced inspection never grants host package-update authority')
+const scheduledClaims = queue.slice(queue.indexOf('export async function processSecurityHardeningQueue')).split('\n').filter(line => line.includes('await hardenExistingHost('))
+assert.ok(scheduledClaims.length > 0 && scheduledClaims.every(line => /\{\s*inspectOnly\s*\}/.test(line)), 'every queue claim retains the pass-wide read-only fence')
+const maintenancePrepares = queue.split('\n').filter(line => line.includes('await prepareAutomaticHostMaintenance('))
+assert.ok(maintenancePrepares.length > 0 && maintenancePrepares.every(line => line.includes('!inspectOnly&&deps===securityHardeningDependencies')), 'a fenced pass cannot prepare another AppArmor transaction')
+assert.ok(queue.includes("if(!inspectOnly&&state.status==='verified'&&kernelInspectionDue(state)"), 'a fenced pass cannot invoke the kernel checker')
 const onboarding=source('src/workers/hostOnboardingWorker.ts')
 assert.ok(onboarding.includes("checkpoint('hardening')") && onboarding.includes('finishSecureOnboarding'))
 assert.ok(onboarding.includes("if (node.step === 'hardening'") && onboarding.includes('hardeningResume'))
@@ -213,6 +246,11 @@ const app = source('src/app.ts')
 assert.ok(app.indexOf('startSecurityHardeningWorker()', app.indexOf('await initPrismaDatabase')) > app.indexOf('await initPrismaDatabase'))
 for (const script of ['install-onboarding-gateway.sh', 'refresh-onboarding-gateway.sh']) assert.ok(source('../scripts/' + script).includes('/usr/local/libexec/incudal-onboarding-dns/alpine-ssh-security.sh'))
 assert.ok(source('src/services/gateway-dns-channel.ts').includes("'alpine-ssh-security.sh'"))
+const channelUnit = spawnSync(process.execPath, ['--import', 'tsx', 'scripts/test-gateway-dns-channel.ts'], {
+  encoding: 'utf8', windowsHide: true, timeout: 60_000,
+  env: { ...process.env, GATEWAY_CHANNEL_UNIT_ONLY: '1', DATABASE_URL: 'postgresql://127.0.0.1:1/gateway_channel_unit_test' },
+})
+assert.equal(channelUnit.status, 0, channelUnit.stdout + channelUnit.stderr)
 const python = spawnSync(process.platform === 'win32' ? 'python' : 'python3', ['../scripts/test-host-security-hardening.py'], { encoding: 'utf8', windowsHide: true })
 assert.equal(python.status, 0, python.stdout + python.stderr)
 const maintenancePython=spawnSync(process.platform==='win32'?'python':'python3',['../scripts/test-host-maintenance-plan.py'],{encoding:'utf8',windowsHide:true})

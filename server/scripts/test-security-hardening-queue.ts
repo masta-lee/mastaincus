@@ -83,7 +83,7 @@ try {
   await hardenExistingHost(host.id, deps); assert.equal(guestWrites, 1, 'recent receipt prevents duplicate work')
   for (const [change,reason] of [[{status:'offline'},'HARDENING_OFFLINE'], [{poolFaulted:true},'HARDENING_HOST_QUARANTINED'],
     [{publicIpSyncBlocked:true},'HARDENING_PUBLIC_IP_PENDING'], [{installPending:true},'HARDENING_INSTALL_PENDING']] as const) {
-    const before={connections,hostCalls,guestWrites}
+    const before: { connections: number; hostCalls: number; guestWrites: number } = {connections,hostCalls,guestWrites}
     await due(); await prisma.host.update({where:{id:host.id},data:change}); await hardenExistingHost(host.id,deps)
     assert.equal((await state()).diagnostic.reason,reason)
     assert.equal((await state()).diagnostic.phase,'authority')
@@ -201,6 +201,35 @@ try {
   assert.equal(resumed.length,beforeCompatResume,'compatibility pending after a completed reboot must not repeatedly resume terminal maintenance')
   assert.equal((await state()).incusCompat.phase,'pending','pending compatibility is preserved for its own worker')
   await prisma.host.update({where:{id:host.id},data:{securityHardening:completedBeforeCompat}})
+  const kernelSummary={revision:'host-kernel-v1',identityHash:completedBeforeCompat.identityHash,status:'waiting-native',
+    checkedAt:new Date().toISOString(),nextCheckAt:new Date(Date.now()+3600000).toISOString(),plan:null,reason:'HARDENING_KERNEL_NATIVE_ACCEPTANCE_REQUIRED'}
+  await prisma.host.update({where:{id:host.id},data:{securityHardening:{...completedBeforeCompat,kernel:kernelSummary,nextCheckAt:new Date(0).toISOString()}}})
+  await hardenExistingHost(host.id,deps)
+  assert.deepEqual((await state()).kernel,kernelSummary,'normal hardening claims and receipts retain the separate kernel summary')
+  const freshKernelReceipt=await state()
+  await prisma.host.update({where:{id:host.id},data:{securityHardening:{...freshKernelReceipt,kernel:{...kernelSummary,nextCheckAt:new Date(0).toISOString()}}}})
+  const kernelResumed:number[]=[],kernelChecked:number[]=[],legacyResumed:number[]=[]
+  const kernelDeps={resume:async(id:number)=>{kernelResumed.push(id)},check:async(id:number)=>{kernelChecked.push(id)}}
+  const beforeKernelOnly={connections,hostCalls,guestWrites}
+  const beforeKernelOnlyState=await state()
+  await processSecurityHardeningQueue(deps,()=>false,{resume:async id=>{legacyResumed.push(id)}},kernelDeps)
+  // A completed page wraps the cursor on the next pass before scanning from
+  // zero. Exercise that normal bounded continuation without changing cursors.
+  if(!kernelChecked.length)await processSecurityHardeningQueue(deps,()=>false,{resume:async id=>{legacyResumed.push(id)}},kernelDeps)
+  assert.deepEqual(kernelChecked,[host.id],'the next bounded host scan checks a due kernel independently of fresh admission')
+  assert.deepEqual({connections,hostCalls,guestWrites},beforeKernelOnly,'kernel planning does not re-claim primary admission or perform customer work')
+  assert.deepEqual(await state(),beforeKernelOnlyState,'the kernel checker owns its own summary and does not replace admission')
+  await prisma.host.update({where:{id:host.id},data:{securityHardening:{...freshKernelReceipt,kernel:kernelSummary}}})
+  await processSecurityHardeningQueue(deps,()=>false,{resume:async id=>{legacyResumed.push(id)}},kernelDeps)
+  assert.deepEqual(kernelChecked,[host.id],'kernel backoff avoids repeated checks of healthy hosts')
+  const kernelIntent={...validMaintenance,recipe:'alpine-kernel-patch-v1',expectedPlanHash:'c'.repeat(64)}
+  await prisma.host.update({where:{id:host.id},data:{securityHardening:{...freshKernelReceipt,kernel:kernelSummary,maintenance:kernelIntent,nextCheckAt:new Date(0).toISOString()}}})
+  await processSecurityHardeningQueue(deps,()=>false,{resume:async id=>{legacyResumed.push(id)}},kernelDeps)
+  assert.deepEqual(kernelResumed,[host.id],'durable kernel maintenance resumes through its own recipe')
+  assert.deepEqual(legacyResumed,[],'the AppArmor resumer never receives a kernel intent')
+  await processSecurityHardeningQueue(deps,()=>true,{resume:async()=>{assert.fail('scheduler stop prevents an AppArmor dispatch')}},kernelDeps)
+  assert.deepEqual(kernelResumed,[host.id],'scheduler stop prevents another kernel dispatch')
+  await prisma.host.update({where:{id:host.id},data:{securityHardening:completedBeforeCompat}})
   const compatBlocker=await prisma.host.create({data:{userId:admin.id,name:prefix+'-compat-blocker',url:host.url,
     securityHardening:{...completedBeforeCompat,incusCompat:{phase:'prepared'}}}})
   try{
@@ -211,7 +240,7 @@ try {
     assert.equal((await state()).status,'verified')
     assert.equal(resumed.length,beforeCompatResume)
   }finally{await prisma.host.delete({where:{id:compatBlocker.id}})}
-  assert.equal(connections,beforePriority.connections+2)
+  assert.equal(connections,beforePriority.connections+3,'the added complete admission claim uses one connection; separate kernel checks use none')
   assert.deepEqual(resumed,[host.id],'terminal proof is inspected rather than rebooted or resumed again')
   await prisma.host.update({where:{id:host.id},data:{securityHardening:beforeMaintenance}})
   const earlyReceipt={...beforeMaintenance,nextCheckAt:new Date(Date.now()+3600000).toISOString()}
@@ -228,9 +257,9 @@ try {
       assert.equal(target.id,expiredHost.id,'expired higher ID is inspected before a healthy lower ID renewal')
       return {request:async()=>[]} as any
     }})
-    assert.equal((await prisma.host.findUniqueOrThrow({where:{id:expiredHost.id}})).securityHardening?.['status'],'verified')
+    const expiredReceipt=(await prisma.host.findUniqueOrThrow({where:{id:expiredHost.id}})).securityHardening as Prisma.JsonObject
+    assert.equal(expiredReceipt.status,'verified')
     assert.deepEqual(await state(),earlyReceipt,'urgent expired recovery does not revoke or claim the early receipt')
-    const expiredReceipt=(await prisma.host.findUniqueOrThrow({where:{id:expiredHost.id}})).securityHardening as object
     await prisma.host.update({where:{id:expiredHost.id},data:{securityHardening:{...expiredReceipt,nextCheckAt:new Date(0).toISOString()}}})
     const busyOrder=await prisma.poolOrder.create({data:{id:randomUUID(),userId:buyer.id,requestHash:prefix+'-busy-priority',totalCents:900}})
     const creating=await prisma.instance.create({data:{userId:buyer.id,hostId:expiredHost.id,name:prefix+'-delivery',incusId:prefix+'-delivery',status:'creating',image:'images:alpine/3.22/cloud',purchaseBatchId:busyOrder.id,cpu:100,memory:256,disk:1024}})
@@ -244,6 +273,109 @@ try {
     }finally{await prisma.instance.delete({where:{id:creating.id}});await prisma.poolOrder.delete({where:{id:busyOrder.id}})}
   }finally{await prisma.host.delete({where:{id:expiredHost.id}})}
   await prisma.host.update({where:{id:host.id},data:{securityHardening:beforeMaintenance}})
+  {
+  // One unresolved reboot still fences new boot/package actions, while another
+  // host's complete read-only inspection can renew its expired admission.
+  let blockerIp=''
+  do{blockerIp=`198.18.${randomInt(1,254)}.${randomInt(1,254)}`}
+  while(await prisma.hostOnboardingNode.findFirst({where:{OR:[{activePublicIp:blockerIp},{publicIp:blockerIp,deletedAt:null}]}}))
+  const blocker=await prisma.host.create({data:{userId:admin.id,name:prefix+'-readonly-blocker',url:host.url,
+    securityHardening:{revision:SECURITY_HARDENING_REVISION,status:'retry',maintenance:validMaintenance,nextCheckAt:new Date(0).toISOString()},
+    onboardingNode:{create:{batchId:batch.id,name:prefix+'-readonly-blocker',publicIp:blockerIp,managementIp,sshPort:22,
+      sshFingerprint:'SHA256:readonly-fixture',nodePublicKey:'A'.repeat(43)+'=',status:'succeeded',credentialsExpireAt:new Date(0)}}},
+    include:{onboardingNode:true}})
+  const readonlyDeps={...deps,
+    host:async(...args:Parameters<typeof deps.host>)=>{
+      assert.equal(args[2],false,'an unrelated maintenance fence never grants a host update permit')
+      return deps.host(...args)
+    },
+    customer:async(...args:Parameters<typeof deps.customer>)=>{
+      assert.equal(args[5]?.inspectOnly,true,'the fenced queue passes only customer inspection authority')
+      return deps.customer(...args)
+    }}
+  const readonlyResumed:string[]=[]
+  const readonlyMaintenance={resume:async(id:number)=>{
+    assert.equal(id,blocker.id);readonlyResumed.push('apparmor');throw Error('fixture original recovery refused')
+  }}
+  const readonlyKernel={resume:async(id:number)=>{
+    assert.equal(id,blocker.id);readonlyResumed.push('kernel');throw Error('fixture original kernel recovery refused')
+  },check:async()=>{assert.fail('the fenced queue must not prepare a new kernel transaction')}}
+  const expireReadonlyTarget=async(updateAttempts=0)=>prisma.host.update({where:{id:host.id},data:{securityHardening:{
+    ...beforeMaintenance,updateAttempts,nextCheckAt:new Date(0).toISOString()}}})
+  try{
+    for(const variant of [
+      {name:'due failed AppArmor owner',maintenance:validMaintenance,nextCheckAt:new Date(0).toISOString(),resumes:'apparmor'},
+      {name:'future owner retry',maintenance:validMaintenance,nextCheckAt:new Date(Date.now()+600000).toISOString(),resumes:null},
+      {name:'onboarding owns original recovery',maintenance:validMaintenance,nextCheckAt:new Date(0).toISOString(),resumes:null,onboarding:true},
+      {name:'original enrollment deleted',maintenance:validMaintenance,nextCheckAt:new Date(0).toISOString(),resumes:'apparmor',deleted:true},
+      {name:'original enrollment fingerprint changed',maintenance:validMaintenance,nextCheckAt:new Date(0).toISOString(),resumes:'apparmor',fingerprintChanged:true},
+      {name:'malformed original intent',maintenance:{phase:'waiting-boot'},nextCheckAt:new Date(0).toISOString(),resumes:'apparmor'},
+      {name:'malformed original schedule',maintenance:validMaintenance,nextCheckAt:'invalid',resumes:'apparmor'},
+      {name:'due failed kernel owner',maintenance:kernelIntent,nextCheckAt:new Date(0).toISOString(),resumes:'kernel'}
+    ]){
+      await prisma.hostOnboardingNode.update({where:{id:blocker.onboardingNode!.id},data:{
+        status:variant.onboarding?'running':'succeeded',step:variant.onboarding?'hardening':'queued',
+        deletedAt:variant.deleted?new Date():null,sshFingerprint:variant.fingerprintChanged?'SHA256:changed-fixture':'SHA256:readonly-fixture'}})
+      await prisma.host.update({where:{id:blocker.id},data:{securityHardening:{revision:SECURITY_HARDENING_REVISION,
+        status:'retry',maintenance:variant.maintenance,nextCheckAt:variant.nextCheckAt}}})
+      await expireReadonlyTarget()
+      const originalBarrier=(await prisma.host.findUniqueOrThrow({where:{id:blocker.id}})).securityHardening
+      const beforeReads:number=hostCalls,beforeWrites:number=guestWrites,beforeResumes:number=readonlyResumed.length
+      await processSecurityHardeningQueue(readonlyDeps,()=>false,readonlyMaintenance,readonlyKernel)
+      assert.equal(hostCalls,beforeReads+1,variant.name+' cannot starve the expired healthy receipt')
+      assert.equal(guestWrites,beforeWrites,variant.name+' cannot issue a customer update')
+      assert.equal((await state()).status,'verified');assert.equal((await state()).phase,'finished')
+      assert.ok(Date.parse((await state()).nextCheckAt)>Date.now(),'only the complete inspection renews admission')
+      assert.deepEqual((await state()).maintenance,beforeMaintenance.maintenance,'read-only recovery cannot create maintenance')
+      assert.deepEqual((await state()).kernel,beforeMaintenance.kernel,'read-only recovery cannot create a kernel plan')
+      assert.deepEqual(readonlyResumed.slice(beforeResumes),variant.resumes?[variant.resumes]:[],'correct due owner retains priority')
+      assert.deepEqual((await prisma.host.findUniqueOrThrow({where:{id:blocker.id}})).securityHardening,originalBarrier,
+        'inspection of another host cannot rewrite the original failed/future/changed/malformed barrier')
+      await assert.rejects(assertHostNotMaintaining(blocker.id),HostMaintenanceError)
+    }
+    await prisma.host.update({where:{id:blocker.id},data:{securityHardening:{revision:SECURITY_HARDENING_REVISION,
+      status:'retry',maintenance:validMaintenance,nextCheckAt:new Date(0).toISOString()}}})
+    for(const protection of ['stopped','held','stopped-after-owner','held-after-owner']){
+      await expireReadonlyTarget()
+      const before=await state(),beforeReads=hostCalls,beforeResumes=readonlyResumed.length
+      let stop=protection==='stopped'
+      held=protection==='held'
+      const protectiveMaintenance={resume:async(id:number)=>{
+        assert.equal(id,blocker.id)
+        if(protection==='stopped-after-owner')stop=true
+        if(protection==='held-after-owner')held=true
+      }}
+      try{
+        await processSecurityHardeningQueue(readonlyDeps,()=>stop,protectiveMaintenance,readonlyKernel)
+        assert.deepEqual(await state(),before,protection+' prevents the unrelated inspection claim')
+        assert.equal(hostCalls,beforeReads);assert.equal(readonlyResumed.length,beforeResumes)
+        await assert.rejects(assertHostNotMaintaining(blocker.id),HostMaintenanceError)
+      }finally{held=false}
+    }
+    await prisma.host.update({where:{id:blocker.id},data:{securityHardening:{revision:SECURITY_HARDENING_REVISION,
+      status:'retry',maintenance:validMaintenance,nextCheckAt:new Date(Date.now()+600000).toISOString()}}})
+    await expireReadonlyTarget(3)
+    const writesBeforeFailure=guestWrites
+    failCustomer=true
+    try{await processSecurityHardeningQueue(readonlyDeps,()=>false,readonlyMaintenance,readonlyKernel)}finally{failCustomer=false}
+    assert.equal((await state()).status,'retry','a failed customer inspection cannot renew a healthy receipt')
+    assert.equal((await state()).updateAttempts,3,'read-only failure does not consume remote update authority')
+    assert.equal(guestWrites,writesBeforeFailure)
+    await expireReadonlyTarget()
+    const readsBeforeRevocation=hostCalls
+    await prisma.user.update({where:{id:admin.id},data:{role:'user'}})
+    try{
+      await processSecurityHardeningQueue(readonlyDeps,()=>false,readonlyMaintenance,readonlyKernel)
+      assert.notEqual((await state()).status,'verified','read-only renewal still requires the current administrator')
+      assert.equal((await state()).error,'HARDENING_ADMIN_REQUIRED');assert.equal(hostCalls,readsBeforeRevocation)
+    }finally{await prisma.user.update({where:{id:admin.id},data:{role:'admin'}})}
+    console.log('PASS real PG unresolved maintenance: other expired receipt fully inspected without host/customer updates or new boot; original barriers, due owners, malformed data, authority and stop/hold preserved')
+  }finally{
+    failCustomer=false;held=false
+    await prisma.host.delete({where:{id:blocker.id}})
+    await prisma.host.update({where:{id:host.id},data:{securityHardening:beforeMaintenance}})
+  }
+  }
   const beforeResource = guestWrites
   await due(); preflight.memoryAvailableKiB = 1; await hardenExistingHost(host.id,deps)
   assert.equal((await state()).diagnostic.reason,'HARDENING_MEMORY_LOW'); assert.equal(guestWrites,beforeResource)

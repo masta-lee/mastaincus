@@ -1,6 +1,7 @@
 import { prisma } from '../db/prisma.js'
 import type { Prisma } from '@prisma/client'
 import { readHostMaintenanceIntent } from './host-maintenance-plan.js'
+import { HOST_KERNEL_MAINTENANCE_RECIPE, readHostKernelIntent } from './host-kernel-maintenance-plan.js'
 
 const object = (value: unknown): Record<string, unknown> => value && typeof value === 'object' && !Array.isArray(value) ? value as Record<string, unknown> : {}
 /** A durable intent never expires into permission, including after recovery. */
@@ -8,7 +9,9 @@ export function hostRebootMaintenanceBlocked(value: unknown): boolean {
   const maintenance = object(value).maintenance
   if (maintenance === undefined || maintenance === null) return false
   try {
-    const intent = readHostMaintenanceIntent(maintenance)
+    const recipe = object(maintenance).recipe
+    if (recipe !== HOST_KERNEL_MAINTENANCE_RECIPE && !['alpine-apparmor-extlinux-v1', 'alpine-apparmor-grub-v1'].includes(String(recipe))) return true
+    const intent = recipe === HOST_KERNEL_MAINTENANCE_RECIPE ? readHostKernelIntent(maintenance) : readHostMaintenanceIntent(maintenance)
     return !['verified', 'aborted'].includes(intent.phase)
   } catch { return true }
 }

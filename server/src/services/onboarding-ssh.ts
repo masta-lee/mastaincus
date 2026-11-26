@@ -71,12 +71,31 @@ export interface OnboardingGateway {
   peers?: GatewayPeer[]
   recovery?: { version: 1; observedAt: number; stateHash: string; configHash?: string; runtimeHash?: string; peers: Array<{ nodeId: string; nodePublicKey: string; managementIp: string; enabled: boolean }> }
   dnsProtocolVersion?: number
+  maintenanceProtocolVersion?: number
+  maintenanceModuleHashes?: GatewayMaintenanceModuleHashes
   recoveryProtocolVersion?: number
   retirementProtocolVersion?: number
 }
 
 export interface GatewayPeer {
   nodeId: string; managementIp: string; publicIp: string | null; lastHandshakeAt: number
+}
+
+export type GatewayMaintenanceModuleHashes = Record<'host-security-maintenance.py' | 'host-kernel-maintenance.py', string>
+
+export function readGatewayMaintenanceCapability(raw: Record<string, unknown>):
+  { maintenanceProtocolVersion: 2; maintenanceModuleHashes: GatewayMaintenanceModuleHashes } | undefined {
+  if (raw.maintenanceProtocolVersion === undefined && raw.maintenanceModuleHashes === undefined) return undefined
+  const modules = raw.maintenanceModuleHashes
+  if (typeof raw.maintenanceProtocolVersion !== 'number' || raw.maintenanceProtocolVersion !== 2 || !modules || typeof modules !== 'object' || Array.isArray(modules) ||
+      Object.keys(modules).sort().join(',') !== 'host-kernel-maintenance.py,host-security-maintenance.py' ||
+      !Object.values(modules).every(value => typeof value === 'string' && /^[a-f0-9]{64}$/.test(value))) {
+    throw new OnboardingError('GATEWAY_MAINTENANCE_CAPABILITY_INVALID')
+  }
+  const hashes = modules as GatewayMaintenanceModuleHashes
+  return { maintenanceProtocolVersion: 2, maintenanceModuleHashes: {
+    'host-security-maintenance.py': hashes['host-security-maintenance.py'],
+    'host-kernel-maintenance.py': hashes['host-kernel-maintenance.py'] } }
 }
 
 export function validateGatewayResponse(raw: unknown, endpoint: string, sshHost: string): OnboardingGateway {
@@ -100,6 +119,7 @@ export function validateGatewayResponse(raw: unknown, endpoint: string, sshHost:
   if (value.dnsProtocolVersion !== undefined && value.dnsProtocolVersion !== 2) throw new OnboardingError('GATEWAY_RESPONSE_INVALID')
   if (value.recoveryProtocolVersion !== undefined && value.recoveryProtocolVersion !== 1) throw new OnboardingError('GATEWAY_RESPONSE_INVALID')
   if (value.retirementProtocolVersion !== undefined && value.retirementProtocolVersion !== 1) throw new OnboardingError('GATEWAY_RESPONSE_INVALID')
+  const maintenance = readGatewayMaintenanceCapability(value)
   let peers: GatewayPeer[] | undefined
   if (value.peers !== undefined) {
     if (!Array.isArray(value.peers) || value.peers.length > 10000) throw new OnboardingError('GATEWAY_RESPONSE_INVALID')
@@ -128,6 +148,7 @@ export function validateGatewayResponse(raw: unknown, endpoint: string, sshHost:
   return { recovery, publicKey: value.publicKey, controlIp: value.controlIp, network: String(value.network), peers,
     managementIp: value.managementIp as string | undefined, managementSshPublicKey: value.managementSshPublicKey, endpoint, sshHost,
     ...(value.dnsProtocolVersion === 2 ? { dnsProtocolVersion: 2 } : {}),
+    ...maintenance,
     ...(value.recoveryProtocolVersion === 1 ? { recoveryProtocolVersion: 1 } : {}),
     ...(value.retirementProtocolVersion === 1 ? { retirementProtocolVersion: 1 } : {}) }
 }

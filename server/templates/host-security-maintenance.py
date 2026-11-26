@@ -21,11 +21,23 @@ import time
 ROOT = Path('/var/lib/incudal-hardening')
 RECIPE = 'alpine-apparmor-extlinux-v1'
 GRUB_RECIPE = 'alpine-apparmor-grub-v1'
+KERNEL_JOURNAL_GUARD = None
 def apparmor_packages(branch):
     base=['apparmor','apparmor-utils','apparmor-openrc']
     return base+(['apparmor-profiles-tunables','apparmor-profiles-abstractions','apparmor-profiles-api'] if branch=='3.24' else ['apparmor-profiles'])
 UUID = re.compile(r'[a-f0-9]{8}-(?:[a-f0-9]{4}-){3}[a-f0-9]{12}')
 def fail(code='HARDENING_JOURNAL_CONFLICT'): raise ValueError(code)
+def strict_journal(pairs):
+    value={}
+    for key,item in pairs:
+        if key in value:fail()
+        value[key]=item
+    return value
+def journal_present(path):
+    try:path.lstat()
+    except FileNotFoundError:return False
+    except OSError:fail()
+    return True
 def digest(data): return hashlib.sha256(data).hexdigest()
 def require_current_request(value):
     if time.time()*1000>=value['expiresAt']:fail('HARDENING_REQUEST_EXPIRED')
@@ -447,6 +459,40 @@ def runlevel_enabled():
     if info.st_uid!=0 or not stat.S_ISLNK(info.st_mode) or link.resolve()!=Path('/etc/init.d/apparmor').resolve():fail()
     protected(Path('/etc/init.d/apparmor'))
     return True
+def validate_saved_apparmor_journal(state):
+    required={'version','identity','phase','beforeHash','afterHash','customerBoot','runlevelBefore','bootMode','prepareHash'}
+    if not isinstance(state,dict) or not required.issubset(state) or set(state)-required-{'grubDefaults','dependencyPlan','rolledBackAt','preparationRetries'} or type(state['version']) is not int or state['version']!=1:fail()
+    saved=state['identity']
+    if not isinstance(saved,dict) or set(saved)!={'nodeId','requestId','identityHash','bootId','architecture','recipe','customers'}:fail()
+    # Reuse the original ten-field schema for data validation only. This
+    # synthesized expiry neither dispatches work nor renews the saved intent.
+    request({**saved,'action':'status','prepareHash':state['prepareHash'],'expiresAt':int(time.time()*1000)+59000})
+    if state['phase'] not in ['preparing','prepared','reboot-intent','customers-restored','rolled-back'] or not isinstance(state['customerBoot'],list) or len(state['customerBoot'])!=len(saved['customers']) or any(not isinstance(record,dict) or set(record)!={'name','guardHash'} or record['name']!=customer['name'] or not isinstance(record['guardHash'],str) or not re.fullmatch('[a-f0-9]{64}',record['guardHash']) for customer,record in zip(saved['customers'],state['customerBoot'])):fail()
+    if type(state['runlevelBefore']) is not bool or type(state['bootMode']) is not int or state['bootMode'] not in [0o600,0o640,0o644,0o700] or any(not isinstance(state[key],str) or not re.fullmatch('[a-f0-9]{64}',state[key]) for key in ['beforeHash','afterHash','prepareHash']):fail()
+    if (saved['recipe']==GRUB_RECIPE)!=('grubDefaults' in state):fail()
+    defaults=state.get('grubDefaults')
+    if 'grubDefaults' in state and (not isinstance(defaults,dict) or set(defaults)!={'beforeHash','afterHash','mode'} or type(defaults['mode']) is not int or defaults['mode'] not in [0o600,0o640,0o644] or any(not isinstance(defaults[key],str) or not re.fullmatch('[a-f0-9]{64}',defaults[key]) for key in ['beforeHash','afterHash'])):fail()
+    expected=digest(json.dumps([saved,state['beforeHash'],state['afterHash'],state['runlevelBefore'],state['bootMode'],defaults],sort_keys=True).encode())
+    if expected!=state['prepareHash']:fail()
+    if 'preparationRetries' in state and (type(state['preparationRetries']) is not int or not 0<=state['preparationRetries']<=2):fail()
+    if 'rolledBackAt' in state and (type(state['rolledBackAt']) is not int or state['rolledBackAt']<=0):fail()
+    if state['phase']=='rolled-back' and 'rolledBackAt' not in state:fail()
+    plan=state.get('dependencyPlan')
+    if 'dependencyPlan' in state:
+        if not isinstance(plan,dict) or set(plan)-{'worldBefore','worldAfter'} not in [{'packages','installed'},{'packages','installed','phase'}] or plan.get('phase','planned') not in ['planned','installed','verified'] or not isinstance(plan['packages'],list) or not 1<=len(plan['packages'])<=20 or any(not isinstance(p,str) or not re.fullmatch(r'[a-zA-Z0-9+_.-]+=[0-9][a-zA-Z0-9+_.~-]*',p) for p in plan['packages']) or not isinstance(plan['installed'],list) or not plan['installed'] or any(not isinstance(p,str) or not re.fullmatch(r'[a-zA-Z0-9+_.-]+-[0-9][a-zA-Z0-9+_.~-]*',p) for p in plan['installed']):fail()
+        if len({p.split('=',1)[0] for p in plan['packages']})!=len(plan['packages']) or len(set(plan['installed']))!=len(plan['installed']):fail()
+        if 'worldAfter' in plan and 'worldBefore' not in plan:fail()
+        for key in ['worldBefore','worldAfter']:
+            if key in plan and (not isinstance(plan[key],str) or len(plan[key].encode())>65536 or '\x00' in plan[key] or '\r' in plan[key]):fail()
+    return state
+
+def assert_apparmor_idle(value):
+    path=ROOT/'maintenance.json'
+    if not journal_present(path):return
+    state=validate_saved_apparmor_journal(json.loads(read(path),object_pairs_hook=strict_journal))
+    if any(state['identity'][key]!=value[key] for key in ['nodeId','identityHash','architecture']):fail('HARDENING_KERNEL_OTHER_JOURNAL_UNKNOWN')
+    if state['phase'] not in ['customers-restored','rolled-back']:fail('HARDENING_KERNEL_OTHER_MAINTENANCE')
+
 def execute(raw):
     value=request(raw);identity(value)
     if os.getuid()!=0:fail()
@@ -456,19 +502,16 @@ def execute(raw):
         protected(lock)
         try:fcntl.flock(fd,fcntl.LOCK_EX|fcntl.LOCK_NB)
         except BlockingIOError:fail('HARDENING_REMOTE_BUSY')
+        # The packaged transport's pure reader decides absence with lstat.
+        # Path.exists() may hide I/O/permission failures on newer Python.
+        if callable(KERNEL_JOURNAL_GUARD):KERNEL_JOURNAL_GUARD(value)
+        elif journal_present(ROOT/'kernel-maintenance.json'):fail('HARDENING_KERNEL_OTHER_JOURNAL_UNKNOWN')
         journal=ROOT/'maintenance.json';state=None
-        if journal.exists():state=json.loads(read(journal))
+        if journal_present(journal):
+            state=json.loads(read(journal),object_pairs_hook=strict_journal)
+            validate_saved_apparmor_journal(state)
         expected={key:value[key] for key in ['nodeId','requestId','identityHash','bootId','architecture','recipe','customers']}
-        if state and (not isinstance(state,dict) or state.get('version')!=1 or state.get('identity')!=expected or
-            state.get('phase') not in ['preparing','prepared','reboot-intent','customers-restored','rolled-back'] or
-            not isinstance(state.get('customerBoot'),list) or len(state['customerBoot'])!=len(value['customers']) or
-            any(not isinstance(saved,dict) or set(saved)!={'name','guardHash'} or saved['name']!=customer['name'] or
-                not isinstance(saved['guardHash'],str) or not re.fullmatch('[a-f0-9]{64}',saved['guardHash'])
-                for customer,saved in zip(value['customers'],state['customerBoot'])) or
-            type(state.get('runlevelBefore')) is not bool or type(state.get('bootMode')) is not int or
-            state['bootMode'] not in [0o600,0o640,0o644,0o700] or
-            any(not isinstance(state.get(key),str) or not re.fullmatch('[a-f0-9]{64}',state[key]) for key in ['beforeHash','afterHash','prepareHash'])):fail()
-        if state and (value['recipe']==GRUB_RECIPE)!=('grubDefaults' in state):fail()
+        if state is not None and state['identity']!=expected:fail()
         if value['action']=='status' and value['prepareHash']=='0'*64:
             # Full original identity above remains mandatory. Discovery must
             # never finish preparation or create a new maintenance journal.

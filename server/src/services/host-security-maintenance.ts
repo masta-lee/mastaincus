@@ -155,7 +155,7 @@ export async function prepareAutomaticHostMaintenance(hostId:number,deps=hostMai
     // the next target even after the process exits or its queue lease expires.
     await tx.$queryRaw`SELECT pg_advisory_xact_lock(4128,1)::text`
     await lockMaintenanceCustomers(tx,hostId)
-    await tx.$queryRaw`SELECT id FROM hosts WHERE id=${hostId} FOR UPDATE`
+    await tx.$queryRaw`SELECT id FROM hosts WHERE id=${hostId} FOR NO KEY UPDATE`
     const host=await tx.host.findUniqueOrThrow({where:{id:hostId},include})
     if(enrollment?!ownsOnboardingHardeningLease(host.onboardingNode,enrollment):onboardingOwnsHardening(host.onboardingNode))return null
     await authorized(tx,host,deps.held,enrollment)
@@ -251,7 +251,7 @@ export async function prepareAutomaticHostMaintenance(hostId:number,deps=hostMai
     const code=/^(HARDENING|ALPINE_SSH)_[A-Z_]{1,90}$/.test(raw)?raw:'HARDENING_PREPARE_FAILED'
     await prisma.$transaction(async tx=>{
       await tx.$executeRaw`SET LOCAL lock_timeout='2s'`
-      await tx.$queryRaw`SELECT id FROM hosts WHERE id=${hostId} FOR UPDATE`
+      await tx.$queryRaw`SELECT id FROM hosts WHERE id=${hostId} FOR NO KEY UPDATE`
       const host=await tx.host.findUnique({where:{id:hostId},include});if(!host)return
       if(enrollment?!ownsOnboardingHardeningLease(host.onboardingNode,enrollment):onboardingOwnsHardening(host.onboardingNode))return
       const state=record(host.securityHardening)
@@ -280,7 +280,9 @@ async function resumeMaintenance(hostId:number,deps:typeof hostMaintenanceDepend
       original=readHostMaintenanceIntent(pending)
       if(['verified','aborted'].includes(original.phase))return null
       await lockMaintenanceCustomers(tx,hostId)
-      await tx.$queryRaw`SELECT id FROM hosts WHERE id=${hostId} FOR UPDATE`
+      // Agent liveness holds KEY SHARE on the host and current authority on
+      // its own row. Non-key maintenance must not starve the new boot report.
+      await tx.$queryRaw`SELECT id FROM hosts WHERE id=${hostId} FOR NO KEY UPDATE`
       const host=await tx.host.findUniqueOrThrow({where:{id:hostId},include}),state=record(host.securityHardening)
       // A periodic scan selected before enrollment changed, or an expired
       // worker, must not overwrite the current enrollment's schedule/receipt.
@@ -346,7 +348,7 @@ async function resumeMaintenance(hostId:number,deps:typeof hostMaintenanceDepend
       await prisma.$transaction(async tx=>{
         await tx.$executeRaw`SET LOCAL lock_timeout='2s'`
         await lockMaintenanceCustomers(tx,hostId)
-        await tx.$queryRaw`SELECT id FROM hosts WHERE id=${hostId} FOR UPDATE`
+        await tx.$queryRaw`SELECT id FROM hosts WHERE id=${hostId} FOR NO KEY UPDATE`
         const host=await tx.host.findUniqueOrThrow({where:{id:hostId},include}),state=record(host.securityHardening)
         await authorized(tx,host,deps.held,enrollment)
         const intent=readHostMaintenanceIntent(state.maintenance)
@@ -368,7 +370,7 @@ async function resumeMaintenance(hostId:number,deps:typeof hostMaintenanceDepend
       // No durable success is recorded; retries obtain a fresh proof again.
       const bootReport=await prisma.$transaction(async tx=>{
         await tx.$executeRaw`SET LOCAL lock_timeout='2s'`
-        await tx.$queryRaw`SELECT id FROM hosts WHERE id=${hostId} FOR UPDATE`
+        await tx.$queryRaw`SELECT id FROM hosts WHERE id=${hostId} FOR NO KEY UPDATE`
         const host=await tx.host.findUniqueOrThrow({where:{id:hostId},include}),state=record(host.securityHardening)
         await authorized(tx,host,deps.held,enrollment)
         const intent=readHostMaintenanceIntent(state.maintenance)
@@ -382,7 +384,7 @@ async function resumeMaintenance(hostId:number,deps:typeof hostMaintenanceDepend
       await prisma.$transaction(async tx=>{
         await tx.$executeRaw`SET LOCAL lock_timeout='2s'`
         await lockMaintenanceCustomers(tx,hostId)
-        await tx.$queryRaw`SELECT id FROM hosts WHERE id=${hostId} FOR UPDATE`
+        await tx.$queryRaw`SELECT id FROM hosts WHERE id=${hostId} FOR NO KEY UPDATE`
         const host=await tx.host.findUniqueOrThrow({where:{id:hostId},include}),state=record(host.securityHardening)
         await authorized(tx,host,deps.held,enrollment)
         const intent=readHostMaintenanceIntent(state.maintenance)
@@ -425,7 +427,7 @@ async function resumeMaintenance(hostId:number,deps:typeof hostMaintenanceDepend
     if(!original)throw error
     const raw=error instanceof Error?error.message:'',code=/^HARDENING_[A-Z_]{1,90}$/.test(raw)?raw:'HARDENING_REMOTE_RESULT_UNKNOWN'
     await prisma.$transaction(async tx=>{
-      await tx.$queryRaw`SELECT id FROM hosts WHERE id=${hostId} FOR UPDATE`
+      await tx.$queryRaw`SELECT id FROM hosts WHERE id=${hostId} FOR NO KEY UPDATE`
       const host=await tx.host.findUnique({where:{id:hostId},include});if(!host)return
       if(enrollment?!ownsOnboardingHardeningLease(host.onboardingNode,enrollment):onboardingOwnsHardening(host.onboardingNode))return
       const state=record(host.securityHardening),intent=readHostMaintenanceIntent(state.maintenance)

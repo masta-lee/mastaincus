@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Fixed boot recipe fixtures. Does not claim native reboot acceptance."""
 import importlib.util
+import copy
 import json
 import os
 import tempfile
@@ -16,6 +17,72 @@ if not source_path.exists():source_path=Path(__file__).with_name('host-security-
 spec=importlib.util.spec_from_file_location('host_maintenance',source_path)
 module=importlib.util.module_from_spec(spec);spec.loader.exec_module(module)
 class MaintenanceTests(unittest.TestCase):
+    def test_cross_recipe_reader_validates_complete_historical_terminal(self):
+        stack,root,config,before,value,calls,_,_=self.fixture()
+        with stack:
+            module.execute(value)
+            path=root/'maintenance.json';state=json.loads(path.read_text());state['phase']='customers-restored'
+            path.write_text(json.dumps(state));original=path.read_bytes();commands=len(calls)
+            target={**value,'recipe':'alpine-kernel-patch-v1','requestId':'44444444-4444-4444-8444-444444444444',
+                'bootId':'55555555-5555-4555-8555-555555555555'}
+            self.assertIsNone(module.assert_apparmor_idle(target))
+            self.assertEqual(path.read_bytes(),original);self.assertEqual(len(calls),commands)
+            invalid=[]
+            for delta in [{'version':True},{'customerBoot':None},{'runlevelBefore':1},{'bootMode':True},
+                          {'prepareHash':'0'*64},{'dependencyPlan':None},{'unknown':'field'}]:
+                invalid.append({**copy.deepcopy(state),**delta})
+            null_defaults=copy.deepcopy(state);null_defaults['identity']['recipe']=module.GRUB_RECIPE;null_defaults['grubDefaults']=None
+            null_defaults['prepareHash']=module.digest(json.dumps([null_defaults['identity'],state['beforeHash'],state['afterHash'],state['runlevelBefore'],state['bootMode'],None],sort_keys=True).encode())
+            invalid.append(null_defaults)
+            for damaged in invalid:
+                path.write_text(json.dumps(damaged));raw=path.read_bytes()
+                with self.assertRaises(ValueError):module.assert_apparmor_idle(target)
+                self.assertEqual(path.read_bytes(),raw);self.assertEqual(len(calls),commands)
+            path.write_bytes(original)
+            for delta in [{'nodeId':'66666666-6666-4666-8666-666666666666'},{'identityHash':'b'*64},{'architecture':'x86_64'}]:
+                with self.assertRaisesRegex(ValueError,'OTHER_JOURNAL_UNKNOWN'):module.assert_apparmor_idle({**target,**delta})
+                self.assertEqual(path.read_bytes(),original)
+
+    def test_malformed_existing_journals_are_preserved_before_any_write(self):
+        for data in [b'{}',b'[]',b'null',b'0',b'{"version":1,"version":1}',b'{"identity":{"phase":"first","phase":"last"}}']:
+            stack,root,config,before,value,calls,_,_=self.fixture()
+            with stack:
+                journal=root/'maintenance.json';journal.write_bytes(data)
+                with self.assertRaises(ValueError):module.execute(value)
+                self.assertEqual(journal.read_bytes(),data)
+                self.assertEqual(config.read_bytes(),before)
+                self.assertEqual(calls,[])
+
+    def test_kernel_guard_owns_shared_lock_before_legacy_preparation(self):
+        stack,root,config,before,value,calls,_,_=self.fixture()
+        with stack:
+            journal=root/'kernel-maintenance.json';journal.write_bytes(b'original kernel evidence')
+            with self.assertRaisesRegex(ValueError,'OTHER_JOURNAL_UNKNOWN'):module.execute(value)
+            self.assertEqual(config.read_bytes(),before);self.assertEqual(calls,[])
+            def refused(request):
+                self.assertEqual(request,value)
+                self.assertTrue((root/'maintenance.lock').exists())
+                raise ValueError('HARDENING_KERNEL_OTHER_MAINTENANCE')
+            with patch.object(module,'KERNEL_JOURNAL_GUARD',side_effect=refused):
+                with self.assertRaisesRegex(ValueError,'OTHER_MAINTENANCE'):module.execute(value)
+            self.assertEqual(journal.read_bytes(),b'original kernel evidence');self.assertEqual(config.read_bytes(),before)
+            with patch.object(module,'KERNEL_JOURNAL_GUARD',return_value=None) as accepted:
+                self.assertEqual(module.execute(value)['phase'],'prepared')
+                accepted.assert_called_once_with(value)
+            self.assertEqual(journal.read_bytes(),b'original kernel evidence')
+
+    def test_unknown_journal_presence_does_not_become_permission(self):
+        for name in ['maintenance.json','kernel-maintenance.json']:
+            for error in [PermissionError('denied'),OSError('unreadable')]:
+                stack,root,config,before,value,calls,_,_=self.fixture()
+                with stack:
+                    original=Path.lstat
+                    def failed(path,*args,**kwargs):
+                        if path==root/name:raise error
+                        return original(path,*args,**kwargs)
+                    with patch.object(Path,'lstat',failed),self.assertRaises(ValueError):module.execute(value)
+                    self.assertEqual(config.read_bytes(),before);self.assertEqual(calls,[])
+
     def fixture(self, initial_enabled=False):
         stack=ExitStack();directory=stack.enter_context(tempfile.TemporaryDirectory());root=Path(directory)
         original=Path;boot_id='33333333-3333-4333-8333-333333333333';calls=[];enabled=[initial_enabled];boot_value=[boot_id]
@@ -196,8 +263,8 @@ class MaintenanceTests(unittest.TestCase):
             prepared=module.execute(value)
             module.execute({**value,'action':'rollback','prepareHash':prepared['prepareHash']})
             with self.assertRaisesRegex(ValueError,'REMOTE_BUSY'):module.execute(value)
-            state=json.loads((root/'maintenance.json').read_text());state['rolledBackAt']=-120000
-            (root/'maintenance.json').write_text(json.dumps(state))
+            module.time.time.return_value=122
+            value['expiresAt']=180000
             config.write_bytes(b'new administrator configuration')
             with self.assertRaisesRegex(ValueError,'JOURNAL'):module.execute(value)
             self.assertEqual(config.read_bytes(),b'new administrator configuration')
@@ -282,7 +349,8 @@ class MaintenanceTests(unittest.TestCase):
         def command(args,**_):
             if args[0]=='grub-script-check':return b''
             return original_command(args,calls,enabled)
-        with stack,patch.object(module,'boot_path',return_value=config),patch.object(module,'grub_defaults_state',return_value={}), \
+        defaults={'beforeHash':module.digest(b'original grub defaults'),'afterHash':module.digest(b'prepared grub defaults'),'mode':0o644}
+        with stack,patch.object(module,'boot_path',return_value=config),patch.object(module,'grub_defaults_state',return_value=defaults), \
             patch.object(module,'grub_defaults_check'),patch.object(module,'ensure_grub_tools',side_effect=install),patch.object(module,'command',side_effect=command):
             with self.assertRaises(TimeoutError):module.execute(value)
             pending=module.execute(value)

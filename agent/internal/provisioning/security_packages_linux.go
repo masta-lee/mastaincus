@@ -64,7 +64,7 @@ func securityPackageCommandFailure(stage string, output []byte, cause error) err
 		diagnostic = "unsupported-option"
 	case strings.Contains(text, "untrusted"), strings.Contains(text, "bad signature"), strings.Contains(text, "bad archive"), strings.Contains(text, "bad checksum"):
 		diagnostic = "signature-or-content"
-	case strings.Contains(text, "unable to select packages"), strings.Contains(text, "breaks: world"), strings.Contains(text, "conflicts:"):
+	case strings.Contains(text, "unable to select package"), strings.Contains(text, "breaks: world"), strings.Contains(text, "conflicts:"):
 		diagnostic = "package-constraints"
 	case strings.Contains(text, "temporary error"), strings.Contains(text, "network unreachable"), strings.Contains(text, "dns lookup error"), strings.Contains(text, "connection timed out"):
 		diagnostic = "network"

@@ -22,6 +22,8 @@ import { hostMaintenanceBlocked, hostRebootMaintenanceBlocked } from '../lib/hos
 import { prepareAutomaticHostMaintenance, resumeAutomaticHostMaintenance } from './host-security-maintenance.js'
 import { onboardingOwnsHardening, ownsOnboardingHardeningLease } from '../lib/onboarding-hardening-owner.js'
 import { hardeningAcceptanceReadyForRetry } from '../lib/host-maintenance-plan.js'
+import { HOST_KERNEL_MAINTENANCE_RECIPE, HOST_KERNEL_STATE_REVISION } from '../lib/host-kernel-maintenance-plan.js'
+import { prepareAutomaticHostKernelMaintenance, resumeAutomaticHostKernelMaintenance } from './host-kernel-maintenance.js'
 
 const include = { onboardingNode: { include: { batch: true } } } as const
 type SecurityHost = Prisma.HostGetPayload<{ include: typeof include }>
@@ -69,7 +71,8 @@ function currentState(value: Prisma.JsonValue | null): Partial<HardeningState> {
 
 /** A lease is scheduling only. Every actual remote action separately locks and
  * verifies the current host/customer/authority; a stored receipt grants no trust. */
-export async function hardenExistingHost(hostId: number, deps = securityHardeningDependencies, enrollment?: OnboardingHardeningLease): Promise<void> {
+export async function hardenExistingHost(hostId: number, deps = securityHardeningDependencies, enrollment?: OnboardingHardeningLease,
+  options: { inspectOnly?: boolean } = {}): Promise<void> {
   if (deps.held()) return
   const claim = await prisma.$transaction(async tx => {
     await tx.$executeRaw`SET LOCAL lock_timeout = '2s'`
@@ -99,6 +102,7 @@ export async function hardenExistingHost(hostId: number, deps = securityHardenin
     state.journalPolicyRevision = SSH_JOURNAL_POLICY_REVISION
     if (previous.maintenance !== undefined) state.maintenance = previous.maintenance
     if (previous.incusCompat !== undefined) state.incusCompat = previous.incusCompat
+    if (previous.kernel !== undefined) state.kernel = previous.kernel
     state.remoteRequestId = typeof previous.remoteRequestId === 'string' && /^[a-f0-9-]{36}$/.test(previous.remoteRequestId)
       ? previous.remoteRequestId : randomUUID()
     const published = renewal ? { ...previous, leaseToken, leaseUntil: state.leaseUntil } as HardeningState : state
@@ -107,7 +111,7 @@ export async function hardenExistingHost(hostId: number, deps = securityHardenin
   }, { maxWait: 3000, timeout: 8000 })
   if (!claim) return
   const { host: original, state, previous, renewal } = claim
-  const inspectOnly = renewal || hardeningNeedsReadOnlyRecovery(previous) || state.updateAttempts! >= 6
+  const inspectOnly = options.inspectOnly === true || renewal || hardeningNeedsReadOnlyRecovery(previous) || state.updateAttempts! >= 6
   const leaseToken = state.leaseToken
   let actorId: number | null = original.onboardingNode?.batch.createdById ?? null
   let failedUpdate = false
@@ -248,7 +252,7 @@ export async function hardenExistingHost(hostId: number, deps = securityHardenin
     if (['ALPINE_SSH_UPDATE_FAILED', 'ALPINE_SSH_VERIFICATION_FAILED'].includes(state.error || '')) failedUpdate = true
     state.diagnostic = hardeningDiagnostic(state.error!, state.phase!)
   }
-  if (failedUpdate) state.updateAttempts = Math.min(state.updateAttempts! + 1, 1000000)
+  if (failedUpdate && !inspectOnly) state.updateAttempts = Math.min(state.updateAttempts! + 1, 1000000)
   const checks = [state.error ? hardeningFailure(new Error(state.error)) : null,
     state.host?.preflight, state.host?.apparmor, state.host?.ssh, ...(state.instances || []).flatMap(instance => [instance.isolation, instance.ssh])].filter(Boolean) as HardeningCheck[]
   Object.assign(state, hardeningSchedule(checks, state.attempts))
@@ -289,6 +293,9 @@ export async function hardenExistingHost(hostId: number, deps = securityHardenin
     // its current durable fence; a successful older probe cannot erase it.
     const currentMaintenance = currentState(host.securityHardening).maintenance
     state.incusCompat=currentState(host.securityHardening).incusCompat
+    const currentKernel = currentState(host.securityHardening).kernel
+    if (currentKernel === undefined) delete state.kernel
+    else state.kernel = currentKernel
     if (currentMaintenance === undefined) delete state.maintenance
     else state.maintenance = currentMaintenance
     if (receiptBusy) {
@@ -356,8 +363,17 @@ export async function hardenExistingHost(hostId: number, deps = securityHardenin
  * installed hosts. One target runs at a time, independent from repair queues. */
 let cursor = 0
 export const securityHardeningMaintenanceDependencies={resume:resumeAutomaticHostMaintenance}
+export const securityHardeningKernelDependencies={resume:resumeAutomaticHostKernelMaintenance,check:prepareAutomaticHostKernelMaintenance}
+function kernelRecord(value: unknown): Record<string, unknown> {
+  return value && typeof value === 'object' && !Array.isArray(value) ? value as Record<string, unknown> : {}
+}
+function kernelInspectionDue(state: Partial<HardeningState>, now = Date.now()): boolean {
+  const kernel = kernelRecord(state.kernel)
+  const due = typeof kernel.nextCheckAt === 'string' ? Date.parse(kernel.nextCheckAt) : NaN
+  return kernel.revision !== HOST_KERNEL_STATE_REVISION || kernel.identityHash !== state.identityHash || !Number.isFinite(due) || due <= now
+}
 export async function processSecurityHardeningQueue(deps = securityHardeningDependencies, stopped = () => false,
-  maintenance=securityHardeningMaintenanceDependencies) {
+  maintenance=securityHardeningMaintenanceDependencies, kernel=securityHardeningKernelDependencies) {
   if (deps.held() || stopped()) return
   const policy = await prisma.systemConfig.findUnique({ where: { key: SECURITY_HARDENING_ENABLED_KEY } })
   if (!policy || !['true', '1'].includes(policy.value)) return
@@ -369,14 +385,28 @@ export async function processSecurityHardeningQueue(deps = securityHardeningDepe
   const pendingMaintenance=await prisma.host.findMany({where:{securityHardening:{path:['maintenance'],not:Prisma.AnyNull}},
     select:{id:true,securityHardening:true,onboardingNode:{select:{id:true,status:true,step:true,deletedAt:true}}},orderBy:{id:'asc'}})
   const active=pendingMaintenance.find(host=>hostRebootMaintenanceBlocked(host.securityHardening))
+  // An unresolved owner still prohibits another reboot. It cannot withhold
+  // read-only receipt checks from unrelated hosts until their healthy stock
+  // expires. Keep this entire pass inspection-only, even if recovery finishes.
+  const inspectOnly = Boolean(active)
   if(active) {
     // Enrollment owns its lease and due time. Calling the general resumer
     // without that lease used to reject authority and postpone it forever.
-    if(onboardingOwnsHardening(active.onboardingNode))return
     const state=currentState(active.securityHardening)
-    if(!stopped()&&(!state.nextCheckAt||Date.parse(state.nextCheckAt)<=Date.now()))await maintenance.resume(active.id)
-    return
+    const due = typeof state.nextCheckAt !== 'string' || !Number.isFinite(Date.parse(state.nextCheckAt)) || Date.parse(state.nextCheckAt) <= Date.now()
+    if(!onboardingOwnsHardening(active.onboardingNode)&&!stopped()&&due) {
+      try {
+        if(kernelRecord(state.maintenance).recipe===HOST_KERNEL_MAINTENANCE_RECIPE) {
+          if(deps===securityHardeningDependencies||kernel!==securityHardeningKernelDependencies)await kernel.resume(active.id)
+        } else await maintenance.resume(active.id)
+      } catch {
+        // Invalid/changed owner data may refuse recovery before its receipt
+        // writer runs. Preserve that original barrier and continue only reads.
+        console.warn(`[SecurityHardening] Maintenance owner #${active.id} remains unresolved; unrelated receipt checks stay read-only`)
+      }
+    }
   }
+  if (deps.held() || stopped()) return
   const completed=pendingMaintenance.find(host=>{
     if(onboardingOwnsHardening(host.onboardingNode))return false
     const state=currentState(host.securityHardening)
@@ -387,7 +417,7 @@ export async function processSecurityHardeningQueue(deps = securityHardeningDepe
     // Recovery marks the intent complete, then the normal full inspection
     // grants saleability. Do that before starting the next host's maintenance,
     // so a recovered empty host is not stranded behind the entire batch.
-    await hardenExistingHost(completed.id,deps)
+    await hardenExistingHost(completed.id,deps,undefined,{inspectOnly})
     return
   }
   // A restart can leave an older receipt expired while many lower-numbered
@@ -403,8 +433,8 @@ export async function processSecurityHardeningQueue(deps = securityHardeningDepe
       !hostMaintenanceBlocked(host.securityHardening)
   }).sort((a,b)=>Date.parse(currentState(a.securityHardening).nextCheckAt!)-Date.parse(currentState(b.securityHardening).nextCheckAt!)||a.id-b.id)[0]
   if(expired&&!deps.held()&&!stopped()){
-    await hardenExistingHost(expired.id,deps)
-    if(deps===securityHardeningDependencies)await prepareAutomaticHostMaintenance(expired.id)
+    await hardenExistingHost(expired.id,deps,undefined,{inspectOnly})
+    if(!inspectOnly&&deps===securityHardeningDependencies)await prepareAutomaticHostMaintenance(expired.id)
     return
   }
   const hosts = await prisma.host.findMany({ where: { id: { gt: cursor }, singleTenant:true,isInstalled:true,
@@ -419,12 +449,24 @@ export async function processSecurityHardeningQueue(deps = securityHardeningDepe
     // a completed reboot journal must not starve all following inspections.
     if(hostMaintenanceBlocked(host.securityHardening)&&!hostRebootMaintenanceBlocked(host.securityHardening))continue
     if(hostMaintenanceBlocked(host.securityHardening)){
-      if(!state.nextCheckAt||Date.parse(state.nextCheckAt)<=Date.now())await resumeAutomaticHostMaintenance(host.id)
+      if(inspectOnly)continue
+      if(!state.nextCheckAt||Date.parse(state.nextCheckAt)<=Date.now()) {
+        if(kernelRecord(state.maintenance).recipe===HOST_KERNEL_MAINTENANCE_RECIPE) {
+          if(deps===securityHardeningDependencies||kernel!==securityHardeningKernelDependencies)await kernel.resume(host.id)
+        } else await maintenance.resume(host.id)
+      }
       continue
     }
     if (state.revision !== SECURITY_HARDENING_REVISION || !state.nextCheckAt || Date.parse(state.nextCheckAt) <= Date.now() || hardeningAcceptanceReadyForRetry(state) || hardeningJournalReadyForRetry(state) || hardeningReceiptRenewalDue(state) || hardeningListenerPolicyInspectionDue(state)) {
-      await hardenExistingHost(host.id, deps)
-      if(deps===securityHardeningDependencies)await prepareAutomaticHostMaintenance(host.id)
+      await hardenExistingHost(host.id, deps, undefined, {inspectOnly})
+      if(!inspectOnly&&deps===securityHardeningDependencies)await prepareAutomaticHostMaintenance(host.id)
+      return
+    }
+    if(!inspectOnly&&state.status==='verified'&&kernelInspectionDue(state)&&
+      (deps===securityHardeningDependencies||kernel!==securityHardeningKernelDependencies)) {
+      // The kernel checker owns its separate summary and exact maintenance
+      // intent. A healthy admission receipt is not replaced by a new claim.
+      await kernel.check(host.id)
       return
     }
   }

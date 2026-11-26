@@ -1,20 +1,43 @@
 import { readFile } from 'node:fs/promises'
+import { createHash } from 'node:crypto'
 import { fileURLToPath } from 'node:url'
 import { prisma } from '../db/prisma.js'
 import type { Prisma } from '@prisma/client'
 import { authorizeUserWrite, type WriteActor } from '../db/user-write-authorization.js'
 import { OnboardingError } from '../lib/host-onboarding.js'
-import { connectOnboardingSsh, gatewayCommand, gatewayConfigured, sshExec, type OnboardingGateway } from './onboarding-ssh.js'
+import { connectOnboardingSsh, gatewayCommand, gatewayConfigured, readGatewayMaintenanceCapability, sshExec,
+  type GatewayMaintenanceModuleHashes, type OnboardingGateway } from './onboarding-ssh.js'
 
 const local = () => ['127.0.0.1', 'localhost', '::1'].includes(process.env.ONBOARDING_GATEWAY_HOST || '')
-export async function gatewayDnsChannelStatus() {
+export async function expectedGatewayMaintenanceModuleHashes(): Promise<GatewayMaintenanceModuleHashes> {
+  const hashes = {} as GatewayMaintenanceModuleHashes
+  for (const name of ['host-security-maintenance.py', 'host-kernel-maintenance.py'] as const) {
+    const source = await readFile(fileURLToPath(new URL('../../templates/' + name, import.meta.url)))
+    if (!source.length || source.length > (name === 'host-kernel-maintenance.py' ? 96 * 1024 : 65536)) {
+      throw new OnboardingError('GATEWAY_DNS_UPGRADE_FAILED')
+    }
+    hashes[name] = createHash('sha256').update(source).digest('hex')
+  }
+  return hashes
+}
+export async function gatewayMaintenanceChannelCurrent(gateway: OnboardingGateway,
+  expected?: GatewayMaintenanceModuleHashes): Promise<boolean> {
+  const capability = readGatewayMaintenanceCapability(gateway as unknown as Record<string, unknown>)
+  if (!capability) return false
+  const hashes = expected ?? await expectedGatewayMaintenanceModuleHashes()
+  readGatewayMaintenanceCapability({ maintenanceProtocolVersion: 2, maintenanceModuleHashes: hashes })
+  return Object.entries(hashes).every(([name, hash]) => capability.maintenanceModuleHashes[name as keyof GatewayMaintenanceModuleHashes] === hash)
+}
+export const gatewayDnsChannelDependencies = { configured: gatewayConfigured, command: gatewayCommand, capable: gatewayMaintenanceChannelCurrent }
+export async function gatewayDnsChannelStatus(deps = gatewayDnsChannelDependencies) {
   const channelTarget = local() ? 'local' as const : 'remote' as const
-  if (!gatewayConfigured()) return { needsChannelUpgrade: false, channelTarget, channelError: null }
+  if (!deps.configured()) return { needsChannelUpgrade: false, channelTarget, channelError: null }
   try {
-    const status = await gatewayCommand()
-    return { needsChannelUpgrade: status.dnsProtocolVersion !== 2, channelTarget, channelError: null }
+    const status = await deps.command()
+    return { needsChannelUpgrade: status.dnsProtocolVersion !== 2 || !await deps.capable(status), channelTarget, channelError: null }
   } catch (error) {
-    return { needsChannelUpgrade: false, channelTarget, channelError: error instanceof OnboardingError ? error.code : 'GATEWAY_DNS_CHANNEL_CHECK_FAILED' }
+    return { needsChannelUpgrade: error instanceof OnboardingError && error.code === 'GATEWAY_MAINTENANCE_CAPABILITY_INVALID',
+      channelTarget, channelError: error instanceof OnboardingError ? error.code : 'GATEWAY_DNS_CHANNEL_CHECK_FAILED' }
   }
 }
 const identity = (gateway: OnboardingGateway) => ({ publicKey: gateway.publicKey, controlIp: gateway.controlIp,
@@ -51,18 +74,22 @@ export async function withGatewayDnsWriteAuthorization<T>(actor: WriteActor, app
     throw error
   }
 }
-export async function ensureGatewayDnsChannel(gateway: OnboardingGateway, password: string | undefined, actor: WriteActor) {
-  if (gateway.dnsProtocolVersion === 2) return
-  // The normal local installation hook refreshes these same three helpers.
+export const gatewayDnsWriteDependencies = { authorize: withGatewayDnsWriteAuthorization, refresh: refreshPinnedGatewayHelpers,
+  command: gatewayCommand, capable: gatewayMaintenanceChannelCurrent }
+export async function ensureGatewayDnsChannel(gateway: OnboardingGateway, password: string | undefined, actor: WriteActor,
+  deps = gatewayDnsWriteDependencies) {
+  if (gateway.dnsProtocolVersion === 2 && await deps.capable(gateway)) return
+  // The normal local installation hook refreshes these same fixed helpers.
   // Never ask for local SSH or credentials if a partial installation left old code.
   if (local()) throw new OnboardingError('GATEWAY_DNS_LOCAL_HELPER_OUTDATED')
   if (!password) throw new OnboardingError('GATEWAY_DNS_HELPER_UPGRADE_REQUIRED')
   if (password.length > 1024) throw new OnboardingError('GATEWAY_DNS_INVALID')
-  await withGatewayDnsWriteAuthorization(actor, () => refreshPinnedGatewayHelpers(gateway, password))
-  const current = await gatewayCommand()
-  if (current.dnsProtocolVersion !== 2 || JSON.stringify(identity(current)) !== JSON.stringify(identity(gateway))) {
+  await deps.authorize(actor, () => deps.refresh(gateway, password))
+  const current = await deps.command()
+  if (JSON.stringify(identity(current)) !== JSON.stringify(identity(gateway))) {
     throw new OnboardingError('GATEWAY_DNS_HOST_IDENTITY_CHANGED')
   }
+  if (current.dnsProtocolVersion !== 2 || !await deps.capable(current)) throw new OnboardingError('GATEWAY_DNS_UPGRADE_FAILED')
 }
 
 // Callers supply their own current Web/recovery authorization before entering.
@@ -71,9 +98,9 @@ export async function refreshPinnedGatewayHelpers(gateway: OnboardingGateway, pa
   if (local()) throw new OnboardingError('GATEWAY_DNS_LOCAL_HELPER_OUTDATED')
   if (typeof password !== 'string' || !password || password.length > 1024) throw new OnboardingError('GATEWAY_DNS_HELPER_UPGRADE_REQUIRED')
   const sources: Record<string, string> = {}
-  for (const name of ['onboarding-gateway.py', 'refresh-host-gateway-endpoint.py', 'install-host-gateway-dns.sh', 'alpine-ssh-security.sh', 'host-security-maintenance.py']) {
-    const source = await readFile(fileURLToPath(new URL(['alpine-ssh-security.sh','host-security-maintenance.py'].includes(name) ? '../../templates/' + name : '../../../scripts/' + name, import.meta.url)))
-    if (source.length > 131072 || source.length === 0) throw new OnboardingError('GATEWAY_DNS_UPGRADE_FAILED')
+  for (const name of ['onboarding-gateway.py', 'refresh-host-gateway-endpoint.py', 'install-host-gateway-dns.sh', 'alpine-ssh-security.sh', 'host-security-maintenance.py', 'host-kernel-maintenance.py']) {
+    const source = await readFile(fileURLToPath(new URL(['alpine-ssh-security.sh','host-security-maintenance.py','host-kernel-maintenance.py'].includes(name) ? '../../templates/' + name : '../../../scripts/' + name, import.meta.url)))
+    if (source.length > (name==='host-kernel-maintenance.py'?96*1024:131072) || source.length === 0) throw new OnboardingError('GATEWAY_DNS_UPGRADE_FAILED')
     sources[name] = source.toString('base64')
   }
   const executor = await readFile(fileURLToPath(new URL('../../../scripts/upgrade-onboarding-gateway.py', import.meta.url)), 'utf8')
@@ -83,7 +110,8 @@ export async function refreshPinnedGatewayHelpers(gateway: OnboardingGateway, pa
     async fingerprint => fingerprint === process.env.ONBOARDING_GATEWAY_FINGERPRINT)
   try {
       const result = JSON.parse(await sshExec(client, '/usr/bin/python3 -I -B -', script, 45000, 8192)) as Record<string, unknown>
-      if (!result || Object.keys(result).sort().join(',') !== 'dnsProtocolVersion,keysAndRoutesPreserved' ||
-          result.dnsProtocolVersion !== 2 || result.keysAndRoutesPreserved !== true) throw new OnboardingError('GATEWAY_DNS_UPGRADE_FAILED')
+      if (!result || Object.keys(result).sort().join(',') !== 'dnsProtocolVersion,keysAndRoutesPreserved,maintenanceModuleHashes,maintenanceProtocolVersion' ||
+          result.dnsProtocolVersion !== 2 || result.keysAndRoutesPreserved !== true ||
+          !await gatewayMaintenanceChannelCurrent(result as unknown as OnboardingGateway)) throw new OnboardingError('GATEWAY_DNS_UPGRADE_FAILED')
   } finally { client.end() }
 }
