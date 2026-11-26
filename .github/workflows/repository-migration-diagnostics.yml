@@ -10,6 +10,10 @@ on:
         description: 'Diagnose the current private-root startup wrapper without installing a panel'
         type: boolean
         default: false
+      rollback_startup:
+        description: 'Trace the fixed c56 real old-worker rollback; does not build or publish'
+        type: boolean
+        default: false
 
 permissions:
   contents: read
@@ -17,7 +21,7 @@ permissions:
 
 jobs:
   normalizer-native-trace:
-    if: github.repository == 'masta-lee/mastaincus' && !inputs.current_startup
+    if: github.repository == 'masta-lee/mastaincus' && !inputs.current_startup && !inputs.rollback_startup
     runs-on: ubuntu-latest
     timeout-minutes: 30
     env:
@@ -155,7 +159,7 @@ jobs:
           retention-days: 3
 
   current-startup-wrapper:
-    if: github.repository == 'masta-lee/mastaincus' && inputs.current_startup
+    if: github.repository == 'masta-lee/mastaincus' && inputs.current_startup && !inputs.rollback_startup
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
@@ -184,3 +188,71 @@ jobs:
                                                'links': selected.st_nlink, 'bytes': selected.st_size}}))
           PY
           bash scripts/test-repository-startup-toolchain.sh
+
+  fixed-rollback-startup:
+    if: github.repository == 'masta-lee/mastaincus' && inputs.rollback_startup
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          ref: 'c56f4fefc2f5f5c5b1e9048aa8c77305fa51336d'
+          path: reproduction-source
+          persist-credentials: false
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: '24'
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          repository: masta-lee/mastaincus
+          run-id: '45909678364'
+          artifact-ids: '15160155855'
+          github-token: ${{ github.token }}
+          merge-multiple: true
+          path: diagnostic-artifact
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          repository: masta-lee/mastaincus
+          run-id: '45909678364'
+          name: incudal-preview-agent
+          github-token: ${{ github.token }}
+          path: preview-agent
+      - name: Validate the fixed signed candidate and original baseline
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          candidate="$PWD/diagnostic-artifact/incudal-preview-c56f4fe-linux-amd64.tar.gz"
+          test "$(stat -c %s "$candidate")" = 221408295
+          test "$(sha256sum "$candidate" | awk '{print $1}')" = 928d1f0b29841fdb50e392bde569f576806033ee86440a01ecde666f4343d631
+          node --input-type=module - "$candidate" <<'JS'
+          import assert from 'node:assert/strict'
+          import {readFileSync} from 'node:fs'
+          import {verifyPanelDigest} from './scripts/panel-package-signature.mjs'
+          assert.ok(verifyPanelDigest('preview-c56f4fe','amd64','928d1f0b29841fdb50e392bde569f576806033ee86440a01ecde666f4343d631',readFileSync(process.argv[2]+'.sig','utf8').trim()))
+          JS
+          gh release download v1.8.14 --repo "$GITHUB_REPOSITORY" --pattern 'incudal-v1.8.14-linux-amd64.tar.gz*' --dir old-artifact
+          (cd old-artifact && sha256sum --check incudal-v1.8.14-linux-amd64.tar.gz.sha256)
+      - name: Run the unchanged c56 rollback and trace after its failure
+        run: |
+          set -euo pipefail
+          candidate="$PWD/diagnostic-artifact/incudal-preview-c56f4fe-linux-amd64.tar.gz"
+          set +e
+          sudo env GITHUB_ACTIONS=true RUNNER_ENVIRONMENT=github-hosted UPGRADE_DRILL_INSTALLER_SOURCE=legacy INCUDAL_AGENT_RELEASE_TOKEN=${{ github.token }} INCUDAL_PREVIEW_AGENT_DIR="$PWD/preview-agent" \
+            bash reproduction-source/scripts/smoke-legacy-online-upgrade.sh "$candidate" "$PWD/old-artifact/incudal-v1.8.14-linux-amd64.tar.gz" rollback
+          original_status=$?
+          set -e
+          if [[ "$original_status" -ne 0 ]]; then
+            sudo systemctl stop incudal-backend.service
+            test "$(sudo systemctl show incudal-backend.service -p MainPID --value)" = 0
+            set +e
+            sudo /usr/bin/env -i PATH=/usr/sbin:/usr/bin:/sbin:/bin LC_ALL=C HOME=/var/cache/incudal-ota GITHUB_ACTIONS=true RUNNER_ENVIRONMENT=github-hosted \
+              /usr/bin/python3 -I -B scripts/test-repository-rollback-native-trace.py
+            trace_status=$?
+            set -e
+            printf '{"phase":"fixed-c56-rollback-status","originalExitCode":%d,"traceExitCode":%d}\n' "$original_status" "$trace_status"
+          fi
+          exit "$original_status"
