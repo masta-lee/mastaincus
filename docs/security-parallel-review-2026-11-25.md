@@ -1,5 +1,13 @@
 # 安全剩余工作：并行精修与实际验证
 
+## 2026-11-27 模块启动链接的已验证阶段
+
+本批 kernel 模板为 97246 字节，SHA256 `21a349cca5c797c4594cc7da38dadf9dbbde3c242d6dc3bd4a0e193416a95f53`；最终守卫为 `150d3f77e8fcbd4d886ad72930e950772cbbfccfff475eeaae4cee59a5a841a0`。例外仅限模块树根级 `vmlinuz`，按计划固定 flavor 绑定 `/boot/vmlinuz-virt` 或 `/boot/vmlinuz-lts`，要求 root/root、0777、单链接与前后原生身份相同，不解引用目标。签名 payload、模块清单、journal、复制与回退均支持精确 alias，普通文件和旧无 alias 状态保留原检查。
+
+新 Linux r6 完整 64 项、0 跳过、0 失败自然退出 0；此前两个 command fixture 的 r5 单独 2 项也自然 0。原 B、PG88982、boot、业务服务、dpkg、nft 及全输入前后保持。独立审视和 root 的 server types、plan 入口、Windows 64 项（40 项明确 Linux 跳过）、security-hardening 与 diff 检查通过。记录为 `logs/kernel-module-alias-20261127-r5-native-result.log`、`r6-native-result.log`。旧 5191/r3 的两项失败保留，原因是后台 writer 尚未启动便触发短测试超时；最终测试增加真实 parent/writer ready 握手，保留未回收 leader PID、固定 10 秒设置上限和原产品预算。两 alias 并发测试仅把旧 inode 移到 source 树外 holder，防止测试本身的 inode 复用误判。
+
+实际原 RSA 签名及完整 datahash 已认证的 LTS APK 在 r4 parser 正控中仍失败，确认未覆盖的真实成员是 `boot/config-6.18.63-0-lts`、`boot/System.map-6.18.63-0-lts`、`usr/share/kernel/lts/kernel.release` 及其目录链；这与已修 alias 是不同缺口。已批准固定 metadata 路径的安装核验、原记录备份、回退/再激活与旧 journal 兼容方案，在下一独立候选实现。不能只增加 parser 白名单或把这批 64 项视为真实 kernel 包与系统启动全部通过。AMD64/ARM64 真实 boot/rollback、生产自动许可、PG 双库/真实 Debian13 glibc2.41 完整资格、新主控备份模拟恢复及最终热更新、正式发行仍待。
+
 第五批 `986fe81cd63c9b88aee128833428defd5bd1b036` 已完成普通 CI 30/30、完整预览 17 项必需任务全部成功及实际双包完整独核。两 current rollback 真实成功且 duplicate guard 保持，ARM 实际归零证据路径通过；原失败与附加日志分析的错误“必然归零”假定分列保留。继续 kernel alias 的完整原生 64 项与新双架构 boot/rollback、双 PG 常驻执行计划/矩阵和新主控备份完整本机模拟恢复，未正式发行或部署生产。
 
 ## 2026-11-27 新来源验证与真实维护余项

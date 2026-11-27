@@ -1,5 +1,7 @@
 # 网关灾备工程进度
 
+2026-11-27 安全维护接续：模块根级 vmlinuz 精确 alias 修订及 writer-ready 测试已完成新 Linux64/0skip/0fail和对应守卫/类型，产品21a、测试150d准备分批保存。真实已认证 LTS 包另有 release 命名配置、System.map 和 kernel.release 三路径尚未兼容，已批准下一批全链 metadata 修复；未据 alias 分项宣布真实 kernel 启动/自动许可或整个灾备完成。PG Ubuntu 双库的直接 API 及原矩阵执行计划待最终审视，完整 R6 Debian13/glibc2.41 环境仍需独立验收，新的 AMD64 原始云镜像已官方 HTTPS/SHA512 核对（未声称 detached PGP）。最新实际缺口见 [并行安全验收](docs/security-parallel-review-2026-11-25.md)，原正式版本与生产保持。
+
 ## 2026-11-27 安全验收与仓库替代的当前范围
 
 维护、安装与发行来源已迁到公开仓库 `masta-lee/mastaincus`，原 v1.8.14 双架构正式包及 Agent v1.0.16 保留原字节和签名。当前阶段源码为 `986fe81cd63c9b88aee128833428defd5bd1b036`，已推 main 和工作分支。上一来源 933 的普通 CI 已 30/30 成功，完整预览两项回滚证据权限失败已精确修订并经过原生对照；986 的完整预览 `45956521774` 最终 17 项必需任务全部成功、普通 CI `45956468567` 最终 30/30 成功，实际双包签名与完整结构独核通过。真实 root 回滚/duplicate guard 两架构通过，原失败与新来源分列保留。实际包、CI、生产热更新与正式发行分别记入 [仓库替代验收](docs/github-backup-mastaincus-2026-11-26.md)。

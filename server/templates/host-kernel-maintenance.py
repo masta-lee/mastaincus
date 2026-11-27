@@ -414,20 +414,110 @@ def official_repositories(branch):
             ('https://dl-cdn.alpinelinux.org/alpine/v' + branch + '/community\n' if 'community' in seen else '')).encode()
 
 
-def module_manifest(path, require_modules=True):
+def module_alias_metadata(flavor):
+    if not isinstance(flavor, str) or flavor not in {'linux-virt', 'linux-lts'}:
+        fail('HARDENING_KERNEL_UNTRUSTED_PATH')
+    target = '/boot/vmlinuz-' + flavor[6:]
+    return {'symlink': True, 'target': target, 'sha256': digest(target.encode()), 'size': len(target.encode()),
+            'mode': 0o777, 'uid': 0, 'gid': 0, 'nlink': 1}
+
+
+def valid_module_alias(proof, flavor):
+    exact_object(proof, {'symlink', 'target', 'sha256', 'size', 'mode', 'uid', 'gid', 'nlink'})
+    if proof['symlink'] is not True or any(type(proof[key]) is not int for key in ['size', 'mode', 'uid', 'gid', 'nlink']) or \
+            not isinstance(proof['target'], str) or not isinstance(proof['sha256'], str) or proof != module_alias_metadata(flavor):
+        fail('HARDENING_KERNEL_UNTRUSTED_PATH')
+
+
+def module_alias_identity(info):
+    return (info.st_dev, info.st_ino, info.st_mode, info.st_uid, info.st_gid, info.st_nlink,
+            info.st_size, info.st_mtime_ns, info.st_ctime_ns)
+
+
+def module_alias_proof(path, flavor):
+    # The package's root-level kernel alias names the independently checked
+    # boot artifact. Never resolve it or read that artifact through the link.
+    expected = module_alias_metadata(flavor)
+    path = Path(path)
+    if path.name != 'vmlinuz':
+        fail('HARDENING_KERNEL_UNTRUSTED_PATH')
+    protected(path.parent, directory=True)
+    before = path.lstat()
+    if not stat.S_ISLNK(before.st_mode) or before.st_uid != 0 or before.st_gid != 0 or before.st_nlink != 1 or \
+            stat.S_IMODE(before.st_mode) != 0o777 or before.st_size != expected['size']:
+        fail('HARDENING_KERNEL_UNTRUSTED_PATH')
+    target = os.readlink(path)
+    after = path.lstat()
+    protected(path.parent, directory=True)
+    if module_alias_identity(before) != module_alias_identity(after):
+        fail('HARDENING_KERNEL_SOURCE_CHANGED')
+    if target != expected['target']:
+        fail('HARDENING_KERNEL_UNTRUSTED_PATH')
+    return expected
+
+
+def copy_module_alias(source, destination, wanted, flavor):
+    valid_module_alias(wanted, flavor)
+    source, destination = Path(source), Path(destination)
+    if source.name != 'vmlinuz' or destination.name != 'vmlinuz':
+        fail('HARDENING_KERNEL_UNTRUSTED_PATH')
+    source_before = source.lstat()
+    if module_alias_proof(source, flavor) != wanted or \
+            module_alias_identity(source.lstat()) != module_alias_identity(source_before):
+        fail('HARDENING_KERNEL_SOURCE_CHANGED')
+    protected(destination.parent, directory=True)
+    try:
+        destination_before = destination.lstat()
+    except FileNotFoundError:
+        # Exclusive creation cannot replace an unexpected file or link. A
+        # failed fsync leaves this exact link for same-source continuation.
+        try:
+            os.symlink(wanted['target'], destination)
+        except FileExistsError:
+            fail('HARDENING_KERNEL_COPY_CHANGED')
+        destination_before = destination.lstat()
+    if module_alias_proof(destination, flavor) != wanted or \
+            module_alias_identity(destination.lstat()) != module_alias_identity(destination_before):
+        fail('HARDENING_KERNEL_COPY_CHANGED')
+    sync_directory(destination.parent)
+    if module_alias_proof(source, flavor) != wanted or \
+            module_alias_identity(source.lstat()) != module_alias_identity(source_before):
+        fail('HARDENING_KERNEL_SOURCE_CHANGED')
+    if module_alias_proof(destination, flavor) != wanted or \
+            module_alias_identity(destination.lstat()) != module_alias_identity(destination_before):
+        fail('HARDENING_KERNEL_COPY_CHANGED')
+
+
+def module_manifest(path, require_modules=True, flavor=None):
+    path = Path(path)
     protected(path, directory=True)
     result, total = {}, 0
-    for directory, subdirs, files in os.walk(path, followlinks=False):
-        base = Path(directory)
+    pending = [path]
+    while pending:
+        base = pending.pop()
         protected(base, directory=True)
-        for name in sorted(subdirs):
-            child = base / name
-            protected(child, directory=True)
-            result[str(child.relative_to(path))] = {'directory': True, 'mode': stat.S_IMODE(child.stat().st_mode)}
-        for name in sorted(files):
-            child = base / name
-            proof = file_proof(child, limit=64 * 1024 * 1024)
-            result[str(child.relative_to(path))] = proof
+        children = []
+        for child in base.iterdir():
+            children.append(child)
+            if len(result) + len(children) > MAX_TREE_FILES:
+                fail('HARDENING_KERNEL_DISK_LOW')
+        for child in sorted(children, key=lambda entry: entry.name):
+            # os.walk classifies entries using a following is_dir() call;
+            # lstat keeps even a dangling kernel alias completely opaque.
+            info = child.lstat()
+            name = str(child.relative_to(path))
+            if stat.S_ISDIR(info.st_mode):
+                directory = protected(child, directory=True)
+                result[name] = {'directory': True, 'mode': stat.S_IMODE(directory.st_mode)}
+                pending.append(child)
+                continue
+            if stat.S_ISLNK(info.st_mode):
+                if base != path or child.name != 'vmlinuz':
+                    fail('HARDENING_KERNEL_UNTRUSTED_PATH')
+                proof = module_alias_proof(child, flavor)
+            else:
+                proof = file_proof(child, limit=64 * 1024 * 1024)
+            result[name] = proof
             total += proof['size']
             if total > MAX_TREE_BYTES or len(result) > MAX_TREE_FILES:
                 fail('HARDENING_KERNEL_DISK_LOW')
@@ -440,8 +530,8 @@ def manifest_size(manifest):
     return sum(row.get('size', 0) for row in manifest.values())
 
 
-def copy_modules(source, target, manifest, value=None):
-    if module_manifest(source) != manifest:
+def copy_modules(source, target, manifest, value=None, flavor=None):
+    if module_manifest(source, flavor=flavor) != manifest:
         fail('HARDENING_KERNEL_MODULES_CHANGED')
     target.mkdir(mode=0o700, exist_ok=True)
     protected(target, directory=True, private=True)
@@ -452,6 +542,10 @@ def copy_modules(source, target, manifest, value=None):
         if proof.get('directory') is True:
             destination.mkdir(mode=proof['mode'], exist_ok=True)
             protected(destination, directory=True)
+        elif proof.get('symlink') is True:
+            if name != 'vmlinuz':
+                fail('HARDENING_KERNEL_UNTRUSTED_PATH')
+            copy_module_alias(source / name, destination, proof, flavor)
         elif destination.exists() and not (destination.parent / ('.kernel-copy-' + destination.name)).exists():
             if file_proof(destination) != proof:
                 fail('HARDENING_KERNEL_BACKUP_CHANGED')
@@ -459,7 +553,7 @@ def copy_modules(source, target, manifest, value=None):
             if destination.exists() and file_proof(destination) != proof:
                 fail('HARDENING_KERNEL_BACKUP_CHANGED')
             copy_checked(source / name, destination, proof)
-    if module_manifest(target) != manifest:
+    if module_manifest(target, flavor=flavor) != manifest:
         fail('HARDENING_KERNEL_MODULES_CHANGED')
 
 
@@ -526,7 +620,7 @@ def boot_baseline(flavor, running):
             'artifacts': {str(path): file_proof(path) for path in artifacts},
             'controls': {str(path): file_proof(path, limit=1024 * 1024) for path in controls},
             'tools': {name: trusted_program(name) for name in tools},
-            'modules': module_manifest(Path('/lib/modules') / running),
+            'modules': module_manifest(Path('/lib/modules') / running, flavor=flavor),
             'identity': runtime_identity(), 'cmdline': Path('/proc/cmdline').read_text().strip()}
 
 
@@ -669,6 +763,14 @@ def kernel_payload(path, flavor, version):
                         not name.startswith('lib/modules/' + expected_release + '/'):
                     fail('HARDENING_KERNEL_PACKAGE_FORMAT_UNSUPPORTED')
                 continue
+            if entry.issym():
+                alias = 'lib/modules/' + expected_release + '/vmlinuz'
+                proof = module_alias_metadata(flavor)
+                if name != alias or entry.name.removeprefix('./') != alias or entry.linkname != proof['target'] or \
+                        entry.uid != 0 or entry.gid != 0 or entry.mode != 0o777 or entry.size != 0 or '/' + name in result:
+                    fail('HARDENING_KERNEL_PACKAGE_FORMAT_UNSUPPORTED')
+                result['/' + name] = proof
+                continue
             if not entry.isfile() or entry.uid != 0 or entry.gid != 0 or entry.mode & 0o022 or entry.size > 64 * 1024 * 1024:
                 fail('HARDENING_KERNEL_PACKAGE_FORMAT_UNSUPPORTED')
             permitted = name in {'boot/vmlinuz-' + flavor[6:], 'boot/config-' + flavor[6:], 'boot/System.map-' + flavor[6:]} or \
@@ -694,6 +796,15 @@ def kernel_payload(path, flavor, version):
         if re.findall(r'^[ \t]*' + field + r'[ \t]*=[ \t]*([^\r\n]*)$', metadata, re.M) != [expected]:
             fail('HARDENING_KERNEL_PACKAGE_FORMAT_UNSUPPORTED')
     return result
+
+
+def installed_payload_proof(path, proof, flavor, release):
+    if isinstance(proof, dict) and proof.get('symlink') is True:
+        if path != '/lib/modules/' + release + '/vmlinuz':
+            fail('HARDENING_KERNEL_PACKAGE_PAYLOAD_INCOMPLETE')
+        valid_module_alias(proof, flavor)
+        return module_alias_proof(Path(path), flavor)
+    return file_proof(Path(path))
 
 
 def private_cache_permissions(path):
@@ -1015,13 +1126,19 @@ def validate_journal(state):
     if not isinstance(baseline['artifacts'], dict) or not mandatory <= set(baseline['artifacts']) or \
             set(baseline['artifacts']) - mandatory - {'/boot/config-' + suffix, '/boot/System.map-' + suffix}:
         fail()
-    for mapping in [baseline['artifacts'], baseline['controls'], baseline['identity'], transaction['context'], transaction['payload'], transaction['cache']]:
+    for mapping, module_payload in [(baseline['artifacts'], False), (baseline['controls'], False), (baseline['identity'], False),
+            (transaction['context'], False), (transaction['payload'], True), (transaction['cache'], False)]:
         if not isinstance(mapping, dict) or not 1 <= len(mapping) <= MAX_TREE_FILES:
             fail()
         for path, proof in mapping.items():
             if not isinstance(path, str) or len(path) > 512 or '\x00' in path or '..' in Path(path).parts:
                 fail()
-            valid_proof(proof)
+            if module_payload and isinstance(proof, dict) and proof.get('symlink') is True:
+                if path != '/lib/modules/' + plan['candidateRelease'] + '/vmlinuz':
+                    fail()
+                valid_module_alias(proof, plan['flavor'])
+            else:
+                valid_proof(proof)
     if not isinstance(baseline['modules'], dict) or not 1 <= len(baseline['modules']) <= MAX_TREE_FILES:
         fail()
     for path, proof in baseline['modules'].items():
@@ -1031,6 +1148,10 @@ def validate_journal(state):
             exact_object(proof, {'directory', 'mode'})
             if type(proof['mode']) is not int or not 0 <= proof['mode'] <= 0o777 or proof['mode'] & 0o022:
                 fail()
+        elif isinstance(proof, dict) and proof.get('symlink') is True:
+            if path != 'vmlinuz':
+                fail()
+            valid_module_alias(proof, plan['flavor'])
         else:
             valid_proof(proof)
     for name, tool in baseline['tools'].items():
@@ -1058,6 +1179,10 @@ def validate_journal(state):
                 exact_object(proof, {'directory', 'mode'})
                 if type(proof['mode']) is not int or not 0 <= proof['mode'] <= 0o777 or proof['mode'] & 0o022:
                     fail()
+            elif isinstance(proof, dict) and proof.get('symlink') is True:
+                if path != 'vmlinuz':
+                    fail()
+                valid_module_alias(proof, plan['flavor'])
             else:
                 valid_proof(proof)
     if state['phase'] in {'boot-staged', 'prepared', 'reboot-intent', 'activated'} and (
@@ -1185,7 +1310,8 @@ def save_before(state, value):
         else:
             copy_checked(Path(path), destination, proof, mode=0o600)
     old_modules = directory / 'old-modules'
-    copy_modules(Path('/lib/modules') / state['plan']['runningRelease'], old_modules, baseline['modules'], value)
+    copy_modules(Path('/lib/modules') / state['plan']['runningRelease'], old_modules, baseline['modules'], value,
+                 flavor=state['plan']['flavor'])
     current_request(value)
     check_fixed_baseline(transaction, include_boot=True)
     if installed_packages(value) != transaction['installed'] or package_context() != transaction['context']:
@@ -1203,7 +1329,7 @@ def verify_original_backups(state):
     for path, proof in baseline['artifacts'].items():
         if file_proof(before_path(state, path), private=True) != backup_proof(proof):
             fail('HARDENING_KERNEL_BACKUP_CHANGED')
-    if module_manifest(run_directory(state) / 'old-modules') != baseline['modules']:
+    if module_manifest(run_directory(state) / 'old-modules', flavor=state['plan']['flavor']) != baseline['modules']:
         fail('HARDENING_KERNEL_BACKUP_CHANGED')
 
 
@@ -1264,7 +1390,7 @@ def install_original(state, value):
         fail('HARDENING_KERNEL_PACKAGE_PLAN_CHANGED')
     check_fixed_baseline(transaction)
     for path, proof in transaction['payload'].items():
-        if file_proof(Path(path)) != proof:
+        if installed_payload_proof(path, proof, flavor, state['plan']['candidateRelease']) != proof:
             fail('HARDENING_KERNEL_PACKAGE_PAYLOAD_INCOMPLETE')
     # The old modules are retained independently before APK removes them.
     # The actual new tree is checked against all signed payload bytes above.
@@ -1298,7 +1424,7 @@ def stage_boot(state, value):
     if installed_packages(value) != transaction['expectedInstalled']:
         fail('HARDENING_KERNEL_PACKAGE_PLAN_CHANGED')
     for path, proof in transaction['payload'].items():
-        if file_proof(Path(path)) != proof:
+        if installed_payload_proof(path, proof, state['plan']['flavor'], state['plan']['candidateRelease']) != proof:
             fail('HARDENING_KERNEL_PACKAGE_PAYLOAD_INCOMPLETE')
     check_partial_boot(state)
     empty_remote(value)
@@ -1364,7 +1490,7 @@ def stage_boot(state, value):
         if proof['mode'] != baseline['artifacts'][path]['mode'] or proof['gid'] != baseline['artifacts'][path]['gid']:
             fail('HARDENING_KERNEL_BOOT_FILES_CHANGED')
     transaction['candidateArtifacts'] = candidates
-    transaction['candidateModules'] = module_manifest(Path('/lib/modules') / release)
+    transaction['candidateModules'] = module_manifest(Path('/lib/modules') / release, flavor=state['plan']['flavor'])
     signed_output_metadata(transaction)
     current_request(value)
     check_fixed_baseline(transaction)
@@ -1385,7 +1511,8 @@ def commit_boot(state, value):
     verify_original_backups(state)
     check_original_cache(state, value)
     check_staging_paths(state)
-    if installed_packages(value) != transaction['expectedInstalled'] or module_manifest(Path('/lib/modules') / state['plan']['candidateRelease']) != transaction['candidateModules']:
+    if installed_packages(value) != transaction['expectedInstalled'] or \
+            module_manifest(Path('/lib/modules') / state['plan']['candidateRelease'], flavor=state['plan']['flavor']) != transaction['candidateModules']:
         fail('HARDENING_KERNEL_PACKAGE_PAYLOAD_INCOMPLETE')
     for path, proof in transaction['candidateArtifacts'].items():
         if file_proof(candidate_path(state, path)) != proof:
@@ -1434,7 +1561,7 @@ def verify_prepared(state, value):
     check_original_cache(state, value)
     if installed_packages(value) != transaction['expectedInstalled'] or \
             {path: file_proof(Path(path)) for path in transaction['baseline']['artifacts']} != transaction['candidateArtifacts'] or \
-            module_manifest(Path('/lib/modules') / state['plan']['candidateRelease']) != transaction['candidateModules']:
+            module_manifest(Path('/lib/modules') / state['plan']['candidateRelease'], flavor=state['plan']['flavor']) != transaction['candidateModules']:
         fail('HARDENING_KERNEL_PREPARE_CHANGED')
     runtime_services(state, value)
 
@@ -1444,10 +1571,11 @@ def restore_module_tree(state):
     original = Path('/lib/modules') / state['plan']['runningRelease']
     backup = run_directory(state) / 'old-modules'
     manifest = baseline['modules']
-    if module_manifest(backup) != manifest:
+    flavor = state['plan']['flavor']
+    if module_manifest(backup, flavor=flavor) != manifest:
         fail('HARDENING_KERNEL_BACKUP_CHANGED')
     if original.exists() or original.is_symlink():
-        actual = module_manifest(original, require_modules=False)
+        actual = module_manifest(original, require_modules=False, flavor=flavor)
         partial = []
         for path, proof in actual.items():
             if path in manifest:
@@ -1458,7 +1586,7 @@ def restore_module_tree(state):
             if not name.name.startswith('.kernel-copy-'):
                 fail('HARDENING_KERNEL_MODULES_CHANGED')
             restored = str(name.parent / name.name.removeprefix('.kernel-copy-'))
-            if restored not in manifest or manifest[restored].get('directory') is True:
+            if restored not in manifest or manifest[restored].get('directory') is True or manifest[restored].get('symlink') is True:
                 fail('HARDENING_KERNEL_MODULES_CHANGED')
             target = original / restored
             if target.exists() and file_proof(target) != manifest[restored]:
@@ -1476,11 +1604,15 @@ def restore_module_tree(state):
             protected(target, directory=True)
             if stat.S_IMODE(target.stat().st_mode) != proof['mode']:
                 fail('HARDENING_KERNEL_MODULES_CHANGED')
+        elif proof.get('symlink') is True:
+            if path != 'vmlinuz':
+                fail('HARDENING_KERNEL_UNTRUSTED_PATH')
+            copy_module_alias(backup / path, target, proof, flavor)
         elif not target.exists():
             copy_checked(backup / path, target, proof)
         elif file_proof(target) != proof:
             fail('HARDENING_KERNEL_MODULES_CHANGED')
-    if module_manifest(original) != manifest:
+    if module_manifest(original, flavor=flavor) != manifest:
         fail('HARDENING_KERNEL_ROLLBACK_INCOMPLETE')
     sync_directory(original)
 
@@ -1492,7 +1624,7 @@ def verify_rollback_files(state, strict=True):
     elif runtime_identity() != baseline['identity'] or Path('/proc/cmdline').read_text().strip() != baseline['cmdline']:
         fail('HARDENING_IDENTITY_CHANGED')
     if {path: file_proof(Path(path)) for path in baseline['artifacts']} != baseline['artifacts'] or \
-            module_manifest(Path('/lib/modules') / state['plan']['runningRelease']) != baseline['modules']:
+            module_manifest(Path('/lib/modules') / state['plan']['runningRelease'], flavor=state['plan']['flavor']) != baseline['modules']:
         fail('HARDENING_KERNEL_ROLLBACK_INCOMPLETE')
 
 
@@ -1539,7 +1671,7 @@ def verify_terminal(state, value):
         transaction = state['transaction']
         if state['prepareHash'] != preparation_hash(state) or runtime_identity() != transaction['baseline']['identity'] or \
                 {path: file_proof(Path(path)) for path in transaction['baseline']['artifacts']} != transaction['candidateArtifacts'] or \
-                module_manifest(Path('/lib/modules') / state['plan']['candidateRelease']) != transaction['candidateModules']:
+                module_manifest(Path('/lib/modules') / state['plan']['candidateRelease'], flavor=state['plan']['flavor']) != transaction['candidateModules']:
             fail('HARDENING_KERNEL_ARCHIVE_CONFLICT')
         empty_remote(value)
     elif state['phase'] == 'rolled-back':

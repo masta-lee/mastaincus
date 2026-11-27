@@ -10,6 +10,7 @@ import json
 import os
 from pathlib import Path
 import signal
+import shutil
 import stat
 import sys
 import tarfile
@@ -402,6 +403,105 @@ class KernelPlanTests(unittest.TestCase):
                             module.kernel_payload(path, 'linux-virt', '6.12.118-r0')
 
 
+class KernelAliasPlanTests(unittest.TestCase):
+    def test_alias_proof_has_exact_fields_and_explicit_flavor(self):
+        for flavor in ['linux-virt', 'linux-lts']:
+            target = '/boot/vmlinuz-' + flavor[6:]
+            expected = {'symlink': True, 'target': target, 'sha256': hashlib.sha256(target.encode()).hexdigest(),
+                        'size': len(target.encode()), 'mode': 0o777, 'uid': 0, 'gid': 0, 'nlink': 1}
+            self.assertEqual(module.module_alias_metadata(flavor), expected)
+            module.valid_module_alias(expected, flavor)
+            self.assertEqual(len(expected), 8)
+        for unknown in [None, '', 'virt', 'linux-other', [], True]:
+            with self.assertRaises(ValueError):
+                module.module_alias_metadata(unknown)
+
+    def test_alias_proof_rejects_foreign_flavor_owner_type_and_extra_fields(self):
+        proof = module.module_alias_metadata('linux-virt')
+        for change in [{'symlink': 1}, {'mode': 0o755}, {'uid': 1}, {'gid': 1}, {'nlink': 2}, {'nlink': True},
+                       {'size': True}, {'sha256': 'a' * 64}, {'target': '/boot/../boot/vmlinuz-virt'},
+                       {'unknown': 'field'}]:
+            with self.subTest(change=change), self.assertRaises(ValueError):
+                module.valid_module_alias({**proof, **change}, 'linux-virt')
+        with self.assertRaises(ValueError):
+            module.valid_module_alias(module.module_alias_metadata('linux-lts'), 'linux-virt')
+        with self.assertRaises(ValueError):
+            module.valid_proof(proof)
+        with self.assertRaises(ValueError):
+            module.valid_proof({'sha256': 'a' * 64, 'size': 18, 'uid': 0, 'gid': 0, 'mode': 0o777})
+
+    def test_installed_payload_only_uses_alias_reader_at_exact_signed_release_path(self):
+        proof = module.module_alias_metadata('linux-virt')
+        release = '6.12.118-0-virt'
+        path = '/lib/modules/' + release + '/vmlinuz'
+        with patch.object(module, 'module_alias_proof', return_value=proof) as alias, \
+                patch.object(module, 'file_proof', side_effect=AssertionError('alias must remain opaque')):
+            self.assertEqual(module.installed_payload_proof(path, proof, 'linux-virt', release), proof)
+            alias.assert_called_once_with(Path(path), 'linux-virt')
+            for wrong in ['/boot/vmlinuz-virt', '/lib/modules/' + release + '/kernel/vmlinuz',
+                          '/lib/modules/6.12.119-0-virt/vmlinuz']:
+                with self.subTest(path=wrong), self.assertRaises(ValueError):
+                    module.installed_payload_proof(wrong, proof, 'linux-virt', release)
+            with self.assertRaises(ValueError):
+                module.installed_payload_proof(path, proof, 'linux-lts', release)
+
+    def alias_apk(self, flavor='linux-virt', architecture='x86_64', name=None, target=None, kind=tarfile.SYMTYPE,
+                  mode=0o777, uid=0, gid=0, size=0, duplicate=False):
+        release = '6.12.118-0-' + flavor[6:]
+        name = 'lib/modules/' + release + '/vmlinuz' if name is None else name
+        target = '/boot/vmlinuz-' + flavor[6:] if target is None else target
+        def tar(entries):
+            output = io.BytesIO()
+            with tarfile.open(fileobj=output, mode='w') as archive:
+                for entry, body in entries:
+                    archive.addfile(entry, None if body is None else io.BytesIO(body))
+            return gzip.compress(output.getvalue())
+        def regular(name, body):
+            entry = tarfile.TarInfo(name);entry.uid = entry.gid = 0;entry.mode = 0o644;entry.size = len(body)
+            return entry, body
+        signature = tar([regular('.SIGN.RSA.test.pub', b'synthetic parsing input, not an authenticated package')])
+        control = tar([regular('.PKGINFO', ('pkgname = ' + flavor + '\npkgver = 6.12.118-r0\narch = ' + architecture + '\n').encode())])
+        entry = tarfile.TarInfo(name);entry.type = kind;entry.linkname = target
+        entry.mode, entry.uid, entry.gid, entry.size = mode, uid, gid, size
+        entries = [regular('boot/vmlinuz-' + flavor[6:], b'candidate'),
+                   regular('lib/modules/' + release + '/kernel/test.ko', b'module'), (entry, None)]
+        if duplicate:
+            entries.append((copy.copy(entry), None))
+        return signature + control + tar(entries)
+
+    def parse_alias_apk(self, data, flavor='linux-virt', architecture='x86_64'):
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / 'fixture.apk';path.write_bytes(data)
+            def proof(file, **_):
+                body = Path(file).read_bytes()
+                return {'sha256': hashlib.sha256(body).hexdigest(), 'size': len(body), 'mode': 0o600, 'uid': 0, 'gid': 0}
+            with patch.object(module, 'file_proof', side_effect=proof), \
+                    patch.object(module.os, 'O_NOFOLLOW', getattr(os, 'O_NOFOLLOW', 0), create=True), \
+                    patch.object(module.os, 'uname', return_value=types.SimpleNamespace(machine=architecture), create=True):
+                return module.kernel_payload(path, flavor, '6.12.118-r0')
+
+    def test_synthetic_payload_alias_supports_both_flavors_and_architectures(self):
+        for flavor in ['linux-virt', 'linux-lts']:
+            for architecture in ['x86_64', 'aarch64']:
+                with self.subTest(flavor=flavor, architecture=architecture):
+                    payload = self.parse_alias_apk(self.alias_apk(flavor, architecture), flavor, architecture)
+                    path = '/lib/modules/6.12.118-0-' + flavor[6:] + '/vmlinuz'
+                    self.assertEqual(payload[path], module.module_alias_metadata(flavor))
+                    self.assertEqual(payload['/boot/vmlinuz-' + flavor[6:]]['sha256'], module.digest(b'candidate'))
+
+    def test_synthetic_payload_refuses_noncanonical_aliases_and_hardlinks(self):
+        cases = [{'name': 'lib/modules/6.12.118-0-virt/kernel/vmlinuz'},
+                 {'name': 'lib/modules/6.12.119-0-virt/vmlinuz'}, {'name': 'lib/modules/6.12.118-0-virt/other'},
+                 {'name': '../vmlinuz'}, {'name': 'lib/modules/6.12.118-0-virt/vmlinuz/'},
+                 {'target': '/boot/vmlinuz-lts'}, {'target': '../../boot/vmlinuz-virt'},
+                 {'target': '/boot/../boot/vmlinuz-virt'}, {'target': '/boot//vmlinuz-virt'},
+                 {'kind': tarfile.LNKTYPE}, {'mode': 0o755}, {'mode': 0o4777}, {'uid': 1}, {'gid': 1},
+                 {'duplicate': True}]
+        for case in cases:
+            with self.subTest(case=case), self.assertRaises(ValueError):
+                self.parse_alias_apk(self.alias_apk(**case))
+
+
 @unittest.skipUnless(os.name == 'posix' and hasattr(os, 'waitid') and hasattr(os, 'getuid') and os.getuid() == 0,
                      'requires isolated Linux subprocess fixtures')
 class KernelCommandTests(unittest.TestCase):
@@ -416,8 +516,10 @@ class KernelCommandTests(unittest.TestCase):
                  'record=Path(' + repr(str(record)) + ')', 'if not attempts.exists():', "    attempts.write_text('first')"]
         if with_child:
             lines += ['    subprocess.Popen([sys.executable,"-c",' + repr(child) + ',str(record)],stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL)',
-                      '    deadline=time.monotonic()+5', '    while not record.exists() and time.monotonic()<deadline: time.sleep(.01)',
-                      '    assert record.exists()']
+                      '    deadline=time.monotonic()+10', '    while not record.exists() and time.monotonic()<deadline: time.sleep(.01)',
+                      '    assert record.exists()',
+                      '    raw=Path("/proc/self/stat").read_text();fields=raw[raw.rfind(") ")+2:].split()',
+                      '    record.with_name(record.name+".parent-ready").write_text(json.dumps({"pid":os.getpid(),"start":fields[19]}))']
         lines += ['    time.sleep(30)', 'else:', '    print("linux-virt-6.18.58-r0\\nbaselayout-3.7.0-r0")']
         program = Path(directory) / 'apk'
         program.write_text('\n'.join(lines) + '\n')
@@ -441,7 +543,10 @@ class KernelCommandTests(unittest.TestCase):
                 budgets.append(timeout)
                 # The exact 8/20 budgets are checked above; shorten only this
                 # synthetic sleeping process fixture, preserving real cleanup.
-                return original_command(args, timeout=2 if len(budgets) == 1 else 4, value=value)
+                if len(budgets) == 1:
+                    with patch.object(module.subprocess, 'Popen', side_effect=self.ready_popen(record)):
+                        return original_command(args, timeout=2, value=value)
+                return original_command(args, timeout=4, value=value)
 
             try:
                 with patch.object(module, 'trusted_program', side_effect=lookup), patch.object(module, 'command', side_effect=command):
@@ -499,23 +604,71 @@ class KernelCommandTests(unittest.TestCase):
             time.sleep(.02)
         self.assertFalse(self.child_alive(record))
 
+    def ready_popen(self, record, allow_exited_parent=False):
+        native = module.subprocess.Popen
+        parent_record = record.with_name(record.name + '.parent-ready')
+        def spawn(*args, **kwargs):
+            self.assertIs(kwargs.get('start_new_session'), True)
+            process = native(*args, **kwargs)
+            deadline = time.monotonic() + 10
+            try:
+                while time.monotonic() < deadline:
+                    # Keep the leader unreaped: command() owns its PID/group.
+                    exited = os.waitid(os.P_PID, process.pid, os.WEXITED | os.WNOHANG | os.WNOWAIT)
+                    if exited is not None and not (allow_exited_parent and exited.si_code == os.CLD_EXITED and exited.si_status == 0):
+                        self.fail('controlled fixture parent exited before writer-ready acknowledgement')
+                    try:
+                        child = json.loads(record.read_text())
+                        parent = json.loads(parent_record.read_text())
+                        child_raw = Path('/proc/' + str(child['pid']) + '/stat').read_text()
+                        parent_raw = Path('/proc/' + str(process.pid) + '/stat').read_text()
+                        child_fields = child_raw[child_raw.rfind(') ') + 2:].split()
+                        parent_fields = parent_raw[parent_raw.rfind(') ') + 2:].split()
+                        arguments = Path('/proc/' + str(child['pid']) + '/cmdline').read_bytes().split(b'\0')
+                    except (FileNotFoundError, ProcessLookupError, json.JSONDecodeError):
+                        time.sleep(.01)
+                        continue
+                    self.assertEqual(set(child), {'pid', 'start'})
+                    self.assertEqual(set(parent), {'pid', 'start'})
+                    self.assertIs(type(child['pid']), int)
+                    self.assertEqual(parent['pid'], process.pid)
+                    self.assertEqual(parent['start'], parent_fields[19])
+                    self.assertEqual(child['start'], child_fields[19])
+                    self.assertEqual(int(child_fields[2]), process.pid)
+                    self.assertNotIn(child_fields[0], {'Z', 'X'})
+                    self.assertIn(str(record).encode(), arguments)
+                    return process
+                self.fail('controlled writer-ready handshake exceeded its fixed 10-second setup bound')
+            except BaseException:
+                try:
+                    os.killpg(process.pid, signal.SIGKILL)
+                except ProcessLookupError:
+                    pass
+                process.wait(timeout=2)
+                raise
+        return spawn
+
     def background_command(self, record, wait):
         child = ('import json,os,sys,time;from pathlib import Path;'
                  'raw=Path("/proc/self/stat").read_text();fields=raw[raw.rfind(") ")+2:].split();'
                  'Path(sys.argv[1]).write_text(json.dumps({"pid":os.getpid(),"start":fields[19]}));'
                  'time.sleep(30)')
-        parent = ('import subprocess,sys,time;from pathlib import Path;'
+        parent = ('import json,os,subprocess,sys,time;from pathlib import Path;'
                   'subprocess.Popen([sys.executable,"-c",sys.argv[1],sys.argv[2]],stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL);'
-                  'record=Path(sys.argv[2]);deadline=time.monotonic()+5\n'
+                  'record=Path(sys.argv[2]);deadline=time.monotonic()+10\n'
                   'while not record.exists() and time.monotonic()<deadline: time.sleep(.01)\n'
-                  'assert record.exists()\n' + ('time.sleep(30)\n' if wait else ''))
+                  'assert record.exists()\n'
+                  'raw=Path("/proc/self/stat").read_text();fields=raw[raw.rfind(") ")+2:].split()\n'
+                  'record.with_name(record.name+".parent-ready").write_text(json.dumps({"pid":os.getpid(),"start":fields[19]}))\n' +
+                  ('time.sleep(30)\n' if wait else ''))
         return [sys.executable, '-c', parent, child, str(record)]
 
     def test_real_timeout_terminates_the_command_group_before_replay(self):
         with tempfile.TemporaryDirectory(prefix='incudal-kernel-command-', dir='/var/lib') as directory:
             record = Path(directory) / 'original-child.json'
             try:
-                with self.assertRaisesRegex(ValueError, '^HARDENING_KERNEL_STEP_TIMEOUT$'):
+                with patch.object(module.subprocess, 'Popen', side_effect=self.ready_popen(record)), \
+                        self.assertRaisesRegex(ValueError, '^HARDENING_KERNEL_STEP_TIMEOUT$'):
                     module.command(self.background_command(record, True), timeout=2)
                 self.assertTrue(record.exists(), 'the background writer started before the parent timed out')
                 deadline = time.monotonic() + 1
@@ -529,7 +682,8 @@ class KernelCommandTests(unittest.TestCase):
         with tempfile.TemporaryDirectory(prefix='incudal-kernel-command-', dir='/var/lib') as directory:
             record = Path(directory) / 'original-child.json'
             try:
-                with self.assertRaisesRegex(ValueError, '^HARDENING_KERNEL_CHILD_PENDING$'):
+                with patch.object(module.subprocess, 'Popen', side_effect=self.ready_popen(record, allow_exited_parent=True)), \
+                        self.assertRaisesRegex(ValueError, '^HARDENING_KERNEL_CHILD_PENDING$'):
                     module.command(self.background_command(record, False), timeout=4)
                 self.assertTrue(record.exists())
                 deadline = time.monotonic() + 1
@@ -550,9 +704,149 @@ class KernelCommandTests(unittest.TestCase):
             module.command([sys.executable, '-c', 'import sys;sys.stdout.buffer.write(b"x"*(5*1024*1024))'], timeout=3)
 
 
+@unittest.skipUnless(os.name == 'posix' and hasattr(os, 'getuid') and os.getuid() == 0, 'requires isolated Linux root alias fixtures')
+class KernelModuleAliasFilesystemTests(unittest.TestCase):
+    def tree(self, parent, name, flavor):
+        root = Path(parent) / name;root.mkdir(mode=0o755)
+        kernel = root / 'kernel';kernel.mkdir(mode=0o755)
+        module_file = kernel / 'test.ko';module_file.write_bytes(b'ordinary module bytes');module_file.chmod(0o644)
+        os.symlink('/boot/vmlinuz-' + flavor[6:], root / 'vmlinuz')
+        return root
+
+    def test_manifest_backup_and_idempotent_copy_never_follow_kernel_alias(self):
+        for flavor in ['linux-virt', 'linux-lts']:
+            with self.subTest(flavor=flavor), tempfile.TemporaryDirectory(prefix='incudal-kernel-alias-', dir='/var/lib') as directory:
+                root = Path(directory);root.chmod(0o700)
+                source = self.tree(root, 'source', flavor)
+                destination = root / 'backup'
+                original_stat, original_proof = os.stat, module.file_proof
+                def no_boot_stat(path, *args, **kwargs):
+                    self.assertFalse(str(path).startswith('/boot/vmlinuz-'), 'alias target must never be statted')
+                    return original_stat(path, *args, **kwargs)
+                def ordinary_proof(path, *args, **kwargs):
+                    self.assertNotEqual(Path(path).name, 'vmlinuz', 'alias must not use the regular reader')
+                    self.assertFalse(str(path).startswith('/boot/vmlinuz-'))
+                    return original_proof(path, *args, **kwargs)
+                with patch.object(module.os, 'stat', side_effect=no_boot_stat), patch.object(module, 'file_proof', side_effect=ordinary_proof):
+                    manifest = module.module_manifest(source, flavor=flavor)
+                    self.assertEqual(manifest['vmlinuz'], module.module_alias_metadata(flavor))
+                    module.copy_modules(source, destination, manifest, flavor=flavor)
+                    self.assertEqual(module.module_manifest(destination, flavor=flavor), manifest)
+                    copied_before = (destination / 'vmlinuz').lstat()
+                    module.copy_modules(source, destination, manifest, flavor=flavor)
+                    self.assertEqual(module.module_alias_identity((destination / 'vmlinuz').lstat()),
+                                     module.module_alias_identity(copied_before))
+                self.assertEqual(os.readlink(destination / 'vmlinuz'), '/boot/vmlinuz-' + flavor[6:])
+                self.assertFalse((destination / '.kernel-copy-vmlinuz').exists())
+
+    def test_link_reader_requires_context_and_rejects_foreign_or_relative_targets(self):
+        for target in ['/boot/vmlinuz-lts', '/boot/vmlinuz-evil', '../../boot/vmlinuz-virt', '/boot/../boot/vmlinuz-virt']:
+            with self.subTest(target=target), tempfile.TemporaryDirectory(prefix='incudal-kernel-alias-', dir='/var/lib') as directory:
+                root = Path(directory);root.chmod(0o700)
+                path = root / 'vmlinuz';os.symlink(target, path)
+                before = path.lstat()
+                with self.assertRaises(ValueError):
+                    module.module_alias_proof(path, 'linux-virt')
+                self.assertEqual(os.readlink(path), target)
+                self.assertEqual(module.module_alias_identity(path.lstat()), module.module_alias_identity(before))
+        with tempfile.TemporaryDirectory(prefix='incudal-kernel-alias-', dir='/var/lib') as directory:
+            root = Path(directory);root.chmod(0o700)
+            tree = self.tree(root, 'tree', 'linux-virt')
+            with self.assertRaises(ValueError):
+                module.module_manifest(tree)
+
+    def test_manifest_refuses_nested_alias_and_other_symlinks(self):
+        for name in ['kernel/vmlinuz', 'kernel/test-link.ko', 'other']:
+            with self.subTest(name=name), tempfile.TemporaryDirectory(prefix='incudal-kernel-alias-', dir='/var/lib') as directory:
+                root = Path(directory);root.chmod(0o700)
+                tree = self.tree(root, 'tree', 'linux-virt')
+                (tree / 'vmlinuz').unlink()
+                os.symlink('/boot/vmlinuz-virt', tree / name)
+                with self.assertRaises(ValueError):
+                    module.module_manifest(tree, flavor='linux-virt')
+                self.assertEqual(os.readlink(tree / name), '/boot/vmlinuz-virt')
+
+    def test_link_reader_refuses_foreign_owner_and_hardlinked_symlink(self):
+        for change in ['owner', 'hardlink']:
+            with self.subTest(change=change), tempfile.TemporaryDirectory(prefix='incudal-kernel-alias-', dir='/var/lib') as directory:
+                root = Path(directory);root.chmod(0o700)
+                path = root / 'vmlinuz';os.symlink('/boot/vmlinuz-virt', path)
+                if change == 'owner':
+                    os.lchown(path, 65534, 65534)
+                else:
+                    os.link(path, root / 'hardlinked-alias', follow_symlinks=False)
+                with self.assertRaises(ValueError):
+                    module.module_alias_proof(path, 'linux-virt')
+                self.assertEqual(os.readlink(path), '/boot/vmlinuz-virt')
+
+    def test_link_reader_rejects_same_literal_replacement_during_readlink(self):
+        with tempfile.TemporaryDirectory(prefix='incudal-kernel-alias-', dir='/var/lib') as directory:
+            root = Path(directory);root.chmod(0o700)
+            source = root / 'source';source.mkdir(mode=0o700)
+            path = source / 'vmlinuz';os.symlink('/boot/vmlinuz-virt', path)
+            original = os.readlink
+            def replace_on_read(link):
+                target = original(link)
+                path.rename(root / 'retained-original-link');os.symlink(target, path)
+                return target
+            with patch.object(module.os, 'readlink', side_effect=replace_on_read), \
+                    self.assertRaisesRegex(ValueError, '^HARDENING_KERNEL_SOURCE_CHANGED$'):
+                module.module_alias_proof(path, 'linux-virt')
+            self.assertEqual(original(path), '/boot/vmlinuz-virt')
+
+    def test_copy_refuses_unknown_destination_and_wrong_destination_name(self):
+        for kind in ['regular', 'foreign-link', 'wrong-name']:
+            with self.subTest(kind=kind), tempfile.TemporaryDirectory(prefix='incudal-kernel-alias-', dir='/var/lib') as directory:
+                root = Path(directory);root.chmod(0o700)
+                source = self.tree(root, 'source', 'linux-virt') / 'vmlinuz'
+                output = root / 'output';output.mkdir(mode=0o700)
+                destination = output / ('unknown' if kind == 'wrong-name' else 'vmlinuz')
+                if kind == 'regular':
+                    destination.write_bytes(b'preserve unknown destination');destination.chmod(0o600)
+                elif kind == 'foreign-link':
+                    os.symlink('/boot/vmlinuz-evil', destination)
+                with self.assertRaises(ValueError):
+                    module.copy_module_alias(source, destination, module.module_alias_metadata('linux-virt'), 'linux-virt')
+                if kind == 'regular':
+                    self.assertEqual(destination.read_bytes(), b'preserve unknown destination')
+                elif kind == 'foreign-link':
+                    self.assertEqual(os.readlink(destination), '/boot/vmlinuz-evil')
+                else:
+                    self.assertFalse(os.path.lexists(destination))
+
+    def test_exclusive_alias_copy_refuses_a_creation_race_and_preserves_the_other_link(self):
+        with tempfile.TemporaryDirectory(prefix='incudal-kernel-alias-', dir='/var/lib') as directory:
+            root = Path(directory);root.chmod(0o700)
+            source = self.tree(root, 'source', 'linux-virt') / 'vmlinuz'
+            output = root / 'output';output.mkdir(mode=0o700);destination = output / 'vmlinuz'
+            native = os.symlink
+            def race(target, path):
+                native('/boot/vmlinuz-evil', path)
+                return native(target, path)
+            with patch.object(module.os, 'symlink', side_effect=race), \
+                    self.assertRaisesRegex(ValueError, '^HARDENING_KERNEL_COPY_CHANGED$'):
+                module.copy_module_alias(source, destination, module.module_alias_metadata('linux-virt'), 'linux-virt')
+            self.assertEqual(os.readlink(destination), '/boot/vmlinuz-evil')
+
+    def test_copy_detects_source_replacement_after_exclusive_creation(self):
+        with tempfile.TemporaryDirectory(prefix='incudal-kernel-alias-', dir='/var/lib') as directory:
+            root = Path(directory);root.chmod(0o700)
+            source = self.tree(root, 'source', 'linux-virt') / 'vmlinuz'
+            output = root / 'output';output.mkdir(mode=0o700);destination = output / 'vmlinuz'
+            native = os.symlink
+            def replace_source(target, path):
+                native(target, path)
+                source.rename(root / 'retained-original-link');native('/boot/vmlinuz-virt', source)
+            with patch.object(module.os, 'symlink', side_effect=replace_source), \
+                    self.assertRaisesRegex(ValueError, '^HARDENING_KERNEL_SOURCE_CHANGED$'):
+                module.copy_module_alias(source, destination, module.module_alias_metadata('linux-virt'), 'linux-virt')
+            self.assertEqual(os.readlink(source), '/boot/vmlinuz-virt')
+            self.assertEqual(os.readlink(destination), '/boot/vmlinuz-virt')
+
+
 @unittest.skipUnless(os.name == 'posix' and hasattr(os, 'getuid') and os.getuid() == 0, 'requires isolated Linux root filesystem fixtures')
 class KernelFilesystemTests(unittest.TestCase):
-    def fixture(self):
+    def fixture(self, include_alias=False):
         stack = ExitStack()
         directory = stack.enter_context(tempfile.TemporaryDirectory(prefix='incudal-kernel-unit-', dir='/var/lib'))
         root, fs = Path(directory), Path(directory) / 'fs'
@@ -583,6 +877,8 @@ class KernelFilesystemTests(unittest.TestCase):
         put('/boot/vmlinuz-virt', b'old-kernel')
         put('/boot/initramfs-virt', b'old-initramfs')
         put('/lib/modules/6.12.100-0-virt/kernel/test.ko', b'old-module')
+        if include_alias:
+            os.symlink('/boot/vmlinuz-virt', mapped('/lib/modules/6.12.100-0-virt/vmlinuz'))
         put('/etc/mkinitfs/mkinitfs.conf', b'features="base ext4"\n')
         put('/etc/default/grub', b'GRUB_CMDLINE_LINUX_DEFAULT="console=ttyS0 apparmor=1"\n')
         put('/etc/ssh/ssh_host_ed25519_key.pub', b'fixture-original-public-key\n')
@@ -613,12 +909,14 @@ class KernelFilesystemTests(unittest.TestCase):
                     'installedVersion': installed, 'candidateVersion': candidate, 'candidateRelease': candidate_release, 'planHash': None, 'reason': None}
             payload = {'/boot/vmlinuz-virt': {'sha256': module.digest(b'new-kernel'), 'size': 10, 'mode': 0o644, 'uid': 0, 'gid': 0},
                        '/lib/modules/' + candidate_release + '/kernel/test.ko': {'sha256': module.digest(b'new-module'), 'size': 10, 'mode': 0o644, 'uid': 0, 'gid': 0}}
+            if include_alias:
+                payload['/lib/modules/' + candidate_release + '/vmlinuz'] = module.module_alias_metadata('linux-virt')
             transaction = {'plan': plan, 'context': context(), 'installed': dict(inventory), 'expectedInstalled': {**inventory, 'linux-virt': candidate},
                            'baseline': {'bootloader': 'grub', 'config': '/boot/grub/grub.cfg',
                                         'arguments': module.linux_arguments(before_config, 'grub', 'linux-virt'),
                                         'artifacts': {path: module.file_proof(mapped(path)) for path in artifact_paths},
                                         'controls': {path: module.file_proof(mapped(path)) for path in ['/etc/mkinitfs/mkinitfs.conf', '/etc/default/grub']},
-                                        'tools': tools, 'modules': module.module_manifest(mapped('/lib/modules/' + running[0])),
+                                        'tools': tools, 'modules': module.module_manifest(mapped('/lib/modules/' + running[0]), flavor='linux-virt'),
                                         'identity': identity, 'cmdline': mapped('/proc/cmdline').read_text().strip()},
                            'cache': module.cache_manifest(target / 'cache'), 'payload': payload,
                            'reactivation': installed == candidate, 'staging': None, 'candidateArtifacts': None, 'candidateModules': None}
@@ -649,6 +947,14 @@ class KernelFilesystemTests(unittest.TestCase):
                 put('/lib/apk/db/installed', b'expected-db\n')
                 put('/boot/vmlinuz-virt', b'new-kernel')
                 put('/lib/modules/' + module.version_release(expected, 'linux-virt') + '/kernel/test.ko', b'new-module')
+                if include_alias:
+                    alias = mapped('/lib/modules/' + module.version_release(expected, 'linux-virt') + '/vmlinuz')
+                    try:
+                        alias.lstat()
+                    except FileNotFoundError:
+                        os.symlink('/boot/vmlinuz-virt', alias)
+                    else:
+                        self.assertEqual(os.readlink(alias), '/boot/vmlinuz-virt')
                 return b'OK\n'
             if program == 'mkinitfs':
                 Path(args[args.index('-o') + 1]).write_bytes(b'new-initramfs')
@@ -690,6 +996,71 @@ class KernelFilesystemTests(unittest.TestCase):
         put('/proc/sys/kernel/osrelease', running[0].encode())
         module.execute({**request, 'action': 'verify'})
         return module.strict_json((module.ROOT / 'kernel-maintenance.json').read_bytes())
+
+    def test_alias_preparation_and_removed_tree_rollback_keep_link_and_original_boot_bytes(self):
+        stack, root, fs, value, _current, _running, inventory, _commands, _put = self.fixture(include_alias=True)
+        with stack:
+            request, _receipt = self.prepared(value)
+            state = module.strict_json((root / 'kernel-maintenance.json').read_bytes())
+            expected = module.module_alias_metadata('linux-virt')
+            self.assertEqual(state['transaction']['baseline']['modules']['vmlinuz'], expected)
+            self.assertEqual(state['transaction']['candidateModules']['vmlinuz'], expected)
+            backup = module.run_directory(state) / 'old-modules/vmlinuz'
+            self.assertEqual(os.readlink(backup), '/boot/vmlinuz-virt')
+            old_tree = fs / 'lib/modules/6.12.100-0-virt'
+            self.assertTrue(old_tree.is_relative_to(fs))
+            shutil.rmtree(old_tree)
+            module.execute({**request, 'action': 'rollback', 'expiresAt': int(module.time.time() * 1000) + 59000})
+            self.assertEqual((fs / 'boot/vmlinuz-virt').read_bytes(), b'old-kernel')
+            self.assertEqual((old_tree / 'kernel/test.ko').read_bytes(), b'old-module')
+            self.assertEqual(module.module_alias_proof(old_tree / 'vmlinuz', 'linux-virt'), expected)
+            self.assertEqual(inventory['linux-virt'], '6.12.118-r0', 'rollback does not downgrade the installed signed package')
+
+    def test_alias_activation_and_original_boot_fallback_model_keep_full_link_state(self):
+        stack, root, fs, value, current_boot, running, _inventory, _commands, put = self.fixture(include_alias=True)
+        with stack:
+            state = self.activated(value, current_boot, running, put)
+            module.validate_journal(state)
+            self.assertEqual(state['transaction']['candidateModules']['vmlinuz'], module.module_alias_metadata('linux-virt'))
+            current_boot[0] = str(uuid.uuid4());running[0] = '6.12.100-0-virt'
+            put('/proc/sys/kernel/osrelease', running[0].encode())
+            request = {**value, 'action': 'rollback', 'expectedPlanHash': state['plan']['planHash'],
+                       'prepareHash': state['prepareHash'], 'expiresAt': int(module.time.time() * 1000) + 59000}
+            module.execute(request)
+            restored = module.strict_json((root / 'kernel-maintenance.json').read_bytes())
+            self.assertEqual(restored['phase'], 'rolled-back')
+            self.assertEqual(os.readlink(fs / 'lib/modules/6.12.100-0-virt/vmlinuz'), '/boot/vmlinuz-virt')
+            self.assertEqual((fs / 'boot/vmlinuz-virt').read_bytes(), b'old-kernel')
+
+    def test_journal_keeps_alias_mode_exception_out_of_other_proofs_and_requires_signed_payload_match(self):
+        stack, root, _fs, value, _current, _running, _inventory, _commands, _put = self.fixture(include_alias=True)
+        with stack:
+            self.prepared(value)
+            original = (root / 'kernel-maintenance.json').read_bytes()
+            state = module.strict_json(original)
+            module.validate_journal(state)
+            def rehash(changed):
+                transaction = changed['transaction']
+                material = {key: field for key, field in transaction.items() if key not in {'staging', 'candidateArtifacts', 'candidateModules'}}
+                material['plan'] = {**transaction['plan'], 'planHash': None}
+                digest = module.digest(module.encoded(material))
+                changed['plan']['planHash'] = digest;changed['transaction']['plan']['planHash'] = digest
+                changed['identity']['expectedPlanHash'] = digest
+            mutations = [
+                lambda data: data['transaction']['candidateModules']['vmlinuz'].update(nlink=True),
+                lambda data: data['transaction']['candidateModules'].update(vmlinuz=module.module_alias_metadata('linux-lts')),
+                lambda data: data['transaction']['candidateArtifacts']['/boot/vmlinuz-virt'].update(mode=0o777),
+                lambda data: data['transaction']['candidateModules'].update({'kernel/vmlinuz': data['transaction']['candidateModules'].pop('vmlinuz')}),
+                lambda data: data['transaction']['baseline']['modules']['vmlinuz'].update(uid=1),
+                lambda data: data['transaction']['payload'].pop('/lib/modules/6.12.118-0-virt/vmlinuz'),
+                lambda data: data['transaction']['payload'].update({'/boot/vmlinuz-virt': module.module_alias_metadata('linux-virt')}),
+                lambda data: data['transaction']['context'].update({'/etc/alias': module.module_alias_metadata('linux-virt')}),
+            ]
+            for index, mutate in enumerate(mutations):
+                changed = copy.deepcopy(state);mutate(changed);rehash(changed)
+                with self.subTest(mutation=index), self.assertRaises(ValueError):
+                    module.validate_journal(changed)
+                self.assertEqual((root / 'kernel-maintenance.json').read_bytes(), original)
 
     def saved_apparmor(self, value, phase, customers=None):
         customers = apparmor_request(value)['customers'] if customers is None else customers
