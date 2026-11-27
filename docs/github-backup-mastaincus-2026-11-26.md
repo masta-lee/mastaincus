@@ -1,5 +1,9 @@
 # mastaincus 仓库替代与原正式资产迁移
 
+2026-11-27最新补证：固定4a包诊断45918378053（driver13ba89aa3baefb6e6748a65a9b178614f3b1037b）保留原failure，unit最新Result为start-limit-hit。该次诊断文本解析会覆盖重复Pre/Post且漏读status=0/0，“只剩一条/未执行”结论不成立；已改用原生D-Bus完整10字段，并增加unit文件身份、安全标准错误码和SQLSTATE。原pin B的stockjournald实读校准实际数组格式；不输出argv、环境或原MESSAGE。
+
+原B独立健康单元在与baseline相同的StartLimitIntervalSec300/Burst5/RestartSec10下，前5次正常，第6次5.652秒内真实命中start-limit-hit；仅reset该新单元后正常、原限制不变，PG88982与boot身份保持且临时unit清理通过。证据为logs/mastaincus-systemd-startlimit-control-20261127-r1/native-result-r1.json。新harness只在已验健康准备完成、另一独立root场景开始之前分段清测试计数，比较PID与真实限制不变；一次故障/原worker回滚/重试过程保持连续保护，不在错误后重置。另修startup helper缺失等错误被当可选的漏判：只有最初legacy-before可缺，current及post-candidate阶段要求root755/单link和actual signed candidate中完整startup字节。该同原4a包的counter-control实际结果仍待，不能先写根因闭合或迁移通过。
+
 Owner确认原仓库已退出，masta-lee/mastaincus 是今后唯一维护、安装和发行仓库。2026-11-27 owner明确批准公开，沿用无需token的安装和更新。仓库已公开；当前产品已推送来源为4a3d7c84aa66c2d2508344bfb8b0a6dd0bc54c78，main与工作分支一致。原v1.8.14六资产仍为latest，Agent v1.0.16已迁移，原安装包、校验值、tag及发行身份保持。匿名下载、双架构全新安装与原worker正常升级已有本次证据；新安装路径的回滚再升级仍失败，迁移尚未完整验收。
 
 2026-11-27最新完整预览[45914480174](https://github.com/masta-lee/mastaincus/actions/runs/45914480174)已自然终态failure，完整headSha为4a3d7c84aa66c2d2508344bfb8b0a6dd0bc54c78。17个非发行job中15个success：双构建、双Incus、候选Agent、双首装、六个legacy clean/migrated-atomic/rollback和两个current clean均通过；两个current rollback失败，正式Release按无tag预览预期skipped。AMD实际全套守卫planned/executed/passed均233。原c56四项rollback失败不被覆写；本次legacy回滚成功只证明其对应原包及路径。

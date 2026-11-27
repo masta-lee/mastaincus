@@ -54,6 +54,24 @@ for p in paths:
 PY
 }
 trap report_failure ERR
+reset_healthy_fixture_start_budget() {
+  # Warmup and separate root-unit scenarios issue normal, successful restarts.
+  # Start counting each independent scenario from its verified healthy baseline;
+  # retain the real production limits and every restart within the scenario.
+  systemctl is-active --quiet incudal-backend
+  local fixture_pid_before fixture_pid_after fixture_limits_before fixture_limits_after
+  fixture_pid_before=$(systemctl show incudal-backend.service -p MainPID --value)
+  [[ "$fixture_pid_before" =~ ^[1-9][0-9]*$ ]] || exit 1
+  fixture_limits_before=$(systemctl show incudal-backend.service --property=StartLimitIntervalUSec,StartLimitBurst,RestartUSec)
+  [[ $'\n'"$fixture_limits_before"$'\n' == *$'\nStartLimitBurst=5\n'* && $'\n'"$fixture_limits_before"$'\n' == *$'\nRestartUSec=10s\n'* ]] || exit 1
+  [[ $'\n'"$fixture_limits_before"$'\n' == *$'\nStartLimitIntervalUSec=5min\n'* || $'\n'"$fixture_limits_before"$'\n' == *$'\nStartLimitIntervalUSec=300s\n'* ]] || exit 1
+  systemctl reset-failed incudal-backend.service
+  systemctl is-active --quiet incudal-backend
+  fixture_pid_after=$(systemctl show incudal-backend.service -p MainPID --value)
+  fixture_limits_after=$(systemctl show incudal-backend.service --property=StartLimitIntervalUSec,StartLimitBurst,RestartUSec)
+  [[ "$fixture_pid_after" == "$fixture_pid_before" && "$fixture_limits_after" == "$fixture_limits_before" ]] || exit 1
+  printf '%s\n' 'PASS isolated healthy fixture start budget: original PID and production start/restart limits unchanged'
+}
 [[ -d /opt && ! -L /opt && $(stat -c %u /opt) == 0 ]] || exit 1
 chmod go-w /opt
 install -d -m 755 /tmp/incudal
@@ -181,6 +199,7 @@ systemctl daemon-reload
 systemctl restart incudal-backend
 curl -fsS --retry 20 --retry-delay 2 --retry-connrefused https://user.upgrade.test/api/health >/dev/null
 node "$repo/scripts/smoke-legacy-online-upgrade.mjs" before "$candidate"
+reset_healthy_fixture_start_budget
 stage=old-worker-upgrade
 if [[ $scenario == rollback ]]; then
   # The actual worker reaches its production verification only after installing
@@ -239,6 +258,7 @@ if tar -xOf "$candidate" ./version.json | python3 -c 'import json,sys,re; sys.ex
 fi
 if [[ $scenario == rollback && $installer_source == current ]]; then
   stage=actual-root-postflight-rollback
+  reset_healthy_fixture_start_budget
   node "$repo/scripts/smoke-legacy-online-upgrade.mjs" root-rollback-prepare "$candidate"
   root_rollback_task=$(python3 -c 'import json; print(json.load(open("/root/incudal-legacy-upgrade.json"))["taskId"])')
   # Queue the genuine root unit behind a normal backend startup. Its worker

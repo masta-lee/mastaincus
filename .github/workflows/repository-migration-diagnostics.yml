@@ -18,6 +18,10 @@ on:
         description: 'Trace the fixed 4a current-installer rollback retry; does not build or publish'
         type: boolean
         default: false
+      current_counter_control:
+        description: 'Use healthy scenario counter boundaries and stricter harness checks with the fixed original 4a package'
+        type: boolean
+        default: false
 
 permissions:
   contents: read
@@ -25,7 +29,7 @@ permissions:
 
 jobs:
   normalizer-native-trace:
-    if: github.repository == 'masta-lee/mastaincus' && !inputs.current_startup && !inputs.rollback_startup && !inputs.current_rollback_startup
+    if: github.repository == 'masta-lee/mastaincus' && !inputs.current_startup && !inputs.rollback_startup && !inputs.current_rollback_startup && !inputs.current_counter_control
     runs-on: ubuntu-latest
     timeout-minutes: 30
     env:
@@ -163,7 +167,7 @@ jobs:
           retention-days: 3
 
   current-startup-wrapper:
-    if: github.repository == 'masta-lee/mastaincus' && inputs.current_startup && !inputs.rollback_startup && !inputs.current_rollback_startup
+    if: github.repository == 'masta-lee/mastaincus' && inputs.current_startup && !inputs.rollback_startup && !inputs.current_rollback_startup && !inputs.current_counter_control
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
@@ -194,7 +198,7 @@ jobs:
           bash scripts/test-repository-startup-toolchain.sh
 
   fixed-rollback-startup:
-    if: github.repository == 'masta-lee/mastaincus' && inputs.rollback_startup && !inputs.current_startup && !inputs.current_rollback_startup
+    if: github.repository == 'masta-lee/mastaincus' && inputs.rollback_startup && !inputs.current_startup && !inputs.current_rollback_startup && !inputs.current_counter_control
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
@@ -262,7 +266,7 @@ jobs:
           exit "$original_status"
 
   fixed-current-rollback-startup:
-    if: github.repository == 'masta-lee/mastaincus' && inputs.current_rollback_startup && !inputs.current_startup && !inputs.rollback_startup
+    if: github.repository == 'masta-lee/mastaincus' && (inputs.current_rollback_startup || inputs.current_counter_control) && !(inputs.current_rollback_startup && inputs.current_counter_control) && !inputs.current_startup && !inputs.rollback_startup
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
@@ -314,13 +318,21 @@ jobs:
           gh release download v1.8.14 --repo "$GITHUB_REPOSITORY" --pattern 'incudal-v1.8.14-linux-amd64.tar.gz*' --dir old-artifact
           (cd old-artifact && sha256sum --check incudal-v1.8.14-linux-amd64.tar.gz.sha256)
           printf '{"driverSource":"%s","reproductionSource":"4a3d7c84aa66c2d2508344bfb8b0a6dd0bc54c78","artifactRun":45914480174,"artifactId":15161578442,"normalizerSha256":"09cef9b5c92ea649d8ef03e97553a789313ff68897108322aeb3295d891ada83"}\n' "$GITHUB_SHA"
-      - name: Run the unchanged 4a current rollback and inspect its actual failed startup
+      - name: Run the fixed 4a current rollback or explicit healthy-counter harness control
         run: |
           set -euo pipefail
           candidate="$PWD/diagnostic-artifact/incudal-preview-4a3d7c8-linux-amd64.tar.gz"
+          reproducer_script='reproduction-source/scripts/smoke-legacy-online-upgrade.sh'
+          fixture_control=false
+          if [[ '${{ inputs.current_counter_control }}' == true ]]; then
+            reproducer_script='scripts/smoke-legacy-online-upgrade.sh'
+            fixture_control=true
+          fi
+          fixture_mjs="$(dirname "$reproducer_script")/smoke-legacy-online-upgrade.mjs"
+          printf '{"phase":"fixed-4a-current-harness-source","driverSource":"%s","originalArtifactSource":"4a3d7c84aa66c2d2508344bfb8b0a6dd0bc54c78","healthyCounterHarnessControl":%s,"harnessSha256":"%s","harnessMjsSha256":"%s"}\n' "$GITHUB_SHA" "$fixture_control" "$(sha256sum "$reproducer_script" | awk '{print $1}')" "$(sha256sum "$fixture_mjs" | awk '{print $1}')"
           set +e
           sudo env GITHUB_ACTIONS=true RUNNER_ENVIRONMENT=github-hosted UPGRADE_DRILL_INSTALLER_SOURCE=current INCUDAL_AGENT_RELEASE_TOKEN=${{ github.token }} INCUDAL_PREVIEW_AGENT_DIR="$PWD/preview-agent" \
-            bash reproduction-source/scripts/smoke-legacy-online-upgrade.sh "$candidate" "$PWD/old-artifact/incudal-v1.8.14-linux-amd64.tar.gz" rollback
+            bash "$reproducer_script" "$candidate" "$PWD/old-artifact/incudal-v1.8.14-linux-amd64.tar.gz" rollback
           original_status=$?
           set -e
           if [[ "$original_status" -ne 0 ]]; then

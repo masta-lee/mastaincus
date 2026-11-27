@@ -63,9 +63,50 @@ def record(name, required=False):
         return {'missing': True}, None
 
 
+def native_exec_metadata(property_name):
+    if property_name not in ('ExecStartPre', 'ExecStartPost'):
+        refused()
+    result = subprocess.run(['/usr/bin/busctl', '--json=short', 'get-property',
+                             'org.freedesktop.systemd1',
+                             '/org/freedesktop/systemd1/unit/incudal_2dbackend_2eservice',
+                             'org.freedesktop.systemd1.Service', property_name],
+                            capture_output=True, timeout=15, check=True, env=SYSTEM_ENV)
+    if len(result.stdout) > 65536:
+        refused()
+    reply = json.loads(result.stdout)
+    if reply.get('type') != 'a(sasbttttuii)' or not isinstance(reply.get('data'), list):
+        refused()
+    commands = []
+    for row in reply['data']:
+        if not isinstance(row, list) or len(row) != 10:
+            refused()
+        executable, arguments, ignore, start_real, start_mono, stop_real, stop_mono, pid, code, status = row
+        if (not isinstance(executable, str)
+                or not re.fullmatch(r'/(?:usr|opt)/[A-Za-z0-9_./+-]{1,240}', executable)
+                or not isinstance(arguments, list) or len(arguments) > 64
+                or any(not isinstance(item, str) or len(item) > 8192 for item in arguments)
+                or type(ignore) is not bool
+                or any(type(value) is not int or not 0 <= value < 2**64
+                       for value in (start_real, start_mono, stop_real, stop_mono))
+                or type(pid) is not int or not 0 <= pid < 2**32
+                or any(type(value) is not int or not -(2**31) <= value < 2**31
+                       for value in (code, status))):
+            refused()
+        known = [name for name in ('harden-database.py', 'migrate-database',
+                                  'incudal-online-task', 'incudal-repository-source-startup',
+                                  'install-platform-backup.sh')
+                 if name in executable or any(name in argument for argument in arguments)]
+        commands.append({'executable': executable, 'knownEntries': known, 'ignoreErrors': ignore,
+                         'startRealtimeUsec': start_real, 'startMonotonicUsec': start_mono,
+                         'stopRealtimeUsec': stop_real, 'stopMonotonicUsec': stop_mono,
+                         'pid': pid, 'exitStatus': status, 'exitCode': code,
+                         'source': 'native-systemd-dbus-execution-tuple'})
+    return commands
+
+
 def unit_state():
     result = subprocess.run(['/usr/bin/systemctl', 'show', 'incudal-backend.service',
-                             '--property=ActiveState,SubState,Result,ExecMainStatus,MainPID,InvocationID,ExecStartPre,ExecStartPost'],
+                             '--property=ActiveState,SubState,Result,ExecMainStatus,ExecMainCode,MainPID,ControlPID,InvocationID,FragmentPath,DropInPaths,NRestarts'],
                             capture_output=True, timeout=15, check=True, env=SYSTEM_ENV)
     if len(result.stdout) > 65536:
         refused()
@@ -78,7 +119,7 @@ def unit_state():
             if not re.fullmatch(r'[a-z-]{1,64}', value):
                 refused()
             values[key] = value
-        elif key in ('ExecMainStatus', 'MainPID'):
+        elif key in ('ExecMainStatus', 'ExecMainCode', 'MainPID', 'ControlPID', 'NRestarts'):
             if not re.fullmatch(r'[0-9]{1,12}', value):
                 refused()
             values[key] = int(value)
@@ -86,31 +127,15 @@ def unit_state():
             if value and not re.fullmatch(r'[a-f0-9]{32}', value):
                 refused()
             values[key] = value
-        elif key in ('ExecStartPre', 'ExecStartPost'):
-            commands = []
-            entries = re.findall(r'\{[^}]*\}', value)
-            if value.strip() and not entries:
+        elif key in ('FragmentPath', 'DropInPaths'):
+            paths = value.split()
+            if key == 'FragmentPath' and len(paths) != 1:
                 refused()
-            for entry in entries:
-                executable = re.search(r'(?:^|[\s{])path=([^\s;]+)', entry)
-                status = re.search(r'(?:^|[\s;])status=([0-9]{1,3})(?:\s|;|})', entry)
-                code = re.search(r'(?:^|[\s;])code=([a-z-]{1,32})(?:\s|;|})', entry)
-                known = [name for name in ('harden-database.py', 'migrate-database',
-                                          'incudal-online-task', 'incudal-repository-source-startup',
-                                          'install-platform-backup.sh') if name in entry]
-                if executable is None or not re.fullmatch(r'/(?:usr|opt)/[A-Za-z0-9_./+-]{1,240}', executable[1]):
-                    refused()
-                times = {}
-                for field in ('start_time', 'stop_time'):
-                    timestamp = re.search(r'(?:^|[\s;])' + field + r'=\[([^\]]{1,96})\]', entry)
-                    if timestamp and timestamp[1] != 'n/a' and not re.fullmatch(
-                            r'[A-Z][a-z]{2} [0-9]{4}-[0-9]{2}-[0-9]{2} [0-9]{2}:[0-9]{2}:[0-9]{2}(?:\.[0-9]{1,6})? [A-Za-z0-9+_-]{1,20}', timestamp[1]):
-                        refused()
-                    times[field] = timestamp[1] if timestamp and timestamp[1] != 'n/a' else None
-                commands.append({'executable': executable[1], 'knownEntries': known,
-                                 'exitStatus': int(status[1]) if status else None,
-                                 'exitCode': code[1] if code else None, **times})
-            values[key] = commands
+            if any(not re.fullmatch(r'/(?:etc|run|usr|lib)/[A-Za-z0-9_./@+-]{1,240}', path) for path in paths):
+                refused()
+            values[key] = [{'path': path, **record(path, required=True)[0]} for path in paths]
+    values['ExecStartPre'] = native_exec_metadata('ExecStartPre')
+    values['ExecStartPost'] = native_exec_metadata('ExecStartPost')
     return values
 
 
@@ -126,6 +151,12 @@ def journal_evidence():
              'release integrity verification failed': 'runtime-seal-byte-refusal',
              'Database compatibility': 'database-compatibility-message',
              'Refusing': 'explicit-refusal',
+             'Failed to set up mount namespacing': 'systemd-namespace-setup-failed',
+             'No such file or directory': 'missing-file-path',
+             'Permission denied': 'access-denied',
+             'Read-only file system': 'read-only-filesystem',
+             'Start request repeated too quickly': 'systemd-start-rate-limited',
+             'Scheduled restart job': 'systemd-automatic-restart',
              'Control process exited': 'systemd-control-exited',
              'Failed at step': 'systemd-step-failed',
              'Failed with result': 'systemd-unit-failed'}
@@ -135,9 +166,13 @@ def journal_evidence():
         if not isinstance(message, str):
             continue
         codes = sorted(set(re.findall(r'\b(?:INCUDAL|DATABASE|AUTHENTICATION|FINANCIAL)_[A-Z0-9_]{2,120}\b', message)))
+        standard_codes = sorted(set(re.findall(r'\b(?:ERR_[A-Z0-9_]{2,64}|P[0-9]{4}|EACCES|ENOENT|EPERM|ENOTDIR|EROFS|EADDRINUSE|ENOMEM)\b', message)))
+        sqlstate_codes = sorted(set(re.findall(r'''(?:\bSQLSTATE[\s:=\[]+|\bcode["']?\s*[:=]\s*["'])([0-9A-Z]{5})(?:["'\]]|\b)''', message)))
+        error_types = sorted(set(re.findall(r'\b(?:Error|TypeError|SyntaxError|ReferenceError|PrismaClientKnownRequestError|PrismaClientInitializationError)\b', message)))
+        runtime_paths = sorted(set(re.findall(r'/(?:opt/incudal|usr/local/libexec/incudal|var/lib/incudal-(?:database|backup|ota))/[A-Za-z0-9_./+-]{1,240}', message)))
         matched = sorted(label for text, label in hints.items() if text in message)
         steps = sorted(set(re.findall(r'Failed at step ([A-Z_]{2,32})\b', message)))
-        if not codes and not matched and not steps:
+        if not codes and not matched and not steps and not standard_codes and not error_types and not sqlstate_codes:
             continue
         invocations = {}
         for field in ('_SYSTEMD_INVOCATION_ID', 'INVOCATION_ID', 'OBJECT_SYSTEMD_INVOCATION_ID'):
@@ -151,6 +186,9 @@ def journal_evidence():
         evidence.append({'invocationIds': invocations, 'realtimeMicroseconds': int(timestamp),
                          'pid': int(pid) if isinstance(pid, str) and re.fullmatch(r'[0-9]{1,12}', pid) else None,
                          'knownCodes': codes, 'fixedHints': matched, 'failedSteps': steps,
+                         'standardErrorCodes': standard_codes, 'errorTypes': error_types,
+                         'sqlstateCodes': sqlstate_codes,
+                         'safeRuntimePaths': runtime_paths,
                          'messageSha256': hashlib.sha256(message.encode('utf-8')).hexdigest()})
     return {'rawMessagesPrinted': False, 'lastEntryLimit': 120, 'sample': True,
             'truncatedPossible': True, 'sizeLimitScope': 'reject-after-capture', 'evidence': evidence}

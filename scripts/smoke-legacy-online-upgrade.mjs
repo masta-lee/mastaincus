@@ -64,7 +64,19 @@ async function verifyRootLauncherGitGate() {
     stdio:['pipe','pipe','pipe'],timeout:30000
   })
   const startup='/usr/local/libexec/incudal/incudal-repository-source-startup'
-  if(await lstat(startup).then(info=>info.isFile()).catch(()=>false)) {
+  const initialLegacyBefore=mode==='before'&&process.env.UPGRADE_DRILL_INSTALLER_SOURCE!=='current'&&process.env.UPGRADE_DRILL_RETRY!=='true'
+  let startupInfo
+  try { startupInfo=await lstat(startup) } catch(error) { if(error?.code!=='ENOENT')throw error }
+  assert.ok(startupInfo||initialLegacyBefore,'the current installer and every post-candidate phase must retain the repository startup guard')
+  if(startupInfo) {
+    assert.ok(startupInfo.isFile()&&!startupInfo.isSymbolicLink()&&startupInfo.uid===0&&startupInfo.gid===0&&startupInfo.nlink===1&&(startupInfo.mode&0o777)===0o755,
+      'the actual repository startup guard must remain a protected regular file')
+    const candidateInstaller=execFileSync('tar',['-xOf',archive,'./scripts/install-panel.sh'],{maxBuffer:1024*1024}).toString('utf8')
+    const marker="<<'INCUDAL_REPOSITORY_SOURCE_SCRIPT'\n",end='\nINCUDAL_REPOSITORY_SOURCE_SCRIPT'
+    assert.equal(candidateInstaller.split(marker).length,2)
+    assert.equal(candidateInstaller.split(end).length,2)
+    const candidateStartup=Buffer.from(candidateInstaller.split(marker)[1].split(end)[0]+'\n')
+    assert.ok((await readFile(startup)).equals(candidateStartup),'the active startup guard must match its independently signed candidate installer in complete bytes')
     const post=execFileSync('/usr/bin/systemctl',['show','incudal-backend.service','--property=ExecStartPost','--value'],{encoding:'utf8'})
     const entry=[...post.matchAll(/\{[^}]*\}/g)].map(match=>match[0]).find(text=>text.includes(startup))
     assert.ok(entry?.includes('argv[]=/usr/bin/env -i PATH=/usr/sbin:/usr/bin:/sbin:/bin LC_ALL=C /usr/bin/bash '+startup+' ;')&&/code=exited\s*;\s*status=0/.test(entry),'actual root startup correction must complete through the loaded backend unit')

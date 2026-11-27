@@ -144,7 +144,9 @@ assert.ok(migrationDiagnostics.includes("ref: '4a3d7c84aa66c2d2508344bfb8b0a6dd0
   migrationDiagnostics.includes("artifact-ids: '15161578442'") &&
   migrationDiagnostics.includes('61dc194460d7f73953cca4ea9749cfec75c9d2972c40955c96e6474804d7af33') &&
   migrationDiagnostics.includes('UPGRADE_DRILL_INSTALLER_SOURCE=current') &&
-  migrationDiagnostics.includes('bash reproduction-source/scripts/smoke-legacy-online-upgrade.sh') &&
+  migrationDiagnostics.includes("reproducer_script='reproduction-source/scripts/smoke-legacy-online-upgrade.sh'") &&
+  migrationDiagnostics.includes("reproducer_script='scripts/smoke-legacy-online-upgrade.sh'") &&
+  migrationDiagnostics.includes('healthyCounterHarnessControl') &&
   migrationDiagnostics.includes('exit "$original_status"') &&
   migrationDiagnostics.includes("ref: 'c56f4fefc2f5f5c5b1e9048aa8c77305fa51336d'"),
   'current rollback diagnostics must pin their original 4a package/reproducer and retain the independent c56 historical probe')
@@ -155,6 +157,25 @@ assert.ok(currentRollbackTrace.includes("SOURCE_COMMIT = '4a3d7c84aa66c2d2508344
   currentRollbackTrace.includes("stopped.get('MainPID') != 0") &&
   currentRollbackTrace.includes("os.O_RDONLY | os.O_NOFOLLOW | os.O_CLOEXEC | os.O_NONBLOCK"),
   'diagnostics must reject local/production execution and authenticate the exact protected installed normalizer before tracing it')
+assert.ok(currentRollbackTrace.includes("reply.get('type') != 'a(sasbttttuii)'") &&
+  currentRollbackTrace.includes("values['ExecStartPre'] = native_exec_metadata('ExecStartPre')") &&
+  currentRollbackTrace.includes("values['ExecStartPost'] = native_exec_metadata('ExecStartPost')") &&
+  !currentRollbackTrace.includes("'--property=ActiveState,SubState,Result,ExecMainStatus,MainPID,InvocationID,ExecStartPre,ExecStartPost'"),
+  'native D-Bus tuples must preserve every execution command and numeric status instead of overwriting repeated formatted properties')
+const fixtureBudget = legacyDrill.match(/reset_healthy_fixture_start_budget\(\) \{[\s\S]*?^\}/m)?.[0]
+assert.ok(fixtureBudget && fixtureBudget.indexOf('systemctl is-active --quiet incudal-backend') < fixtureBudget.indexOf('systemctl reset-failed') &&
+  fixtureBudget.includes('"$fixture_pid_after" == "$fixture_pid_before"') &&
+  fixtureBudget.includes('"$fixture_limits_after" == "$fixture_limits_before"') &&
+  [...legacyDrill.matchAll(/^[ \t]*reset_healthy_fixture_start_budget$/mg)].length === 2,
+  'only healthy scenario boundaries may clear fixture restart counters; PID and real production limits must remain unchanged')
+const faultAndRetry = legacyDrill.slice(legacyDrill.indexOf('if NODE_EXTRA_CA_CERTS='), legacyDrill.indexOf('stage=post-upgrade-verification'))
+assert.ok(!faultAndRetry.includes('reset_healthy_fixture_start_budget') && !faultAndRetry.includes('reset-failed'),
+  'the real fault and retry scenario must retain its uninterrupted original service restart protection')
+assert.ok(legacyWorkerDrill.includes("const initialLegacyBefore=mode==='before'") &&
+  legacyWorkerDrill.includes('startupInfo||initialLegacyBefore') &&
+  legacyWorkerDrill.includes('startupInfo.nlink===1') &&
+  legacyWorkerDrill.includes('equals(candidateStartup)'),
+  'missing/invalid startup guards cannot pass current-install or post-candidate verification; exact signed startup bytes are mandatory')
 assert.ok(read('scripts/check-release-runtime-files.py').includes("'scripts/install-panel.sh'"),
   'the startup hook installer must be compared against its actual package bytes')
 assert.ok(installer.includes('configure_host_pool_gateway'), 'installer must configure the management gateway')
