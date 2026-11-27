@@ -1,5 +1,13 @@
 # mastaincus 仓库替代与原正式资产迁移
 
+2026-11-27 第五批正在保存：第四批 `933f79362d1e0e7296016901c67e2e946821a605` 的[普通 CI](https://github.com/masta-lee/mastaincus/actions/runs/45949817721)已自然成功，30 项全部通过。[完整预览](https://github.com/masta-lee/mastaincus/actions/runs/45949821213)已自然失败：15 项通过，AMD64、ARM64 两项 current rollback 失败，Release 预期 skipped。
+
+两项失败分别对应 job `140346817504`、`140346817559`，均在 `smoke-legacy-online-upgrade.mjs:95` 的证据文件元数据检查处拒绝。新观察器的外层重定向先于子 shell 内的 `umask 077` 创建文件，实际生成 `0644`，与原守卫要求的 `0600` 不符。修订仅把重定向移到子 shell 内的 `exec`，确保权限掩码先生效；原 root、0600、单链接、O_NOFOLLOW、前后 FD/named 身份和同次成功证据检查不变。独立代码审视、本机仓库守卫和 Bash/JS 语法均通过。原 B 的真实对照自然退出 0，旧写法生成 644、新写法生成 600，root 单链接和父进程 umask 保持；证据为 `logs/mastaincus-startup-observer-umask-control-20261127-result.json`。新来源完整预览仍待，不把本地修订当作这两项已经通过。
+
+933 的实际双架构包独核已经完成：API ZIP 摘要、成员 CRC、原 Ed25519 验签及四项拒绝对照、321 份固定源码、所有链接解析、完整 gzip 尾块与 root 权限全部通过。AMD64 为 221402337 字节、SHA256 `f200b1482f524419d30e5abdd42d927dedc3fc0d4db07e15520f7eb3701747f4`；ARM64 为 220572655 字节、SHA256 `f27b196f626ec8b6aae3acf2559cf04c060a54c771824abe0ed2f86268d8a6cd`。新 kernel 模板 `68aef3317b18574cbc28bfadcbca43c8be04a7b92a7be14f980b7e2a034ebbd9` 在两包中完整相同，测试模块未进入 runtime。独审摘要见 `logs/mastaincus-preview-933f7936-artifacts/AUDIT_SUMMARY.md`；包核验通过不消除上述流程失败。
+
+继续执行内核严格 alias 兼容、真实双架构启动/回退、双 PostgreSQL 安全维护和主控新备份完整本机模拟恢复。PG 外层的输出目录时间、双流读取及逐资源清理缺口正在精修，双 PG 矩阵尚未启动。最终主控候选热更新和正式新版仍待这些相关验收。
+
 第二批ca11550a9065f0bdbf4c6bc96a7fcc29bf9ba9bb已推main/工作分支。完整预览45945358636已自然success，17项必需任务全部success，两架构新装及十项原worker clean/migrated/rollback全部通过，Release按无tag预览skipped。原两项current rollback流程已由此次真实同提交回归覆盖；实际双包独立核验仍在进行。[完整预览](https://github.com/masta-lee/mastaincus/actions/runs/45945358636)
 
 对应普通CI45945354423已终态28success/1failure，唯一失败为NativeSystemdPolicy测试对目录首文件的固定假设。日志中的JSON来自第一份故障证据，产品repair按path.name绑定expected/name/file正确；之前“脚本变成JSON”的初步描述已纠正。原ca在systemctl先枚举时自然0、policy.json先时精确复现b'{"versi'与b'#!/usr/'误比。测试仅此方法改为按first.name校验对应prefix/token/hash/size/mode，并覆盖两种顺序及完整二文件证据、同inode续接和durable ready。候选两顺序完整NativeSystemdPolicy各14/14，新完整Linux root模块209/209/0skip自然exit0，原B/PG88982/boot/服务/包库/隔离相同，临时目录及旧r1自有进程清理已核。源SHA763ec69524de9759ee34ef4e3d75452c97d4219075ff95ecb45ebb931dc3eda0，完整日志SHA b61658f98d9b36ea3a4b28270cb9058543c290846190432d4380ccbb43382ff5。原r1外层观察预算180秒短于原276秒而超时，失败保留；r2仅原完整模块改600秒观察，业务/方法deadline不变。证据logs/source-ci-policy-order-native-20261127-r2-result.log及-r1/-r2-inputs.json。[原普通CI](https://github.com/masta-lee/mastaincus/actions/runs/45945354423)

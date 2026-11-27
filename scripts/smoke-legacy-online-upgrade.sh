@@ -275,7 +275,10 @@ if [[ $scenario == rollback && $installer_source == current ]]; then
   reset_healthy_fixture_start_budget
   if [[ ${UPGRADE_DRILL_STARTUP_OBSERVE:-true} == true ]]; then
     startup_observer_output="$work/startup-observation.jsonl"
-    (umask 077; exec /usr/bin/python3 -I -B "$repo/scripts/test-repository-current-rollback-native-trace.py" --observe) > "$startup_observer_output" &
+    (
+      umask 077
+      exec /usr/bin/python3 -I -B "$repo/scripts/test-repository-current-rollback-native-trace.py" --observe > "$startup_observer_output"
+    ) &
     startup_observer_pid=$!
     for ((observer_ready_attempt=0; observer_ready_attempt<80; observer_ready_attempt++)); do
       grep -Fq '"phase": "current-startup-observer-ready"' "$startup_observer_output" && break

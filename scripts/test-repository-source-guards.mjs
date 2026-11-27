@@ -233,6 +233,8 @@ assert.ok(legacyWorkerDrill.includes('hasCompletedRepositoryStartup(snapshot)') 
   legacyDrill.indexOf('systemctl start "incudal-online-rollback@${root_rollback_task}.service"') <
     legacyDrill.indexOf('stop_startup_observer\n  node "$repo/scripts/smoke-legacy-online-upgrade.mjs" root-rollback-wait'),
   'root rollback must stop the read-only observer before validating its protected completed proof and original startup identity')
+assert.match(legacyDrill, /\(\s*\n\s*umask 077\s*\n\s*exec [^\n]+--observe > "\$startup_observer_output"\s*\n\s*\) &/,
+  'the observer proof must be created after its private umask takes effect, inside the subshell')
 const fixtureBudget = legacyDrill.match(/reset_healthy_fixture_start_budget\(\) \{[\s\S]*?^\}/m)?.[0]
 assert.ok(fixtureBudget && fixtureBudget.indexOf('systemctl is-active --quiet incudal-backend') < fixtureBudget.indexOf('systemctl reset-failed') &&
   fixtureBudget.includes('"$fixture_pid_after" == "$fixture_pid_before"') &&
