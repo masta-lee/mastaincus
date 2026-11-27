@@ -15,6 +15,13 @@ sudo bash install-panel.sh
 
 新脚本支持精确识别并迁移已安装旧官方仓库值，保留自定义仓库与原凭据。用于匹配退役值的历史代码不是当前下载入口；禁止机械替换匹配值、重打旧包或重新seal使不可信内容通过。
 
+原官方安装的更新来源配置：
+
+```dotenv
+SYSTEM_UPDATE_RELEASE_REPOSITORY=masta-lee/mastaincus
+INCUDAL_AGENT_RELEASE_REPOSITORY=masta-lee/mastaincus
+```
+
 ## 部署与更新
 
 - 私有业务后端只能有一个Node进程，监听127.0.0.1:3001；用户端与管理端独立源和cookie域。
@@ -24,6 +31,10 @@ sudo bash install-panel.sh
 - 安装/OTA/签名组件或发行前必读[v1.8.7事故复盘](docs/postmortem-v1.8.7-upgrade-2026-11-12.md)，保留双架构原旧worker正常升级、已迁移状态、后半程故障回退再升级和实际tar完整核验。
 
 当前授权为源码精修、阶段提交推送、对应隔离/指定测试账户验收，验证后的完整可信主控热更新及条件式发版。主控现场源码/配置补丁、人工清故障标绿、放宽未知身份、生产还原/DNS/客户数据操作不在此次继续范围。RUN_DB_CHECKS=0只能在owner明确批准时使用。
+
+## Private Backend Must Run As A Single Instance
+
+The private backend at `127.0.0.1:3001` must run as exactly one Node.js process. Treat a second backend replica as an unsupported deployment. Before enabling multiple processes, move the process-local locks, nonce replay protection, delivery finalization and configuration cache to shared storage with coordinated invalidation.
 
 ## 测试与发行顺序
 
