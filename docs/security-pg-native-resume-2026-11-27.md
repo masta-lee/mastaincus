@@ -97,3 +97,37 @@ R8 微阶段已冻结16份来源，freeze `6cb283d9e9a950497d05e29531467c8c9b163
 根审在原canonical launcher `2d74cd2d…` 中发现无限 readline／queue／wait／join与异常不收子进程的确定缺口；该源精确保存在 `historical-2d74-launcher.py`，旧范围不改。新具名 `launch_bounded_r1.py` 为 `e493078c70b85df56b0f8d9f6847a2e55684a11824bc72b2154201ce954daed4`／17281字节：先把暂停的新child纳入仅本次的kill-on-close job后再运行，运行中两流32KiB chunk在producer锁内收费，共16MiB、64KiB line及8项queue上限；读／put／get都使用共同72小时deadline，异常只停止该job并有界确认、reap／join／关闭。任意trace仅私有保存，最终安全结果另存。8项新纯控自然0；4项实际Windows normal／shared-limit／line-limit／退出遗留后代均自然0，原B与本机PG两个原持有handle仍alive，本次job与child／reader／pipe／stream停止和关闭完整确认。原生报告 `e73fe592…`／4397字节；这些Python fixture没有启动QEMU／PG，不代表目标客机取证通过。
 
 新启动器仍等根最终审，与原16份冻结来源分别绑定；16源／112／151／9／13未因这次launcher修订重复运行。实际启动必须使用根审通过的新具名入口，保持1800秒同boot等待，精确原intent全文／原生facts与指定packages-proof校验；独立精准SSH recipe仍须先取得真实状态再冻结审查。当前客机具体package异常、合法partial续接及22次矩阵仍未完成，不提前发版。
+
+根最终审后，R8 仅一次通过真实held `e493` 源与exact `6cb` 启动，实际自然退出1：原B before保护先返回序列采样移动，下一次完整历史投影被 `B_LEGACY_SQL_TRANSITION_UNPROVEN` 拒绝，最终独立保护也拒。没有任何 owned-guest-started，stop集合为空、没有新PG／VM／22调用，实际boot仍各2、总5仍余3。启动器真实capture完整404字节、stderr0，原job／child／reader／pipe／stream停止和关闭全确认；完整失败源及私有结果保留，不重用该输出namespace。
+
+新的原B只读取证查明原始日志2410条、当前2598条，188条追加均按原类型、顺序、起止配对、零失败和原32条审计前缀严格通过。原find_original_boundary只盲搜最后128个cutoff，原边界已经落在范围外；使用原已认证R3报告 `ff3cf37e…`／25076字节中的原logBoundary后，完整旧SQL／所有旧row／其它表／catalog／权限及实际backend仍投影到原 `9de03503…`，没有留存删除或旧数据变化。私有SQL1265969字节／`24a81800…`，完整R2私有报告1765233字节／`39b816c5…`，只保存于原stage/private。首个取证wrapper的一次大block写入被原1MiB守卫拒绝，原失败源／空证据保留；R2仅采用原1MiB分块后自然0，没有修改B。
+
+未执行的R9 initializer初稿仅绑定原R3与旧32前缀，随后审查收紧为R10：仍只从原R3取原边界，另对已认证39b8 R2报告使用唯一固定路径／SHA／确切1765233字节的2MiB私有FD读，先validate R3→R2原32，再validate R2→current完整188前缀后建立current before；其余cap、128盲搜、MAXAPPENDS512、类型和原9de全不变。新3项188前缀控制、6项原边界／126／128／188／source／schema／anchor控制与受影响10项Matrix回归自然0。R10 freeze `f6a45410f217c8c7a315162aeae42078e86f0b25d298ee6797b031250f657bfe`，plan `94e56223…`，唯一Matrix变更 `eb641af1…`，其他15份冻结源、e493／9cd保持字节。旧R9 `d8b85ae8…`、6／10控制与全部R8失败保留；当前R10待根审，仍未再次启动，原3398具体软件准备异常与22调用完整验收未完成。
+
+## R10 实际终态：启动超时，原两个句柄已停止
+
+上述“待根审”是该冻结时的状态。根于2026-11-27 17:38:06 UTC批准R10，原 `e493` 启动器于17:39:38实际开始；source／target两原QEMU分别于17:40:55／56启动。此轮自然退出1，主失败码为 `PG_EXECUTION_GUEST_STARTUP_TIMEOUT`，没有 `owned-guest-inspected`、同boot诊断完成、packages准备、finalPlan或任何原22次worker调用。
+
+17:46:07 UTC的完整终态确认两台原持有句柄signaled、exit0、句柄关闭、两控制端口空闲，cleanup errors为空。启动器也确认captureComplete、executionCloseObserved、ownedChildReaped、ownedJobStopped、readerThreadsJoined、streamsClosed和pipeHandlesClosed全部为true。完整私有stdout为1470字节／`012e27b73fdb47d48eba1f124dffe25cb99a6344c5f275693f3927ddf5f7d662`，stderr为127825字节／`15b7a00476497bdddec817392b07146e87b52ca0dab4a0b65c93ce0547ffbb8a`；原输出、源码、盘和seed不覆盖。
+
+两份原串口可见Ubuntu原hostname、正常DHCP与默认路由、cloud-init Network Stage和SSH socket；source约172、target约168 guest秒出现网络就绪。未见最终SSH服务Started，不能仅据此认定包错误、网络永久失败或身份变化。stderr主要是早期SSH banner读取失败，不是原3398包准备的具体异常。该轮是每台实际第三次启动，原4范围余1，已批准整体5范围余2；下一步仍需诊断启动和原API／worker两次重启，不能把失败启动漏计或继续声称余3。
+
+终态同时存在独立 `same-boot-final-protection-failed`。历史holder在已有主异常时仅写verificationCompleted=false，丢弃了次要保护异常的具体类型和内容；stderr未保留该异常，因此目前不能猜定是B或Windows哪条保护失败，也不能将before成功当作最终保护通过。正在准备独立固定来源的无boot只读复核和具名错误留存修订，原R10不改、不追认保护成功。
+
+后停只读目录观察为source1219166208、target294584320字节，原R7的1212940288／287965184已经是历史锚。新R10后停封存reader已从原已验R7 reader `6e14fe26…` 精确派生，源码8527字节／`8de088182d9ce286bff563cb798a4a66251b7c1448b8824a514a2c789450edaa`，固定原stdout／stderr、两原pid、原R6／R7证明和这两已观察size，并分别保留原4／新5预算。派生与语法已自然通过；尚待根审执行，没有新VM／PG／worker启动，尚未核全文后停磁盘或重新声明seed／key不变。
+
+根随后批准该一次无boot只读封存，实际自然退出0。两原FileID和虚拟容量3758096384均保持，source当前全文为1219166208字节／`c61e983d9858448089e6f7a6fdbf42fac97b1cc01f26fbbbb5b66209ee6f6144`，target294584320字节／`bc82e11ace9da1162050a1286a08acf3ab2e38c6fe43beab0b8fc0d8fe536939`；两原seed、clientKey的完整身份和字节保持，prepared未改。R10私有后停证明4293字节／`6afdc5dba105cad9649c31646792701aa180ba7c6eb5599b7140ea8f743e0085`，原初值、R6、R7和R10当前值分别保存。两控制端口再次确认空闲、原22调用仍为0，没有新VM／SQL／worker；原final保护错误仍未证明，独立fresh B／Windows读者沿原协议准备待根审。
+
+根又批准最小fresh B／Windows只读reader `2ac6326a…`，实际自然退出0。当前Windows原B进程／本机PG的完整保护通过；原B当前2614条日志相对原2410条追加204条，原ff3→R10 before→fresh三段完整前缀和旧SQL／账目／其他DB均严格核回 `9de03503…`。B私有完整报告1776688字节／`adc0f82d3d7f672780b439c0a95add5abc8a506d84e74a6895974c2fa5616d3c`，Windows报告4065字节／`e7ae90c8f9f49a8bf6bf68471a4948eb25b12dafa40f0963097ab4a3fff23bcf`。本次只读SQL没有启动客机、PG服务或worker，也没有改原基线。**这只证明新的当前状态通过，R10当时secondary保护错误的底层原因仍未捕获，不追认当时通过。** 原3398对应R7包准备，R10对应新SSH启动超时；两份Windows stderr均只有早期banner栈，不能拿它们替代尚未取得的guest包日志／partial状态。下一步原同盘同boot诊断须先确定新的有限真实启动范围并经根审，原当前三次boot／原22调用0保持。
+
+## R11 最小受限接续已准备，实际启动待根审
+
+根明确批准新的有限整体6＝已耗3＋原必需3，仅把测试SSH就绪窗口由300改600秒；原1800秒同boot诊断、72小时总窗、每plan4、3attempts、22calls及产品8／20秒保持。新coordinator仍实际持有并运行原R6／R7验证器和完整旧证据，再核 `6afdc5db…` 的R10后停证明及两当前全文／原FileID；Matrix保留原ff3／9de和原188，再绑定 `adc0f82d…` 的完整204前缀。没有重prepare、清intent、新基线或放宽任意文件／签名／身份门槛。
+
+新holder把次要保护异常的完整trace只写现有私有writer，公开固定错误码、hash／size和是否完成留存；留存失败明确报告，不覆写主错误、不阻止原自有句柄收尾。R10历史源码与未知原因保持。新来源在 `logs/security-controller-pg-execution-20261127-r11`：freeze `a349e770cdd1a80a81169a3339c7fdfd4f1910325d3ea462e96a75ab4203cdbb`，plan `3a76f3c6cc8497239f32b51e35ac638367a7482b73052f442bea71fd9fc8b2a7`；16核心来源中12个保持完整字节，原 `e493` 有界launcher也完整保持。
+
+对应谱系10、204前缀4、私有异常留存／主错误与cleanup5，共19项纯控制自然通过。首轮测试缺少已存在B helper和假Matrix.plan字段的夹具失败分别保留，补齐原helper字节和fixture字段后通过，没有据此改16核心源。直接PowerShell的原样preflight因非canonical CRT引用被 `PG_COORDINATOR_PROCESS_ARGUMENTS_CHANGED` 拒绝；保留原严格参数检查，改用原已验canonical launcher／only两个helper完整原字节后，实际native preflight自然退出0、154held／111runtime、原三段盘／seed／key／prepared与当前范围通过，无VM／SQL／future Matrix.before。该原生结果SHA `ab3ec19cf4662639d1e8d38fbd45fa796ec32013f4d353c67e25e1762bfc7d48`；最终16核心源再次完整核对一致。
+
+两处完整diff和本次全部纯控／原生结果已经交根审。尚未启动R11、原22次worker调用仍为0；下一步实际启动成功后先沿原forensic读取原3398日志／intent／包审计／client18 proof，再按真实状态在同boot执行独立精准续接，不能直接调用原fresh packages或删intent。完整PG、B1原备份恢复、最终主控热更新与正式发行仍未完成。
+
+以上为准备阶段记录。根随后核完整功能diff、19项控制、原生preflight和实际预算后，批准R11一次受限执行。原B／Windows启动前保护实际通过，source PID2932／21165、target PID16748／21167均已报告owned-guest-started，分别为原盘实际第四次启动；新整体6次范围剩原API和worker两次重启。原held `e493` 启动器／两原盘和seed保持，实际600秒SSH观察及固定1800秒同boot诊断进行中，尚未取得新boot ID、forensic结果或22次worker调用。此启动不等于完整PG通过。
