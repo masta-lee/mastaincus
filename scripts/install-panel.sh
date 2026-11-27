@@ -25,6 +25,18 @@ readonly INSTALL_DIR="/opt/incudal"
 readonly SERVICE_NAME="incudal-backend"
 readonly SERVICE_FILE="/etc/systemd/system/${SERVICE_NAME}.service"
 readonly ENV_FILE="${INSTALL_DIR}/.env"
+readonly INSTALLATION_IDENTITY_PATHS=(
+    "$SERVICE_FILE"
+    /etc/systemd/system/incudal.service
+    /var/lib/incudal-gateway-controller/enrollment.json
+    /var/lib/incudal-gateway-controller/identity.json
+    /var/lib/incudal-gateway-controller/signing.pem
+    /root/.ssh/incudal-host-management
+    /root/.ssh/incudal-host-management.pub
+    /etc/wireguard/incudal-mgmt.conf
+    /var/lib/incudal-backup/recovery-hold.json
+)
+readonly INSTALLATION_GATEWAY_STATE_DIR="/var/lib/incudal-management-gateway"
 readonly RUN_USER="incudal"
 readonly DEFAULT_PORT=3001
 readonly NODE_MAJOR=24
@@ -486,7 +498,7 @@ install_verified_root_helpers_from_archive() {
     local tar_file="$1"
     local helper entry tmp
 
-    install -d -o root -g root -m 0755 /usr/local/libexec/incudal /usr/local/libexec/incudal/ota-path
+    install -d -o root -g root -m 0755 /usr/local/libexec/incudal /usr/local/libexec/incudal/ota-path || return "$?"
     for helper in \
         incudal-online-task.sh.example \
         incudal-systemctl-wrapper.sh.example \
@@ -496,7 +508,7 @@ install_verified_root_helpers_from_archive() {
             error "已验证产物缺少唯一 root helper: deploy/${helper}"
             return 1
         fi
-        tmp="$(mktemp)"
+        tmp="$(mktemp)" || return "$?"
         if ! tar -xOzf "$tar_file" "$entry" > "$tmp"; then rm -f -- "$tmp"; return 1; fi
         if [[ "$helper" == incudal-online-task.sh.example ]] && ! normalize_legacy_online_task_helper "$tmp"; then
             rm -f -- "$tmp"
@@ -508,13 +520,13 @@ install_verified_root_helpers_from_archive() {
             return 1
         fi
         case "$helper" in
-            incudal-online-task.sh.example) install -o root -g root -m 0755 "$tmp" /usr/local/libexec/incudal/incudal-online-task ;;
-            incudal-systemctl-wrapper.sh.example) install -o root -g root -m 0755 "$tmp" /usr/local/libexec/incudal/systemctl ;;
-            incudal-ota-chown-wrapper.sh.example) install -o root -g root -m 0755 "$tmp" /usr/local/libexec/incudal/ota-path/chown ;;
+            incudal-online-task.sh.example) install -o root -g root -m 0755 "$tmp" /usr/local/libexec/incudal/incudal-online-task || return "$?" ;;
+            incudal-systemctl-wrapper.sh.example) install -o root -g root -m 0755 "$tmp" /usr/local/libexec/incudal/systemctl || return "$?" ;;
+            incudal-ota-chown-wrapper.sh.example) install -o root -g root -m 0755 "$tmp" /usr/local/libexec/incudal/ota-path/chown || return "$?" ;;
         esac
-        rm -f "$tmp"
+        rm -f "$tmp" || return "$?"
     done
-    install -d -o root -g root -m 0755 /var/cache/incudal-ota /var/lib/incudal-ota/manifests
+    install -d -o root -g root -m 0755 /var/cache/incudal-ota /var/lib/incudal-ota/manifests || return "$?"
 }
 
 # ========================== 颜色定义 ==========================
@@ -544,7 +556,9 @@ gen_password() {
 }
 
 gen_secret() {
-    printf 'A1!%s' "$(openssl rand -hex 64)" | cut -c "1-${1:-48}"
+    local generated_entropy
+    generated_entropy="$(openssl rand -hex 64)" || return "$?"
+    printf 'A1!%s' "$generated_entropy" | cut -c "1-${1:-48}"
 }
 
 is_valid_email() {
@@ -558,7 +572,7 @@ prompt_initial_admin_email() {
 
     if [[ -f "$ENV_FILE" ]]; then
         local existing_email
-        existing_email="$(get_env_value "ADMIN_EMAIL")"
+        existing_email="$(get_env_value "ADMIN_EMAIL")" || return "$?"
         if [[ -n "$existing_email" ]]; then
             printf '%s' "$existing_email"
             return 0
@@ -566,7 +580,7 @@ prompt_initial_admin_email() {
     fi
 
     echo -ne "  ${BOLD}请输入初始管理员邮箱 [${default_email}]: ${NC}" >&2
-    read -r input
+    read -r input || return "$?"
     input="${input:-$default_email}"
 
     if ! is_valid_email "$input"; then
@@ -855,61 +869,66 @@ ensure_env_keys() {
     if [[ ! -f "$ENV_FILE" ]]; then
         return 0
     fi
-    local system_repository agent_repository
+    local system_repository agent_repository generated_env_value
     system_repository="$(get_release_repository_default GITHUB_REPO SYSTEM_UPDATE_RELEASE_REPOSITORY)" || return 1
     agent_repository="$(get_release_repository_default GITHUB_REPOSITORY INCUDAL_AGENT_RELEASE_REPOSITORY)" || return 1
 
-    set_env_if_missing "NODE_ENV" "production" "运行环境"
-    set_env_if_missing "HOST" "127.0.0.1" "后端监听地址"
-    set_env_if_missing "PORT" "${DEFAULT_PORT}" "后端监听端口"
-    set_env_if_value "PORT" "3000" "${DEFAULT_PORT}" "后端监听端口（迁移旧版前端端口）"
-    set_env_if_missing "TRUST_PROXY" "true" "信任本机 Nginx 代理头"
-    set_env_if_missing "JWT_SECRET" "$(gen_secret 48)" "JWT 密钥"
-    set_env_if_missing "COOKIE_SECRET" "$(gen_secret 48)" "Cookie 密钥"
-    set_env_if_missing "ENCRYPTION_KEY" "$(openssl rand -base64 32)" "敏感数据加密密钥"
-    set_env_if_missing "ADMIN_EMAIL" "admin@payincus.local" "管理员初始邮箱"
-    set_env_if_missing "ADMIN_PASSWORD" "$(gen_password 16)" "管理员初始密码"
+    set_env_if_missing "NODE_ENV" "production" "运行环境" || return "$?"
+    set_env_if_missing "HOST" "127.0.0.1" "后端监听地址" || return "$?"
+    set_env_if_missing "PORT" "${DEFAULT_PORT}" "后端监听端口" || return "$?"
+    set_env_if_value "PORT" "3000" "${DEFAULT_PORT}" "后端监听端口（迁移旧版前端端口）" || return "$?"
+    set_env_if_missing "TRUST_PROXY" "true" "信任本机 Nginx 代理头" || return "$?"
+    generated_env_value="$(gen_secret 48)" || return "$?"
+    set_env_if_missing "JWT_SECRET" "$generated_env_value" "JWT 密钥" || return "$?"
+    generated_env_value="$(gen_secret 48)" || return "$?"
+    set_env_if_missing "COOKIE_SECRET" "$generated_env_value" "Cookie 密钥" || return "$?"
+    generated_env_value="$(openssl rand -base64 32)" || return "$?"
+    set_env_if_missing "ENCRYPTION_KEY" "$generated_env_value" "敏感数据加密密钥" || return "$?"
+    set_env_if_missing "ADMIN_EMAIL" "admin@payincus.local" "管理员初始邮箱" || return "$?"
+    generated_env_value="$(gen_password 16)" || return "$?"
+    set_env_if_missing "ADMIN_PASSWORD" "$generated_env_value" "管理员初始密码" || return "$?"
     local current_admin_password
     current_admin_password="$(get_env_value "ADMIN_PASSWORD" && printf '\037')" || return 1
     current_admin_password="${current_admin_password%$'\037'}"
     current_admin_password="${current_admin_password%$'\n'}"
     if [[ -z "$current_admin_password" || "$current_admin_password" == "admin123" ]]; then
-        set_env_value "ADMIN_PASSWORD" "$(gen_password 16)" "管理员初始密码"
+        generated_env_value="$(gen_password 16)" || return "$?"
+        set_env_value "ADMIN_PASSWORD" "$generated_env_value" "管理员初始密码" || return "$?"
     fi
-    set_env_if_missing "SERVE_STATIC_CLIENT" "false" "后端静态文件服务开关"
-    set_env_if_missing "VITE_API_BASE_URL" "/api" "前端 API 基础路径"
-    set_env_if_missing "VITE_CUSTOMER_BASE_URL" "" "管理后台生成客户链接的前端地址"
-    set_env_if_missing "VITE_ADMIN_BASE_URL" "" "客户前端管理后台地址"
-    set_env_if_missing "SYSTEM_UPDATE_ALLOWED_ADMIN_IDS" "" "允许执行在线更新的管理员 ID"
-    set_env_if_missing "SYSTEM_UPDATE_LOG_DIR" "${INSTALL_DIR}/update-logs" "在线更新日志目录"
-    set_env_if_missing "SYSTEM_UPDATE_STARTED_BY_USER_ID" "" "命令行更新任务发起管理员 ID"
-    set_env_if_missing "SYSTEM_UPDATE_RELEASE_REPOSITORY" "$system_repository" "在线更新 GitHub Release 仓库"
-    set_env_if_missing "SYSTEM_UPDATE_RELEASE_TOKEN" "" "在线更新私有 Release Token"
-    set_env_if_missing "SYSTEM_UPDATE_APPLY_MODE" "auto" "在线更新应用模式"
-    set_env_if_missing "INCUDAL_AGENT_RELEASE_REPOSITORY" "$agent_repository" "Agent GitHub Release 仓库"
+    set_env_if_missing "SERVE_STATIC_CLIENT" "false" "后端静态文件服务开关" || return "$?"
+    set_env_if_missing "VITE_API_BASE_URL" "/api" "前端 API 基础路径" || return "$?"
+    set_env_if_missing "VITE_CUSTOMER_BASE_URL" "" "管理后台生成客户链接的前端地址" || return "$?"
+    set_env_if_missing "VITE_ADMIN_BASE_URL" "" "客户前端管理后台地址" || return "$?"
+    set_env_if_missing "SYSTEM_UPDATE_ALLOWED_ADMIN_IDS" "" "允许执行在线更新的管理员 ID" || return "$?"
+    set_env_if_missing "SYSTEM_UPDATE_LOG_DIR" "${INSTALL_DIR}/update-logs" "在线更新日志目录" || return "$?"
+    set_env_if_missing "SYSTEM_UPDATE_STARTED_BY_USER_ID" "" "命令行更新任务发起管理员 ID" || return "$?"
+    set_env_if_missing "SYSTEM_UPDATE_RELEASE_REPOSITORY" "$system_repository" "在线更新 GitHub Release 仓库" || return "$?"
+    set_env_if_missing "SYSTEM_UPDATE_RELEASE_TOKEN" "" "在线更新私有 Release Token" || return "$?"
+    set_env_if_missing "SYSTEM_UPDATE_APPLY_MODE" "auto" "在线更新应用模式" || return "$?"
+    set_env_if_missing "INCUDAL_AGENT_RELEASE_REPOSITORY" "$agent_repository" "Agent GitHub Release 仓库" || return "$?"
     local repository_key
     for repository_key in SYSTEM_UPDATE_RELEASE_REPOSITORY INCUDAL_AGENT_RELEASE_REPOSITORY GITHUB_REPO GITHUB_REPOSITORY; do
-        migrate_release_repository "$repository_key"
+        migrate_release_repository "$repository_key" || return "$?"
     done
-    set_env_if_missing "INCUDAL_AGENT_RELEASE_TOKEN" "${INCUDAL_AGENT_RELEASE_TOKEN:-}" "Agent GitHub Release Token"
-    set_env_if_missing "INCUDAL_AGENT_RELEASE_DIR" "" "Agent 本地 Release 目录"
-    set_env_if_missing "INCUDAL_AGENT_BINARY_URL" "" "Agent 自定义二进制地址"
-    set_env_if_missing "INCUDAL_AGENT_BINARY_SHA256" "" "Agent 自定义二进制 SHA256"
-    set_env_if_missing "COOKIE_SAME_SITE" "" "Cookie SameSite 策略"
-    set_env_if_missing "COOKIE_SECURE" "" "Cookie Secure 开关"
-    set_env_if_missing "COOKIE_DOMAIN" "" "Cookie 共享域（必须留空以隔离客户面板和管理后台）"
+    set_env_if_missing "INCUDAL_AGENT_RELEASE_TOKEN" "${INCUDAL_AGENT_RELEASE_TOKEN:-}" "Agent GitHub Release Token" || return "$?"
+    set_env_if_missing "INCUDAL_AGENT_RELEASE_DIR" "" "Agent 本地 Release 目录" || return "$?"
+    set_env_if_missing "INCUDAL_AGENT_BINARY_URL" "" "Agent 自定义二进制地址" || return "$?"
+    set_env_if_missing "INCUDAL_AGENT_BINARY_SHA256" "" "Agent 自定义二进制 SHA256" || return "$?"
+    set_env_if_missing "COOKIE_SAME_SITE" "" "Cookie SameSite 策略" || return "$?"
+    set_env_if_missing "COOKIE_SECURE" "" "Cookie Secure 开关" || return "$?"
+    set_env_if_missing "COOKIE_DOMAIN" "" "Cookie 共享域（必须留空以隔离客户面板和管理后台）" || return "$?"
 
     local frontend_url
-    frontend_url="$(get_env_value "FRONTEND_URL")"
+    frontend_url="$(get_env_value "FRONTEND_URL")" || return "$?"
     if [[ -n "$frontend_url" ]]; then
-        set_env_if_missing "SITE_URL" "$frontend_url" "站点公网地址"
-        set_env_if_missing "PAYMENT_CALLBACK_BASE_URL" "$frontend_url" "支付回调公网地址"
+        set_env_if_missing "SITE_URL" "$frontend_url" "站点公网地址" || return "$?"
+        set_env_if_missing "PAYMENT_CALLBACK_BASE_URL" "$frontend_url" "支付回调公网地址" || return "$?"
     fi
 
     # root-run OTA units read this file.  Keep it readable by the service group,
     # but never writable by the service account (prevents NODE_OPTIONS/env injection).
-    chown "root:${RUN_USER}" "$ENV_FILE" 2>/dev/null || true
-    chmod 640 "$ENV_FILE"
+    chown "root:${RUN_USER}" "$ENV_FILE" 2>/dev/null || return "$?"
+    chmod 640 "$ENV_FILE" || return "$?"
 }
 
 # ========================== 系统检查 ==========================
@@ -998,6 +1017,23 @@ check_existing() {
     return 1  # 未安装
 }
 
+has_existing_installation_identity() {
+    local identity_path
+    for identity_path in "${INSTALLATION_IDENTITY_PATHS[@]}"; do
+        [[ ! -e "$identity_path" && ! -L "$identity_path" ]] || return 0
+    done
+    [[ ! -L "$INSTALLATION_GATEWAY_STATE_DIR" ]] || return 0
+    [[ ! -e "$INSTALLATION_GATEWAY_STATE_DIR/owner.json" && ! -L "$INSTALLATION_GATEWAY_STATE_DIR/owner.json" ]] || return 0
+    for identity_path in \
+        "$INSTALLATION_GATEWAY_STATE_DIR"/*/identity.json \
+        "$INSTALLATION_GATEWAY_STATE_DIR"/*/bootstrap.json \
+        "$INSTALLATION_GATEWAY_STATE_DIR"/*/transport/gateway-identity.json \
+        "$INSTALLATION_GATEWAY_STATE_DIR"/*/auth/gateway-auth.json; do
+        [[ ! -e "$identity_path" && ! -L "$identity_path" ]] || return 0
+    done
+    return 1
+}
+
 is_atomic_layout() {
     [[ -L "${INSTALL_DIR}/current" && -f "${INSTALL_DIR}/current/server/dist/app.js" ]]
 }
@@ -1020,20 +1056,20 @@ install_nodejs() {
 
     # Configure the signed repository directly; no mutable remote root script.
     info "添加 NodeSource APT 源..."
-    apt-get install -y -qq ca-certificates curl gnupg >/dev/null 2>&1
+    apt-get install -y -qq ca-certificates curl gnupg >/dev/null 2>&1 || return "$?"
     local node_key
-    node_key=$(mktemp)
+    node_key=$(mktemp) || return "$?"
     if ! curl --proto '=https' --proto-redir '=https' -fsSL --connect-timeout 15 --max-time 60 https://deb.nodesource.com/gpgkey/nodesource-repo.gpg.key -o "$node_key" ||
        [[ $(sha256sum "$node_key" | awk '{print $1}') != b42e0321dabdc24e892115da705cf061167eac12a317f23d329862d0aa0a271d ]]; then
         rm -f "$node_key"; error 'NodeSource 签名身份校验失败'; return 1
     fi
-    install -d -o root -g root -m 0755 /etc/apt/keyrings
-    gpg --batch --yes --dearmor -o /etc/apt/keyrings/nodesource.gpg "$node_key"
-    rm -f "$node_key"
-    chmod 0644 /etc/apt/keyrings/nodesource.gpg
-    printf 'deb [signed-by=/etc/apt/keyrings/nodesource.gpg] https://deb.nodesource.com/node_%s.x nodistro main\n' "$NODE_MAJOR" > /etc/apt/sources.list.d/nodesource.list
-    apt-get update -qq >/dev/null 2>&1
-    apt-get install -y -qq nodejs >/dev/null 2>&1
+    install -d -o root -g root -m 0755 /etc/apt/keyrings || return "$?"
+    gpg --batch --yes --dearmor -o /etc/apt/keyrings/nodesource.gpg "$node_key" || return "$?"
+    rm -f "$node_key" || return "$?"
+    chmod 0644 /etc/apt/keyrings/nodesource.gpg || return "$?"
+    printf 'deb [signed-by=/etc/apt/keyrings/nodesource.gpg] https://deb.nodesource.com/node_%s.x nodistro main\n' "$NODE_MAJOR" > /etc/apt/sources.list.d/nodesource.list || return "$?"
+    apt-get update -qq >/dev/null 2>&1 || return "$?"
+    apt-get install -y -qq nodejs >/dev/null 2>&1 || return "$?"
 
     [[ -x /usr/bin/node ]] || { error "系统 Node.js 安装失败，缺少 /usr/bin/node"; return 1; }
     /usr/bin/node -e 'const [a,b,c]=process.versions.node.split(".").map(Number);process.exit(a===24&&(b>22||b===22&&c>=3)?0:1)' || { error '系统 Node.js 未达到 24.22.3 安全补丁基线'; return 1; }
@@ -1050,10 +1086,10 @@ install_pnpm() {
     fi
 
     if command -v corepack &>/dev/null; then
-        corepack enable >/dev/null 2>&1
-        corepack prepare "pnpm@${PNPM_VERSION}" --activate >/dev/null 2>&1
+        corepack enable >/dev/null 2>&1 || return "$?"
+        corepack prepare "pnpm@${PNPM_VERSION}" --activate >/dev/null 2>&1 || return "$?"
     else
-        npm install -g "pnpm@${PNPM_VERSION}" >/dev/null 2>&1
+        npm install -g "pnpm@${PNPM_VERSION}" >/dev/null 2>&1 || return "$?"
     fi
 
     if ! command -v pnpm &>/dev/null; then
@@ -1068,7 +1104,7 @@ install_pnpm() {
 install_system_tools() {
     step "安装基础系统工具..."
 
-    apt-get install -y -qq ca-certificates curl git sudo tar python3 openssh-client openssh-server wireguard-tools locales >/dev/null 2>&1
+    apt-get install -y -qq ca-certificates curl git sudo tar python3 openssh-client openssh-server wireguard-tools locales >/dev/null 2>&1 || return "$?"
 
     # apt 的错误此前被完全吞掉：任何一个基础工具没装上，后面都会以难以定位的方式失败
     # （例如 git 缺失会让部署目录不是 Git 工作区，只留下一句 warn）。这里显式验一遍。
@@ -1086,14 +1122,14 @@ install_system_tools() {
 
 # ========================== 安装 PostgreSQL ==========================
 ensure_postgresql_running() {
-    systemctl enable postgresql >/dev/null 2>&1
-    systemctl start postgresql
+    systemctl enable postgresql >/dev/null 2>&1 || return "$?"
+    systemctl start postgresql || return "$?"
     local attempt
     for attempt in $(seq 1 30); do
         if pg_isready -h 127.0.0.1 -p 5432 -q; then
             return 0
         fi
-        sleep 1
+        sleep 1 || return "$?"
     done
     error "PostgreSQL 在 127.0.0.1:5432 未就绪，请检查 postgresql 服务及集群配置后重试"
     return 1
@@ -1108,38 +1144,38 @@ install_postgresql() {
         if [[ "$pg_ver" -ge "$PG_VERSION" ]] 2>/dev/null; then
             info "PostgreSQL ${pg_ver} 已安装，检查服务是否就绪"
             ensure_postgresql_running
-            return
+            return "$?"
         fi
     fi
 
     # 添加 PostgreSQL 官方 APT 源
     info "添加 PostgreSQL 官方 APT 源..."
-    apt-get install -y -qq gnupg lsb-release >/dev/null 2>&1
+    apt-get install -y -qq gnupg lsb-release >/dev/null 2>&1 || return "$?"
 
     local pg_key
-    pg_key=$(mktemp)
+    pg_key=$(mktemp) || return "$?"
     if ! curl --proto '=https' --proto-redir '=https' -fsSL --connect-timeout 15 --max-time 60 \
         https://www.postgresql.org/media/keys/ACCC4CF8.asc -o "$pg_key" ||
        [[ $(sha256sum "$pg_key" | awk '{print $1}') != 0144068502a1eddd2a0280ede10ef607d1ec592ce819940991203941564e8e76 ]]; then
         rm -f "$pg_key"; error 'PostgreSQL 软件源签名身份校验失败'; return 1
     fi
-    install -d -o root -g root -m 0755 /etc/apt/keyrings
+    install -d -o root -g root -m 0755 /etc/apt/keyrings || return "$?"
     if ! gpg --batch --yes --dearmor -o /etc/apt/keyrings/postgresql.gpg "$pg_key"; then
         rm -f "$pg_key"; error 'PostgreSQL 软件源签名密钥无效'; return 1
     fi
-    rm -f "$pg_key"
+    rm -f "$pg_key" || return "$?"
     # APT verifies repositories as _apt, including when the caller uses umask 077.
     # This is a public verification key; keep private runtime files restricted.
-    chmod 0644 /etc/apt/keyrings/postgresql.gpg
+    chmod 0644 /etc/apt/keyrings/postgresql.gpg || return "$?"
 
     echo "deb [signed-by=/etc/apt/keyrings/postgresql.gpg] https://apt.postgresql.org/pub/repos/apt ${OS_CODENAME}-pgdg main" \
-        > /etc/apt/sources.list.d/pgdg.list
+        > /etc/apt/sources.list.d/pgdg.list || return "$?"
 
-    apt-get update -qq >/dev/null 2>&1
-    apt-get install -y -qq "postgresql-${PG_VERSION}" >/dev/null 2>&1
+    apt-get update -qq >/dev/null 2>&1 || return "$?"
+    apt-get install -y -qq "postgresql-${PG_VERSION}" >/dev/null 2>&1 || return "$?"
 
     # 确保服务启动
-    ensure_postgresql_running
+    ensure_postgresql_running || return "$?"
 
     log "PostgreSQL ${PG_VERSION} 安装完成"
 }
@@ -1153,11 +1189,11 @@ install_redis() {
         return 0
     fi
 
-    apt-get install -y -qq redis-server >/dev/null 2>&1
+    apt-get install -y -qq redis-server >/dev/null 2>&1 || return "$?"
 
     # 确保服务启动
-    systemctl enable redis-server >/dev/null 2>&1
-    systemctl start redis-server
+    systemctl enable redis-server >/dev/null 2>&1 || return "$?"
+    systemctl start redis-server || return "$?"
 
     log "Redis 安装完成"
 }
@@ -1483,67 +1519,87 @@ install_release() {
     verify_release_publisher "$tar_file" || return 1
     validate_release_archive "$tar_file" || return 1
     install_verified_root_helpers_from_archive "$tar_file" || return 1
-    RELEASE_VERIFIED_THIS_RUN=true
 
     # 创建安装目录
-    mkdir -p "$INSTALL_DIR"
+    mkdir -p "$INSTALL_DIR" || return "$?"
     # Existing installations may still be service-owned.  Seal ownership
     # before root extracts over the tree to avoid pre-existing symlink/write
     # races during an upgrade.
-    /usr/local/libexec/incudal/incudal-online-task harden
+    /usr/local/libexec/incudal/incudal-online-task harden || return "$?"
 
     if [[ "$is_upgrade" == "true" ]]; then
         # 升级模式：先备份当前版本
         info "备份当前版本..."
-        local backup_dir="${INSTALL_DIR}.bak.$(date +%Y%m%d%H%M%S)"
-        cp -r "$INSTALL_DIR" "$backup_dir"
+        local backup_dir
+        backup_dir="${INSTALL_DIR}.bak.$(date +%Y%m%d%H%M%S)" || return "$?"
+        [[ ! -e "$backup_dir" && ! -L "$backup_dir" ]] || { error "当前版本备份路径已存在，原数据保持；请稍后重试。"; return 1; }
+        cp -r "$INSTALL_DIR" "$backup_dir" || return "$?"
         info "备份已保存到: ${backup_dir}"
 
         # 保留 .env 文件和证书目录
         local env_backup=""
         local certs_backup=""
         if [[ -f "${INSTALL_DIR}/.env" ]]; then
-            env_backup=$(mktemp)
-            cp "${INSTALL_DIR}/.env" "$env_backup"
+            env_backup=$(mktemp) || return "$?"
+            cp -a "${INSTALL_DIR}/.env" "$env_backup" || return "$?"
         fi
         if [[ -d "${INSTALL_DIR}/server/certs" ]]; then
-            certs_backup=$(mktemp -d)
-            cp -r "${INSTALL_DIR}/server/certs" "$certs_backup/"
+            certs_backup=$(mktemp -d) || return "$?"
+            cp -a "${INSTALL_DIR}/server/certs" "$certs_backup/" || return "$?"
         fi
 
         # 清理旧文件（保留 .env 和 certs）
-        rm -rf "${INSTALL_DIR}/client" "${INSTALL_DIR}/server/dist" "${INSTALL_DIR}/server/node_modules"
+        rm -rf "${INSTALL_DIR}/client" "${INSTALL_DIR}/server/dist" "${INSTALL_DIR}/server/node_modules" || return "$?"
 
         # 解压新版本
-        tar -xzf "$tar_file" -C "$INSTALL_DIR" --strip-components=0
+        tar -xzf "$tar_file" -C "$INSTALL_DIR" --strip-components=0 || return "$?"
 
         # 恢复 .env 和证书
-        if [[ -n "$env_backup" && -f "$env_backup" ]]; then
-            cp "$env_backup" "${INSTALL_DIR}/.env"
-            rm -f "$env_backup"
+        if [[ -n "$env_backup" ]]; then
+            [[ -f "$env_backup" && ! -L "$env_backup" ]] || { error "原环境备份缺失或不是普通文件，停止后续配置。"; return 1; }
+            local env_restore
+            env_restore=$(mktemp "$INSTALL_DIR/.env.restore.XXXXXXXX") || return "$?"
+            cp -a "$env_backup" "$env_restore" || return "$?"
+            mv -fT -- "$env_restore" "${INSTALL_DIR}/.env" || return "$?"
+            rm -f "$env_backup" || return "$?"
         fi
-        if [[ -n "$certs_backup" && -d "$certs_backup/certs" ]]; then
-            mkdir -p "${INSTALL_DIR}/server/certs"
-            cp -r "$certs_backup/certs/"* "${INSTALL_DIR}/server/certs/" 2>/dev/null || true
-            rm -rf "$certs_backup"
+        if [[ -n "$certs_backup" ]]; then
+            [[ -d "$certs_backup/certs" && ! -L "$certs_backup/certs" ]] || { error "原证书备份缺失或目录无效，停止后续配置。"; return 1; }
+            local certs_restore certs_retained restore_status
+            certs_restore=$(mktemp -d "$INSTALL_DIR/server/.certs.restore.XXXXXXXX") || return "$?"
+            cp -a "$certs_backup/certs/." "$certs_restore/" || return "$?"
+            certs_retained=$(mktemp -d "$INSTALL_DIR/server/.certs.retained.XXXXXXXX") || return "$?"
+            rmdir -- "$certs_retained" || return "$?"
+            mv -T -- "${INSTALL_DIR}/server/certs" "$certs_retained" || return "$?"
+            if mv -T -- "$certs_restore" "${INSTALL_DIR}/server/certs"; then
+                rm -rf "$certs_retained" "$certs_backup" || return "$?"
+            else
+                restore_status=$?
+                mv -T -- "$certs_retained" "${INSTALL_DIR}/server/certs" || {
+                    error "证书目录还原未完成，原证书保留在受限临时目录；停止后续配置。"
+                    return 1
+                }
+                return "$restore_status"
+            fi
         fi
     else
         # 全新安装
-        tar -xzf "$tar_file" -C "$INSTALL_DIR" --strip-components=0
+        tar -xzf "$tar_file" -C "$INSTALL_DIR" --strip-components=0 || return "$?"
     fi
 
     # 清理下载的临时文件
-    rm -f "$tar_file" "${tar_file}.sha256" "${tar_file}.sig"
+    rm -f "$tar_file" "${tar_file}.sha256" "${tar_file}.sig" || return "$?"
 
     # 创建证书目录
-    mkdir -p "${INSTALL_DIR}/server/certs"
+    mkdir -p "${INSTALL_DIR}/server/certs" || return "$?"
 
     # The fixed helper came directly from the checksum-verified archive.  Use
     # its non-executing harden action before any service account can modify the
     # extracted code tree.
-    /usr/local/libexec/incudal/incudal-online-task harden
+    /usr/local/libexec/incudal/incudal-online-task harden || return "$?"
 
-    log "产物包安装完成"
+    log "产物包安装完成" || return "$?"
+    RELEASE_VERIFIED_THIS_RUN=true
 }
 
 # ========================== 配置 Git 在线更新元数据 ==========================
@@ -1555,22 +1611,22 @@ configure_git_metadata() {
         return 0
     fi
 
-    cd "$INSTALL_DIR"
+    cd "$INSTALL_DIR" || return "$?"
 
     if [[ -d "${INSTALL_DIR}/.git" ]]; then
         git remote get-url origin >/dev/null 2>&1 && \
             git remote set-url origin "https://github.com/${GITHUB_REPO}.git" || \
-            git remote add origin "https://github.com/${GITHUB_REPO}.git"
+            git remote add origin "https://github.com/${GITHUB_REPO}.git" || return "$?"
     else
-        git init -q
+        git init -q || return "$?"
         git remote add origin "https://github.com/${GITHUB_REPO}.git" 2>/dev/null || \
-            git remote set-url origin "https://github.com/${GITHUB_REPO}.git" 2>/dev/null || true
+            git remote set-url origin "https://github.com/${GITHUB_REPO}.git" 2>/dev/null || return "$?"
     fi
 
     # Git creates executable sample hooks; root OTA rejects executable hooks.
     # Samples are documentation only, so keep them without execute permission.
     if [[ -d "${INSTALL_DIR}/.git/hooks" ]]; then
-        find "${INSTALL_DIR}/.git/hooks" -type f -name '*.sample' -exec chmod a-x {} +
+        find "${INSTALL_DIR}/.git/hooks" -type f -name '*.sample' -exec chmod a-x {} + || return "$?"
     fi
 
     git config --global --add safe.directory "$INSTALL_DIR" 2>/dev/null || true
@@ -1589,15 +1645,15 @@ create_user() {
     if id "$RUN_USER" &>/dev/null; then
         log "用户 ${RUN_USER} 已存在，跳过"
     else
-        useradd --system --home-dir "${INSTALL_DIR}" --shell /usr/sbin/nologin "$RUN_USER"
+        useradd --system --home-dir "${INSTALL_DIR}" --shell /usr/sbin/nologin "$RUN_USER" || return "$?"
         log "系统用户 ${RUN_USER} 创建完成"
     fi
 
     # 创建 npm 缓存目录（npx/prisma 需要可写的 home 目录）
-    mkdir -p "${INSTALL_DIR}/.npm"
-    mkdir -p "${INSTALL_DIR}/.cache"
+    mkdir -p "${INSTALL_DIR}/.npm" || return "$?"
+    mkdir -p "${INSTALL_DIR}/.cache" || return "$?"
     [[ ! -L /var/lib/incudal-images ]] || { error '镜像库目录不能是符号链接'; return 1; }
-    install -d -o "$RUN_USER" -g "$RUN_USER" -m 0750 /var/lib/incudal-images
+    install -d -o "$RUN_USER" -g "$RUN_USER" -m 0750 /var/lib/incudal-images || return "$?"
 
     # Nginx runs as www-data and must be able to traverse the install root
     # to serve client/dist while .env stays owner-only below.
@@ -1605,13 +1661,13 @@ create_user() {
         .npm .cache .incudal-update-downloads update-logs \
         agent-release; do
         if [[ -e "${INSTALL_DIR}/${mutable}" ]]; then
-            chown -R "${RUN_USER}:${RUN_USER}" "${INSTALL_DIR}/${mutable}"
+            chown -R "${RUN_USER}:${RUN_USER}" "${INSTALL_DIR}/${mutable}" || return "$?"
         fi
     done
-    chmod 751 "$INSTALL_DIR"
+    chmod 751 "$INSTALL_DIR" || return "$?"
     if [[ -f "$ENV_FILE" ]]; then
-        chown "root:${RUN_USER}" "$ENV_FILE"
-        chmod 640 "$ENV_FILE"
+        chown "root:${RUN_USER}" "$ENV_FILE" || return "$?"
+        chmod 640 "$ENV_FILE" || return "$?"
     fi
 }
 
@@ -1629,7 +1685,7 @@ generate_panel_cert() {
         return 0
     fi
 
-    mkdir -p "$cert_dir"
+    mkdir -p "$cert_dir" || return "$?"
 
     # 生成自签名客户端证书（用于面板与 Incus API 的 mTLS 通信）
     info "生成面板客户端证书（RSA 4096 位，有效期 10 年）..."
@@ -1638,11 +1694,11 @@ generate_panel_cert() {
         -out "$cert_file" \
         -days 3650 -nodes \
         -subj "/CN=incudal-panel/O=PayIncus" \
-        2>/dev/null
+        2>/dev/null || return "$?"
 
     # 设置权限：只有 incudal 用户可读
-    chmod 600 "$cert_file" "$key_file"
-    chown "${RUN_USER}:${RUN_USER}" "$cert_file" "$key_file"
+    chmod 600 "$cert_file" "$key_file" || return "$?"
+    chown "${RUN_USER}:${RUN_USER}" "$cert_file" "$key_file" || return "$?"
 
     log "面板客户端证书生成完成"
     info "证书路径: ${cert_file}"
@@ -1681,7 +1737,7 @@ try:
 except (OSError,subprocess.TimeoutExpired):raise SystemExit('DATABASE_BOOTSTRAP_QUERY_FAILED')
 print('DATABASE_BOOTSTRAP_READY')
 DATABASE_BOOTSTRAP
-    )
+    ) || return "$?"
     log "PostgreSQL 数据库与原登录身份已核验"
 }
 
@@ -1689,7 +1745,8 @@ DATABASE_BOOTSTRAP
 generate_env() {
     local db_password="$1"
     local redis_password="$2"
-    local admin_password="${3:-$(gen_password 16)}"
+    local admin_password="${3:-}"
+    if [[ -z "$admin_password" ]]; then admin_password="$(gen_password 16)" || return "$?"; fi
     local admin_email="${4:-admin@payincus.local}"
 
     step "生成环境配置..."
@@ -1697,19 +1754,19 @@ generate_env() {
     if [[ -f "$ENV_FILE" ]]; then
         info ".env 文件已存在，检查并补齐缺失的密钥配置"
         ensure_env_keys
-        return 0
+        return "$?"
     fi
 
     local jwt_secret
-    jwt_secret=$(gen_secret 48)
+    jwt_secret=$(gen_secret 48) || return "$?"
     local cookie_secret
-    cookie_secret=$(gen_secret 48)
+    cookie_secret=$(gen_secret 48) || return "$?"
     local encryption_key
-    encryption_key=$(openssl rand -base64 32)
+    encryption_key=$(openssl rand -base64 32) || return "$?"
 
     (
-    umask 077
-    cat > "$ENV_FILE" << EOF
+    umask 077 || exit "$?"
+    cat > "$ENV_FILE" << EOF || exit "$?"
 # ============================================================================
 # PayIncus 环境配置
 # 由安装脚本自动生成于 $(date '+%Y-%m-%d %H:%M:%S')
@@ -1780,10 +1837,10 @@ COOKIE_DOMAIN=
 # ============ 监控告警（可选）============
 # ALERT_WEBHOOK_URL=https://your-webhook-url
 EOF
-    )
+    ) || return "$?"
 
-    chown "root:${RUN_USER}" "$ENV_FILE"
-    chmod 640 "$ENV_FILE"
+    chown "root:${RUN_USER}" "$ENV_FILE" || return "$?"
+    chmod 640 "$ENV_FILE" || return "$?"
 
     log "环境配置文件生成完成: ${ENV_FILE}"
 }
@@ -1798,14 +1855,14 @@ setup_redis() {
     if [[ -f "$redis_conf" ]]; then
         # 设置密码
         if grep -q "^requirepass" "$redis_conf" 2>/dev/null; then
-            sed -i "s/^requirepass.*/requirepass ${redis_password}/" "$redis_conf"
+            sed -i "s/^requirepass.*/requirepass ${redis_password}/" "$redis_conf" || return "$?"
         elif grep -q "^# requirepass" "$redis_conf" 2>/dev/null; then
-            sed -i "s/^# requirepass.*/requirepass ${redis_password}/" "$redis_conf"
+            sed -i "s/^# requirepass.*/requirepass ${redis_password}/" "$redis_conf" || return "$?"
         else
-            echo "requirepass ${redis_password}" >> "$redis_conf"
+            echo "requirepass ${redis_password}" >> "$redis_conf" || return "$?"
         fi
 
-        systemctl restart redis-server
+        systemctl restart redis-server || return "$?"
         log "Redis 密码配置完成"
     else
         warn "Redis 配置文件不存在，跳过密码配置"
@@ -1828,16 +1885,16 @@ database_migration_mode() {
 run_migrations() {
     step "执行数据库迁移..."
 
-    cd "${INSTALL_DIR}/server"
+    cd "${INSTALL_DIR}/server" || return "$?"
     local migration_mode
     migration_mode="$(database_migration_mode "$INSTALL_DIR")" || return 1
     if [[ "$migration_mode" == legacy ]]; then
         # The retained original archives predate the root-only migration tools.
         # Keep their original database owner and run their ORM as that user.
-        /usr/sbin/runuser -u "$RUN_USER" -- /usr/bin/env -i "PATH=$INSTALLER_SYSTEM_PATH" "ENV_FILE=$ENV_FILE" "HOME=$INSTALL_DIR" pnpm exec prisma migrate deploy
+        /usr/sbin/runuser -u "$RUN_USER" -- /usr/bin/env -i "PATH=$INSTALLER_SYSTEM_PATH" "ENV_FILE=$ENV_FILE" "HOME=$INSTALL_DIR" pnpm exec prisma migrate deploy || return "$?"
     else
-        env "ENV_FILE=$ENV_FILE" python3 "$INSTALL_DIR/scripts/harden-database.py"
-        env "ENV_FILE=$ENV_FILE" bash "$INSTALL_DIR/scripts/migrate-database.sh"
+        env "ENV_FILE=$ENV_FILE" python3 "$INSTALL_DIR/scripts/harden-database.py" || return "$?"
+        env "ENV_FILE=$ENV_FILE" bash "$INSTALL_DIR/scripts/migrate-database.sh" || return "$?"
     fi
 
     log "数据库迁移完成"
@@ -1857,7 +1914,7 @@ create_service() {
     if [[ "$migration_mode" == legacy ]]; then
         migration_start="ExecStartPre=/usr/bin/env -i PATH=${INSTALLER_SYSTEM_PATH} HOME=${INSTALL_DIR} ENV_FILE=${ENV_FILE} /usr/bin/bash --noprofile --norc -c 'cd ${app_dir}/server && exec pnpm exec prisma migrate deploy'"
     fi
-    cat > "$SERVICE_FILE" << EOF
+    cat > "$SERVICE_FILE" << EOF || return "$?"
 [Unit]
 Description=PayIncus 容器虚拟化管理平台
 Documentation=https://github.com/${GITHUB_REPO}
@@ -1920,8 +1977,8 @@ EOF
 
     install_repository_startup_guard || return 1
 
-    systemctl daemon-reload
-    systemctl enable "$SERVICE_NAME" >/dev/null 2>&1
+    systemctl daemon-reload || return "$?"
+    systemctl enable "$SERVICE_NAME" >/dev/null 2>&1 || return "$?"
 
     log "systemd 服务创建完成"
 }
@@ -1930,7 +1987,7 @@ EOF
 create_online_update_service() {
     step "创建在线更新 systemd 单元..."
 
-    mkdir -p "${INSTALL_DIR}/update-logs"
+    mkdir -p "${INSTALL_DIR}/update-logs" || return "$?"
     local app_dir="${INSTALL_DIR}"
     if [[ -L "${INSTALL_DIR}/current" ]]; then
         app_dir="${INSTALL_DIR}/current"
@@ -1961,10 +2018,10 @@ create_online_update_service() {
         fi
     done
 
-    install -d -o root -g root -m 0755 /usr/local/libexec/incudal /usr/local/libexec/incudal/ota-path
-    install -d -o root -g root -m 0755 /var/cache/incudal-ota /var/lib/incudal-ota/manifests
+    install -d -o root -g root -m 0755 /usr/local/libexec/incudal /usr/local/libexec/incudal/ota-path || return "$?"
+    install -d -o root -g root -m 0755 /var/cache/incudal-ota /var/lib/incudal-ota/manifests || return "$?"
 
-    cat > /etc/systemd/system/incudal-online-update@.service << EOF
+    cat > /etc/systemd/system/incudal-online-update@.service << EOF || return "$?"
 [Unit]
 Description=PayIncus online update task %i
 Documentation=https://github.com/${GITHUB_REPO}
@@ -1986,7 +2043,7 @@ StandardError=journal
 SyslogIdentifier=incudal-online-update
 EOF
 
-    cat > /etc/systemd/system/incudal-online-rollback@.service << EOF
+    cat > /etc/systemd/system/incudal-online-rollback@.service << EOF || return "$?"
 [Unit]
 Description=PayIncus online update rollback task %i
 Documentation=https://github.com/${GITHUB_REPO}
@@ -2009,37 +2066,37 @@ SyslogIdentifier=incudal-online-rollback
 EOF
 
     local sudoers_tmp
-    sudoers_tmp="$(mktemp)"
-    cat > "$sudoers_tmp" << EOF
+    sudoers_tmp="$(mktemp)" || return "$?"
+    cat > "$sudoers_tmp" << EOF || return "$?"
 Defaults:${RUN_USER} secure_path=/usr/local/libexec/incudal:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
 # Only the root-owned wrapper is allowed.  It rejects extra arguments and only
 # accepts only fixed managed unit templates and validated task IDs.
 ${RUN_USER} ALL=(root) NOPASSWD: /usr/local/libexec/incudal/systemctl
 EOF
-    chmod 440 "$sudoers_tmp"
-    visudo -cf "$sudoers_tmp" >/dev/null
-    install -o root -g root -m 0440 "$sudoers_tmp" /etc/sudoers.d/incudal-online-update
-    rm -f "$sudoers_tmp"
+    chmod 440 "$sudoers_tmp" || return "$?"
+    visudo -cf "$sudoers_tmp" >/dev/null || return "$?"
+    install -o root -g root -m 0440 "$sudoers_tmp" /etc/sudoers.d/incudal-online-update || return "$?"
+    rm -f "$sudoers_tmp" || return "$?"
 
     # seal is run only after install_release verified the release SHA256.  It
     # makes code/current/releases root-owned, leaves only documented runtime
     # directories writable by incudal, and writes the trusted file manifest.
-    /usr/local/libexec/incudal/incudal-online-task seal
+    /usr/local/libexec/incudal/incudal-online-task seal || return "$?"
 
     if [[ -f "${app_dir}/scripts/install-platform-backup.sh" ]]; then
-        bash "${app_dir}/scripts/install-platform-backup.sh"
+        bash "${app_dir}/scripts/install-platform-backup.sh" || return "$?"
     fi
     # Legacy backup installers copy their original helper again. Generate the
     # same repository constant after that hook, without changing the archive or
     # its sealed runtime template; current helpers remain byte-identical.
     local repository_helper
-    repository_helper="$(mktemp)"
-    cp "${app_dir}/deploy/incudal-online-task.sh.example" "$repository_helper"
-    normalize_legacy_online_task_helper "$repository_helper"
-    install -o root -g root -m 0755 "$repository_helper" /usr/local/libexec/incudal/incudal-online-task
-    rm -f -- "$repository_helper"
+    repository_helper="$(mktemp)" || return "$?"
+    cp "${app_dir}/deploy/incudal-online-task.sh.example" "$repository_helper" || return "$?"
+    normalize_legacy_online_task_helper "$repository_helper" || return "$?"
+    install -o root -g root -m 0755 "$repository_helper" /usr/local/libexec/incudal/incudal-online-task || return "$?"
+    rm -f -- "$repository_helper" || return "$?"
 
-    systemctl daemon-reload
+    systemctl daemon-reload || return "$?"
 
     log "在线更新 systemd 单元和 sudoers 创建完成"
 }
@@ -2170,8 +2227,8 @@ setup_nginx_certbot() {
     info "准备配置 Nginx 反代及 Let's Encrypt SSL 自动证书"
     local client_dist
     local admin_client_dist
-    client_dist="$(resolve_static_dist_dir "client/dist/user")"
-    admin_client_dist="$(resolve_static_dist_dir "client/dist/admin")"
+    client_dist="$(resolve_static_dist_dir "client/dist/user")" || return "$?"
+    admin_client_dist="$(resolve_static_dist_dir "client/dist/admin")" || return "$?"
 
     if [[ ! -d "$client_dist" ]]; then
         error "未找到前端构建目录: $client_dist"
@@ -2186,7 +2243,7 @@ setup_nginx_certbot() {
     fi
 
     echo -ne "  ${BOLD}请输入客户面板域名 (例如 panel.example.com): ${NC}"
-    read -r DOMAIN
+    read -r DOMAIN || return "$?"
 
     if [[ -z "$DOMAIN" ]]; then
         error "域名不能为空！"
@@ -2194,7 +2251,7 @@ setup_nginx_certbot() {
     fi
 
     echo -ne "  ${BOLD}请输入管理后台域名 (例如 admin.example.com): ${NC}"
-    read -r ADMIN_DOMAIN
+    read -r ADMIN_DOMAIN || return "$?"
 
     if [[ -z "$ADMIN_DOMAIN" ]]; then
         error "管理后台域名不能为空！"
@@ -2207,37 +2264,37 @@ setup_nginx_certbot() {
     fi
 
     echo -ne "  ${BOLD}请输入你的邮箱 (用于证书过期通知，可留空): ${NC}"
-    read -r EMAIL
+    read -r EMAIL || return "$?"
 
     info "安装 Nginx 与 Certbot..."
-    apt-get install -y -qq nginx certbot python3-certbot-nginx >/dev/null 2>&1
+    apt-get install -y -qq nginx certbot python3-certbot-nginx >/dev/null 2>&1 || return "$?"
 
     # 更新公网 URL：CORS、页面链接、支付回调都应使用浏览器可访问的前端域名
-    set_env_value "FRONTEND_URL" "https://${DOMAIN}" "前端公网地址"
-    set_env_value "ADMIN_FRONTEND_URL" "https://${ADMIN_DOMAIN}" "管理后台公网地址"
-    set_env_value "SITE_URL" "https://${DOMAIN}" "站点公网地址"
-    set_env_value "PAYMENT_CALLBACK_BASE_URL" "https://${DOMAIN}" "支付回调公网地址"
-    set_env_value "VITE_CUSTOMER_BASE_URL" "https://${DOMAIN}" "管理后台生成客户链接的前端地址"
-    set_env_value "VITE_ADMIN_BASE_URL" "https://${ADMIN_DOMAIN}" "前端管理后台地址"
+    set_env_value "FRONTEND_URL" "https://${DOMAIN}" "前端公网地址" || return "$?"
+    set_env_value "ADMIN_FRONTEND_URL" "https://${ADMIN_DOMAIN}" "管理后台公网地址" || return "$?"
+    set_env_value "SITE_URL" "https://${DOMAIN}" "站点公网地址" || return "$?"
+    set_env_value "PAYMENT_CALLBACK_BASE_URL" "https://${DOMAIN}" "支付回调公网地址" || return "$?"
+    set_env_value "VITE_CUSTOMER_BASE_URL" "https://${DOMAIN}" "管理后台生成客户链接的前端地址" || return "$?"
+    set_env_value "VITE_ADMIN_BASE_URL" "https://${ADMIN_DOMAIN}" "前端管理后台地址" || return "$?"
 
     log "配置 Nginx 站点..."
     {
-        write_nginx_split_maps
-        write_nginx_split_server_block "$DOMAIN" "$client_dist"
-        write_nginx_split_server_block "$ADMIN_DOMAIN" "$admin_client_dist"
-    } > /etc/nginx/sites-available/incudal.conf
+        write_nginx_split_maps || return "$?"
+        write_nginx_split_server_block "$DOMAIN" "$client_dist" || return "$?"
+        write_nginx_split_server_block "$ADMIN_DOMAIN" "$admin_client_dist" || return "$?"
+    } > /etc/nginx/sites-available/incudal.conf || return "$?"
 
-    ln -sf /etc/nginx/sites-available/incudal.conf /etc/nginx/sites-enabled/
+    ln -sf /etc/nginx/sites-available/incudal.conf /etc/nginx/sites-enabled/ || return "$?"
     # 移除默认站点（避免冲突）
     rm -f /etc/nginx/sites-enabled/default 2>/dev/null || true
-    nginx -t >/dev/null 2>&1
-    systemctl reload nginx
+    nginx -t >/dev/null 2>&1 || return "$?"
+    systemctl reload nginx || return "$?"
 
     log "申请 Let's Encrypt SSL 证书..."
     if [[ -n "$EMAIL" ]]; then
-        certbot --nginx -d "$DOMAIN" -d "$ADMIN_DOMAIN" --non-interactive --agree-tos -m "$EMAIL" --redirect
+        certbot --nginx -d "$DOMAIN" -d "$ADMIN_DOMAIN" --non-interactive --agree-tos -m "$EMAIL" --redirect || return "$?"
     else
-        certbot --nginx -d "$DOMAIN" -d "$ADMIN_DOMAIN" --non-interactive --agree-tos --register-unsafely-without-email --redirect
+        certbot --nginx -d "$DOMAIN" -d "$ADMIN_DOMAIN" --non-interactive --agree-tos --register-unsafely-without-email --redirect || return "$?"
     fi
 
     log "HTTPS 配置完成！客户面板: https://${DOMAIN}，管理后台: https://${ADMIN_DOMAIN}"
@@ -2375,9 +2432,9 @@ configure_cf_nginx() {
         return 1
     fi
     {
-        write_nginx_split_maps
-        write_nginx_split_server_block "$server_name" "$client_dist" "default"
-        write_nginx_split_server_block "$ADMIN_DOMAIN" "$admin_client_dist"
+        write_nginx_split_maps || return "$?"
+        write_nginx_split_server_block "$server_name" "$client_dist" "default" || return "$?"
+        write_nginx_split_server_block "$ADMIN_DOMAIN" "$admin_client_dist" || return "$?"
     } > /etc/nginx/sites-available/incudal.conf || { error "无法写入 Nginx 站点配置。"; return 1; }
     ln -sf /etc/nginx/sites-available/incudal.conf /etc/nginx/sites-enabled/ || return 1
     rm -f /etc/nginx/sites-enabled/default || return 1
@@ -2415,8 +2472,8 @@ setup_cf_tunnel() {
     fi
     show_cf_route_summary
     local client_dist admin_client_dist
-    client_dist="$(resolve_static_dist_dir "client/dist/user")"
-    admin_client_dist="$(resolve_static_dist_dir "client/dist/admin")"
+    client_dist="$(resolve_static_dist_dir "client/dist/user")" || return "$?"
+    admin_client_dist="$(resolve_static_dist_dir "client/dist/admin")" || return "$?"
     if [[ ! -s "$client_dist/index.html" || ! -s "$admin_client_dist/index.html" ]]; then
         error "缺少用户端或管理端 index.html，请确认安装包包含 client/dist/user 和 client/dist/admin。"
         return 1
@@ -2426,7 +2483,7 @@ setup_cf_tunnel() {
         if ! command -v cloudflared &>/dev/null; then
             local binary cloudflared_hash
             info "下载 cloudflared..."
-            binary="$(mktemp)"
+            binary="$(mktemp)" || return "$?"
             case "$ARCH" in
                 amd64) cloudflared_hash=97bb3b02d23a5980fc9c15a1a270e692da1923f103f920d5b16d4931d5ab55e7 ;;
                 arm64) cloudflared_hash=b155cec3e48e489cfb8e5c602769fb8c771083018d8881d68b4d18a791567c5a ;;
@@ -2440,7 +2497,7 @@ setup_cf_tunnel() {
                 error "cloudflared 下载或安装失败，请检查 GitHub 访问和系统架构。"
                 return 1
             fi
-            rm -f "$binary"
+            rm -f "$binary" || return "$?"
         fi
         install_cf_service || return 1
         if ! systemctl enable cloudflared >/dev/null 2>&1 || ! systemctl start cloudflared >/dev/null 2>&1; then
@@ -2452,12 +2509,12 @@ setup_cf_tunnel() {
         return 1
     fi
     configure_cf_nginx "$client_dist" "$admin_client_dist" || return 1
-    set_env_value "FRONTEND_URL" "https://${DOMAIN}" "前端公网地址"
-    set_env_value "ADMIN_FRONTEND_URL" "https://${ADMIN_DOMAIN}" "管理后台公网地址"
-    set_env_value "SITE_URL" "https://${DOMAIN}" "站点公网地址"
-    set_env_value "PAYMENT_CALLBACK_BASE_URL" "https://${DOMAIN}" "支付回调公网地址"
-    set_env_value "VITE_CUSTOMER_BASE_URL" "https://${DOMAIN}" "管理后台生成客户链接的前端地址"
-    set_env_value "VITE_ADMIN_BASE_URL" "https://${ADMIN_DOMAIN}" "前端管理后台地址"
+    set_env_value "FRONTEND_URL" "https://${DOMAIN}" "前端公网地址" || return "$?"
+    set_env_value "ADMIN_FRONTEND_URL" "https://${ADMIN_DOMAIN}" "管理后台公网地址" || return "$?"
+    set_env_value "SITE_URL" "https://${DOMAIN}" "站点公网地址" || return "$?"
+    set_env_value "PAYMENT_CALLBACK_BASE_URL" "https://${DOMAIN}" "支付回调公网地址" || return "$?"
+    set_env_value "VITE_CUSTOMER_BASE_URL" "https://${DOMAIN}" "管理后台生成客户链接的前端地址" || return "$?"
+    set_env_value "VITE_ADMIN_BASE_URL" "https://${ADMIN_DOMAIN}" "前端管理后台地址" || return "$?"
     CF_TUNNEL_SELECTED=true
     CF_TUNNEL_VERIFIED=false
     info "本机配置已写入；后端启动后将检查两端页面、API、隧道和公网入口。"
@@ -2625,10 +2682,10 @@ load_cf_domains() {
 start_service() {
     step "启动 PayIncus 服务..."
 
-    systemctl start "$SERVICE_NAME"
+    systemctl start "$SERVICE_NAME" || return "$?"
 
     # 等待几秒检查状态
-    sleep 3
+    sleep 3 || return "$?"
 
     if systemctl is-active --quiet "$SERVICE_NAME"; then
         log "PayIncus 服务启动成功！"
@@ -2699,7 +2756,7 @@ show_result() {
 # ========================== 升级流程 ==========================
 do_upgrade() {
     show_banner
-    check_os
+    check_os || return "$?"
 
     if ! check_existing; then
         error "未检测到已安装的 PayIncus，请先执行全新安装"
@@ -2714,8 +2771,8 @@ do_upgrade() {
 
     info "检测到已安装的 PayIncus，准备升级..."
 
-    apt-get update -qq >/dev/null 2>&1
-    install_system_tools
+    apt-get update -qq >/dev/null 2>&1 || return "$?"
+    install_system_tools || return "$?"
 
     # 停止服务
     info "停止当前服务..."
@@ -2728,9 +2785,9 @@ do_upgrade() {
     if [[ -z "$tar_file" ]]; then
         exit 1
     fi
-    install_release "$tar_file" true
+    install_release "$tar_file" true || return "$?"
     if [[ -f "$INSTALL_DIR/scripts/refresh-onboarding-gateway.sh" ]]; then
-        bash "$INSTALL_DIR/scripts/refresh-onboarding-gateway.sh"
+        bash "$INSTALL_DIR/scripts/refresh-onboarding-gateway.sh" || return "$?"
     fi
 
     local version="unknown"
@@ -2739,22 +2796,22 @@ do_upgrade() {
     fi
 
     # 修复权限
-    chmod 751 "$INSTALL_DIR"
+    chmod 751 "$INSTALL_DIR" || return "$?"
     if [[ -f "$ENV_FILE" ]]; then
-        chown "root:${RUN_USER}" "$ENV_FILE"
-        chmod 640 "$ENV_FILE"
+        chown "root:${RUN_USER}" "$ENV_FILE" || return "$?"
+        chmod 640 "$ENV_FILE" || return "$?"
     fi
 
-    configure_git_metadata
-    ensure_env_keys
-    create_service
-    create_online_update_service
+    configure_git_metadata || return "$?"
+    ensure_env_keys || return "$?"
+    create_service || return "$?"
+    create_online_update_service || return "$?"
 
     # 运行迁移
-    run_migrations
+    run_migrations || return "$?"
 
     # 重启服务
-    start_service
+    start_service || return "$?"
 
     echo ""
     divider
@@ -2814,13 +2871,18 @@ do_uninstall() {
 # ========================== 机器池管理网关 ==========================
 configure_host_pool_gateway() {
     local public_host="${ONBOARDING_PUBLIC_HOST:-}"
-    if [[ -n "$(get_env_value ONBOARDING_GATEWAY_HOST)" && -n "$(get_env_value ONBOARDING_GATEWAY_KEY_PATH)" && -n "$(get_env_value ONBOARDING_GATEWAY_FINGERPRINT)" && -n "$(get_env_value ONBOARDING_WG_ENDPOINT)" ]]; then
+    local gateway_key gateway_value gateway_configured=true
+    for gateway_key in ONBOARDING_GATEWAY_HOST ONBOARDING_GATEWAY_KEY_PATH ONBOARDING_GATEWAY_FINGERPRINT ONBOARDING_WG_ENDPOINT; do
+        gateway_value="$(get_env_value "$gateway_key")" || return "$?"
+        [[ -n "$gateway_value" ]] || gateway_configured=false
+    done
+    if [[ "$gateway_configured" == true ]]; then
         info "机器池管理网关已配置，保留现有地址和密钥"
         return 0
     fi
     if [[ -z "$public_host" ]]; then
         echo -ne "  ${BOLD}机器池管理网关公网 IPv4 或直连域名（不能经过 CDN，留空稍后配置）: ${NC}" >&2
-        read -r public_host
+        read -r public_host || return "$?"
     fi
     if [[ -z "$public_host" ]]; then
         warn "自动接入尚未配置。需要时运行: sudo bash install-panel.sh --configure-host-pool"
@@ -2832,113 +2894,136 @@ configure_host_pool_gateway() {
         --public-host "$public_host" \
         --management-address "${ONBOARDING_MANAGEMENT_ADDRESS:-10.253.240.1/20}" \
         --listen-port "${ONBOARDING_WG_PORT:-51820}" \
-        --ssh-port "${ONBOARDING_CONTROL_SSH_PORT:-22}"
+        --ssh-port "${ONBOARDING_CONTROL_SSH_PORT:-22}" || return "$?"
 }
 
 # ========================== 全新安装流程 ==========================
 do_install() {
     show_banner
-    check_os
+    check_os || return "$?"
+
+    if [[ -e "$ENV_FILE" || -L "$ENV_FILE" ]]; then
+        if ! env_file_identity > /dev/null; then
+            error "现有环境配置不是安全的普通文件，已停止安装并保留原数据。"
+            return 1
+        fi
+    elif has_existing_installation_identity; then
+        error "检测到已有服务或控制身份，但环境配置缺失；请从可信备份恢复原配置，不能重新生成身份。"
+        return 1
+    fi
 
     if check_existing; then
         warn "检测到已安装的 PayIncus (${INSTALL_DIR})"
-        info "产物包已解压就绪，将跳过下载步骤，直接从配置阶段继续"
+        info "将重新验证完整产物，并保留已有配置和证书后续接"
         info "如需全新安装，请先运行: sudo bash $0 --uninstall"
         echo "" >&2
     fi
 
     # 密码处理：如果 .env 已存在则复用旧密码，避免密码不一致
-    local db_password
-    local redis_password
+    local db_password database_url
+    local redis_password redis_url
     local admin_email
 
     if [[ -f "$ENV_FILE" ]]; then
         info "检测到已有 .env 配置，复用现有密码"
-        # 从 DATABASE_URL 提取密码: postgresql://user:PASSWORD@host:port/db
-        db_password=$(grep -oP 'DATABASE_URL=postgresql://[^:]+:\K[^@]+' "$ENV_FILE" 2>/dev/null || echo "")
-        # 从 REDIS_URL 提取密码: redis://:PASSWORD@host:port
-        redis_password=$(grep -oP 'REDIS_URL=redis://:\K[^@]+' "$ENV_FILE" 2>/dev/null || echo "")
-
-        if [[ -z "$db_password" ]]; then
+        # Decode the existing dotenv record without sourcing it. Quoting and
+        # whitespace around '=' are valid, while an invalid original URL must
+        # still fail before any package or service changes.
+        database_url="$(get_env_value "DATABASE_URL")" || return "$?"
+        if [[ "$database_url" =~ ^postgresql://[^:]+:([^@]+)@ ]]; then
+            db_password="${BASH_REMATCH[1]}"
+        else
             error "无法从现有 .env 提取数据库密码，已停止安装并保留原配置。请检查 DATABASE_URL 后重试。"
             return 1
         fi
-        if [[ -z "$redis_password" ]]; then
-            redis_password=$(gen_password 24)
+        if check_existing; then
+            # Re-enter the existing authenticated upgrade path. Merely finding
+            # app.js never sets the per-run package verification receipt.
+            do_upgrade
+            return "$?"
+        fi
+        redis_url="$(get_env_value "REDIS_URL")" || return "$?"
+        if [[ "$redis_url" =~ ^redis://:([^@]+)@ ]]; then
+            redis_password="${BASH_REMATCH[1]}"
+        else
+            redis_password=$(gen_password 24) || return "$?"
         fi
     else
-        db_password=$(gen_password 24)
-        redis_password=$(gen_password 24)
+        db_password=$(gen_password 24) || return "$?"
+        redis_password=$(gen_password 24) || return "$?"
     fi
 
     # 初始管理员邮箱
-    admin_email="$(prompt_initial_admin_email)"
-    if [[ -f "$ENV_FILE" && -z "$(get_env_value "ADMIN_EMAIL")" ]]; then
-        set_env_value "ADMIN_EMAIL" "$admin_email" "管理员初始邮箱"
-    fi
+    admin_email="$(prompt_initial_admin_email)" || return "$?"
 
     # 安装依赖
     step "更新系统包索引..."
-    apt-get update -qq >/dev/null 2>&1
+    apt-get update -qq >/dev/null 2>&1 || return "$?"
 
-    install_system_tools
-    install_nodejs
-    install_pnpm
-    install_postgresql
-    install_redis
+    install_system_tools || return "$?"
+    install_nodejs || return "$?"
+    install_pnpm || return "$?"
+    install_postgresql || return "$?"
+    install_redis || return "$?"
 
     # 创建用户（必须早于 install_release）：install_release 会创建 server/certs 并立即
     # 调用 incudal-online-task harden，而 harden 会把 .env / server/certs 等 chown 到
     # root:${RUN_USER} 组。若此时系统用户/组尚未创建，chown 会以
     # "invalid group: 'root:incudal'" 失败，导致全新安装中断。
-    create_user
+    create_user || return "$?"
 
-    # 仅在全新安装时获取和解压产物包（已安装则跳过）
-    if ! check_existing; then
-        # 获取产物包（自动下载或手动放置）
-        local tar_file
-        tar_file=$(obtain_release) || exit 1
-        if [[ -z "$tar_file" ]]; then
-            exit 1
+    # A partial code tree is not a verification receipt. Re-obtain the full
+    # authenticated archive before any configuration writes; retain existing
+    # partial certificates and remove stale runtime code through upgrade mode.
+    local tar_file retain_partial=false
+    if check_existing || [[ -f "$ENV_FILE" || -e "$INSTALL_DIR/server/certs" || -L "$INSTALL_DIR/server/certs" ]]; then
+        retain_partial=true
+    fi
+    tar_file=$(obtain_release) || exit 1
+    [[ -n "$tar_file" ]] || exit 1
+    install_release "$tar_file" "$retain_partial" || return 1
+
+    if [[ -f "$ENV_FILE" ]]; then
+        local configured_admin_email
+        configured_admin_email="$(get_env_value "ADMIN_EMAIL")" || return "$?"
+        if [[ -z "$configured_admin_email" ]]; then
+            set_env_value "ADMIN_EMAIL" "$admin_email" "管理员初始邮箱" || return "$?"
         fi
-
-        # 解压安装
-        install_release "$tar_file" false
-    else
-        log "产物包已就绪，跳过下载和解压"
     fi
 
     # 配置 Git 元数据
-    configure_git_metadata
+    configure_git_metadata || return "$?"
 
     # 生成面板客户端证书（与 Incus API mTLS 通信所需）
-    generate_panel_cert
+    generate_panel_cert || return "$?"
 
     # 配置数据库
-    setup_database "$db_password"
+    setup_database "$db_password" || return "$?"
 
     # 配置 Redis
-    setup_redis "$redis_password"
+    setup_redis "$redis_password" || return "$?"
 
     # 生成 .env
-    generate_env "$db_password" "$redis_password" "$(gen_password 16)" "$admin_email"
+    local initial_admin_password
+    initial_admin_password="$(gen_password 16)" || return "$?"
+    generate_env "$db_password" "$redis_password" "$initial_admin_password" "$admin_email" || return "$?"
 
     # Only a fresh, checksum-verified release with its full signed component
     # catalog may initialize a new controller identity. Restarts never do this.
     if [[ -f "$INSTALL_DIR/vendor/gateway/catalog.json" ]]; then
         if [[ -f /var/lib/incudal-gateway-controller/enrollment.json ]]; then
-            bash "$INSTALL_DIR/scripts/install-gateway-controller.sh"
+            bash "$INSTALL_DIR/scripts/install-gateway-controller.sh" || return "$?"
         else
-            bash "$INSTALL_DIR/scripts/install-gateway-controller.sh" --initialize-release
+            bash "$INSTALL_DIR/scripts/install-gateway-controller.sh" --initialize-release || return "$?"
         fi
     fi
 
     # 创建 systemd 服务
-    create_service
-    create_online_update_service
+    create_service || return "$?"
+    create_online_update_service || return "$?"
 
     # 运行数据库迁移
-    run_migrations
+    run_migrations || return "$?"
 
     # 选择网络方案
     echo ""
@@ -2950,20 +3035,20 @@ do_install() {
     echo -e "  ${CYAN}[3]${NC} 仅启动服务        ${DIM}（手动配置反代）${NC}"
     echo ""
     echo -ne "  ${BOLD}请选择 [1-3]: ${NC}"
-    read -r net_opt
+    read -r net_opt || return "$?"
 
     case "${net_opt:-3}" in
-        1) setup_nginx_certbot ;;
-        2) setup_cf_tunnel ;;
+        1) setup_nginx_certbot || return "$?" ;;
+        2) setup_cf_tunnel || return "$?" ;;
         3) info "跳过网络配置，服务将监听 127.0.0.1:${DEFAULT_PORT}" ;;
         *) info "无效选项，跳过网络配置" ;;
     esac
 
     # 配置管理隧道及受限 SSH 网关，成功验证后才写入环境配置。
-    configure_host_pool_gateway
+    configure_host_pool_gateway || return "$?"
 
     # 启动服务
-    start_service
+    start_service || return "$?"
 
     if [[ "$CF_TUNNEL_SELECTED" == true ]] && ! diagnose_cf_tunnel; then
         show_result
@@ -2971,7 +3056,7 @@ do_install() {
     fi
 
     # 显示结果
-    show_result
+    show_result || return "$?"
 }
 
 # ========================== 主入口 ==========================

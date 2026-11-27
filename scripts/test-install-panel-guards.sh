@@ -312,7 +312,10 @@ grep -Fxq "GITHUB_REPOSITORY='custom/agent'" "$WORK_DIR/init-alias-only.env"
 
 # Invalid existing credentials must fail before package/service changes and keep
 # every byte of the existing configuration. Run only unchanged installer code.
-declare -f do_install > "$WORK_DIR/install-function.sh"
+printf '%s\n' "${INSTALLATION_IDENTITY_PATHS[@]}" | grep -Fxq /var/lib/incudal-gateway-controller/signing.pem
+[[ "$INSTALLATION_GATEWAY_STATE_DIR" == /var/lib/incudal-management-gateway ]]
+declare -f do_install env_file_identity has_existing_installation_identity database_migration_mode get_env_value env_dotenv_data > "$WORK_DIR/install-function.sh"
+declare -f do_upgrade > "$WORK_DIR/upgrade-function.sh"
 bash -s -- "$WORK_DIR" <<'EXISTING_ENV_GUARD'
     set -euo pipefail
     test_work="$1"
@@ -323,10 +326,463 @@ bash -s -- "$WORK_DIR" <<'EXISTING_ENV_GUARD'
     cp "$ENV_FILE" "$test_work/expected.env"
     show_banner() { :; }; check_os() { :; }; check_existing() { return 0; }
     warn() { :; }; info() { :; }; error() { :; }
+    do_upgrade() { echo 'invalid credentials must not reach a successful upgrade' >&2; return 0; }
     gen_password() { echo 'installer must not generate replacement credentials' >&2; exit 99; }
     if do_install > /dev/null; then echo 'installer accepted invalid existing credentials' >&2; exit 1; fi
     cmp "$ENV_FILE" "$test_work/expected.env"
 EXISTING_ENV_GUARD
+
+# Run the original installer functions in separate processes with isolated paths.
+# Dependency and package callbacks are controls; real checksum/archive checks
+# remain below and native signed-package installation is verified independently.
+resume_cases=(
+    configured configured-single-quoted configured-double-quoted configured-space-record configured-failed configured-checksum-failed configured-invalid configured-duplicate-invalid configured-env-read-failed atomic
+    fresh partial partial-env partial-env-single-quoted partial-env-double-quoted partial-env-spaced partial-certs partial-empty-certs partial-env-checksum-failed
+    download-failed checksum-failed publisher-failed archive-failed helpers-failed
+    lost-managed-service lost-legacy-service lost-enrollment lost-controller
+    lost-controller-signing lost-controller-signing-no-app
+    lost-private-key lost-public-key lost-wireguard lost-recovery
+    lost-gateway-identity lost-gateway-bootstrap lost-gateway-owner lost-gateway-transport-identity lost-gateway-auth env-directory env-hardlink env-symlink
+    fresh-os-failed fresh-db-password-failed fresh-redis-password-failed fresh-admin-password-failed fresh-admin-prompt-failed
+    fresh-apt-failed fresh-dependency-tools-failed fresh-dependency-node-failed fresh-dependency-pnpm-failed
+    fresh-dependency-postgres-failed fresh-dependency-redis-failed fresh-dependency-user-failed
+    fresh-git-failed fresh-certificate-failed fresh-database-failed fresh-redis-failed fresh-env-failed
+    fresh-controller-failed fresh-service-failed fresh-root-unit-failed fresh-migration-failed
+    fresh-network-read-failed fresh-nginx-failed fresh-cf-failed fresh-gateway-failed fresh-start-failed fresh-result-failed
+)
+resume_executed=0
+resume_native_pending=0
+for resume_case in "${resume_cases[@]}"; do
+    resume_root="$WORK_DIR/install-resume-$resume_case"
+    mkdir -p "$resume_root/install/server" "$resume_root/control" "$resume_root/gateway-state"
+    case "$resume_case" in
+        fresh|fresh-*) ;;
+        partial-empty-certs) mkdir "$resume_root/install/server/certs" ;;
+        *)
+            mkdir "$resume_root/install/server/certs"
+            printf 'original certificate\n' > "$resume_root/install/server/certs/client.crt"
+            ;;
+    esac
+    if [[ -d "$resume_root/install/server/certs" ]]; then
+        cp -a "$resume_root/install/server/certs" "$resume_root/expected-certs"
+    fi
+    printf 'DATABASE_URL=postgresql://incudal:fixture-db-password@127.0.0.1:5432/incudal\nJWT_SECRET=fixture-retained-identity\n' > "$resume_root/original.env"
+    case "$resume_case" in
+        configured|configured-*|atomic|env-*)
+            mkdir -p "$resume_root/install/server/dist"
+            printf 'original app\n' > "$resume_root/install/server/dist/app.js"
+            cp "$resume_root/original.env" "$resume_root/install/.env"
+            ;;
+        fresh-*) ;;
+        lost-controller-signing-no-app) ;;
+        partial-env*) cp "$resume_root/original.env" "$resume_root/install/.env" ;;
+        partial-certs|partial-empty-certs) ;;
+        partial|*-failed|lost-*)
+            mkdir -p "$resume_root/install/server/dist"
+            printf 'original app\n' > "$resume_root/install/server/dist/app.js"
+            ;;
+    esac
+    case "$resume_case" in
+        configured-invalid) printf 'DATABASE_URL=invalid\nJWT_SECRET=fixture-retained-identity\n' > "$resume_root/install/.env" ;;
+        configured-duplicate-invalid) printf 'DATABASE_URL=invalid\n' >> "$resume_root/install/.env" ;;
+        configured-single-quoted|partial-env-single-quoted)
+            printf '%s\n' "DATABASE_URL='postgresql://incudal:fixture-db-password@127.0.0.1:5432/incudal'" 'JWT_SECRET=fixture-retained-identity' > "$resume_root/install/.env"
+            ;;
+        configured-double-quoted|partial-env-double-quoted)
+            printf '%s\n' 'DATABASE_URL="postgresql://incudal:fixture-db-password@127.0.0.1:5432/incudal" # original comment' 'JWT_SECRET=fixture-retained-identity' > "$resume_root/install/.env"
+            ;;
+        configured-space-record|partial-env-spaced)
+            printf '%s\n' '  export DATABASE_URL = "postgresql://incudal:fixture-db-password@127.0.0.1:5432/incudal"  # original spacing' 'JWT_SECRET=fixture-retained-identity' > "$resume_root/install/.env"
+            ;;
+        env-directory) rm "$resume_root/install/.env"; mkdir "$resume_root/install/.env" ;;
+        env-hardlink) rm "$resume_root/install/.env"; ln "$resume_root/original.env" "$resume_root/install/.env" ;;
+        env-symlink)
+            rm "$resume_root/install/.env"
+            if MSYS=winsymlinks:nativestrict ln -s "../original.env" "$resume_root/install/.env" 2> "$resume_root/symlink.log" &&
+                [[ -L "$resume_root/install/.env" ]]; then
+                :
+            elif [[ "$(uname -s)" != Linux ]]; then
+                printf 'NATIVE_ENV_SYMLINK_CASE_PENDING: this Windows toolchain cannot create a real symlink; Linux CI must run the refusal case.\n'
+                resume_native_pending=$((resume_native_pending + 1))
+                continue
+            else
+                echo 'the Linux symlink refusal fixture requires real symlink semantics' >&2
+                exit 1
+            fi
+            ;;
+        lost-managed-service) : > "$resume_root/control/managed.service" ;;
+        lost-legacy-service) : > "$resume_root/control/legacy.service" ;;
+        lost-enrollment) : > "$resume_root/control/enrollment.json" ;;
+        lost-controller) : > "$resume_root/control/identity.json" ;;
+        lost-controller-signing|lost-controller-signing-no-app) : > "$resume_root/control/signing.pem" ;;
+        lost-private-key) : > "$resume_root/control/management-key" ;;
+        lost-public-key) : > "$resume_root/control/management-key.pub" ;;
+        lost-wireguard) : > "$resume_root/control/wireguard.conf" ;;
+        lost-recovery) : > "$resume_root/control/recovery-hold.json" ;;
+        lost-gateway-identity|lost-gateway-bootstrap)
+            mkdir "$resume_root/gateway-state/gateway-a"
+            if [[ "$resume_case" == lost-gateway-identity ]]; then
+                : > "$resume_root/gateway-state/gateway-a/identity.json"
+            else
+                : > "$resume_root/gateway-state/gateway-a/bootstrap.json"
+            fi
+            ;;
+        lost-gateway-owner) : > "$resume_root/gateway-state/owner.json" ;;
+        lost-gateway-transport-identity)
+            mkdir -p "$resume_root/gateway-state/gateway-a/transport"
+            : > "$resume_root/gateway-state/gateway-a/transport/gateway-identity.json"
+            ;;
+        lost-gateway-auth)
+            mkdir -p "$resume_root/gateway-state/gateway-a/auth"
+            : > "$resume_root/gateway-state/gateway-a/auth/gateway-auth.json"
+            ;;
+    esac
+    if [[ -f "$resume_root/install/.env" && ! -L "$resume_root/install/.env" ]]; then
+        cp "$resume_root/install/.env" "$resume_root/expected.env"
+    fi
+    : > "$resume_root/trace"
+    printf '3\n' > "$resume_root/network-answer"
+    case "$resume_case" in
+        fresh-network-read-failed) : > "$resume_root/network-answer" ;;
+        fresh-nginx-failed) printf '1\n' > "$resume_root/network-answer" ;;
+        fresh-cf-failed) printf '2\n' > "$resume_root/network-answer" ;;
+        fresh-controller-failed)
+            mkdir -p "$resume_root/install/vendor/gateway" "$resume_root/install/scripts"
+            : > "$resume_root/install/vendor/gateway/catalog.json"
+            printf '#!/usr/bin/env bash\nexit 42\n' > "$resume_root/install/scripts/install-gateway-controller.sh"
+            ;;
+    esac
+    if bash -s -- "$WORK_DIR" "$resume_root" "$resume_case" > "$resume_root/output.log" 2>&1 <<'INSTALL_RESUME_GUARD'
+    set -euo pipefail
+    guard_work="$1"
+    guard_root="$2"
+    guard_case="$3"
+    source "$guard_work/install-function.sh"
+    readonly INSTALL_DIR="$guard_root/install" ENV_FILE="$guard_root/install/.env"
+    readonly SERVICE_NAME=incudal-backend SERVICE_FILE="$guard_root/control/managed.service"
+    readonly INSTALLATION_IDENTITY_PATHS=(
+        "$SERVICE_FILE" "$guard_root/control/legacy.service" "$guard_root/control/enrollment.json"
+        "$guard_root/control/identity.json" "$guard_root/control/signing.pem" "$guard_root/control/management-key"
+        "$guard_root/control/management-key.pub" "$guard_root/control/wireguard.conf" "$guard_root/control/recovery-hold.json"
+    )
+    readonly INSTALLATION_GATEWAY_STATE_DIR="$guard_root/gateway-state"
+    RELEASE_VERIFIED_THIS_RUN=false
+    VERIFIED_LEGACY_DATABASE_PACKAGE=""
+    CF_TUNNEL_SELECTED=false
+    DEFAULT_PORT=3001
+    CYAN="" YELLOW="" DIM="" BOLD="" NC=""
+    record() { printf '%s\n' "$*" >> "$guard_root/trace"; }
+    show_banner() { :; }; check_os() { [[ "$guard_case" != fresh-os-failed ]] || { record failed:os; return 42; }; }; warn() { :; }; info() { :; }; log() { :; }; step() { :; }; divider() { :; }
+    error() { printf '%s\n' "$*" >&2; }
+    check_existing() { [[ -f "$INSTALL_DIR/server/dist/app.js" ]]; }
+    gen_password() {
+        local count=0
+        [[ ! -f "$guard_root/password-calls" ]] || read -r count < "$guard_root/password-calls"
+        count=$((count + 1)); printf '%s\n' "$count" > "$guard_root/password-calls"
+        record generated-password
+        if [[ ( "$count" == 1 && "$guard_case" == fresh-db-password-failed ) || ( "$count" == 2 && "$guard_case" == fresh-redis-password-failed ) || ( "$count" == 3 && "$guard_case" == fresh-admin-password-failed ) ]]; then record failed:password; return 42; fi
+        printf 'fixture-generated-password'
+    }
+    prompt_initial_admin_email() { record administrator-prompt; [[ "$guard_case" != fresh-admin-prompt-failed ]] || { record failed:administrator; return 42; }; printf 'fixture@example.invalid'; }
+    if [[ "$guard_case" == configured-env-read-failed ]]; then
+        get_env_value() { return 42; }
+    fi
+    set_env_value() { [[ "$RELEASE_VERIFIED_THIS_RUN" == true ]] || return 96; record configuration:edit; }
+    dependency() { record "dependency:$1"; [[ "$guard_case" != "fresh-dependency-$1-failed" ]] || { record "failed:dependency-$1"; return 42; }; }
+    apt-get() { record dependency:apt; [[ "$guard_case" != fresh-apt-failed ]] || { record failed:apt; return 42; }; }
+    install_system_tools() { dependency tools; }
+    install_nodejs() { dependency node; }
+    install_pnpm() { dependency pnpm; }
+    install_postgresql() { dependency postgres; }
+    install_redis() { dependency redis; }
+    create_user() { dependency user; }
+    do_upgrade() { record delegated-upgrade; [[ "$guard_case" != configured-failed ]] || return 41; return 0; }
+    if [[ "$guard_case" == atomic || "$guard_case" == configured-checksum-failed ]]; then
+        source "$guard_work/upgrade-function.sh"
+        is_atomic_layout() { [[ "$guard_case" == atomic ]]; }
+        systemctl() { record service-control; }
+    fi
+    obtain_release() { record obtain-release; [[ "$guard_case" != download-failed ]] || return 43; printf '%s' "$guard_root/controlled-archive"; }
+    install_release() {
+        record "install-release:$2"
+        RELEASE_VERIFIED_THIS_RUN=false
+        local phase
+        for phase in checksum publisher archive helpers; do
+            record "verify:$phase"
+            [[ "$guard_case" != "$phase-failed" && "$guard_case" != "configured-$phase-failed" && "$guard_case" != "partial-env-$phase-failed" ]] || return 42
+        done
+        record authenticated-package
+        RELEASE_VERIFIED_THIS_RUN=true
+        mkdir -p "$INSTALL_DIR/scripts"
+        : > "$INSTALL_DIR/scripts/harden-database.py"
+        : > "$INSTALL_DIR/scripts/migrate-database.sh"
+    }
+    configured_action() {
+        [[ "$RELEASE_VERIFIED_THIS_RUN" == true ]] || return 92
+        [[ "$(database_migration_mode "$INSTALL_DIR")" == modern ]] || return 93
+        record "configuration:$1"
+        [[ "$guard_case" != "fresh-$1-failed" ]] || { record "failed:$1"; return 42; }
+    }
+    configure_git_metadata() { configured_action git; }
+    generate_panel_cert() { configured_action certificate; }
+    setup_database() {
+        configured_action database || return "$?"
+        case "$guard_case" in
+            partial-env*) [[ "$1" == fixture-db-password ]] || return 94; record retained-db-password ;;
+        esac
+    }
+    setup_redis() { configured_action redis; }
+    generate_env() { configured_action env || return "$?"; [[ -f "$ENV_FILE" ]] || cp "$guard_root/original.env" "$ENV_FILE"; }
+    create_service() { configured_action service; }
+    create_online_update_service() { configured_action root-unit; }
+    run_migrations() { configured_action migration; }
+    configure_host_pool_gateway() { configured_action gateway; }
+    start_service() { configured_action start; }
+    show_result() { configured_action result; }
+    setup_nginx_certbot() { record failed:nginx; return 42; }
+    setup_cf_tunnel() { record failed:cf; return 42; }
+    if [[ "$guard_case" == configured-checksum-failed || "$guard_case" == configured-env-read-failed || "$guard_case" == partial-env-checksum-failed || "$guard_case" == fresh-* ]]; then
+        # A calling condition disables Bash errexit inside functions. Package
+        # refusal must still return its failure without reaching configuration.
+        if do_install < "$guard_root/network-answer"; then exit 0; else exit "$?"; fi
+    fi
+    do_install < "$guard_root/network-answer"
+INSTALL_RESUME_GUARD
+    then
+        resume_status=0
+    else
+        resume_status=$?
+    fi
+    resume_expected=1
+    case "$resume_case" in
+        configured|configured-single-quoted|configured-double-quoted|configured-space-record|fresh|partial|partial-env|partial-env-single-quoted|partial-env-double-quoted|partial-env-spaced|partial-certs|partial-empty-certs) resume_expected=0 ;;
+        configured-failed) resume_expected=41 ;;
+        configured-checksum-failed|configured-env-read-failed) resume_expected=42 ;;
+    esac
+    if [[ "$resume_case" == fresh-* && "$resume_case" != fresh-network-read-failed ]]; then resume_expected=42; fi
+    [[ "$resume_status" -eq "$resume_expected" ]] || {
+        printf 'installer resume case %s returned %s instead of %s\n' "$resume_case" "$resume_status" "$resume_expected" >&2
+        cat "$resume_root/output.log" >&2
+        exit 1
+    }
+    if [[ -d "$resume_root/expected-certs" ]]; then
+        diff -r "$resume_root/expected-certs" "$resume_root/install/server/certs"
+    fi
+    if [[ -f "$resume_root/expected.env" ]]; then
+        cmp "$resume_root/expected.env" "$resume_root/install/.env"
+    fi
+    case "$resume_case" in
+        configured|configured-single-quoted|configured-double-quoted|configured-space-record|configured-failed)
+            [[ "$(cat "$resume_root/trace")" == delegated-upgrade ]]
+            ;;
+        configured-checksum-failed)
+            grep -Fxq verify:checksum "$resume_root/trace"
+            ! grep -q '^configuration:' "$resume_root/trace"
+            ! grep -Fxq authenticated-package "$resume_root/trace"
+            ! grep -Fxq generated-password "$resume_root/trace"
+            ! grep -Fxq administrator-prompt "$resume_root/trace"
+            ;;
+        fresh|partial|partial-env|partial-env-single-quoted|partial-env-double-quoted|partial-env-spaced|partial-certs|partial-empty-certs)
+            grep -Fxq obtain-release "$resume_root/trace"
+            if [[ "$resume_case" == partial* ]]; then
+                grep -Fxq install-release:true "$resume_root/trace"
+            else
+                grep -Fxq install-release:false "$resume_root/trace"
+            fi
+            verified_line=$(grep -nFx authenticated-package "$resume_root/trace" | cut -d: -f1)
+            first_config=$(grep -n '^configuration:' "$resume_root/trace" | head -n 1 | cut -d: -f1)
+            [[ "$verified_line" -lt "$first_config" ]]
+            grep -Fxq configuration:result "$resume_root/trace"
+            if [[ "$resume_case" == partial-env* ]]; then grep -Fxq retained-db-password "$resume_root/trace"; fi
+            ;;
+        partial-env-checksum-failed)
+            grep -Fxq install-release:true "$resume_root/trace"
+            grep -Fxq verify:checksum "$resume_root/trace"
+            ! grep -q '^configuration:' "$resume_root/trace"
+            ! grep -Fxq authenticated-package "$resume_root/trace"
+            ;;
+        download-failed|checksum-failed|publisher-failed|archive-failed|helpers-failed)
+            ! grep -q '^configuration:' "$resume_root/trace"
+            ! grep -Fxq authenticated-package "$resume_root/trace"
+            [[ ! -e "$resume_root/install/.env" ]]
+            ;;
+        fresh-*)
+            ! grep -Fxq configuration:result "$resume_root/trace" || [[ "$resume_case" == fresh-result-failed ]]
+            if [[ "$resume_case" != fresh-controller-failed && "$resume_case" != fresh-network-read-failed ]]; then
+                [[ "$(tail -n 1 "$resume_root/trace")" == failed:* ]]
+            fi
+            if [[ "$resume_case" == fresh-migration-failed ]]; then
+                ! grep -Fxq configuration:gateway "$resume_root/trace"
+                ! grep -Fxq configuration:start "$resume_root/trace"
+            fi
+            ;;
+        *)
+            [[ ! -s "$resume_root/trace" ]]
+            ;;
+    esac
+    if [[ "$resume_case" == atomic ]]; then grep -Fq '检测到原子 OTA 布局' "$resume_root/output.log"; fi
+    resume_executed=$((resume_executed + 1))
+done
+printf 'PASS installer resume subprocess controls: %s configured/partial/refusal cases; native_symlink_pending=%s\n' "$resume_executed" "$resume_native_pending"
+
+declare -f install_release do_upgrade > "$WORK_DIR/install-release-functions.sh"
+release_failure_cases=(
+    success empty-certs root-mkdir front-harden date backup-copy
+    env-backup-temp cert-backup-temp env-backup-copy cert-backup-copy
+    tree-cleanup archive-extract env-restore-temp env-restore-copy env-restore-move
+    cert-restore-temp cert-restore-copy cert-retained-temp cert-retained-rmdir
+    cert-retain-move cert-publish-move cert-cleanup download-cleanup final-cert-mkdir post-harden
+)
+for release_failure_case in "${release_failure_cases[@]}"; do
+    release_guard_root="$WORK_DIR/release-command-$release_failure_case"
+    mkdir -p "$release_guard_root/install/server/certs" "$release_guard_root/payload/server/dist" "$release_guard_root/tmp"
+    printf 'paid-expiry=2030-01-01\nidentity=fixture-original\n' > "$release_guard_root/install/.env"
+    cp "$release_guard_root/install/.env" "$release_guard_root/original.env"
+    if [[ "$release_failure_case" != empty-certs ]]; then
+        printf 'fixture original client identity\n' > "$release_guard_root/install/server/certs/client.key"
+        printf 'fixture hidden identity\n' > "$release_guard_root/install/server/certs/.hidden"
+        mkdir "$release_guard_root/install/server/certs/empty"
+    fi
+    cp -a "$release_guard_root/install/server/certs" "$release_guard_root/original-certs"
+    printf 'fixture new app\n' > "$release_guard_root/payload/server/dist/app.js"
+    tar -czf "$release_guard_root/archive.tar.gz" -C "$release_guard_root/payload" .
+    bash -s -- "$WORK_DIR" "$release_guard_root" "$release_failure_case" <<'ORIGINAL_RELEASE_COMMAND_GUARD'
+    set -euo pipefail
+    guard_work="$1"; guard_root="$2"; guard_case="$3"
+    source "$guard_work/install-release-functions.sh"
+    readonly INSTALL_DIR="$guard_root/install"
+    RELEASE_VERIFIED_THIS_RUN=false; VERIFIED_LEGACY_DATABASE_PACKAGE=""
+    record() { printf '%s\n' "$*" >> "$guard_root/actions"; }
+    error() { record "error:$*"; }; info() { :; }; step() { :; }
+    log() { record "success:$*"; }
+    verify_release_checksum() { record checksum; }
+    verify_release_publisher() { record publisher; }
+    validate_release_archive() { record archive-validation; }
+    install_verified_root_helpers_from_archive() { record verified-helpers; }
+    function /usr/local/libexec/incudal/incudal-online-task {
+        [[ "$1" == harden ]] || return 91
+        [[ "$RELEASE_VERIFIED_THIS_RUN" == false ]] || return 92
+        local count=0
+        [[ ! -f "$guard_root/hardens" ]] || read -r count < "$guard_root/hardens"
+        count=$((count + 1)); printf '%s\n' "$count" > "$guard_root/hardens"
+        record "harden:$count"
+        if [[ "${guard_probe:-false}" != true && ( ( "$count" == 1 && "$guard_case" == front-harden ) || ( "$count" == 2 && "$guard_case" == post-harden ) ) ]]; then return 42; fi
+    }
+    # Prove the absolute helper is controlled before calling the untouched
+    # original function; no host root helper or service is executed.
+    guard_probe=true
+    /usr/local/libexec/incudal/incudal-online-task harden
+    guard_probe=false
+    rm "$guard_root/hardens"
+    : > "$guard_root/actions"
+    fs_command() {
+        local program="$1"; shift
+        local operation="" count=0
+        case "$program" in
+            mkdir)
+                [[ "$*" != "-p $INSTALL_DIR" ]] || operation=root-mkdir
+                [[ "$*" != "-p $INSTALL_DIR/server/certs" ]] || operation=final-cert-mkdir
+                ;;
+            date) operation=date ;;
+            cp)
+                [[ "$1" != -r || "$2" != "$INSTALL_DIR" ]] || operation=backup-copy
+                [[ "$1" != -a || "$2" != "$INSTALL_DIR/.env" ]] || operation=env-backup-copy
+                [[ "$1" != -a || "$2" != "$INSTALL_DIR/server/certs" ]] || operation=cert-backup-copy
+                [[ "$3" != "$INSTALL_DIR"/.env.restore.* ]] || operation=env-restore-copy
+                [[ "$3" != "$INSTALL_DIR"/server/.certs.restore.* ]] || operation=cert-restore-copy
+                ;;
+            rm)
+                [[ "$*" != "-rf $INSTALL_DIR/client "* ]] || operation=tree-cleanup
+                [[ "$*" != "-f $guard_root/archive.tar.gz "* ]] || operation=download-cleanup
+                [[ "$*" != "-rf $INSTALL_DIR/server/.certs.retained."* ]] || operation=cert-cleanup
+                ;;
+            tar) operation=archive-extract ;;
+            mv)
+                local move_source="$2"
+                [[ "$2" != -- ]] || move_source="$3"
+                [[ "$move_source" != "$INSTALL_DIR"/.env.restore.* ]] || operation=env-restore-move
+                [[ "$move_source" != "$INSTALL_DIR/server/certs" ]] || operation=cert-retain-move
+                [[ "$move_source" != "$INSTALL_DIR"/server/.certs.restore.* ]] || operation=cert-publish-move
+                ;;
+            rmdir) operation=cert-retained-rmdir ;;
+            mktemp)
+                [[ ! -f "$guard_root/temps" ]] || read -r count < "$guard_root/temps"
+                count=$((count + 1)); printf '%s\n' "$count" > "$guard_root/temps"
+                case "$count" in 1) operation=env-backup-temp ;; 2) operation=cert-backup-temp ;; 3) operation=env-restore-temp ;; 4) operation=cert-restore-temp ;; 5) operation=cert-retained-temp ;; esac
+                ;;
+        esac
+        record "command:$program:$operation"
+        if [[ "$operation" == "$guard_case" ]]; then
+            if [[ "$operation" == env-restore-copy ]]; then printf 'partial invalid identity' > "$3"; fi
+            if [[ "$operation" == cert-restore-copy ]]; then printf 'partial invalid identity' > "$3/client.key"; fi
+            return 42
+        fi
+        if [[ "$program" == mktemp && "$#" -eq 0 ]]; then
+            command mktemp "$guard_root/tmp/file.XXXXXXXX"
+        elif [[ "$program" == mktemp && "$*" == -d ]]; then
+            command mktemp -d "$guard_root/tmp/dir.XXXXXXXX"
+        else
+            command "$program" "$@"
+        fi
+    }
+    mkdir() { fs_command mkdir "$@"; }; date() { fs_command date "$@"; }
+    cp() { fs_command cp "$@"; }; rm() { fs_command rm "$@"; }
+    tar() { fs_command tar "$@"; }; mv() { fs_command mv "$@"; }
+    rmdir() { fs_command rmdir "$@"; }; mktemp() { fs_command mktemp "$@"; }
+    if install_release "$guard_root/archive.tar.gz" true; then result=0; else result=$?; fi
+    if [[ "$guard_case" == success || "$guard_case" == empty-certs ]]; then
+        [[ "$result" -eq 0 && "$RELEASE_VERIFIED_THIS_RUN" == true ]]
+        grep -Fq 'success:产物包安装完成' "$guard_root/actions"
+        [[ "$(cat "$guard_root/hardens")" -eq 2 ]]
+    else
+        [[ "$result" -eq 42 && "$RELEASE_VERIFIED_THIS_RUN" == false ]] || { printf 'original install_release failure case %s returned %s/receipt=%s\n' "$guard_case" "$result" "$RELEASE_VERIFIED_THIS_RUN" >&2; exit 1; }
+        ! grep -Fq 'success:产物包安装完成' "$guard_root/actions"
+        [[ "$(tail -n 1 "$guard_root/actions")" == "command:"*":$guard_case" || "$guard_case" == front-harden || "$guard_case" == post-harden || "$guard_case" == cert-publish-move ]]
+    fi
+    command cmp "$guard_root/original.env" "$INSTALL_DIR/.env"
+    command diff -r "$guard_root/original-certs" "$INSTALL_DIR/server/certs"
+    record checked-original-identity-and-paid-expiry
+ORIGINAL_RELEASE_COMMAND_GUARD
+done
+printf 'PASS original install_release command controls: %s cases; partial restore writes, empty/hidden certificates and paid identity retained\n' "${#release_failure_cases[@]}"
+
+upgrade_failure_cases=(success config-git config-keys config-service config-root-unit migration start)
+for upgrade_failure_case in "${upgrade_failure_cases[@]}"; do
+    upgrade_guard_root="$WORK_DIR/upgrade-command-$upgrade_failure_case"
+    mkdir -p "$upgrade_guard_root/install"
+    printf 'paid-expiry=2030-01-01\nidentity=fixture-original\n' > "$upgrade_guard_root/install/.env"
+    cp "$upgrade_guard_root/install/.env" "$upgrade_guard_root/original.env"
+    bash -s -- "$WORK_DIR" "$upgrade_guard_root" "$upgrade_failure_case" <<'ORIGINAL_UPGRADE_COMMAND_GUARD'
+    set -euo pipefail
+    guard_work="$1"; guard_root="$2"; guard_case="$3"
+    source "$guard_work/install-release-functions.sh"
+    readonly INSTALL_DIR="$guard_root/install" ENV_FILE="$guard_root/install/.env" RUN_USER=fixture
+    readonly SERVICE_NAME=incudal-backend
+    GITHUB_REPO=masta-lee/mastaincus; CYAN="" GREEN="" BOLD="" NC=""
+    record() { printf '%s\n' "$*" >> "$guard_root/actions"; }
+    show_banner() { :; }; check_os() { :; }; check_existing() { return 0; }; is_atomic_layout() { return 1; }
+    error() { record error; }; info() { :; }; divider() { :; }
+    apt-get() { :; }; install_system_tools() { :; }; systemctl() { :; }
+    obtain_release() { printf 'controlled-archive'; }
+    install_release() { record validated-package; RELEASE_VERIFIED_THIS_RUN=true; }
+    chmod() { :; }; chown() { :; }
+    action() { record "$1"; [[ "$1" != "$guard_case" ]] || return 42; }
+    configure_git_metadata() { action config-git; }; ensure_env_keys() { action config-keys; }
+    create_service() { action config-service; }; create_online_update_service() { action config-root-unit; }
+    run_migrations() { action migration; }; start_service() { action start; }
+    if do_upgrade > "$guard_root/output.log" 2>&1; then result=0; else result=$?; fi
+    if [[ "$guard_case" == success ]]; then
+        [[ "$result" -eq 0 ]]
+        grep -Fq '升级到 unknown 完成' "$guard_root/output.log"
+    else
+        [[ "$result" -eq 42 ]]
+        [[ "$(tail -n 1 "$guard_root/actions")" == "$guard_case" ]]
+        ! grep -Fq '升级到 unknown 完成' "$guard_root/output.log"
+    fi
+    cmp "$guard_root/original.env" "$ENV_FILE"
+ORIGINAL_UPGRADE_COMMAND_GUARD
+done
+printf 'PASS original do_upgrade configuration controls: %s conditional-call cases; failures propagate without later actions or success text\n' "${#upgrade_failure_cases[@]}"
 
 mkdir -p "$WORK_DIR/payload"
 printf 'payincus installer guard\n' > "$WORK_DIR/payload/version.txt"
