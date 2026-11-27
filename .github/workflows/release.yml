@@ -457,8 +457,29 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          gh release download v1.8.14 --repo "$GITHUB_REPOSITORY" --pattern 'incudal-v1.8.14-linux-${{ matrix.arch }}.tar.gz*' --dir old-artifact
-          (cd old-artifact && sha256sum --check 'incudal-v1.8.14-linux-${{ matrix.arch }}.tar.gz.sha256')
+          legacy_archive='incudal-v1.8.14-linux-${{ matrix.arch }}.tar.gz'
+          legacy_download_root="$(mktemp -d "$RUNNER_TEMP/incudal-legacy-download.XXXXXXXX")"
+          trap 'rm -rf -- "$legacy_download_root"' EXIT
+          legacy_download_succeeded=false
+          for legacy_attempt in 1 2 3; do
+            legacy_attempt_dir="$legacy_download_root/attempt-$legacy_attempt"
+            mkdir -- "$legacy_attempt_dir"
+            if gh release download v1.8.14 --repo "$GITHUB_REPOSITORY" --pattern "$legacy_archive" --pattern "$legacy_archive.sha256" --dir "$legacy_attempt_dir"; then
+              legacy_download_succeeded=true
+              break
+            fi
+            if [[ "$legacy_attempt" -lt 3 ]]; then
+              printf '::warning::Original v1.8.14 download attempt %s failed; retrying.\n' "$legacy_attempt"
+              sleep "$((legacy_attempt * 2))"
+            fi
+          done
+          if [[ "$legacy_download_succeeded" != true ]]; then
+            printf '::error::Original v1.8.14 download failed after 3 attempts.\n'
+            exit 1
+          fi
+          (cd "$legacy_attempt_dir" && sha256sum --check "$legacy_archive.sha256")
+          mkdir -- old-artifact
+          mv -- "$legacy_attempt_dir/$legacy_archive" "$legacy_attempt_dir/$legacy_archive.sha256" old-artifact/
       - name: 原worker升级至新包并核身份和校时
         run: |
           package=$(find "$PWD/upgrade-artifact" -maxdepth 1 -name '*.tar.gz' -type f)

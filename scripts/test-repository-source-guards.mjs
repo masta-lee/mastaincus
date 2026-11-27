@@ -1,10 +1,12 @@
 import assert from 'node:assert/strict'
 import { hasCompletedRepositoryStartup, hasRecordedRepositoryStartup } from './repository-startup-execution-evidence.mjs'
-import { readFileSync, existsSync } from 'node:fs'
-import { resolve } from 'node:path'
+import { readFileSync, existsSync, mkdtempSync, mkdirSync, writeFileSync, readdirSync, realpathSync, lstatSync, rmSync } from 'node:fs'
+import { resolve, basename, sep } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { runInNewContext } from 'node:vm'
 import { createHash } from 'node:crypto'
+import { tmpdir } from 'node:os'
+import { spawnSync } from 'node:child_process'
 
 const root = fileURLToPath(new URL('../', import.meta.url))
 const read = path => readFileSync(resolve(root, path), 'utf8')
@@ -77,6 +79,109 @@ assert.ok(workflow.includes('fresh-install:'), 'publication must depend on fresh
 assert.ok(workflow.includes('- fresh-install'), 'Release must wait for fresh installation checks')
 assert.ok(workflow.includes("if: always() && startsWith(github.ref, 'refs/tags/v') && needs.build.result == 'success' && needs.fresh-install.result == 'success' && needs.legacy-upgrade.result == 'success'"),
   'formal publication must survive the intentionally skipped preview-agent dependency but reject any failed build/install/upgrade gate')
+
+// Execute the actual workflow shell with local subprocess controls. Neither gh
+// nor sleep reaches the network, while checksum verification uses real coreutils.
+const legacyDownloadStep = workflow.match(/      - name: 下载并校验原v1\.8\.14发行包[\s\S]*?        run: \|\r?\n([\s\S]*?)      - name: 原worker升级至新包/)?.[1]
+assert.ok(legacyDownloadStep, 'the original release download step must remain independently executable')
+const legacyDownloadShell = legacyDownloadStep.split(/\r?\n/).map(line => line.replace(/^          /, '')).join('\n')
+const bashExecutable = process.platform === 'win32'
+  ? [resolve(process.env.ProgramFiles || 'C:/Program Files', 'Git/bin/bash.exe'),
+      resolve(process.env.ProgramFiles || 'C:/Program Files', 'Git/usr/bin/bash.exe')].find(existsSync)
+  : '/usr/bin/bash'
+assert.ok(bashExecutable && existsSync(bashExecutable), 'download subprocess controls require the existing native Bash toolchain')
+const legacyShellPath = value => value.replaceAll('\\', '/').replace(/^([A-Za-z]):/, (_, drive) => '/' + drive.toLowerCase())
+const mockGh = String.raw`#!/usr/bin/env bash
+set -euo pipefail
+if [[ "$#" -eq 1 && "$1" == --legacy-fixture-probe ]]; then exit 0; fi
+[[ "$#" -eq 11 && "$1" == release && "$2" == download && "$3" == v1.8.14 ]]
+[[ "$4" == --repo && "$5" == masta-lee/mastaincus && "$6" == --pattern && "$7" == "$CI_LEGACY_FIXTURE_ARCHIVE" ]]
+[[ "$8" == --pattern && "$9" == "$CI_LEGACY_FIXTURE_ARCHIVE.sha256" ]]
+shift 9
+[[ "$1" == --dir ]]
+download_dir="$2"
+[[ "$download_dir" == "$RUNNER_TEMP"/incudal-legacy-download.*/attempt-* ]]
+count=0
+if [[ -f "$CI_LEGACY_FIXTURE_ROOT/calls" ]]; then read -r count < "$CI_LEGACY_FIXTURE_ROOT/calls"; fi
+count=$((count + 1))
+printf '%s\n' "$count" > "$CI_LEGACY_FIXTURE_ROOT/calls"
+printf '%s\n' "$download_dir" >> "$CI_LEGACY_FIXTURE_ROOT/directories"
+if [[ "$CI_LEGACY_FIXTURE_MODE" == continuous || ( "$CI_LEGACY_FIXTURE_MODE" == transient && "$count" -eq 1 ) ]]; then
+  printf 'partial download\n' > "$download_dir/$CI_LEGACY_FIXTURE_ARCHIVE"
+  printf 'release not found\n' >&2
+  exit 1
+fi
+printf 'retained-original-v1.8.14-%s\n' "$CI_LEGACY_FIXTURE_ARCH" > "$download_dir/$CI_LEGACY_FIXTURE_ARCHIVE"
+(cd "$download_dir" && sha256sum --binary "$CI_LEGACY_FIXTURE_ARCHIVE" > "$CI_LEGACY_FIXTURE_ARCHIVE.sha256")
+if [[ "$CI_LEGACY_FIXTURE_MODE" == bad-checksum ]]; then
+  printf 'corrupted bytes\n' >> "$download_dir/$CI_LEGACY_FIXTURE_ARCHIVE"
+fi
+`
+const mockSleep = String.raw`#!/usr/bin/env bash
+set -euo pipefail
+[[ "$#" -eq 1 && ( "$1" == 2 || "$1" == 4 ) ]]
+printf '%s\n' "$1" >> "$CI_LEGACY_FIXTURE_ROOT/waits"
+`
+const checksumControl = String.raw`#!/usr/bin/env bash
+set -euo pipefail
+if [[ "$1" == --check ]]; then printf 'check\n' >> "$CI_LEGACY_FIXTURE_ROOT/checks"; fi
+exec /usr/bin/sha256sum "$@"
+`
+for (const arch of ['amd64', 'arm64']) for (const mode of ['transient', 'continuous', 'bad-checksum']) {
+  const fixtureParent = realpathSync(tmpdir())
+  const fixtureRoot = mkdtempSync(resolve(fixtureParent, 'mastaincus-legacy-download-control-'))
+  const fixtureIdentity = realpathSync(fixtureRoot)
+  assert.ok(fixtureIdentity.startsWith(fixtureParent + sep) && basename(fixtureIdentity).startsWith('mastaincus-legacy-download-control-'))
+  try {
+    const bin = resolve(fixtureRoot, 'bin'), runnerTemp = resolve(fixtureRoot, 'runner-temp')
+    mkdirSync(bin); mkdirSync(runnerTemp)
+    mkdirSync(resolve(runnerTemp, 'kept'))
+    writeFileSync(resolve(runnerTemp, 'kept/sentinel'), 'unrelated temporary data')
+    for (const [name, content] of [['gh', mockGh], ['sleep', mockSleep], ['sha256sum', checksumControl]]) {
+      writeFileSync(resolve(bin, name), content, { mode: 0o755 })
+    }
+    const archive = 'incudal-v1.8.14-linux-' + arch + '.tar.gz'
+    const fixtureEnv = { ...process.env, GITHUB_REPOSITORY: repository,
+      RUNNER_TEMP: legacyShellPath(runnerTemp), CI_LEGACY_FIXTURE_BIN: legacyShellPath(bin),
+      CI_LEGACY_FIXTURE_ROOT: legacyShellPath(fixtureRoot), CI_LEGACY_FIXTURE_ARCHIVE: archive,
+      CI_LEGACY_FIXTURE_ARCH: arch, CI_LEGACY_FIXTURE_MODE: mode }
+    for (const key of ['GH_TOKEN', 'GITHUB_TOKEN', 'GH_ENTERPRISE_TOKEN', 'GITHUB_ENTERPRISE_TOKEN']) delete fixtureEnv[key]
+    const script = 'export PATH="$CI_LEGACY_FIXTURE_BIN:$PATH"\ngh --legacy-fixture-probe\n' +
+      legacyDownloadShell.replaceAll('${{ matrix.arch }}', arch)
+    const result = spawnSync(bashExecutable, ['--noprofile', '--norc', '-e', '-c', script],
+      { cwd: fixtureRoot, env: fixtureEnv, encoding: 'utf8', timeout: 30_000 })
+    assert.equal(result.error, undefined, arch + '/' + mode + ' must complete its actual subprocess')
+    assert.ok(existsSync(resolve(fixtureRoot, 'calls')), arch + '/' + mode + ' must reach the controlled gh: ' + result.stderr + result.stdout)
+    const readLines = name => existsSync(resolve(fixtureRoot, name))
+      ? readFileSync(resolve(fixtureRoot, name), 'utf8').trim().split(/\r?\n/) : []
+    const calls = Number(readFileSync(resolve(fixtureRoot, 'calls'), 'utf8').trim())
+    assert.equal(calls, mode === 'transient' ? 2 : mode === 'continuous' ? 3 : 1, arch + '/' + mode + ' must retain its finite download bound')
+    assert.deepEqual(readLines('waits'), mode === 'transient' ? ['2'] : mode === 'continuous' ? ['2', '4'] : [])
+    assert.equal(new Set(readLines('directories')).size, calls, 'every retry must use a new private directory')
+    assert.equal(readLines('checks').length, mode === 'continuous' ? 0 : 1, 'only a successful download reaches one real checksum check')
+    const oldArtifact = resolve(fixtureRoot, 'old-artifact')
+    if (mode === 'transient') {
+      assert.equal(result.status, 0, result.stderr)
+      const expected = 'retained-original-v1.8.14-' + arch + '\n'
+      assert.equal(readFileSync(resolve(oldArtifact, archive), 'utf8'), expected, 'partial download bytes must not escape into the upgrade input')
+      assert.equal(readFileSync(resolve(oldArtifact, archive + '.sha256'), 'utf8'),
+        createHash('sha256').update(expected).digest('hex') + ' *' + archive + '\n')
+      assert.deepEqual(readdirSync(oldArtifact).sort(), [archive, archive + '.sha256'].sort(), 'only the original archive and checksum may be handed to the worker')
+    } else {
+      assert.notEqual(result.status, 0, 'exhaustion and bad checksums must fail the actual workflow')
+      assert.equal(existsSync(oldArtifact), false, 'failed input must never be handed to the original worker')
+      if (mode === 'bad-checksum') assert.match(result.stdout, /FAILED/, 'the real checksum tool must reject corrupted bytes')
+    }
+    assert.equal(readFileSync(resolve(runnerTemp, 'kept/sentinel'), 'utf8'), 'unrelated temporary data')
+    assert.deepEqual(readdirSync(runnerTemp), ['kept'], 'download cleanup must preserve unrelated temporary paths')
+  } finally {
+    assert.equal(realpathSync(fixtureRoot), fixtureIdentity, 'fixture cleanup must retain its exact temporary root')
+    assert.ok(lstatSync(fixtureRoot).isDirectory() && !lstatSync(fixtureRoot).isSymbolicLink())
+    rmSync(fixtureRoot, { recursive: true, force: false })
+  }
+}
+console.log('Original release download subprocess controls passed: both architectures, finite retry, real checksum refusal and private cleanup')
+
 const installer = read('scripts/install-panel.sh')
 const pinnedHelpers = installer.match(/PINNED_STARTUP_HELPERS = frozenset\(\{([\s\S]*?)\}\)/)?.[1]
 assert.ok(pinnedHelpers, 'startup normalization must retain independent complete helper content pins')
