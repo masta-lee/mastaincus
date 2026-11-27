@@ -116,7 +116,7 @@ try {
   await assert.rejects(db.verifyRestoredDatabase(restored, captured.report, directory, 'tampered-sequence'), /OSS_DATABASE_INTEGRITY_MISMATCH/)
   console.log('PASS: incorrect sequence counter is rejected.')
   await db.pgQuery('SELECT setval($1::regclass,$2::bigint,$3::boolean)', [sequence.reference, sequence.lastValue, sequence.isCalled], restored)
-  await db.pgQuery("SELECT lo_put($1,0,decode('ff','hex'))", [oid], restored)
+  await db.pgRecoveryTransaction(tx=>tx("SELECT lo_put($1,0,decode('ff','hex'))", [oid]), restored)
   await assert.rejects(db.verifyRestoredDatabase(restored, captured.report, directory, 'tampered-large-object'), /OSS_DATABASE_INTEGRITY_MISMATCH/)
   console.log('PASS: damaged large-object content is rejected.')
   await db.pgQuery('DROP TABLE "edge schema"."quoted.table"', [], restored)

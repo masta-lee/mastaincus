@@ -28,9 +28,41 @@ const utilitySource = databaseSource.slice(start, end).replace(/^export /gm, '')
 const compiled = ts.transpileModule(utilitySource + '\nreturn { dumpDatabase, restoreDatabase }', {
   compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.None }
 }).outputText
+const loadBackupUtilities = new Function('pgProcess','ensure','quoteIdentifier','quoteLiteral','postgresConnection','pgEnv','retainedMigrationIdentity','exec','pgQuery','localDatabaseAdmin', compiled)
 if (process.argv.includes('--check-fixture')) {
   assert.ok(compiled.includes('--single-transaction') && compiled.includes('--exit-on-error'))
-  console.log(`Fixture valid: v1.7.7 prefix ${cut}, current ${release.length}; actual backup utility functions loaded`)
+  const target='incudal_restore_'+'a'.repeat(32)
+  for(const scenario of [
+    {name:'legacy-empty',present:false,user:'postgres',database:'ci_gateway_test',denied:false},
+    {name:'custom-lo-denied',present:true,user:'postgres',database:'ci_gateway_test',denied:true},
+    {name:'standard-lo-boundary',present:true,user:'incudal',database:'incudal',denied:false}
+  ]){
+    const utilityCalls:string[]=[],adminCalls:string[]=[],privilegeCalls:string[]=[];let queryCalls=0
+    const connection={user:scenario.user,database:scenario.database,url:new URL(`postgresql://${scenario.user}@127.0.0.1/${scenario.database}`)}
+    const fixture=loadBackupUtilities(async(command:string,args:string[])=>{
+      utilityCalls.push(command);assert.ok(args.includes('--single-transaction')&&args.includes('--exit-on-error'))
+    },(condition:boolean,code:string)=>assert.ok(condition,code),quoteIdentifier,(value:string)=>"'"+value.replaceAll("'","''")+"'",
+    ()=>connection,(database:string)=>({PGDATABASE:database}),async(url:URL)=>url,
+    async(program:string)=>{privilegeCalls.push(program);return{stdout:'',stderr:''}},
+    async(sql:string,_params:unknown[],database:string)=>{
+      queryCalls++;assert.equal(database,target);assert.ok(sql.includes('pg_catalog.pg_largeobject_metadata'))
+      return[{present:scenario.present}]
+    },async(sql:string)=>{adminCalls.push(sql);return''}) as {restoreDatabase:(source:string,target:string)=>Promise<void>}
+    if(scenario.denied){
+      await assert.rejects(fixture.restoreDatabase('fixture.dump',target),/OSS_DATABASE_LO_RESTORE_SCOPE_INVALID/)
+      assert.deepEqual(adminCalls,[]);assert.deepEqual(privilegeCalls,[],'unknown LO identity is rejected before either privilege boundary')
+    }else{
+      await fixture.restoreDatabase('fixture.dump',target)
+      assert.deepEqual(privilegeCalls,['/usr/bin/psql'])
+      assert.equal(adminCalls.length,scenario.present?1:0)
+      if(scenario.present)assert.ok(adminCalls[0].startsWith(`\\connect "${target}"`)&&
+        adminCalls[0].includes('OR roleid IN (runtime_id,migration_id)')&&adminCalls[0].includes('ALTER LARGE OBJECT'),
+        'standard LO branch must execute the exact restricted production ownership SQL')
+    }
+    assert.deepEqual(utilityCalls,['pg_restore']);assert.equal(queryCalls,1)
+    console.log(`PASS utility dependency wiring: ${scenario.name}; no database or OS execution`)
+  }
+  console.log(`Fixture executed: v1.7.7 prefix ${cut}, current ${release.length}; exact production utilities and all three dependency branches checked`)
   process.exit(0)
 }
 assert.equal(process.platform, 'linux')
@@ -67,14 +99,14 @@ async function utility(command: string, args: string[], database?: string, input
     if (output) await writeFile(output, Buffer.concat(stdout), { flag: 'wx', mode: 0o600 })
   } finally { clearTimeout(timer); if (child.exitCode === null) child.kill('SIGKILL') }
 }
-const backup = new Function('pgProcess','ensure','quoteIdentifier','quoteLiteral','postgresConnection','pgEnv','retainedMigrationIdentity','exec', compiled)(
+const backup = loadBackupUtilities(
   utility,(condition:boolean,code:string)=>assert.ok(condition,code),quoteIdentifier,(value:string)=>"'"+value.replaceAll("'","''")+"'",
-  ()=>({user:decodeURIComponent(connection.username),url:connection}),(target:string)=>({PGDATABASE:target}),async(url:URL)=>url,
+  ()=>({user:decodeURIComponent(connection.username),database:decodeURIComponent(connection.pathname.slice(1)),url:connection}),(target:string)=>({PGDATABASE:target}),async(url:URL)=>url,
   async(program:string,args:string[],options:{env:{PGDATABASE:string}})=>{
     assert.equal(program,'/usr/bin/psql','only the production restore privilege utility is adapted')
     await utility('psql',args,options.env.PGDATABASE)
     return {stdout:'',stderr:''}
-  }) as {
+  },pgQuery,async()=>{throw new Error('Historical schema-only fixture cannot execute privileged LO mapping')}) as {
   dumpDatabase: (path: string) => Promise<void>
   restoreDatabase: (path: string, target: string) => Promise<void>
 }
@@ -102,6 +134,8 @@ try {
   await symlink(join(root, 'server/node_modules'), join(app, 'server/node_modules'))
   for (let index = 0; index < cut; index++) await installMigration(index)
   await migrate(source)
+  assert.deepEqual(await pgQuery('SELECT EXISTS(SELECT 1 FROM pg_catalog.pg_largeobject_metadata) AS present',[],source),[{present:false}],
+    'historical migration fixture is intentionally schema/rows only; real low-role LO recovery runs separately')
   assertMigrationHistory(await appliedBackupMigrations(source), release.slice(0, cut), true)
   const legacyFields = ['owner_id', 'actor_sid', 'actor_iat', 'identity_hash', 'attempt_id', 'recovery_state']
   assert.equal((await pgQuery("SELECT column_name FROM information_schema.columns WHERE table_name='restore_tasks' AND column_name=ANY($1)", [legacyFields], source)).length, 0)
