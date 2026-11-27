@@ -10,6 +10,8 @@ https://admin.example.com/admin/system-update
 
 ## Recommended Mode
 
+The update source is [masta-lee/mastaincus](https://github.com/masta-lee/mastaincus). Use its [stable Releases](https://github.com/masta-lee/mastaincus/releases) for installation and updates.
+
 ```dotenv
 SYSTEM_UPDATE_APPLY_MODE=auto
 SYSTEM_UPDATE_RELEASE_REPOSITORY=masta-lee/mastaincus

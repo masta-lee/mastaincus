@@ -60,13 +60,228 @@ def apk3_package_names(args, installed, action):
     return names
 
 
+# Exact successful APK3 info stdout and its separate corrupt-cache warnings.
+# Captured from the disposable Alpine fixture; contains only public package data.
+APK3_CAPTURED_INFO_STDOUT = b"""alpine-base-3.24.3-r0
+alpine-baselayout-3.7.2-r1
+alpine-baselayout-data-3.7.2-r1
+alpine-conf-3.22.0-r0
+alpine-keys-2.6-r0
+alpine-release-3.24.3-r0
+apk-tools-3.0.8-r0
+blkid-2.42.3-r1
+bridge-1.5-r5
+busybox-1.37.0-r31
+busybox-binsh-1.37.0-r31
+busybox-mdev-openrc-1.37.0-r31
+busybox-openrc-1.37.0-r31
+busybox-suid-1.37.0-r31
+ca-certificates-bundle-20261020-r0
+chrony-4.8-r7
+chrony-common-4.8-r7
+chrony-openrc-4.8-r7
+cloud-init-26.1-r3
+cloud-init-datasource-akamai-26.1-r3
+cloud-init-datasource-akamai-pyc-26.1-r3
+cloud-init-datasource-aliyun-26.1-r3
+cloud-init-datasource-aliyun-pyc-26.1-r3
+cloud-init-datasource-altcloud-26.1-r3
+cloud-init-datasource-altcloud-pyc-26.1-r3
+cloud-init-datasource-azure-26.1-r3
+cloud-init-datasource-azure-pyc-26.1-r3
+cloud-init-datasource-bigstep-26.1-r3
+cloud-init-datasource-bigstep-pyc-26.1-r3
+cloud-init-datasource-cloudcix-26.1-r3
+cloud-init-datasource-cloudcix-pyc-26.1-r3
+cloud-init-datasource-cloudsigma-26.1-r3
+cloud-init-datasource-cloudsigma-pyc-26.1-r3
+cloud-init-datasource-cloudstack-26.1-r3
+cloud-init-datasource-cloudstack-pyc-26.1-r3
+cloud-init-datasource-configdrive-26.1-r3
+cloud-init-datasource-configdrive-pyc-26.1-r3
+cloud-init-datasource-digitalocean-26.1-r3
+cloud-init-datasource-digitalocean-pyc-26.1-r3
+cloud-init-datasource-ec2-26.1-r3
+cloud-init-datasource-ec2-pyc-26.1-r3
+cloud-init-datasource-exoscale-26.1-r3
+cloud-init-datasource-exoscale-pyc-26.1-r3
+cloud-init-datasource-gce-26.1-r3
+cloud-init-datasource-gce-pyc-26.1-r3
+cloud-init-datasource-hetzner-26.1-r3
+cloud-init-datasource-hetzner-pyc-26.1-r3
+cloud-init-datasource-ibmcloud-26.1-r3
+cloud-init-datasource-ibmcloud-pyc-26.1-r3
+cloud-init-datasource-lxd-26.1-r3
+cloud-init-datasource-lxd-pyc-26.1-r3
+cloud-init-datasource-maas-26.1-r3
+cloud-init-datasource-maas-pyc-26.1-r3
+cloud-init-datasource-nocloud-26.1-r3
+cloud-init-datasource-nocloud-pyc-26.1-r3
+cloud-init-datasource-nwcs-26.1-r3
+cloud-init-datasource-nwcs-pyc-26.1-r3
+cloud-init-datasource-opennebula-26.1-r3
+cloud-init-datasource-opennebula-pyc-26.1-r3
+cloud-init-datasource-openstack-26.1-r3
+cloud-init-datasource-openstack-pyc-26.1-r3
+cloud-init-datasource-oracle-26.1-r3
+cloud-init-datasource-oracle-pyc-26.1-r3
+cloud-init-datasource-ovf-26.1-r3
+cloud-init-datasource-ovf-pyc-26.1-r3
+cloud-init-datasource-rbx-26.1-r3
+cloud-init-datasource-rbx-pyc-26.1-r3
+cloud-init-datasource-scaleway-26.1-r3
+cloud-init-datasource-scaleway-pyc-26.1-r3
+cloud-init-datasource-smartos-26.1-r3
+cloud-init-datasource-smartos-pyc-26.1-r3
+cloud-init-datasource-upcloud-26.1-r3
+cloud-init-datasource-upcloud-pyc-26.1-r3
+cloud-init-datasource-vmware-26.1-r3
+cloud-init-datasource-vmware-pyc-26.1-r3
+cloud-init-datasource-vultr-26.1-r3
+cloud-init-datasource-vultr-pyc-26.1-r3
+cloud-init-datasource-wsl-26.1-r3
+cloud-init-datasource-wsl-pyc-26.1-r3
+cloud-init-datasources-26.1-r3
+cloud-init-openrc-26.1-r3
+cloud-init-pyc-26.1-r3
+cloud-utils-growpart-0.33-r1
+cryptsetup-libs-2.8.6-r0
+device-mapper-libs-2.03.35-r3
+dhcpcd-10.5.2-r1
+dhcpcd-openrc-10.5.2-r1
+doas-6.8.2-r8
+dosfstools-4.2-r2
+e2fsprogs-1.47.4-r0
+e2fsprogs-extra-1.47.4-r0
+e2fsprogs-libs-1.47.4-r0
+gdbm-1.26-r0
+ifupdown-ng-0.13.0-r0
+ifupdown-ng-iproute2-0.13.0-r0
+iproute2-minimal-7.0.0-r0
+json-c-0.18-r1
+kmod-34.2-r1
+kmod-libs-34.2-r1
+lddtree-1.27-r0
+libapk-3.0.8-r0
+libblkid-2.42.3-r1
+libbsd-0.12.2-r0
+libbz2-1.0.8-r6
+libcap2-2.78-r0
+libcom_err-1.47.4-r0
+libcrypto3-3.5.9-r0
+libeconf-0.8.3-r0
+libedit-20260508.3.1-r1
+libelf-0.195-r0
+libexpat-2.9.0-r0
+libfdisk-2.42.3-r1
+libffi-3.5.2-r1
+libgcc-15.2.0-r5
+libmd-1.2.0-r0
+libmnl-1.0.5-r2
+libmount-2.42.3-r1
+libncursesw-6.6_p20260516-r0
+libnvme-1.16.2-r0
+libnvmemi-1.16.2-r0
+libpanelw-6.6_p20260516-r0
+libseccomp-2.6.1-r0
+libsmartcols-2.42.3-r1
+libssl3-3.5.9-r0
+libstdc++-15.2.0-r5
+libuuid-2.42.3-r1
+limine-bios-12.9.4-r0
+limine-bios-updater-12.9.4-r0
+limine-efi-updater-12.9.4-r0
+limine-efi-x86_64-12.9.4-r0
+limine-tool-12.9.4-r0
+linux-pam-1.7.1-r2
+linux-virt-6.18.58-r0
+mdev-conf-4.10-r0
+mkinitfs-3.14.1-r0
+mount-2.42.3-r1
+mpdecimal-4.0.1-r0
+musl-1.2.6-r3
+musl-utils-1.2.6-r3
+ncurses-terminfo-base-6.6_p20260516-r0
+nvme-cli-2.16-r1
+openrc-0.63.2-r0
+openrc-user-0.63.2-r0
+openssh-10.3_p1-r1
+openssh-client-common-10.3_p1-r1
+openssh-client-default-10.3_p1-r1
+openssh-keygen-10.3_p1-r1
+openssh-server-10.3_p1-r1
+openssh-server-common-10.3_p1-r1
+openssh-server-common-openrc-10.3_p1-r1
+openssh-server-pam-10.3_p1-r1
+openssh-sftp-server-10.3_p1-r1
+partx-2.42.3-r1
+popt-1.19-r4
+py3-attrs-26.1.0-r0
+py3-attrs-pyc-26.1.0-r0
+py3-certifi-2026.2.25-r1
+py3-certifi-pyc-2026.2.25-r1
+py3-charset-normalizer-3.4.9-r0
+py3-charset-normalizer-pyc-3.4.9-r0
+py3-configobj-5.0.9-r2
+py3-configobj-pyc-5.0.9-r2
+py3-idna-3.16-r0
+py3-idna-pyc-3.16-r0
+py3-jinja2-3.1.6-r1
+py3-jinja2-pyc-3.1.6-r1
+py3-jsonpatch-1.33-r5
+py3-jsonpatch-pyc-1.33-r5
+py3-jsonpointer-3.1.1-r0
+py3-jsonpointer-pyc-3.1.1-r0
+py3-jsonschema-4.26.0-r0
+py3-jsonschema-pyc-4.26.0-r0
+py3-jsonschema-specifications-2025.9.1-r2
+py3-jsonschema-specifications-pyc-2025.9.1-r2
+py3-markupsafe-3.0.3-r1
+py3-markupsafe-pyc-3.0.3-r1
+py3-referencing-0.37.0-r1
+py3-referencing-pyc-0.37.0-r1
+py3-requests-2.33.1-r0
+py3-requests-pyc-2.33.1-r0
+py3-rpds-py-0.30.0-r2
+py3-rpds-py-pyc-0.30.0-r2
+py3-typing-extensions-4.15.0-r1
+py3-typing-extensions-pyc-4.15.0-r1
+py3-urllib3-2.7.0-r0
+py3-urllib3-pyc-2.7.0-r0
+py3-yaml-6.0.3-r2
+py3-yaml-pyc-6.0.3-r2
+pyc-3.14.8-r0
+python3-3.14.8-r0
+python3-pyc-3.14.8-r0
+python3-pycache-pyc0-3.14.8-r0
+readline-8.3.3-r1
+scanelf-1.3.9-r1
+sfdisk-2.42.3-r1
+sgdisk-1.0.10-r1
+shadow-4.18.0-r1
+skalibs-libs-2.15.0.0-r0
+sqlite-libs-3.53.4-r0
+ssl_client-1.37.0-r31
+tzdata-2026e-r0
+utmps-libs-0.1.3.3-r0
+xz-libs-5.8.4-r0
+yaml-0.2.5-r2
+zlib-1.3.2-r1
+zstd-libs-1.5.7-r2
+"""
+APK3_CAPTURED_INFO_STDERR = b"""WARNING: opening from cache https://dl-cdn.alpinelinux.org/alpine/v3.24/main/x86_64/APKINDEX.tar.gz: unexpected end of file
+WARNING: opening from cache https://dl-cdn.alpinelinux.org/alpine/v3.24/community/x86_64/APKINDEX.tar.gz: unexpected end of file
+"""
+
+
 class KernelPlanTests(unittest.TestCase):
     def test_inventory_timeout_rechecks_tool_and_retries_once_with_original_request(self):
         request = base_request()
         calls = []
         tools = [{'path': '/first/apk'}, {'path': '/second/apk'}]
 
-        def command(args, timeout, value):
+        def command(args, timeout, value, *, stdout_only):
+            self.assertIs(stdout_only, True)
             calls.append((args, timeout, value))
             if len(calls) == 1:
                 raise ValueError('HARDENING_KERNEL_STEP_TIMEOUT')
@@ -601,6 +816,75 @@ class KernelMetadataPlanTests(unittest.TestCase):
 @unittest.skipUnless(os.name == 'posix' and hasattr(os, 'waitid') and hasattr(os, 'getuid') and os.getuid() == 0,
                      'requires isolated Linux subprocess fixtures')
 class KernelCommandTests(unittest.TestCase):
+    def inventory_output_program(self, directory, stdout, stderr, exit_code=0):
+        program = Path(directory) / 'apk-output'
+        program.write_text('\n'.join(['#!' + sys.executable, 'import sys',
+            "assert sys.argv[1:] == ['info', '-v']",
+            'sys.stdout.buffer.write(' + repr(stdout) + ')',
+            'sys.stderr.buffer.write(' + repr(stderr) + ')',
+            'sys.exit(' + repr(exit_code) + ')']) + '\n')
+        program.chmod(0o700)
+        return program
+
+    def test_real_inventory_parses_captured_206_rows_without_stderr_cache_warnings(self):
+        self.assertEqual(hashlib.sha256(APK3_CAPTURED_INFO_STDOUT).hexdigest(),
+                         'e9f876f704888d9f2eefc76d2ee3915d33870690af3d0b79d2233124027ee83a')
+        self.assertEqual(hashlib.sha256(APK3_CAPTURED_INFO_STDERR).hexdigest(),
+                         '898266b4812c8101de86bea810308b9497b2e205222f2e60aeced796154356d7')
+        with tempfile.TemporaryDirectory(prefix='incudal-kernel-inventory-streams-', dir='/var/lib') as directory:
+            program = self.inventory_output_program(directory, APK3_CAPTURED_INFO_STDOUT, APK3_CAPTURED_INFO_STDERR)
+            with patch.object(module, 'trusted_program', return_value={'path': str(program)}):
+                inventory = module.installed_packages()
+            self.assertEqual(len(inventory), 206)
+            self.assertEqual(inventory['linux-virt'], '6.18.58-r0')
+            self.assertEqual(inventory['alpine-base'], '3.24.3-r0')
+
+    def test_real_inventory_still_rejects_invalid_stdout_with_expected_stderr(self):
+        outputs = [b'', APK3_CAPTURED_INFO_STDOUT + b'linux-virt-6.18.58-r0\n',
+            APK3_CAPTURED_INFO_STDOUT + APK3_CAPTURED_INFO_STDERR, b'\xff',
+            b''.join(('fixture-' + str(at) + '-1.0-r0\n').encode() for at in range(3001))]
+        for output in outputs:
+            with self.subTest(bytes=len(output)), tempfile.TemporaryDirectory(
+                    prefix='incudal-kernel-inventory-invalid-', dir='/var/lib') as directory:
+                program = self.inventory_output_program(directory, output, APK3_CAPTURED_INFO_STDERR)
+                with patch.object(module, 'trusted_program', return_value={'path': str(program)}), \
+                        self.assertRaises((ValueError, UnicodeDecodeError)):
+                    module.installed_packages()
+
+    def test_real_inventory_cannot_accept_valid_rows_after_nonzero_exit(self):
+        with tempfile.TemporaryDirectory(prefix='incudal-kernel-inventory-nonzero-', dir='/var/lib') as directory:
+            program = self.inventory_output_program(directory, APK3_CAPTURED_INFO_STDOUT, APK3_CAPTURED_INFO_STDERR, 7)
+            with patch.object(module, 'trusted_program', return_value={'path': str(program)}) as lookup, \
+                    self.assertRaisesRegex(ValueError, '^HARDENING_KERNEL_PREPARE_FAILED$'):
+                module.installed_packages()
+            self.assertEqual(lookup.call_count, 1, 'nonzero exit cannot be treated as an inventory timeout')
+
+    def test_real_stdout_only_keeps_the_combined_four_mib_output_limit(self):
+        for stdout_size, stderr_size in [(0, 4 * 1024 * 1024 + 1),
+                                        (2 * 1024 * 1024 + 1, 2 * 1024 * 1024 + 1)]:
+            program = ('import sys;sys.stdout.buffer.write(b"x"*' + str(stdout_size) + ');'
+                       'sys.stderr.buffer.write(b"y"*' + str(stderr_size) + ')')
+            with self.subTest(stdout_size=stdout_size, stderr_size=stderr_size), \
+                    self.assertRaisesRegex(ValueError, '^HARDENING_KERNEL_PREPARE_FAILED$'):
+                module.command([sys.executable, '-c', program], timeout=8, stdout_only=True)
+        self.assertEqual(module.command([sys.executable, '-c',
+            'import sys;sys.stderr.buffer.write(b"y"*(4*1024*1024))'], timeout=8, stdout_only=True), b'')
+
+    def test_real_stdout_only_still_reaps_a_detached_writer_before_reply(self):
+        with tempfile.TemporaryDirectory(prefix='incudal-kernel-stdout-group-', dir='/var/lib') as directory:
+            record = Path(directory) / 'original-child.json'
+            try:
+                with patch.object(module.subprocess, 'Popen', side_effect=self.ready_popen(record, allow_exited_parent=True)), \
+                        self.assertRaisesRegex(ValueError, '^HARDENING_KERNEL_CHILD_PENDING$'):
+                    module.command(self.background_command(record, False), timeout=4, stdout_only=True)
+                self.assertTrue(record.exists())
+                deadline = time.monotonic() + 1
+                while self.child_alive(record) and time.monotonic() < deadline:
+                    time.sleep(.02)
+                self.assertFalse(self.child_alive(record), 'stdout-only selection cannot bypass process-group cleanup')
+            finally:
+                self.cleanup_child(record)
+
     def inventory_program(self, directory, with_child):
         record, attempts = Path(directory) / 'original-child.json', Path(directory) / 'attempts'
         child = ('import json,os,sys,time;from pathlib import Path;'
@@ -635,14 +919,15 @@ class KernelCommandTests(unittest.TestCase):
                 lookups.append(name)
                 return {'path': str(program), 'proof': module.file_proof(program)}
 
-            def command(args, timeout, value):
+            def command(args, timeout, value, *, stdout_only):
+                self.assertIs(stdout_only, True)
                 budgets.append(timeout)
                 # The exact 8/20 budgets are checked above; shorten only this
                 # synthetic sleeping process fixture, preserving real cleanup.
                 if len(budgets) == 1:
                     with patch.object(module.subprocess, 'Popen', side_effect=self.ready_popen(record)):
-                        return original_command(args, timeout=2, value=value)
-                return original_command(args, timeout=4, value=value)
+                        return original_command(args, timeout=2, value=value, stdout_only=stdout_only)
+                return original_command(args, timeout=4, value=value, stdout_only=stdout_only)
 
             try:
                 with patch.object(module, 'trusted_program', side_effect=lookup), patch.object(module, 'command', side_effect=command):

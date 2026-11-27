@@ -1,6 +1,6 @@
 # 项目介绍
 
-PayIncus 是面向 Incus hosting 业务的 NAT VPS 销售、交付、计费和运营平台。它把用户购买、余额扣费、实例创建、NAT 网络、流量统计、工单通知、支付回调、宿主机 Agent、Public API 和后台 OTA 放进一套可审计流程。
+MastaIncus 是面向 Incus hosting 业务的 NAT VPS 销售、交付、计费和运营平台。它把用户购买、余额扣费、实例创建、NAT 网络、流量统计、工单通知、支付回调、宿主机 Agent、Public API 和后台 OTA 放进一套可审计流程。
 
 ## 适用场景
 
@@ -20,7 +20,7 @@ PayIncus 是面向 Incus hosting 业务的 NAT VPS 销售、交付、计费和�
 
 ## 当前产品边界
 
-PayIncus 是非 Docker split 部署优先的生产系统：
+MastaIncus 是非 Docker split 部署优先的生产系统：
 
 - 用户端和管理端是两个 Vite 构建入口。
 - 用户端产物目录是 `client/dist/user`。
@@ -33,6 +33,10 @@ PayIncus 是非 Docker split 部署优先的生产系统：
 - 默认安装目录是 `/opt/incudal`，这是当前脚本、systemd、OTA 和线上 release 布局使用的真实路径。
 
 ## 入口
+
+- 维护仓库：[masta-lee/mastaincus](https://github.com/masta-lee/mastaincus)
+- 正式安装包：[Releases](https://github.com/masta-lee/mastaincus/releases)
+- 在线更新：[后台 OTA](/guide/ota-update)
 
 - 用户端：`https://panel.example.com`
 - 管理后台：`https://admin.example.com`

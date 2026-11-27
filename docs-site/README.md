@@ -1,6 +1,6 @@
-# PayIncus 文档站
+# MastaIncus 文档站
 
-这是 PayIncus 的 VitePress 双语文档站源码，目标发布地址为 `https://masta-lee.github.io/mastaincus/`。新仓库的 Pages 尚未部署；当前可直接阅读本目录的 Markdown 源码。
+这是 MastaIncus 的 VitePress 双语文档站源码。[文档源码](https://github.com/masta-lee/mastaincus/tree/main/docs-site/docs)可直接阅读，Pages 发布地址为 `https://masta-lee.github.io/mastaincus/`；实际部署结果以本仓库的文档工作流为准。
 
 - 中文默认路径：`/mastaincus/`
 - 英文路径：`/mastaincus/en/`
@@ -41,7 +41,7 @@ docs/.vitepress/dist
 
 ## GitHub Pages
 
-新仓库目前为私有，Actions 暂未启用，以下为后续 Pages 配置流程，不表示站点已经发布。
+仓库已公开，文档通过本仓库的 GitHub Actions 部署；下列配置只控制文档站，不改变平台安装包或主控版本。
 
 文档站通过 GitHub Actions 发布到 GitHub Pages：
 

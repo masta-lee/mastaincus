@@ -1,21 +1,21 @@
 ---
 layout: home
-title: PayIncus 文档
-description: PayIncus 部署、运营、开发与 OTA 文档
+title: MastaIncus 文档
+description: MastaIncus 部署、运营、开发与 OTA 文档
 ---
 
 <main class="docs-home">
   <section class="docs-home-masthead">
     <div class="docs-home-brand">
-      <img class="docs-home-logo" src="/incudal_logo.webp" alt="PayIncus">
+      <img class="docs-home-logo" src="/incudal_logo.webp" alt="MastaIncus">
       <div>
-        <p class="docs-home-eyebrow">PayIncus Documentation</p>
-        <h1>PayIncus 文档</h1>
+        <p class="docs-home-eyebrow">MastaIncus Documentation</p>
+        <h1>MastaIncus 文档</h1>
         <p class="docs-home-summary">面向 Incus 商业化交付平台的部署、运营、API 接入和生产维护手册，覆盖用户端、管理后台和后台 OTA。按工作目标查找步骤，不需要先了解整个系统。</p>
         <div class="docs-home-actions">
-          <a class="docs-home-button primary" href="/payincus/deployment/one-click-install">部署 PayIncus</a>
-          <a class="docs-home-button" href="/payincus/guide/introduction">了解系统</a>
-          <a class="docs-home-button" href="/payincus/api/overview">查看 API</a>
+          <a class="docs-home-button primary" href="/mastaincus/deployment/one-click-install">部署 MastaIncus</a>
+          <a class="docs-home-button" href="/mastaincus/guide/introduction">了解系统</a>
+          <a class="docs-home-button" href="/mastaincus/api/overview">查看 API</a>
         </div>
       </div>
     </div>
@@ -23,7 +23,7 @@ description: PayIncus 部署、运营、开发与 OTA 文档
       <span>Production Operations</span>
       <strong>发布与更新</strong>
       <p>安装包、OTA 和回滚均以 GitHub Release 与 SHA256 校验结果为准。</p>
-      <a href="/payincus/release/version-log">查看版本日志</a>
+      <a href="/mastaincus/release/version-log">查看版本日志</a>
     </aside>
   </section>
 
@@ -33,10 +33,10 @@ description: PayIncus 部署、运营、开发与 OTA 文档
       <p>选择与你当前任务最接近的入口。</p>
     </div>
     <div class="docs-home-links">
-      <a class="docs-home-link" href="/payincus/deployment/one-click-install"><span class="docs-home-link-index">01</span><span><strong>一键安装</strong><small>在 Debian 或 Ubuntu 新服务器上完成首次部署。</small></span></a>
-      <a class="docs-home-link" href="/payincus/deployment/manual-install"><span class="docs-home-link-index">02</span><span><strong>手工部署</strong><small>接入已有 PostgreSQL、Nginx、systemd 和发布流程。</small></span></a>
-      <a class="docs-home-link" href="/payincus/guide/split-deployment"><span class="docs-home-link-index">03</span><span><strong>前后台分离</strong><small>配置用户端、管理端、API 和域名边界。</small></span></a>
-      <a class="docs-home-link" href="/payincus/guide/ota-update"><span class="docs-home-link-index">04</span><span><strong>后台 OTA</strong><small>校验 Release、切换版本并执行受控回滚。</small></span></a>
+      <a class="docs-home-link" href="/mastaincus/deployment/one-click-install"><span class="docs-home-link-index">01</span><span><strong>一键安装</strong><small>在 Debian 或 Ubuntu 新服务器上完成首次部署。</small></span></a>
+      <a class="docs-home-link" href="/mastaincus/deployment/manual-install"><span class="docs-home-link-index">02</span><span><strong>手工部署</strong><small>接入已有 PostgreSQL、Nginx、systemd 和发布流程。</small></span></a>
+      <a class="docs-home-link" href="/mastaincus/guide/split-deployment"><span class="docs-home-link-index">03</span><span><strong>前后台分离</strong><small>配置用户端、管理端、API 和域名边界。</small></span></a>
+      <a class="docs-home-link" href="/mastaincus/guide/ota-update"><span class="docs-home-link-index">04</span><span><strong>后台 OTA</strong><small>校验 Release、切换版本并执行受控回滚。</small></span></a>
     </div>
   </section>
 
@@ -48,22 +48,22 @@ description: PayIncus 部署、运营、开发与 OTA 文档
     <div class="docs-home-columns">
       <div class="docs-home-column">
         <h3>部署与运维</h3>
-        <a href="/payincus/deployment/environment">环境变量</a>
-        <a href="/payincus/deployment/systemd">systemd 服务</a>
-        <a href="/payincus/deployment/nginx">Nginx 分离部署</a>
-        <a href="/payincus/troubleshooting/common-errors">常见错误</a>
+        <a href="/mastaincus/deployment/environment">环境变量</a>
+        <a href="/mastaincus/deployment/systemd">systemd 服务</a>
+        <a href="/mastaincus/deployment/nginx">Nginx 分离部署</a>
+        <a href="/mastaincus/troubleshooting/common-errors">常见错误</a>
       </div>
       <div class="docs-home-column">
         <h3>产品与运营</h3>
-        <a href="/payincus/user/dashboard">用户端功能</a>
-        <a href="/payincus/admin/overview">管理后台功能</a>
-        <a href="/payincus/features/billing">支付与账务</a>
-        <a href="/payincus/features/instances">实例与资源交付</a>
+        <a href="/mastaincus/user/dashboard">用户端功能</a>
+        <a href="/mastaincus/admin/overview">管理后台功能</a>
+        <a href="/mastaincus/features/billing">支付与账务</a>
+        <a href="/mastaincus/features/instances">实例与资源交付</a>
       </div>
       <div class="docs-home-column">
         <h3>API 与接入</h3>
-        <a href="/payincus/api/overview">Public API</a>
-        <a href="/payincus/api/overview#oauth">OAuth Provider</a>
+        <a href="/mastaincus/api/overview">Public API</a>
+        <a href="/mastaincus/api/overview#oauth">OAuth Provider</a>
       </div>
     </div>
   </section>
@@ -76,7 +76,7 @@ description: PayIncus 部署、运营、开发与 OTA 文档
     <div class="docs-home-links">
       <a class="docs-home-link" href="https://github.com/masta-lee/mastaincus"><span class="docs-home-link-index">GH</span><span><strong>GitHub</strong><small>查看源码、Release 和问题记录。</small></span></a>
       <a class="docs-home-link" href="https://github.com/masta-lee/mastaincus/issues"><span class="docs-home-link-index">IS</span><span><strong>Issues</strong><small>在本仓库反馈问题和功能建议。</small></span></a>
-      <a class="docs-home-link" href="/payincus/demo"><span class="docs-home-link-index">DE</span><span><strong>部署体验</strong><small>在自己的测试环境中部署和体验。</small></span></a>
+      <a class="docs-home-link" href="/mastaincus/demo"><span class="docs-home-link-index">DE</span><span><strong>部署体验</strong><small>在自己的测试环境中部署和体验。</small></span></a>
     </div>
   </section>
 </main>

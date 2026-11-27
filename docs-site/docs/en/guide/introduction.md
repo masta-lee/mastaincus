@@ -1,6 +1,6 @@
 # Introduction
 
-PayIncus is an Incus hosting platform for NAT VPS sales, resource delivery, billing, and operations. It connects user purchases, balance billing, Incus instance delivery, NAT networking, traffic accounting, tickets, notifications, payment callbacks, host Agent reporting, Public API, and admin OTA updates in one auditable workflow.
+MastaIncus is an Incus hosting platform for NAT VPS sales, resource delivery, billing, and operations. It connects user purchases, balance billing, Incus instance delivery, NAT networking, traffic accounting, tickets, notifications, payment callbacks, host Agent reporting, Public API, and admin OTA updates in one auditable workflow.
 
 ## Use Cases
 
@@ -20,7 +20,7 @@ PayIncus is an Incus hosting platform for NAT VPS sales, resource delivery, bill
 
 ## Product Boundary
 
-PayIncus is optimized for non-Docker split production deployment:
+MastaIncus is optimized for non-Docker split production deployment:
 
 - The user portal and admin console are separate Vite entrypoints.
 - User build output is `client/dist/user`.
@@ -33,6 +33,10 @@ PayIncus is optimized for non-Docker split production deployment:
 - The default install directory is `/opt/incudal`; this is the real path used by the current installer, systemd templates, OTA worker, and production release layout.
 
 ## Entry Points
+
+- Repository: [masta-lee/mastaincus](https://github.com/masta-lee/mastaincus)
+- Stable packages: [Releases](https://github.com/masta-lee/mastaincus/releases)
+- Updates: [Admin OTA](/en/guide/ota-update)
 
 - User portal: `https://panel.example.com`
 - Admin console: `https://admin.example.com`

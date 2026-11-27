@@ -288,7 +288,7 @@ def command_group_alive(group):
     return False
 
 
-def command(args, timeout=8, value=None):
+def command(args, timeout=8, value=None, *, stdout_only=False):
     if value is not None:
         current_request(value)
         timeout = min(timeout, max(0.001, (value['expiresAt'] - time.time() * 1000) / 1000))
@@ -319,12 +319,15 @@ def command(args, timeout=8, value=None):
             if value is not None:
                 current_request(value)
             out.seek(0); errors.seek(0)
-            result = out.read(4 * 1024 * 1024) + errors.read(4 * 1024 * 1024)
-            if len(result) > 4 * 1024 * 1024:
+            # Inventory consumes only package rows, while both streams retain
+            # the same aggregate limit and all callers keep failure checks.
+            stdout = out.read(4 * 1024 * 1024)
+            stderr = errors.read(4 * 1024 * 1024)
+            if len(stdout) + len(stderr) > 4 * 1024 * 1024:
                 fail('HARDENING_KERNEL_PREPARE_FAILED')
             process.wait(timeout=2)
             unreaped = False
-            return result
+            return stdout if stdout_only else stdout + stderr
         except BaseException:
             if unreaped:
                 try:
@@ -359,7 +362,7 @@ def same_series(before, expected):
 
 def installed_packages(value=None):
     try:
-        output = command([trusted_program('apk')['path'], 'info', '-v'], timeout=8, value=value).decode()
+        output = command([trusted_program('apk')['path'], 'info', '-v'], timeout=8, value=value, stdout_only=True).decode()
     except ValueError as error:
         if str(error) != 'HARDENING_KERNEL_STEP_TIMEOUT':
             raise
@@ -367,7 +370,7 @@ def installed_packages(value=None):
         # its process group. Recheck the tool and the original request expiry.
         if value is not None:
             current_request(value)
-        output = command([trusted_program('apk')['path'], 'info', '-v'], timeout=20, value=value).decode()
+        output = command([trusted_program('apk')['path'], 'info', '-v'], timeout=20, value=value, stdout_only=True).decode()
     result = {}
     for line in output.splitlines():
         match = re.fullmatch(r'([a-zA-Z0-9+_.-]+)-([0-9][a-zA-Z0-9+_.~-]*)', line)

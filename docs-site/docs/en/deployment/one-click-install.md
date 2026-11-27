@@ -1,13 +1,13 @@
 ---
 title: One-click Install
-description: Deploy PayIncus on Debian or Ubuntu from a verified GitHub Release
+description: Deploy MastaIncus on Debian or Ubuntu from a verified GitHub Release
 ---
 
 # One-click Install
 
-The new repository is private. Source files, raw installer URLs and release assets require an authorized GitHub identity; the anonymous download examples below are not directly usable in this phase. The new GitHub Pages address has not been deployed yet.
+[masta-lee/mastaincus](https://github.com/masta-lee/mastaincus) is the maintenance repository. Source files, the installer and stable release assets are public and can be downloaded without a GitHub token. The installer selects the latest stable release; see [Releases](https://github.com/masta-lee/mastaincus/releases) for packages and versions.
 
-<p class="doc-lead">Deploy PayIncus on a clean server with the official installer. It configures dependencies, database access, environment variables, systemd, and the selected external access mode.</p>
+<p class="doc-lead">Deploy MastaIncus on a clean server with the official installer. It configures dependencies, database access, environment variables, systemd, and the selected external access mode.</p>
 
 <div class="doc-meta">
   <div><span>Use case</span><strong>First production install</strong></div>
@@ -99,7 +99,7 @@ Page checks compare the response with the matching local build; API checks requi
 - Installs Node.js, pnpm, PostgreSQL, Redis, Nginx, and systemd dependencies.
 - Creates the database connection and `/opt/incudal/.env`.
 - Downloads the latest GitHub Release artifact and its `.sha256`, then verifies it before extraction.
-- Extracts PayIncus into `/opt/incudal`.
+- Extracts MastaIncus into `/opt/incudal`.
 - Runs Prisma migrations and Prisma Client generation.
 - Creates the `incudal` system user and `incudal-backend` service.
 - Creates OTA, certificate, cache, and log directories.

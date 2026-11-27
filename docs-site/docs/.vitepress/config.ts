@@ -313,8 +313,8 @@ export default defineConfig({
       preserveSymlinks: true
     }
   },
-  title: 'PayIncus',
-  description: 'PayIncus 用户端、管理后台、Incus 交付、Agent 和 OTA 文档',
+  title: 'MastaIncus',
+  description: 'MastaIncus 用户端、管理后台、Incus 交付、Agent 和 OTA 文档',
   lang: 'zh-CN',
   cleanUrls: true,
   lastUpdated: true,
@@ -340,8 +340,8 @@ export default defineConfig({
     root: {
       label: '简体中文',
       lang: 'zh-CN',
-      title: 'PayIncus',
-      description: 'PayIncus 用户端、管理后台、Incus 交付、Agent 和 OTA 文档',
+      title: 'MastaIncus',
+      description: 'MastaIncus 用户端、管理后台、Incus 交付、Agent 和 OTA 文档',
       themeConfig: {
         nav: zhNav,
         editLink: {
@@ -368,8 +368,8 @@ export default defineConfig({
     en: {
       label: 'English',
       lang: 'en-US',
-      title: 'PayIncus',
-      description: 'PayIncus documentation for user portal, admin console, Incus delivery, Agent reporting, payments and OTA updates',
+      title: 'MastaIncus',
+      description: 'MastaIncus documentation for user portal, admin console, Incus delivery, Agent reporting, payments and OTA updates',
       themeConfig: {
         nav: enNav,
         editLink: {
@@ -396,7 +396,7 @@ export default defineConfig({
   },
   themeConfig: {
     logo: '/incudal_logo.webp',
-    siteTitle: 'PayIncus',
+    siteTitle: 'MastaIncus',
     search: {
       provider: 'local'
     },
@@ -404,8 +404,8 @@ export default defineConfig({
       { icon: 'github', link: 'https://github.com/masta-lee/mastaincus' }
     ],
     footer: {
-      message: 'PayIncus documentation',
-      copyright: 'Copyright © 2026 PayIncus'
+      message: 'MastaIncus documentation',
+      copyright: '<a href="https://github.com/masta-lee/mastaincus/blob/main/LICENSE">BSD 3-Clause · License and copyright</a>'
     }
   }
 })

@@ -1,13 +1,13 @@
 ---
 title: 一键安装
-description: 使用经过校验的 GitHub Release 在 Debian 或 Ubuntu 上部署 PayIncus
+description: 使用经过校验的 GitHub Release 在 Debian 或 Ubuntu 上部署 MastaIncus
 ---
 
 # 一键安装
 
-新仓库当前为私有，源码、raw 安装入口和发行资产需要有仓库访问权限的 GitHub 身份；下面的匿名下载示例在该阶段不能直接使用。GitHub Pages 目标地址尚未部署，可先阅读 `docs-site/docs/` 中的文档源码。
+维护仓库为 [masta-lee/mastaincus](https://github.com/masta-lee/mastaincus)，源码、安装脚本与正式发行资产已公开，可匿名下载，无需 GitHub token。安装器默认选择本仓库最新正式版；版本与安装包见 [Releases](https://github.com/masta-lee/mastaincus/releases)。
 
-<p class="doc-lead">使用官方安装脚本在新服务器上部署 PayIncus。脚本负责依赖、数据库、环境变量、systemd 和外部访问入口。</p>
+<p class="doc-lead">使用官方安装脚本在新服务器上部署 MastaIncus。脚本负责依赖、数据库、环境变量、systemd 和外部访问入口。</p>
 
 <div class="doc-meta">
   <div><span>适用场景</span><strong>首次生产部署</strong></div>
@@ -51,7 +51,7 @@ Cloudflare Tunnel 适合无公网 IP 或希望隐藏网站源站的服务器。�
 ### 先在 Cloudflare 添加两个域名路由
 
 1. 将域名接入 Cloudflare，进入 Zero Trust → Networks → Tunnels / Connectors（名称随控制台版本变化）。
-2. 创建类型为 **Cloudflared** 的 Tunnel，名称可以填写 `payincus-panel`。
+2. 创建类型为 **Cloudflared** 的 Tunnel，名称可以填写 `mastaincus-panel`。
 3. 在 Public Hostnames / Published application routes 中添加以下两条路由：
 
 | 配置项 | 客户面板 | 管理后台 |
@@ -116,7 +116,7 @@ CF Tunnel 只负责网站访问，机器池 WireGuard / SSH 管理网关仍需�
 - 安装 Node.js、pnpm、PostgreSQL、Redis、Nginx 和 systemd 依赖。
 - 创建数据库连接和 `/opt/incudal/.env`。
 - 下载最新 GitHub Release artifact 及其 `.sha256`，校验通过后才解压。
-- 解压 PayIncus 到 `/opt/incudal`。
+- 解压 MastaIncus 到 `/opt/incudal`。
 - 执行 Prisma migration 和 Prisma Client 生成。
 - 创建 `incudal` 系统用户和 `incudal-backend` 服务。
 - 创建 OTA、证书、缓存和日志目录。

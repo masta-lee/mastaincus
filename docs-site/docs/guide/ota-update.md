@@ -1,6 +1,6 @@
 ---
 title: 后台 OTA
-description: 使用 GitHub Release、安全校验和原子目录切换更新 PayIncus
+description: 使用 GitHub Release、安全校验和原子目录切换更新 MastaIncus
 ---
 
 # 后台 OTA
@@ -26,6 +26,8 @@ https://admin.example.com/admin/system-update
 ```
 
 ## 更新模式
+
+安装与更新统一使用 [masta-lee/mastaincus](https://github.com/masta-lee/mastaincus) 的[正式发行包](https://github.com/masta-lee/mastaincus/releases)。
 
 默认推荐：
 
