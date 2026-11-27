@@ -1,5 +1,11 @@
 # mastaincus 仓库替代与原正式资产迁移
 
+第二批ca11550a9065f0bdbf4c6bc96a7fcc29bf9ba9bb已推main/工作分支。完整预览45945358636已自然success，17项必需任务全部success，两架构新装及十项原worker clean/migrated/rollback全部通过，Release按无tag预览skipped。原两项current rollback流程已由此次真实同提交回归覆盖；实际双包独立核验仍在进行。[完整预览](https://github.com/masta-lee/mastaincus/actions/runs/45945358636)
+
+对应普通CI45945354423已终态28success/1failure，唯一失败为NativeSystemdPolicy测试对目录首文件的固定假设。日志中的JSON来自第一份故障证据，产品repair按path.name绑定expected/name/file正确；之前“脚本变成JSON”的初步描述已纠正。原ca在systemctl先枚举时自然0、policy.json先时精确复现b'{"versi'与b'#!/usr/'误比。测试仅此方法改为按first.name校验对应prefix/token/hash/size/mode，并覆盖两种顺序及完整二文件证据、同inode续接和durable ready。候选两顺序完整NativeSystemdPolicy各14/14，新完整Linux root模块209/209/0skip自然exit0，原B/PG88982/boot/服务/包库/隔离相同，临时目录及旧r1自有进程清理已核。源SHA763ec69524de9759ee34ef4e3d75452c97d4219075ff95ecb45ebb931dc3eda0，完整日志SHA b61658f98d9b36ea3a4b28270cb9058543c290846190432d4380ccbb43382ff5。原r1外层观察预算180秒短于原276秒而超时，失败保留；r2仅原完整模块改600秒观察，业务/方法deadline不变。证据logs/source-ci-policy-order-native-20261127-r2-result.log及-r1/-r2-inputs.json。[原普通CI](https://github.com/masta-lee/mastaincus/actions/runs/45945354423)
+
+按owner分批推送要求，先保存这一已验证测试修复，继续新普通CI与实际包核验。内核库存慢读取的精确timeout自动重试及双PG外层协调器分别按新来源验证，尚未因此完成内核启动/回退或真实备份完整恢复。正式新版及最终目标主控热更新仍待全部相关验收。
+
 启动取证批次6399ccea26d27648da94fba289ca68bbb9cf9db6已推main和工作分支。普通CI45941186540已自然终态27success/2failure；两失败分别为安全恢复测试非root/Python3.12的文件属性模型漏适配，以及Ubuntu runner预装Microsoft APT源403。原失败保留，新最小修复已通过以下专用验收，待下一同来源CI。[普通CI](https://github.com/masta-lee/mastaincus/actions/runs/45941186540)
 
 固定4a包诊断45941189480已自然failure，并取得决定性原生时序。checkpoint12记录同InvocationID864b8191642c4923a6ad76a90720221d、MainPID28984的startup pid28985/code1/status0，单调开始511469935、完成511531286，backend ActiveEnter511549432。随后三次manager reload后checkpoint13保留同InvocationID/PID/两启动时间，却把所有Post执行字段清零；最终原断言失败。观察器exit0/13快照，实际脚本和unit/drop-in文件完整hash保持。真实数据在logs/mastaincus-diag-45941189480-reports.json，全原日志另存且未覆盖。[固定包诊断](https://github.com/masta-lee/mastaincus/actions/runs/45941189480)

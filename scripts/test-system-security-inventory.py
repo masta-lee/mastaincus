@@ -3297,37 +3297,50 @@ class NativeSystemdPolicy(unittest.TestCase):
             self.assertTrue(fixture['journal']['systemdPolicy']['ready']);self.assertTrue(synced)
 
     def test_unready_fixed_prefixes_resume_with_original_failed_bytes_and_durable_ready(self):
-        import json,stat
-        with self.policy_fixture(prepare=False)as fixture:
-            journal=fixture['journal'];proof=journal['systemdPolicy'];token=proof['token'];digest=proof['sourceHash'];root=fixture['source'].parent
-            backup=fixture['security']/('runtime-backup-'+'f'*32);backup.mkdir(mode=0o700);journal['backup']=backup.name;fixture['write'](journal,fixture['security'])
-            expected=module.runtime_systemctl_preparation_files(proof);root.mkdir(mode=0o700)
-            prefixes={'systemctl':expected['systemctl'][0][:137],'policy.json':expected['policy.json'][0][:31]}
-            for name,data in prefixes.items():(root/name).write_bytes(data);(root/name).chmod(0o644 if name=='systemctl'else 0o600)
-            (root/'policy.lock').write_bytes(b'');(root/'policy.lock').chmod(0o600)
-            original_write=os.write;partial=[False]
-            def interrupted(fd,data):
-                if '/policy-failures/'in os.readlink('/proc/self/fd/'+str(fd)):
-                    if partial[0]:raise OSError('private evidence copy interrupted')
-                    partial[0]=True;return original_write(fd,data[:7])
-                return original_write(fd,data)
-            with patch.object(module.os,'write',side_effect=interrupted),self.assertRaises(OSError):module.ensure_runtime_systemctl_policy(journal)
-            self.assertNotIn('ready',proof);self.assertEqual((root/'systemctl').read_bytes(),prefixes['systemctl'])
-            first=journal['policyPreparationFailures'][0];stored=backup/'policy-failures'/first['file'];inode=stored.stat().st_ino;self.assertEqual(stored.read_bytes(),prefixes['systemctl'][:7])
-            synced=[];sync=os.fsync;write=module.write_runtime_maintenance
-            def fsync(fd):
-                if stat.S_ISDIR(os.fstat(fd).st_mode):synced.append(os.readlink('/proc/self/fd/'+str(fd)))
-                return sync(fd)
-            def durable(value,*args,**kwargs):
-                if value['systemdPolicy'].get('ready'):self.assertIn(str(root),synced)
-                return write(value,*args,**kwargs)
-            with patch.object(module.os,'fsync',side_effect=fsync),patch.object(module,'write_runtime_maintenance',side_effect=durable),patch.object(module,'command')as command:module.ensure_runtime_systemctl_policy(journal)
-            command.assert_not_called();self.assertTrue(proof['ready']);self.assertEqual(proof['token'],token);self.assertEqual(proof['sourceHash'],digest);self.assertEqual(stored.stat().st_ino,inode)
-            self.assertEqual(len(journal['policyPreparationFailures']),2)
-            for name,(data,mode)in expected.items():self.assertEqual((root/name).read_bytes(),data);self.assertEqual(stat.S_IMODE((root/name).stat().st_mode),mode)
-            for failure in journal['policyPreparationFailures']:self.assertEqual((backup/'policy-failures'/failure['file']).read_bytes(),prefixes[failure['name']])
-            persisted=json.loads((fixture['security']/'runtime-maintenance.json').read_bytes());self.assertEqual(persisted,journal)
-            module.runtime_backup_evidence(backup,journal);self.assertEqual(module.read_runtime_systemctl_policy(proof)['actions'],[])
+        import hashlib,json,stat
+        original_iterdir=type(pathlib.Path()).iterdir
+        for first_name in ['systemctl','policy.json']:
+            with self.subTest(firstFile=first_name),self.policy_fixture(prepare=False)as fixture:
+                journal=fixture['journal'];proof=journal['systemdPolicy'];token=proof['token'];digest=proof['sourceHash'];root=fixture['source'].parent
+                backup=fixture['security']/('runtime-backup-'+'f'*32);backup.mkdir(mode=0o700);journal['backup']=backup.name;fixture['write'](journal,fixture['security'])
+                expected=module.runtime_systemctl_preparation_files(proof);root.mkdir(mode=0o700)
+                prefixes={'systemctl':expected['systemctl'][0][:137],'policy.json':expected['policy.json'][0][:31]}
+                for name,data in prefixes.items():(root/name).write_bytes(data);(root/name).chmod(0o644 if name=='systemctl'else 0o600)
+                (root/'policy.lock').write_bytes(b'');(root/'policy.lock').chmod(0o600)
+                def ordered(directory):
+                    entries=list(original_iterdir(directory))
+                    if directory==root:entries.sort(key=lambda item:(item.name!=first_name,item.name))
+                    return iter(entries)
+                # Directory enumeration may yield either incomplete file first.
+                # Each recorded failure must retain its own named original bytes.
+                with patch.object(type(root),'iterdir',new=ordered):
+                    original_write=os.write;partial=[False]
+                    def interrupted(fd,data):
+                        if '/policy-failures/'in os.readlink('/proc/self/fd/'+str(fd)):
+                            if partial[0]:raise OSError('private evidence copy interrupted')
+                            partial[0]=True;return original_write(fd,data[:7])
+                        return original_write(fd,data)
+                    with patch.object(module.os,'write',side_effect=interrupted),self.assertRaises(OSError):module.ensure_runtime_systemctl_policy(journal)
+                    self.assertNotIn('ready',proof)
+                    for name,data in prefixes.items():self.assertEqual((root/name).read_bytes(),data)
+                    first=journal['policyPreparationFailures'][0];self.assertIn(first['name'],prefixes)
+                    original=prefixes[first['name']];stored=backup/'policy-failures'/first['file'];inode=stored.stat().st_ino
+                    self.assertEqual(first['token'],token);self.assertEqual(first['sha256'],hashlib.sha256(original).hexdigest());self.assertEqual(first['size'],len(original))
+                    self.assertEqual(first['mode'],0o644 if first['name']=='systemctl'else 0o600);self.assertEqual(stored.read_bytes(),original[:7])
+                    synced=[];sync=os.fsync;write=module.write_runtime_maintenance
+                    def fsync(fd):
+                        if stat.S_ISDIR(os.fstat(fd).st_mode):synced.append(os.readlink('/proc/self/fd/'+str(fd)))
+                        return sync(fd)
+                    def durable(value,*args,**kwargs):
+                        if value['systemdPolicy'].get('ready'):self.assertIn(str(root),synced)
+                        return write(value,*args,**kwargs)
+                    with patch.object(module.os,'fsync',side_effect=fsync),patch.object(module,'write_runtime_maintenance',side_effect=durable),patch.object(module,'command')as command:module.ensure_runtime_systemctl_policy(journal)
+                    command.assert_not_called();self.assertTrue(proof['ready']);self.assertEqual(proof['token'],token);self.assertEqual(proof['sourceHash'],digest);self.assertEqual(stored.stat().st_ino,inode)
+                    self.assertEqual(len(journal['policyPreparationFailures']),2)
+                    for name,(data,mode)in expected.items():self.assertEqual((root/name).read_bytes(),data);self.assertEqual(stat.S_IMODE((root/name).stat().st_mode),mode)
+                    for failure in journal['policyPreparationFailures']:self.assertEqual((backup/'policy-failures'/failure['file']).read_bytes(),prefixes[failure['name']])
+                    persisted=json.loads((fixture['security']/'runtime-maintenance.json').read_bytes());self.assertEqual(persisted,journal)
+                    module.runtime_backup_evidence(backup,journal);self.assertEqual(module.read_runtime_systemctl_policy(proof)['actions'],[])
 
     def test_ready_flag_removed_cannot_reset_a_recorded_action_rejection_or_third_content(self):
         for kind in ['action','rejected','third']:
