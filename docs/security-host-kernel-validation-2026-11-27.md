@@ -2,6 +2,8 @@
 
 日期：2026-11-27。本文记录本轮源码和隔离验证；真实双架构启动、回滚及生产自动启用仍需后续验收。
 
+本批源码 `287c8527ce525be5d05b33d11f54c81a3c37d0e6` 已推 main 与工作分支。普通 CI `45990216078` 最终 30 项全部成功，独立 SSH 安全 `45990216229` 最终 9 项全部成功，完整预览 `45990416441` 最终 17 项必需任务全部成功，Release 预期 skipped。两个实际包独立下载／核心核验／完整归档复核均自然退出 0：AMD64 221404411 字节、SHA256 `380b705455cf49da04a16cf596b905b306043485483ee8c2eaa7eaec65335224`；ARM64 220466278 字节、SHA256 `677f89f23b65ec08036898ae26af6bcb8b716ed9bbe426a8119145d3debe8bff`。原 Ed25519、四类拒绝对照、321 份完整源码、root 权限、全部链接／祖先、ZIP CRC 与 gzip 尾块通过；6f32／6188／a101 在两包精确匹配，每架构仅下载一次。报告 `logs/mastaincus-preview-287c8527-artifacts/AUDIT_SUMMARY.md`。
+
 ## 修复
 
 已认证的 Alpine LTS APK 还包含 `/boot/config-<release>`、`/boot/System.map-<release>` 与 `/usr/share/kernel/<flavor>/kernel.release`。旧解析器拒绝这些成员。新解析器只接受同一内核 flavor/release 的三条固定路径；`kernel.release` 的大小、完整 SHA256 和内容必须对应候选 release 加换行。原 APK 签名、datahash、路径、属主、权限和其它成员检查保持。
@@ -38,5 +40,11 @@ Linux r6 和最终通道 r5 均在原隔离 B 的具名临时目录运行，原 
 - 原真实 LTS 包解析的 3797 个成员通过，只证明该已认证包格式。新的 AMD64／ARM64 实际启动、回滚、旧内核保留和自动许可尚需完成。
 - 双 PostgreSQL 实际 worker 矩阵、真实 Debian 13/glibc 2.41 系统资格和新的主控备份本机完整模拟恢复仍需完成。最后才按原可信 worker 热更新主控、验证并正式发版。
 - PG 两次实际启动已分别暴露旧 QEMU `-drive serial` 参数和测试 runtime 缺少 `bios-256k.bin`。参数已修，固件依赖仍在准备可信来源及严格派生预检；两轮均确认只停止本次 QEMU，原盘、seed、B 和本机 PG 保护保持，未完成矩阵。
+
+真实 H/D 首轮在测试 wrapper 的二次 100 KiB 输入绑定处拒绝，尚未启动 QEMU。新 wrapper 仅对该固定 kernel 核完整 SHA／108363 字节，执行原 main 的全部绑定阶段后在 QEMU 创建前停止的四组 old/new 对照通过。沿用两份未启动的 overlay 后，原 6.18.58 内核与原 SSH pin 实际启动成功；第二轮在测试 helper 的 `plan.sources` 循环再次使用默认 100 KiB 而拒绝，未确认任何 APK／GRUB／候选内核操作成功。两轮失败、停机和原 prepared 证据保留；接续已启动的数据不得再标成未启动或重跑旧 prepare。
+
+复审漏点是只核了带 kernel 字面量的读取，未覆盖通用循环和 launcher/helper 二次读取。后续先枚举 prepare→wrapper→guest/helper→flow 全部受限读者，对固定路径、SHA 与完整字节用同一受限规则；测试完整安全 module-load 与所有 `plan.sources`，在 APK／GRUB 写入前确认实际新源通过，再进入真实启动。新增 pending guard 的可执行源码须来自已核 bytes／FD，不能先核路径再重开执行。该测试工具问题与已经通过的产品源码／CI／包分别记录。
+
+备份版本只读审查确认 `manifest.version` 取实际 `version.json`，候选版要求完全同版；最后保存的生产证据是 `test.a241daf`，`test.994fff2` 只是历史。旧原备份只能先在同版原签名包恢复并核身份／财务／保护，再实测原 worker 升级到新签名候选。验证新恢复代码需从这个隔离升级后数据集生成真正同候选备份，再同源恢复；不改原备份 manifest，不把这份派生备份称新生产快照。最终候选可用 branch 的 `workflow_dispatch tag=v1.8.14-test.<7hex>` 生成测试资产，Release 仅在 `refs/tags/v` 时发布；不必提前发行或操作生产以绕过版本门禁。
 
 最新已完成的前一批 `eca80074366852a5113752989cabf4077dbf3902`：普通 CI 45967552390 的 30 项与完整双架构预览 45968108311 的 17 项必需任务均最终成功，Release 预期 skipped。两实际包独立签名、321 份固定源码、权限、全部链接、ZIP CRC 与 gzip 尾块通过；包内为该提交的 `21a349…` 模板，不能把本轮尚未发行的 metadata 修复归入旧包。
