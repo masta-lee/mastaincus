@@ -10,7 +10,7 @@ import { openPromise } from 'yauzl'
 import { BackupError, normalizeConfig, openSecret, sealSecret, publicConfig, recoveryRequestAllowed, validatePrefix, nextScheduledTime } from '../src/services/platform-backup-core.js'
 import { decryptBackup, encryptBackup, hashFile, validAssetName, validateManifest } from '../src/services/platform-backup-archive.js'
 import { AliyunOssClient, sanitizedOssError } from '../src/services/aliyun-oss-client.js'
-import { assertDatabaseIntegrity, normalizedDumpHash, normalizePublicSchemaPrologue, publicSchemaFingerprint, restoreDumpToolchainHeader, databaseToolFailure, type DatabaseIntegrity } from '../src/services/platform-backup-database.js'
+import { assertDatabaseIntegrity, normalizedDumpHash, normalizePublicSchemaPrologue, publicSchemaFingerprint, restoreDumpToolchainHeader, databaseToolFailure, restoredLargeObjectOwnershipSql, type DatabaseIntegrity } from '../src/services/platform-backup-database.js'
 import { createReadableZip, readableZipName, verifyReadableZip } from '../src/services/platform-backup-readable.js'
 import { waitForProtectedBackendHealth, waitForRestoredAgentHeartbeats } from '../src/services/platform-backup-health.js'
 import { retainGatewayEndpoints, reconcileArchivedGatewayPeers } from '../src/services/platform-backup-gateway.js'
@@ -584,6 +584,22 @@ try {
   assert.ok(source.indexOf("await client.upload(") < source.indexOf('await client.retain('), 'retention must follow verified upload')
   assert.ok(source.indexOf('await verifyDatabaseBackup(') < source.indexOf('await encryptBackup('), 'a backup must restore and match every source table before encryption or publication')
   const databaseSource = await readFile(resolve(import.meta.dirname, '../src/services/platform-backup-database.ts'), 'utf8')
+  const loTarget='incudal_restore_'+'a'.repeat(32),loSql=restoredLargeObjectOwnershipSql(loTarget,'incudal')
+  assert.ok(loSql.startsWith(`\\connect "${loTarget}"\nBEGIN;\nSET LOCAL search_path = pg_catalog;`),'LO authorization runs only in the exact staging database, under one local-peer transaction')
+  for(const target of ['incudal','postgres','incudal_restore_'+'a'.repeat(31),'incudal_restore_'+'a'.repeat(32)+'\n','incudal_restore_'+'a'.repeat(32)+';DROP DATABASE incudal'])
+    assert.throws(()=>restoredLargeObjectOwnershipSql(target,'incudal'),/OSS_DATABASE_LO_RESTORE_SCOPE_INVALID/)
+  for(const role of ['postgres','incudal_migrate','other_application','incudal\n','incudal;GRANT'])
+    assert.throws(()=>restoredLargeObjectOwnershipSql(loTarget,role),/OSS_DATABASE_LO_RESTORE_SCOPE_INVALID/)
+  assert.ok(loSql.includes('datdba=migration_id')&&loSql.includes('pg_auth_members WHERE member IN (runtime_id,migration_id) OR roleid IN (runtime_id,migration_id)')&&
+    loSql.includes('rolsuper OR rolcreatedb OR rolcreaterole OR rolreplication OR rolbypassrls'),'unknown database ownership, elevated roles and either direction of membership cannot acquire LO rights')
+  assert.ok(loSql.includes('m.lomowner NOT IN (runtime_id,migration_id)')&&loSql.includes('a.grantee NOT IN (runtime_id,migration_id)')&&
+    loSql.indexOf('OSS_DATABASE_LO_RESTORE_AUTHORIZATION_INVALID')<loSql.indexOf('ALTER LARGE OBJECT'),'all unknown LO owners/ACLs are rejected before the first ownership write')
+  assert.ok(loSql.includes('SELECT oid,lomowner FROM pg_largeobject_metadata ORDER BY oid')&&loSql.includes("GRANT SELECT,UPDATE ON LARGE OBJECT %s TO %I"),'zero-page objects are included and native read/write/delete capability is mapped by original OID')
+  assert.ok(!/REASSIGN OWNED|SECURITY DEFINER|lo_compat_privileges|GRANT.*(?:pg_largeobject|incudal_migrate TO)|lo_create\(|lo_unlink\(/i.test(loSql),'mapping must not elevate roles, bypass permissions, grant catalogs or recreate/delete original data')
+  const databasePreparation=await readFile(resolve(import.meta.dirname,'../../scripts/harden-database.py'),'utf8')
+  assert.ok(databasePreparation.includes("s.classid='pg_catalog.pg_largeobject'::regclass AND s.objsubid=0")&&
+    databasePreparation.includes('m.oid=s.objid AND m.lomowner=s.refobjid')&&databasePreparation.includes('s.dbid=(SELECT oid FROM pg_database WHERE datname=current_database())'),
+    'hardening exempts only an existing runtime-owned LO in this database; every other ownership boundary remains strict')
   const dumpSource = databaseSource.slice(databaseSource.indexOf('export async function dumpDatabase('), databaseSource.indexOf('export async function restoreDatabase('))
   assert.ok(dumpSource.includes('--snapshot=') && dumpSource.includes('--large-objects') && !dumpSource.includes('--no-privileges') && !dumpSource.includes('--no-owner'), 'full dump must preserve ownership, grants and large objects under the shared snapshot')
   assert.ok(databaseSource.includes('--globals-only') && databaseSource.includes('OSS_DATABASE_FOREIGN_TABLE_UNSUPPORTED'), 'cluster authorization must be archived and silently omitted foreign data rejected')
@@ -620,6 +636,13 @@ try {
   const freshInstall = await readFile(resolve(import.meta.dirname, '../../scripts/smoke-fresh-install.sh'), 'utf8')
   assert.ok(freshInstall.includes('RUN_BACKUP_COMPATIBILITY_DRILL=1') && freshInstall.includes('smoke-platform-backup-compatibility.mjs'), 'both release architectures must run isolated migration compatibility acceptance')
   const recoveryDrill = await readFile(resolve(import.meta.dirname, '../../scripts/smoke-platform-backup.mjs'), 'utf8')
+  assert.ok(recoveryDrill.includes('const largeObjects=await createLargeObjectFixture()')&&
+    recoveryDrill.includes('await verifyRestoredLargeObjects(largeObjects,true)')&&recoveryDrill.includes('SELECT lo_put($1::oid,0,$2::bytea)')&&
+    recoveryDrill.includes('SELECT lo_unlink($1::oid) AS removed')&&recoveryDrill.includes("largeObjectState(preservedSource,fixture)"),
+    'real release drill must preserve multi/zero-page OIDs/data, exercise native runtime CRUD and keep the source database unchanged')
+  assert.ok(recoveryDrill.includes('if(core.recoveryHeld()){')&&recoveryDrill.includes('mutations wait for actual resume')&&
+    recoveryDrill.includes('CREATE TABLE public.${probe}(id integer)')&&recoveryDrill.includes('SET ROLE incudal_migrate'),
+    'LO regression keeps protection intact and checks that native data ownership does not restore DDL or role access')
   assert.ok(recoveryDrill.includes('await verifyBackupLocaleDrill()') && recoveryDrill.includes('await ensureBackupLocales([name])') &&
     recoveryDrill.includes('archiveRejected') && recoveryDrill.includes('noRestart:true'),
     'both release architectures must exercise archive-only new locales against the unchanged real postmaster')

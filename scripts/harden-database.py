@@ -100,7 +100,11 @@ DO $ownership$ DECLARE item record; BEGIN
   ALTER SCHEMA public OWNER TO incudal_migrate;
   IF EXISTS(SELECT 1 FROM pg_shdepend s WHERE s.refclassid='pg_authid'::regclass
     AND s.refobjid=(SELECT oid FROM pg_roles WHERE rolname='incudal')
-    AND s.dbid=(SELECT oid FROM pg_database WHERE datname=current_database()) AND s.deptype='o') THEN
+    AND s.dbid=(SELECT oid FROM pg_database WHERE datname=current_database()) AND s.deptype='o'
+    -- Large objects are runtime-owned application data: native lo_unlink
+    -- requires their ownership. No schema, table, routine or shared owner is exempt.
+    AND NOT (s.classid='pg_catalog.pg_largeobject'::regclass AND s.objsubid=0
+      AND EXISTS(SELECT 1 FROM pg_catalog.pg_largeobject_metadata m WHERE m.oid=s.objid AND m.lomowner=s.refobjid))) THEN
     RAISE EXCEPTION 'DATABASE_LOCAL_OWNERSHIP_UNSUPPORTED';
   END IF;
 END $ownership$;

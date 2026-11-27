@@ -178,6 +178,68 @@ async function verifyBackupLocaleDrill() {
     console.log('Backup locale running-postmaster regression passed',JSON.stringify({archiveRejected,standalone:true,exactCollation:true,noRestart:true,idempotent:true}))
   } finally { if(exists)await localDatabaseAdmin(`DROP DATABASE ${quoted};`) }
 }
+async function largeObjectState(database, fixture) {
+  assert.ok(database==='incudal'||database===preservedSource,'LO evidence is confined to this drill source/destination')
+  const ids=[fixture.large,fixture.empty];assert.ok(ids.every(value=>/^[0-9]+$/.test(value)))
+  const output=await localDatabaseAdmin(`\\connect ${quoteIdentifier(database)}
+BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY;
+SELECT json_build_object('metadata',(SELECT coalesce(json_agg(json_build_array(oid::text,pg_get_userbyid(lomowner),lomacl::text) ORDER BY oid),'[]') FROM pg_largeobject_metadata WHERE oid IN (${ids.join(',')})),
+  'pages',(SELECT coalesce(json_agg(json_build_array(loid::text,pageno,encode(sha256(data),'hex')) ORDER BY loid,pageno),'[]') FROM pg_largeobject WHERE loid IN (${ids.join(',')})));
+COMMIT;`)
+  const records=output.split(/\r?\n/).filter(line=>line.startsWith('{'))
+  assert.equal(records.length,1);return JSON.parse(records[0])
+}
+const largeObjectRoles=()=>pgQuery(`SELECT rolname,rolsuper,rolcreatedb,rolcreaterole,rolreplication,rolbypassrls,
+  (SELECT count(*)::int FROM pg_auth_members WHERE member=r.oid OR roleid=r.oid) memberships FROM pg_roles r
+  WHERE rolname IN ('incudal','incudal_migrate') ORDER BY rolname`)
+async function createLargeObjectFixture() {
+  assert.equal((await pgQuery('SELECT count(*)::int AS count FROM pg_largeobject_metadata'))[0].count,0,'empty fixture database required before creating LO data')
+  const data=Buffer.from(Array.from({length:8193},(_,index)=>index%256))
+  const [{id:large}]=await pgQuery('SELECT lo_from_bytea(0,$1::bytea)::text AS id',[data])
+  const [{id:empty}]=await pgQuery('SELECT lo_create(0)::text AS id')
+  const fixture={large,empty,data,roles:await largeObjectRoles()}
+  fixture.source=await largeObjectState('incudal',fixture)
+  assert.ok(fixture.source.pages.filter(row=>row[0]===large).length>1,'real multi-page large object required')
+  assert.equal(fixture.source.pages.filter(row=>row[0]===empty).length,0,'zero-page object retains a separate metadata OID')
+  assert.deepEqual(fixture.source.metadata.map(row=>row[0]),[large,empty].sort((a,b)=>Number(a)-Number(b)))
+  return fixture
+}
+async function verifyRestoredLargeObjects(fixture, verifyHardening=false) {
+  const before=await largeObjectState('incudal',fixture)
+  assert.deepEqual(before.pages,fixture.source.pages,'all original LO page numbers and content hashes survive restore')
+  assert.deepEqual(before.metadata.map(row=>row[0]),fixture.source.metadata.map(row=>row[0]),'original multi/zero-page LO OIDs survive restore')
+  assert.ok(before.metadata.every(row=>row[1]==='incudal'),'only the runtime owns restored LO application data')
+  if(verifyHardening){
+    assert.equal(core.recoveryHeld(),false,'repeat hardening is tested after real recovery protection is cleared')
+    for(let repeat=0;repeat<2;repeat++)await exec('/usr/bin/python3',['-I','-B','/opt/incudal/scripts/harden-database.py'],
+      {timeout:180000,env:{...process.env,NODE_OPTIONS:'',NODE_PATH:''}})
+    assert.deepEqual(await largeObjectState('incudal',fixture),before,'repeated role hardening keeps LO data, OIDs and runtime ownership')
+  }
+  const roles=await largeObjectRoles();assert.deepEqual(roles,fixture.roles,'LO mapping cannot alter role flags or memberships')
+  assert.equal(roles.length,2)
+  for(const role of roles)assert.ok(!role.rolsuper&&!role.rolcreatedb&&!role.rolcreaterole&&!role.rolreplication&&!role.rolbypassrls&&role.memberships===0)
+  const [{actor}]=await pgQuery('SELECT current_user::text AS actor');assert.equal(actor,'incudal')
+  const [{outside}]=await pgQuery(`SELECT count(*)::int AS outside FROM pg_largeobject_metadata m
+    CROSS JOIN LATERAL aclexplode(m.lomacl) a WHERE m.oid=ANY($1::oid[]) AND (a.grantee<>m.lomowner OR a.grantor<>m.lomowner)`,[[fixture.large,fixture.empty]])
+  assert.equal(outside,0,'restored LOs grant nothing to PUBLIC or other roles')
+  assert.deepEqual((await pgQuery('SELECT lo_get($1::oid) AS data',[fixture.large]))[0].data,fixture.data,'authenticated low-privilege runtime reads restored binary data')
+  assert.deepEqual((await pgQuery('SELECT lo_get($1::oid) AS data',[fixture.empty]))[0].data,Buffer.alloc(0))
+  const probe=quoteIdentifier('lo_ddl_'+randomUUID().replaceAll('-',''))
+  for(const sql of [`CREATE TABLE public.${probe}(id integer)`,`CREATE SCHEMA ${probe}`,'SET ROLE incudal_migrate'])
+    await assert.rejects(pgQuery(sql),error=>error.code==='42501','LO data ownership must not restore DDL or migration-role access')
+  if(core.recoveryHeld()){
+    assert.deepEqual(await largeObjectState(preservedSource,fixture),fixture.source,'protected restore leaves the preserved source database unchanged')
+    console.log('PASS protected restored LO: original multi/zero-page OIDs, pages and readable data, no outside ACL/DDL/role access; mutations wait for actual resume')
+    return
+  }
+  const patch=Buffer.from([0xa1,0xb2,0xc3,0xd4])
+  await pgQuery('SELECT lo_put($1::oid,0,$2::bytea)',[fixture.large,patch])
+  assert.deepEqual((await pgQuery('SELECT lo_get($1::oid,0,4) AS data',[fixture.large]))[0].data,patch,'runtime native write is retained')
+  for(const id of [fixture.empty,fixture.large])assert.equal((await pgQuery('SELECT lo_unlink($1::oid) AS removed',[id]))[0].removed,1,'runtime native unlink is retained')
+  assert.equal((await largeObjectState('incudal',fixture)).metadata.length,0)
+  assert.deepEqual(await largeObjectState(preservedSource,fixture),fixture.source,'runtime reads/writes/unlinks on the destination cannot change the preserved source database')
+  console.log('PASS restored LO: original multi/zero-page OIDs and pages, authenticated runtime native read/write/unlink, no DDL/role elevation, preserved source database unchanged')
+}
 try {
   for (const entry of ['user', 'admin']) {
     assert.equal(await readFile(`/opt/incudal/client/dist/${entry}/recovery/payincus-recovery.py`, 'utf8'), await readFile('/opt/incudal/scripts/platform-backup-recovery.py', 'utf8'))
@@ -188,6 +250,9 @@ try {
   await exec('/usr/bin/sudo', ['-u', 'incudal', 'test', '-w', '/var/lib/incudal-backup/inbox'])
   await assert.rejects(exec('/usr/bin/sudo', ['-u', 'incudal', 'test', '-r', '/var/lib/incudal-backup/private']))
   await verifyBackupLocaleDrill()
+  const [{hosts:loHosts,instances:loInstances}]=await pgQuery('SELECT (SELECT count(*)::int FROM hosts) hosts,(SELECT count(*)::int FROM instances) instances')
+  assert.equal(loHosts,0);assert.equal(loInstances,0,'LO recovery regression uses only the empty disposable installation')
+  const largeObjects=await createLargeObjectFixture()
   const key = `backup_drill_${randomUUID()}`
   await secured.prisma.systemConfig.create({data:{key,value:'snapshot',type:'string'}})
   const backup = await task('backup')
@@ -234,6 +299,7 @@ try {
   assert.equal((await readFile('/sys/class/net/incudal-mgmt/ifindex', 'utf8')).trim(), gatewayIfindex, 'same-controller recovery must not recreate the management interface')
   assert.equal((await exec('/usr/bin/wg', ['show', 'incudal-mgmt', 'endpoints'])).stdout, gatewayEndpoints, 'same-controller recovery must preserve learned peer endpoints')
   await health(true)
+  await verifyRestoredLargeObjects(largeObjects)
   assert.equal((await pgQuery('SELECT value FROM system_configs WHERE key=$1', [key]))[0].value, 'snapshot')
   assert.equal(core.openSecret((await core.readBackupConfig()).backupPassword), password)
   assert.ok(process.env.ENCRYPTION_KEY === initialEnv.ENCRYPTION_KEY, 'restoration retains the authenticated source encryption key')
@@ -323,6 +389,7 @@ try {
   }
   assert.ok(complete, 'snapshot recovery must finish through installed automatic review and root resume')
   await health(false)
+  await verifyRestoredLargeObjects(largeObjects,true)
   assert.equal((await pgQuery('SELECT value FROM system_configs WHERE key=$1', [key]))[0].value, 'snapshot')
   assert.equal(createHash('sha256').update(await readFile(`${controllerRoot}/signing.pem`)).digest('hex'), controllerKeyBefore)
   assert.equal(await readFile(`${controllerRoot}/identity.json`, 'utf8'), controllerIdentityBefore)

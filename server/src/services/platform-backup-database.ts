@@ -120,9 +120,54 @@ export async function restoreDatabase(source: string, target: string) {
   await pgProcess('pg_restore', ['--dbname', target, '--no-owner', '--no-privileges', '--exit-on-error', '--single-transaction'], target, source)
   await grantRestoredRuntime(target)
 }
+export function restoredLargeObjectOwnershipSql(target: string, runtime: string): string {
+  ensure(typeof target==='string' && /^incudal_(check|restore|verify)_[a-f0-9]{32}$/.test(target) && !/[\r\n]/.test(target) && runtime === 'incudal', 'OSS_DATABASE_LO_RESTORE_SCOPE_INVALID', 409)
+  // Native lo_unlink requires ownership, not SELECT/UPDATE grants. Only these
+  // restored data objects belong to the runtime; schema/DDL owners stay separate.
+  return `\\connect ${quoteIdentifier(target)}
+BEGIN;
+SET LOCAL search_path = pg_catalog;
+DO $incudal_lo_ownership$ DECLARE runtime_id oid; migration_id oid; item record; BEGIN
+  SELECT oid INTO runtime_id FROM pg_roles WHERE rolname='incudal' AND rolcanlogin
+    AND NOT (rolsuper OR rolcreatedb OR rolcreaterole OR rolreplication OR rolbypassrls);
+  SELECT oid INTO migration_id FROM pg_roles WHERE rolname='incudal_migrate' AND rolcanlogin
+    AND NOT (rolsuper OR rolcreatedb OR rolcreaterole OR rolreplication OR rolbypassrls);
+  IF current_database()<>${quoteLiteral(target)} OR runtime_id IS NULL OR migration_id IS NULL
+    OR NOT EXISTS(SELECT 1 FROM pg_database WHERE datname=current_database() AND datdba=migration_id)
+    OR EXISTS(SELECT 1 FROM pg_auth_members WHERE member IN (runtime_id,migration_id) OR roleid IN (runtime_id,migration_id)) THEN
+    RAISE EXCEPTION 'OSS_DATABASE_LO_RESTORE_SCOPE_INVALID';
+  END IF;
+  IF EXISTS(SELECT 1 FROM pg_largeobject_metadata m WHERE m.lomowner NOT IN (runtime_id,migration_id)
+    OR EXISTS(SELECT 1 FROM aclexplode(m.lomacl) a WHERE a.grantor NOT IN (runtime_id,migration_id)
+      OR a.grantee NOT IN (runtime_id,migration_id))) THEN
+    RAISE EXCEPTION 'OSS_DATABASE_LO_RESTORE_AUTHORIZATION_INVALID';
+  END IF;
+  FOR item IN SELECT oid,lomowner FROM pg_largeobject_metadata ORDER BY oid LOOP
+    IF item.lomowner<>runtime_id THEN
+      EXECUTE format('ALTER LARGE OBJECT %s OWNER TO %I',item.oid,'incudal');
+    END IF;
+    EXECUTE format('GRANT SELECT,UPDATE ON LARGE OBJECT %s TO %I',item.oid,'incudal');
+  END LOOP;
+  IF EXISTS(SELECT 1 FROM pg_largeobject_metadata m WHERE m.lomowner<>runtime_id
+    OR NOT EXISTS(SELECT 1 FROM aclexplode(COALESCE(m.lomacl,acldefault('L',m.lomowner))) a WHERE a.grantee=runtime_id AND a.privilege_type='SELECT')
+    OR NOT EXISTS(SELECT 1 FROM aclexplode(COALESCE(m.lomacl,acldefault('L',m.lomowner))) a WHERE a.grantee=runtime_id AND a.privilege_type='UPDATE')
+    OR EXISTS(SELECT 1 FROM aclexplode(m.lomacl) a WHERE a.grantor<>runtime_id OR a.grantee<>runtime_id)) THEN
+    RAISE EXCEPTION 'OSS_DATABASE_LO_RESTORE_AUTHORIZATION_INVALID';
+  END IF;
+END $incudal_lo_ownership$;
+COMMIT;
+`
+}
 async function grantRestoredRuntime(target: string) {
   ensure(/^incudal_(check|restore|verify)_[a-f0-9]{32}$/.test(target), 'OSS_DATABASE_INVALID')
-  const user=quoteIdentifier(postgresConnection().user)
+  const connection=postgresConnection()
+  const [objects]=await pgQuery<{present:boolean}>('SELECT EXISTS(SELECT 1 FROM pg_catalog.pg_largeobject_metadata) AS present',[],target)
+  ensure(typeof objects?.present==='boolean','OSS_DATABASE_LO_RESTORE_SCOPE_INVALID',409)
+  if(objects.present){
+    ensure(connection.database==='incudal'&&connection.user==='incudal','OSS_DATABASE_LO_RESTORE_SCOPE_INVALID',409)
+    await localDatabaseAdmin(restoredLargeObjectOwnershipSql(target,connection.user))
+  }
+  const user=quoteIdentifier(connection.user)
   const sql=`REVOKE ALL ON DATABASE ${quoteIdentifier(target)} FROM PUBLIC; REVOKE CREATE,TEMPORARY ON DATABASE ${quoteIdentifier(target)} FROM ${user}; GRANT CONNECT ON DATABASE ${quoteIdentifier(target)} TO ${user};
     DO $incudal_grants$ DECLARE n record; role_name text:=${quoteLiteral(postgresConnection().user)}; BEGIN FOR n IN SELECT nspname FROM pg_namespace WHERE nspname !~ '^pg_' AND nspname<>'information_schema' LOOP
       EXECUTE format('REVOKE CREATE ON SCHEMA %I FROM PUBLIC,%I',n.nspname,role_name);
