@@ -1,5 +1,11 @@
 # mastaincus 仓库替代与原正式资产迁移
 
+第五批已提交推送为 `986fe81cd63c9b88aee128833428defd5bd1b036`，远端 main 与工作分支完整 SHA 相同。[普通 CI](https://github.com/masta-lee/mastaincus/actions/runs/45956468567)已最终成功、30 项全部通过；[完整双架构预览](https://github.com/masta-lee/mastaincus/actions/runs/45956521774)已最终成功、17 项必需任务全部通过，Release 预期 skipped。AMD64、ARM64 两项 current rollback 的新 job `140368587558`、`140368587519` 均成功，原 933 两项权限失败由本次同来源真实流程回归覆盖。
+
+986 实际双包完整独核也已自然退出 0：AMD64 221397774 字节、SHA256 `9110330ad7a31b97b8eff0a280b84b4ba9362e0f707ab72fd41cdbbccea14f77`；ARM64 220460812 字节、SHA256 `348675d86ee9b4c4b0e840c5b147e60e29770926601c5821f357ad6e6dbaf3f4`。API ZIP 摘要、成员 CRC、原 Ed25519 及四种拒绝对照、321 份固定源码、root 权限、所有实际链接解析和 gzip 尾块全部通过。两包 kernel 模板仍为完整 `68aef3317b18574cbc28bfadcbca43c8be04a7b92a7be14f980b7e2a034ebbd9`，测试专用模块未进入 runtime；每架构只下载一次。结果见 `logs/mastaincus-preview-986fe81c-artifacts/AUDIT_SUMMARY.md`。
+
+进一步回读两项完成日志，观察器各记录 13 份真实快照，两边均完成实际 root 回滚及原 worker 的 duplicate guard。AMD64 最后仍保留原生成功执行状态；ARM64 最后真实归零，同 InvocationID 的保存证据由原核验接受。附加日志分析首次假定两架构最后必然全部归零，被 AMD64 的实际原生成功状态否定，现按两种合法路径分别记录，不造零或放宽判定。记录为 `logs/mastaincus-986fe81c-rollback-observer-analysis.json`，原 job 日志另存，原失败不覆盖。当前完整 CI 与包验收已完成；剩余安全、真实内核/双 PG/新备份完整模拟恢复及最终主控热更新继续，尚未正式发行。
+
 2026-11-27 第五批正在保存：第四批 `933f79362d1e0e7296016901c67e2e946821a605` 的[普通 CI](https://github.com/masta-lee/mastaincus/actions/runs/45949817721)已自然成功，30 项全部通过。[完整预览](https://github.com/masta-lee/mastaincus/actions/runs/45949821213)已自然失败：15 项通过，AMD64、ARM64 两项 current rollback 失败，Release 预期 skipped。
 
 两项失败分别对应 job `140346817504`、`140346817559`，均在 `smoke-legacy-online-upgrade.mjs:95` 的证据文件元数据检查处拒绝。新观察器的外层重定向先于子 shell 内的 `umask 077` 创建文件，实际生成 `0644`，与原守卫要求的 `0600` 不符。修订仅把重定向移到子 shell 内的 `exec`，确保权限掩码先生效；原 root、0600、单链接、O_NOFOLLOW、前后 FD/named 身份和同次成功证据检查不变。独立代码审视、本机仓库守卫和 Bash/JS 语法均通过。原 B 的真实对照自然退出 0，旧写法生成 644、新写法生成 600，root 单链接和父进程 umask 保持；证据为 `logs/mastaincus-startup-observer-umask-control-20261127-result.json`。新来源完整预览仍待，不把本地修订当作这两项已经通过。
