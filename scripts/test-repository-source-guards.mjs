@@ -85,10 +85,15 @@ assert.deepEqual([...pinnedHelpers.matchAll(/'([a-f0-9]{64})'/g)].map(match => m
 ].sort(), 'startup pin updates must follow the exact current helper bytes and original v1.8.13/v1.8.14 helper identity')
 assert.ok(installer.includes('if source.sha not in PINNED_STARTUP_HELPERS:') &&
   installer.includes('if source.sha != source_digest(manifest.raw): refuse()') &&
-  installer.includes('if installed.raw not in (source.raw, converted): refuse()') &&
+  installer.includes('if not retained_secure and installed.raw not in (source.raw, converted): refuse()') &&
   installer.includes('if runtime() != (app, current): refuse()') &&
   rootHelper.includes('  verify_manifest\n  verify_git_control\n'),
   'known exact helpers may normalize during the pre-seal startup transition; unknown helpers, installed bytes, identity and actual root task seals remain guarded')
+assert.ok(installer.includes("CURRENT_SECURE_HELPER = '" + createHash('sha256').update(readFileSync(resolve(root, 'deploy/incudal-online-task.sh.example'))).digest('hex') + "'") &&
+  installer.includes('source.sha == LEGACY_HELPER and installed.sha == CURRENT_SECURE_HELPER') &&
+  installer.includes("secure = hold(HELPERS + '/database-secure-task'") &&
+  installer.includes('secure.sha != CURRENT_SECURE_HELPER or secure.raw != installed.raw'),
+  'a retained security launcher after legacy rollback must require its exact current pin, exact legacy source and protected matching secure copy')
 assert.ok(installer.includes('VERIFIED_LEGACY_DATABASE_PACKAGE=""') &&
   installer.includes('RELEASE_VERIFIED_THIS_RUN=false\n    VERIFIED_LEGACY_DATABASE_PACKAGE=""') &&
   installer.includes('database_migration_mode()') &&

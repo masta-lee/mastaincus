@@ -120,6 +120,8 @@ PINNED_STARTUP_HELPERS = frozenset({
     '2c2407c17f6997c01e3997fbb040fb302c66a3854346746b08891e9822f1e820',
     '15fd9cac0a7af20a2a8499b10637c7d3696c99ef1abe81eacce728134011219a',
 })
+CURRENT_SECURE_HELPER = '2c2407c17f6997c01e3997fbb040fb302c66a3854346746b08891e9822f1e820'
+LEGACY_HELPER = '15fd9cac0a7af20a2a8499b10637c7d3696c99ef1abe81eacce728134011219a'
 
 def refuse():
     raise ValueError('INCUDAL_RETIRED_HELPER_REFUSED')
@@ -276,6 +278,13 @@ def main():
             hold(SEALS + '/' + key + '.sha256.links', 16 * 1024 * 1024, {0o600, 0o644})
             if source.sha != source_digest(manifest.raw): refuse()
         installed = hold(HELPERS + '/' + TARGET, 1024 * 1024, {0o755})
+        retained_secure = source.sha == LEGACY_HELPER and installed.sha == CURRENT_SECURE_HELPER
+        if retained_secure:
+            # Role-separation startup deliberately keeps the verified new
+            # launcher after rollback and does not rerun the older installer.
+            # Retain it only with its independently held exact secure copy.
+            secure = hold(HELPERS + '/database-secure-task', 1024 * 1024, {0o755})
+            if secure.sha != CURRENT_SECURE_HELPER or secure.raw != installed.raw: refuse()
         # Hold both mandatory local Git configuration and any active global inputs.
         hold(ROOT + '/.git/config', 1024 * 1024, {0o600, 0o644})
         for name in ('/etc/gitconfig', HOME + '/.gitconfig', HOME + '/.config/git/config'):
@@ -285,8 +294,8 @@ def main():
         git_before = git_snapshot(); raw_origin = origin()
         convertible = OLD in source.raw and NEW not in source.raw
         converted = source.raw.replace(OLD, NEW) if convertible else source.raw
-        if installed.raw not in (source.raw, converted): refuse()
-        wanted = converted if raw_origin == NEW else source.raw
+        if not retained_secure and installed.raw not in (source.raw, converted): refuse()
+        wanted = installed.raw if retained_secure else (converted if raw_origin == NEW else source.raw)
         def recheck(check_installed=True):
             if runtime() != (app, current): refuse()
             for item in directories.values(): item.check()

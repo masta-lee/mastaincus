@@ -47,7 +47,16 @@ async function verifyRootLauncherGitGate() {
   assert.ok([old,current].includes(raw),'root launcher requires one exact maintained or retired origin')
   const expected=raw===current&&source.includes(Buffer.from(old))&&!source.includes(Buffer.from(current))
     ?Buffer.from(source.toString('utf8').replaceAll(old,current)):source
-  assert.ok(helper.equals(expected),'installed helper must follow the actual origin after every startup and rollback')
+  let retainedSecure=false
+  if(!helper.equals(expected)) {
+    const securePath='/usr/local/libexec/incudal/database-secure-task'
+    const secureInfo=await lstat(securePath)
+    const secure=await readFile(securePath)
+    const currentTemplate=execFileSync('tar',['-xOf',archive,'./deploy/incudal-online-task.sh.example'],{maxBuffer:1024*1024})
+    retainedSecure=hash(source)==='15fd9cac0a7af20a2a8499b10637c7d3696c99ef1abe81eacce728134011219a'&&helper.equals(currentTemplate)&&secure.equals(helper)&&
+      secureInfo.isFile()&&!secureInfo.isSymbolicLink()&&secureInfo.uid===0&&secureInfo.gid===0&&secureInfo.nlink===1&&(secureInfo.mode&0o777)===0o755
+  }
+  assert.ok(helper.equals(expected)||retainedSecure,'installed helper must follow the actual origin or retain its verified current security launcher after rollback')
   const declaration=helper.toString('utf8').match(/^verify_git_control\(\) \{[\s\S]*?^\}/m)?.[0]
   assert.ok(declaration,'execute the exact shipped launcher gate, not a fixture replacement')
   execFileSync('/usr/bin/env',['-i','PATH=/usr/sbin:/usr/bin:/sbin:/bin','HOME=/var/cache/incudal-ota','LC_ALL=C','/usr/bin/bash','-s'],{
@@ -93,7 +102,16 @@ if (mode === 'root-rollback-prepare') {
   const unit=mode==='root-rollback-wait'?state.rootRollbackUnit:'incudal-online-update@'+state.taskId+'.service'
   const output=execFileSync('/usr/bin/systemctl',['show',unit,'--property=Result,ExecMainStatus,Job,ExecStart'],{encoding:'utf8'})
   assert.match(output,/^Result=success$/m);assert.match(output,/^ExecMainStatus=0$/m);assert.match(output,/^Job=0$/m)
-  assert.ok(output.includes('argv[]=/usr/local/libexec/incudal/incudal-online-task '+(mode==='root-rollback-wait'?'rollback':'update')+' '+state.taskId+' ;'),'actual root unit must retain the shipped launcher and task argument')
+  const operation=mode==='root-rollback-wait'?'rollback':'update'
+  let launcher='/usr/local/libexec/incudal/incudal-online-task'
+  if(output.includes('argv[]=/usr/local/libexec/incudal/database-secure-task ')) {
+    launcher='/usr/local/libexec/incudal/database-secure-task'
+    const info=await lstat(launcher),bytes=await readFile(launcher)
+    const candidateTemplate=execFileSync('tar',['-xOf',archive,'./deploy/incudal-online-task.sh.example'],{maxBuffer:1024*1024})
+    assert.ok(info.isFile()&&!info.isSymbolicLink()&&info.uid===0&&info.gid===0&&info.nlink===1&&(info.mode&0o777)===0o755&&bytes.equals(candidateTemplate),
+      'the retained root security unit must execute the exact protected candidate launcher')
+  }
+  assert.ok(output.includes('argv[]='+launcher+' '+operation+' '+state.taskId+' ;'),'actual root unit must retain an authenticated shipped launcher and exact task argument')
   if(mode==='root-rollback-wait')assert.ok((await readFile('/opt/incudal/update-logs/system-update-'+state.taskId+'-rollback.log','utf8')).includes('Rollback completed successfully'))
   else assert.ok((await readFile('/opt/incudal/update-logs/system-update-'+state.taskId+'.log','utf8')).trimEnd().endsWith('System update task '+state.taskId+' is already claimed or finished; skipping duplicate worker'),'actual next root unit must enter the original completed-task guard')
   app=await realpath('/opt/incudal/current')

@@ -77,7 +77,7 @@ def normalize(root, seals, helpers, home, before_recheck=None):
 
 
 def case(stage, label, source=CURRENT, seal='valid', atomic=False, origin=NEW,
-         installed_converted=False, mutation=None, accepted=True):
+         installed_converted=False, mutation=None, accepted=True, installed_override=None, secure=None):
     folder = stage / label
     folder.mkdir(mode=0o700)
     root, seals, helpers, home = (folder / leaf for leaf in ('app', 'seals', 'helpers', 'cache'))
@@ -99,7 +99,13 @@ def case(stage, label, source=CURRENT, seal='valid', atomic=False, origin=NEW,
     convertible = OLD in source and NEW not in source
     converted = source.replace(OLD, NEW) if convertible else source
     installed = helpers / 'incudal-online-task'
-    write(installed, converted if installed_converted else source, 0o755)
+    write(installed, installed_override if installed_override is not None else (converted if installed_converted else source), 0o755)
+    if secure is not None:
+        secure_file = helpers / 'database-secure-task'
+        write(secure_file, CURRENT + (b'\n# modified\n' if secure == 'changed' else b''), 0o755)
+        if secure == 'writable': secure_file.chmod(0o777)
+        elif secure == 'hardlink': os.link(secure_file, folder / 'secure-extra-link')
+        else: assert secure in ('matching', 'changed')
     key = hashlib.sha256(str(app).encode()).hexdigest()
     seal_path = seals / (key + '.sha256')
     if seal in ('valid', 'old', 'malformed', 'missing-links'):
@@ -192,7 +198,9 @@ def case(stage, label, source=CURRENT, seal='valid', atomic=False, origin=NEW,
     assert status == (0 if accepted else 1), label
     assert not out and err == ('' if accepted else 'INCUDAL_RETIRED_HELPER_REFUSED\n'), label
     assert template.read_bytes() == race.get('source', before_source), label
-    assert installed.read_bytes() == ((converted if origin == NEW else source) if accepted else race.get('installed', before_installed)), label
+    retained = hashlib.sha256(source).hexdigest() == HISTORICAL_HELPER and installed_override == CURRENT and secure == 'matching'
+    expected_installed = before_installed if retained else (converted if origin == NEW else source)
+    assert installed.read_bytes() == (expected_installed if accepted else race.get('installed', before_installed)), label
     assert (root / '.git' / 'config').read_bytes() == race.get('config', before_local), label
     assert ((home / '.gitconfig').read_bytes() if (home / '.gitconfig').exists() else None) == before_global, label
     assert {path.name: path.read_bytes() for path in seals.iterdir()} == before_seals, label
@@ -331,8 +339,10 @@ def main():
     assert stat.S_ISDIR(parent.st_mode) and parent.st_uid == parent.st_gid == 0 and not parent.st_mode & 0o022
     parser = argparse.ArgumentParser()
     parser.add_argument('legacy_archive', nargs='?')
+    parser.add_argument('--legacy-helper', help='exact original helper bytes already verified from the retained archive')
     parser.add_argument('--node', default='/usr/bin/node', help='absolute resolved Node from the installed system or current build toolchain')
     args = parser.parse_args()
+    assert not (args.legacy_archive and args.legacy_helper)
     historical = None
     if args.legacy_archive is not None:
         with tarfile.open(args.legacy_archive, 'r:gz') as archive:
@@ -340,6 +350,9 @@ def main():
             assert member.isfile() and member.size == 15127
             historical = archive.extractfile(member).read()
             assert hashlib.sha256(historical).hexdigest() == HISTORICAL_HELPER
+    elif args.legacy_helper:
+        historical = Path(args.legacy_helper).read_bytes()
+        assert len(historical) == 15127 and hashlib.sha256(historical).hexdigest() == HISTORICAL_HELPER
     count = 0
     with tempfile.TemporaryDirectory(prefix='incudal-repository-startup-test-', dir='/root') as temp:
         stage = Path(temp)
@@ -385,6 +398,14 @@ def main():
                 ('original-converted-new-origin', {'source': historical, 'installed_converted': True, 'seal': 'missing'}),
                 ('original-changed-no-seal-refused', {'source': historical, 'seal': 'missing', 'mutation': 'source-bytes', 'accepted': False}),
                 ('original-recheck-swap-cleans-own-temp', {'source': historical, 'seal': 'missing', 'mutation': 'recheck-installed-swap', 'accepted': False}),
+                ('original-retained-secure-new-origin', {'source': historical, 'seal': 'missing', 'installed_override': CURRENT, 'secure': 'matching'}),
+                ('original-retained-secure-old-origin', {'source': historical, 'seal': 'missing', 'origin': OLD, 'installed_override': CURRENT, 'secure': 'matching'}),
+                ('original-retained-secure-missing-proof-refused', {'source': historical, 'seal': 'missing', 'installed_override': CURRENT, 'accepted': False}),
+                ('original-retained-secure-changed-proof-refused', {'source': historical, 'seal': 'missing', 'installed_override': CURRENT, 'secure': 'changed', 'accepted': False}),
+                ('original-retained-secure-writable-proof-refused', {'source': historical, 'seal': 'missing', 'installed_override': CURRENT, 'secure': 'writable', 'accepted': False}),
+                ('original-retained-secure-hardlink-proof-refused', {'source': historical, 'seal': 'missing', 'installed_override': CURRENT, 'secure': 'hardlink', 'accepted': False}),
+                ('unknown-source-retained-secure-refused', {'source': historical + b'\n# unknown\n', 'installed_override': CURRENT, 'secure': 'matching', 'accepted': False}),
+                ('original-retained-secure-current-recheck-refused', {'source': historical, 'seal': 'missing', 'atomic': True, 'mutation': 'recheck-current-change', 'installed_override': CURRENT, 'secure': 'matching', 'accepted': False}),
             ])
         for label, kwargs in scenarios:
             case(stage, label, **kwargs)
