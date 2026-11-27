@@ -414,6 +414,198 @@ def official_repositories(branch):
             ('https://dl-cdn.alpinelinux.org/alpine/v' + branch + '/community\n' if 'community' in seen else '')).encode()
 
 
+def kernel_metadata_paths(flavor, release):
+    if not isinstance(flavor, str) or flavor not in {'linux-virt', 'linux-lts'}:
+        fail('HARDENING_KERNEL_UNTRUSTED_PATH')
+    release_version(release, flavor)
+    return {'config': '/boot/config-' + release, 'map': '/boot/System.map-' + release,
+            'release': '/usr/share/kernel/' + flavor[6:] + '/kernel.release'}
+
+
+def metadata_parent_guard(path, create=False):
+    for parent in reversed(Path(path).parents):
+        try:
+            parent.lstat()
+        except FileNotFoundError:
+            if not create:
+                continue
+            parent.mkdir(mode=0o755)
+        protected(parent, directory=True)
+
+
+def metadata_proof(path):
+    metadata_parent_guard(path)
+    path = Path(path)
+    try:
+        path.lstat()
+    except FileNotFoundError:
+        return None
+    proof = file_proof(path, limit=64 * 1024 * 1024)
+    if proof['gid'] != 0:
+        fail('HARDENING_KERNEL_UNTRUSTED_PATH')
+    return proof
+
+
+def package_metadata_snapshot(flavor, release):
+    return {path: metadata_proof(path) for path in kernel_metadata_paths(flavor, release).values()}
+
+
+def validate_metadata_payload(path, proof, plan):
+    paths = kernel_metadata_paths(plan['flavor'], plan['candidateRelease'])
+    if path not in paths.values():
+        fail('HARDENING_KERNEL_PACKAGE_FORMAT_UNSUPPORTED')
+    valid_proof(proof)
+    if proof['gid'] != 0:
+        fail('HARDENING_KERNEL_PACKAGE_FORMAT_UNSUPPORTED')
+    if path == paths['release']:
+        body = (plan['candidateRelease'] + '\n').encode()
+        if proof['size'] != len(body) or proof['sha256'] != digest(body):
+            fail('HARDENING_KERNEL_PACKAGE_FORMAT_UNSUPPORTED')
+
+
+def expected_package_metadata(transaction):
+    paths = kernel_metadata_paths(transaction['plan']['flavor'], transaction['plan']['candidateRelease'])
+    return {path: transaction['payload'][path] for path in paths.values() if path in transaction['payload']}
+
+
+def package_metadata_reservation(transaction, include_before=True):
+    before = transaction['baseline'].get('packageMetadata')
+    if before is None:
+        return 0, 0  # Old journals retain the exact original resource policy.
+    records = list(expected_package_metadata(transaction).items())
+    if include_before:
+        records += list(before.items())
+    # Keep room for the registered payload and its atomic-copy scratch, even
+    # when no old metadata exists or an interrupted APK already wrote a file.
+    required = sum(proof['size'] * 2 for _, proof in records if proof is not None)
+    boot_required = sum(proof['size'] * 2 for path, proof in records if path.startswith('/boot/') and proof is not None)
+    return required, boot_required
+
+
+def check_package_metadata_partial(state, strict_before=False):
+    transaction = state['transaction']
+    before = transaction['baseline'].get('packageMetadata')
+    if before is None:
+        return  # Never add fields or a new range to an old journal/hash.
+    expected = expected_package_metadata(transaction)
+    for path in set(before) | set(expected):
+        actual = metadata_proof(path)
+        accepted = [before[path]] if strict_before and path in before else [None]
+        if not strict_before and path in before:
+            accepted.append(before[path])
+        if path in expected and not (strict_before and path in before):
+            accepted.append(expected[path])
+        if actual not in accepted:
+            fail('HARDENING_KERNEL_CONFIGURATION_CHANGED')
+
+
+def verify_package_metadata(transaction):
+    if 'packageMetadata' not in transaction['baseline']:
+        return
+    for path, expected in expected_package_metadata(transaction).items():
+        if metadata_proof(path) != expected:
+            fail('HARDENING_KERNEL_PACKAGE_PAYLOAD_INCOMPLETE')
+
+
+def metadata_backup_path(state, original):
+    paths = kernel_metadata_paths(state['plan']['flavor'], state['plan']['runningRelease'])
+    names = [name for name, path in paths.items() if path == original]
+    if len(names) != 1:
+        fail('HARDENING_KERNEL_UNTRUSTED_PATH')
+    return run_directory(state) / 'metadata-before' / names[0]
+
+
+def save_package_metadata_before(state, value):
+    before = state['transaction']['baseline'].get('packageMetadata')
+    if before is None:
+        return
+    check_package_metadata_partial(state, strict_before=True)
+    directory = run_directory(state) / 'metadata-before'
+    directory.mkdir(mode=0o700, exist_ok=True)
+    protected(directory, directory=True, private=True)
+    for path, proof in before.items():
+        destination = metadata_backup_path(state, path)
+        if proof is None:
+            try:
+                destination.lstat()
+            except FileNotFoundError:
+                continue
+            fail('HARDENING_KERNEL_BACKUP_CHANGED')
+        current_request(value)
+        if metadata_proof(destination) is None:
+            copy_checked(Path(path), destination, proof, mode=0o600)
+        elif file_proof(destination, private=True) != backup_proof(proof):
+            fail('HARDENING_KERNEL_BACKUP_CHANGED')
+    sync_directory(directory)
+
+
+def verify_package_metadata_backups(state):
+    before = state['transaction']['baseline'].get('packageMetadata')
+    if before is None:
+        return
+    for path, proof in before.items():
+        backup = metadata_backup_path(state, path)
+        if proof is None:
+            try:
+                backup.lstat()
+            except FileNotFoundError:
+                continue
+            fail('HARDENING_KERNEL_BACKUP_CHANGED')
+        if file_proof(backup, private=True) != backup_proof(proof):
+            fail('HARDENING_KERNEL_BACKUP_CHANGED')
+
+
+def rollback_package_metadata(state, inventory, value):
+    transaction = state['transaction']
+    before = transaction['baseline'].get('packageMetadata')
+    if before is None:
+        return
+    validate_partial_inventory(transaction, inventory)
+    verify_package_metadata_backups(state)
+    expected = expected_package_metadata(transaction)
+    release_path = kernel_metadata_paths(state['plan']['flavor'], state['plan']['runningRelease'])['release']
+    committed = inventory[state['plan']['flavor']] == transaction['expectedInstalled'][state['plan']['flavor']]
+    desired = {**before}
+    if committed and release_path in expected:
+        desired[release_path] = expected[release_path]
+    for path, wanted in desired.items():
+        actual = metadata_proof(path)
+        allowed = [None, before[path], expected.get(path)]
+        if actual not in allowed:
+            fail('HARDENING_KERNEL_CONFIGURATION_CHANGED')
+        if actual == wanted:
+            continue
+        current_request(value)
+        metadata_parent_guard(path, create=wanted is not None)
+        if metadata_proof(path) != actual:
+            fail('HARDENING_KERNEL_SOURCE_CHANGED')
+        if wanted is None:
+            Path(path).unlink()
+            sync_directory(Path(path).parent)
+        elif committed and path == release_path and path in expected:
+            atomic(Path(path), (state['plan']['candidateRelease'] + '\n').encode(), mode=wanted['mode'])
+            if metadata_proof(path) != wanted:
+                fail('HARDENING_KERNEL_ROLLBACK_INCOMPLETE')
+        else:
+            copy_checked(metadata_backup_path(state, path), Path(path), backup_proof(wanted), mode=wanted['mode'])
+
+
+def verify_rollback_package_metadata(state, inventory=None):
+    transaction = state['transaction']
+    before = transaction['baseline'].get('packageMetadata')
+    if before is None:
+        return
+    inventory = installed_packages() if inventory is None else inventory
+    validate_partial_inventory(transaction, inventory)
+    desired = {**before}
+    release_path = kernel_metadata_paths(state['plan']['flavor'], state['plan']['runningRelease'])['release']
+    expected = expected_package_metadata(transaction)
+    if inventory[state['plan']['flavor']] == transaction['expectedInstalled'][state['plan']['flavor']] and release_path in expected:
+        desired[release_path] = expected[release_path]
+    if any(metadata_proof(path) != proof for path, proof in desired.items()):
+        fail('HARDENING_KERNEL_ROLLBACK_INCOMPLETE')
+
+
 def module_alias_metadata(flavor):
     if not isinstance(flavor, str) or flavor not in {'linux-virt', 'linux-lts'}:
         fail('HARDENING_KERNEL_UNTRUSTED_PATH')
@@ -621,6 +813,7 @@ def boot_baseline(flavor, running):
             'controls': {str(path): file_proof(path, limit=1024 * 1024) for path in controls},
             'tools': {name: trusted_program(name) for name in tools},
             'modules': module_manifest(Path('/lib/modules') / running, flavor=flavor),
+            'packageMetadata': package_metadata_snapshot(flavor, running),
             'identity': runtime_identity(), 'cmdline': Path('/proc/cmdline').read_text().strip()}
 
 
@@ -759,7 +952,8 @@ def kernel_payload(path, flavor, version):
                     fail('HARDENING_KERNEL_PACKAGE_FORMAT_UNSUPPORTED')
                 continue
             if entry.isdir():
-                if entry.uid != 0 or entry.gid != 0 or entry.mode & 0o022 or name not in {'boot', 'lib', 'lib/modules', 'lib/modules/' + expected_release} and \
+                if entry.uid != 0 or entry.gid != 0 or entry.mode & 0o022 or name not in {'boot', 'lib', 'lib/modules', 'lib/modules/' + expected_release,
+                        'usr', 'usr/share', 'usr/share/kernel', 'usr/share/kernel/' + flavor[6:]} and \
                         not name.startswith('lib/modules/' + expected_release + '/'):
                     fail('HARDENING_KERNEL_PACKAGE_FORMAT_UNSUPPORTED')
                 continue
@@ -773,17 +967,29 @@ def kernel_payload(path, flavor, version):
                 continue
             if not entry.isfile() or entry.uid != 0 or entry.gid != 0 or entry.mode & 0o022 or entry.size > 64 * 1024 * 1024:
                 fail('HARDENING_KERNEL_PACKAGE_FORMAT_UNSUPPORTED')
+            metadata_names = kernel_metadata_paths(flavor, expected_release)
             permitted = name in {'boot/vmlinuz-' + flavor[6:], 'boot/config-' + flavor[6:], 'boot/System.map-' + flavor[6:]} or \
+                '/' + name in metadata_names.values() or \
                 name.startswith('lib/modules/' + expected_release + '/')
             if not permitted or '/' + name in result:
                 fail('HARDENING_KERNEL_PACKAGE_FORMAT_UNSUPPORTED')
+            if '/' + name in metadata_names.values() and entry.mode > 0o777:
+                fail('HARDENING_KERNEL_PACKAGE_FORMAT_UNSUPPORTED')
+            release_text = (expected_release + '\n').encode()
+            if '/' + name == metadata_names['release'] and entry.size != len(release_text):
+                fail('HARDENING_KERNEL_PACKAGE_FORMAT_UNSUPPORTED')
             stream = archive.extractfile(entry)
             hasher = hashlib.sha256()
+            release_body = bytearray()
             while True:
                 chunk = stream.read(1024 * 1024)
                 if not chunk:
                     break
                 hasher.update(chunk)
+                if '/' + name == metadata_names['release']:
+                    release_body.extend(chunk)
+            if '/' + name == metadata_names['release'] and bytes(release_body) != release_text:
+                fail('HARDENING_KERNEL_PACKAGE_FORMAT_UNSUPPORTED')
             result['/' + name] = {'sha256': hasher.hexdigest(), 'size': entry.size, 'mode': entry.mode, 'uid': 0, 'gid': 0}
     if file_proof(path, private=True) != initial:
         fail('HARDENING_KERNEL_CACHE_CHANGED')
@@ -1070,7 +1276,9 @@ def signed_output_metadata(transaction):
     prefix = '/lib/modules/' + transaction['plan']['candidateRelease'] + '/'
     signed = {}
     for path, proof in transaction['payload'].items():
-        if path.startswith('/boot/'):
+        if path in kernel_metadata_paths(transaction['plan']['flavor'], transaction['plan']['candidateRelease']).values():
+            validate_metadata_payload(path, proof, transaction['plan'])
+        elif path.startswith('/boot/'):
             before = baseline['artifacts'].get(path)
             if before is None or candidates.get(path) != {**proof, 'mode': before['mode'], 'gid': before['gid']}:
                 fail('HARDENING_KERNEL_PACKAGE_PAYLOAD_INCOMPLETE')
@@ -1117,7 +1325,19 @@ def validate_journal(state):
             fail()
     elif plan['runningRelease'] != version_release(plan['installedVersion'], plan['flavor']) or not same_series(plan['installedVersion'], plan['candidateVersion']):
         fail()
-    baseline = exact_object(transaction['baseline'], {'bootloader', 'config', 'arguments', 'artifacts', 'controls', 'tools', 'modules', 'identity', 'cmdline'})
+    baseline = transaction['baseline']
+    baseline_keys = {'bootloader', 'config', 'arguments', 'artifacts', 'controls', 'tools', 'modules', 'identity', 'cmdline'}
+    if not isinstance(baseline, dict) or set(baseline) not in (baseline_keys, baseline_keys | {'packageMetadata'}):
+        fail()
+    if 'packageMetadata' in baseline:
+        metadata = baseline['packageMetadata']
+        if not isinstance(metadata, dict) or set(metadata) != set(kernel_metadata_paths(plan['flavor'], plan['runningRelease']).values()):
+            fail()
+        for proof in metadata.values():
+            if proof is not None:
+                valid_proof(proof)
+                if proof['gid'] != 0:
+                    fail()
     suffix = plan['flavor'][6:]
     config = '/boot/grub/grub.cfg' if plan['bootloader'] == 'grub' else '/boot/extlinux.conf'
     if baseline['bootloader'] != plan['bootloader'] or baseline['config'] != config or not isinstance(baseline['arguments'], list) or not isinstance(baseline['cmdline'], str) or len(baseline['cmdline']) > 65536:
@@ -1133,7 +1353,10 @@ def validate_journal(state):
         for path, proof in mapping.items():
             if not isinstance(path, str) or len(path) > 512 or '\x00' in path or '..' in Path(path).parts:
                 fail()
-            if module_payload and isinstance(proof, dict) and proof.get('symlink') is True:
+            metadata_paths = kernel_metadata_paths(plan['flavor'], plan['candidateRelease'])
+            if module_payload and path in metadata_paths.values():
+                validate_metadata_payload(path, proof, plan)
+            elif module_payload and isinstance(proof, dict) and proof.get('symlink') is True:
                 if path != '/lib/modules/' + plan['candidateRelease'] + '/vmlinuz':
                     fail()
                 valid_module_alias(proof, plan['flavor'])
@@ -1294,10 +1517,12 @@ def save_before(state, value):
     transaction = state['transaction']
     baseline = transaction['baseline']
     directory = run_directory(state)
-    required = manifest_size(baseline['modules']) * 2 + manifest_size(transaction['cache']) + manifest_size(baseline['artifacts']) * 2 + 64 * 1024 * 1024
-    boot_required = manifest_size(baseline['artifacts']) * 2 + 16 * 1024 * 1024
+    metadata_required, boot_metadata_required = package_metadata_reservation(transaction)
+    required = manifest_size(baseline['modules']) * 2 + manifest_size(transaction['cache']) + manifest_size(baseline['artifacts']) * 2 + metadata_required + 64 * 1024 * 1024
+    boot_required = manifest_size(baseline['artifacts']) * 2 + boot_metadata_required + 16 * 1024 * 1024
     resources(required, boot_required)
     current_request(value)
+    save_package_metadata_before(state, value)
     backup = directory / 'before'
     backup.mkdir(mode=0o700, exist_ok=True)
     protected(backup, directory=True, private=True)
@@ -1316,6 +1541,7 @@ def save_before(state, value):
     check_fixed_baseline(transaction, include_boot=True)
     if installed_packages(value) != transaction['installed'] or package_context() != transaction['context']:
         fail('HARDENING_KERNEL_SOURCE_CHANGED')
+    check_package_metadata_partial(state, strict_before=True)
 
 
 def save_journal(state, value):
@@ -1326,6 +1552,7 @@ def save_journal(state, value):
 
 def verify_original_backups(state):
     baseline = state['transaction']['baseline']
+    verify_package_metadata_backups(state)
     for path, proof in baseline['artifacts'].items():
         if file_proof(before_path(state, path), private=True) != backup_proof(proof):
             fail('HARDENING_KERNEL_BACKUP_CHANGED')
@@ -1364,9 +1591,11 @@ def install_original(state, value):
     check_fixed_baseline(transaction)
     verify_original_backups(state)
     check_partial_boot(state)
+    check_package_metadata_partial(state)
     check_original_cache(state, value)
     empty_remote(value)
-    resources()
+    metadata_required, boot_metadata_required = package_metadata_reservation(transaction, include_before=False)
+    resources(256 * 1024 * 1024 + metadata_required, 32 * 1024 * 1024 + boot_metadata_required)
     current = installed_packages(value)
     validate_partial_inventory(transaction, current)
     expected, flavor = state['plan']['candidateVersion'], state['plan']['flavor']
@@ -1380,6 +1609,7 @@ def install_original(state, value):
         fail('HARDENING_KERNEL_PACKAGE_PLAN_CHANGED')
     check_fixed_baseline(transaction)
     check_partial_boot(state)
+    check_package_metadata_partial(state)
     if cache_manifest(directory / 'cache') != transaction['cache']:
         fail('HARDENING_KERNEL_CACHE_CHANGED')
     current_request(value)
@@ -1427,6 +1657,8 @@ def stage_boot(state, value):
         if installed_payload_proof(path, proof, state['plan']['flavor'], state['plan']['candidateRelease']) != proof:
             fail('HARDENING_KERNEL_PACKAGE_PAYLOAD_INCOMPLETE')
     check_partial_boot(state)
+    check_package_metadata_partial(state)
+    verify_package_metadata(transaction)
     empty_remote(value)
     current_request(value)
     directory = staging_directory(state)
@@ -1511,6 +1743,7 @@ def commit_boot(state, value):
     verify_original_backups(state)
     check_original_cache(state, value)
     check_staging_paths(state)
+    verify_package_metadata(transaction)
     if installed_packages(value) != transaction['expectedInstalled'] or \
             module_manifest(Path('/lib/modules') / state['plan']['candidateRelease'], flavor=state['plan']['flavor']) != transaction['candidateModules']:
         fail('HARDENING_KERNEL_PACKAGE_PAYLOAD_INCOMPLETE')
@@ -1563,6 +1796,7 @@ def verify_prepared(state, value):
             {path: file_proof(Path(path)) for path in transaction['baseline']['artifacts']} != transaction['candidateArtifacts'] or \
             module_manifest(Path('/lib/modules') / state['plan']['candidateRelease'], flavor=state['plan']['flavor']) != transaction['candidateModules']:
         fail('HARDENING_KERNEL_PREPARE_CHANGED')
+    verify_package_metadata(transaction)
     runtime_services(state, value)
 
 
@@ -1617,8 +1851,9 @@ def restore_module_tree(state):
     sync_directory(original)
 
 
-def verify_rollback_files(state, strict=True):
+def verify_rollback_files(state, strict=True, inventory=None):
     baseline = state['transaction']['baseline']
+    verify_rollback_package_metadata(state, inventory)
     if strict:
         check_fixed_baseline(state['transaction'])
     elif runtime_identity() != baseline['identity'] or Path('/proc/cmdline').read_text().strip() != baseline['cmdline']:
@@ -1643,6 +1878,7 @@ def rollback(state, value):
     check_fixed_baseline(state['transaction'])
     verify_original_backups(state)
     check_partial_boot(state)
+    check_package_metadata_partial(state)
     current_inventory = installed_packages(value)
     validate_partial_inventory(state['transaction'], current_inventory)
     empty_remote(value)
@@ -1652,7 +1888,8 @@ def rollback(state, value):
         check_partial_boot(state)
         if not Path(path).exists() or file_proof(Path(path)) != before:
             copy_checked(before_path(state, path), Path(path), backup_proof(before), mode=before['mode'])
-    verify_rollback_files(state)
+    rollback_package_metadata(state, current_inventory, value)
+    verify_rollback_files(state, inventory=current_inventory)
     if installed_packages(value) != current_inventory:
         fail('HARDENING_KERNEL_PACKAGE_PLAN_CHANGED')
     # No APK downgrade and no unknown module/file removal. The signed newer
@@ -1673,6 +1910,7 @@ def verify_terminal(state, value):
                 {path: file_proof(Path(path)) for path in transaction['baseline']['artifacts']} != transaction['candidateArtifacts'] or \
                 module_manifest(Path('/lib/modules') / state['plan']['candidateRelease'], flavor=state['plan']['flavor']) != transaction['candidateModules']:
             fail('HARDENING_KERNEL_ARCHIVE_CONFLICT')
+        verify_package_metadata(transaction)
         empty_remote(value)
     elif state['phase'] == 'rolled-back':
         verify_rollback_files(state, strict=False)

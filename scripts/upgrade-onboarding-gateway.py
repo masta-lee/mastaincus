@@ -122,7 +122,7 @@ def upgrade(request):
         raw = base64.b64decode(value, validate=True)
         # Python accepts CRLF during compilation, but a Linux shebang does not.
         # Reject noncanonical scripts before any identity reads or publication.
-        limit=96*1024 if name=='host-kernel-maintenance.py' else 131072
+        limit=128*1024 if name=='host-kernel-maintenance.py' else 131072
         require(0 < len(raw) <= limit and b'\0' not in raw and b'\r' not in raw)
         if name.endswith('.py'):
             compile(raw, name, 'exec')

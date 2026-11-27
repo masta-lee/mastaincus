@@ -1,5 +1,9 @@
 # mastaincus 仓库替代与原正式资产迁移
 
+2026-11-27 第六批 `eca80074366852a5113752989cabf4077dbf3902` 已完整终态：[普通 CI](https://github.com/masta-lee/mastaincus/actions/runs/45967552390) 30 项全部成功；[Build & Release 双架构预览](https://github.com/masta-lee/mastaincus/actions/runs/45968108311) 17 项必需任务全部成功，正式 Release 预期 skipped。实际双包完整独核退出 0：AMD64 221407056 字节／SHA256 `f1b3cdb9602222668a7eb923f1a22032f13f88dc36db184cbf7d322a69b55474`；ARM64 220457579 字节／SHA256 `bb75623e7db1aaa211476b75ce0f7fe41c8a2071a359bbc34cae2a790254db43`。原 Ed25519、四类负例、321 份固定源码、root 权限、所有链接、ZIP CRC 与 gzip 尾块通过，每架构只下载一次；包内是该提交的 `21a349…`，与本轮 metadata 候选分开。报告 `logs/mastaincus-preview-eca80074-artifacts/AUDIT_SUMMARY.md`。
+
+后续固定 metadata／空间／128 KiB 完整传输的已验源码、保留失败与未完成门槛见 [宿主内核更新验收](security-host-kernel-validation-2026-11-27.md)。新来源的源码 CI／完整预览需按实际提交另核，真实双架构内核启动、双 PG、Debian 13 系统资格、新备份完整本机模拟恢复及最终可信主控热更新继续进行；本轮没有提前正式发版。
+
 第五批已提交推送为 `986fe81cd63c9b88aee128833428defd5bd1b036`，远端 main 与工作分支完整 SHA 相同。[普通 CI](https://github.com/masta-lee/mastaincus/actions/runs/45956468567)已最终成功、30 项全部通过；[完整双架构预览](https://github.com/masta-lee/mastaincus/actions/runs/45956521774)已最终成功、17 项必需任务全部通过，Release 预期 skipped。AMD64、ARM64 两项 current rollback 的新 job `140368587558`、`140368587519` 均成功，原 933 两项权限失败由本次同来源真实流程回归覆盖。
 
 986 实际双包完整独核也已自然退出 0：AMD64 221397774 字节、SHA256 `9110330ad7a31b97b8eff0a280b84b4ba9362e0f707ab72fd41cdbbccea14f77`；ARM64 220460812 字节、SHA256 `348675d86ee9b4c4b0e840c5b147e60e29770926601c5821f357ad6e6dbaf3f4`。API ZIP 摘要、成员 CRC、原 Ed25519 及四种拒绝对照、321 份固定源码、root 权限、所有实际链接解析和 gzip 尾块全部通过。两包 kernel 模板仍为完整 `68aef3317b18574cbc28bfadcbca43c8be04a7b92a7be14f980b7e2a034ebbd9`，测试专用模块未进入 runtime；每架构只下载一次。结果见 `logs/mastaincus-preview-986fe81c-artifacts/AUDIT_SUMMARY.md`。

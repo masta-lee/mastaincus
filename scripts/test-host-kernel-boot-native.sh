@@ -55,7 +55,7 @@ def fixed_module(name, source, limit):
 
 # Use both original recipe readers, as the packaged fixed transport does.
 # A bare kernel module cannot declare an existing AppArmor journal idle.
-module = fixed_module('native_host_kernel', source, 96 * 1024)
+module = fixed_module('native_host_kernel', source, 128 * 1024)
 apparmor = fixed_module('native_host_apparmor', apparmor_source, 64 * 1024)
 if not callable(getattr(apparmor, 'assert_apparmor_idle', None)) or not callable(module.assert_kernel_idle):
     module.fail('HARDENING_KERNEL_OTHER_JOURNAL_UNKNOWN')

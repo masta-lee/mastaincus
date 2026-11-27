@@ -69,10 +69,33 @@ class UpgradeTests(unittest.TestCase):
         self.assertEqual(self.writes, [])
 
     def test_fixed_kernel_module_has_its_own_bounded_size(self):
-        oversized=base64.b64encode(b'#'+b'a'*(96*1024)).decode()
+        oversized=base64.b64encode(b'#'+b'a'*(128*1024)).decode()
         with self.assertRaises(ValueError):
             upgrade.upgrade({**self.request,'sources':{**self.request['sources'],'host-kernel-maintenance.py':oversized}})
         self.assertEqual(self.writes,[])
+        upgrade.identity.assert_not_called()
+
+    def test_large_fixed_kernel_is_published_and_rechecked_with_original_identity(self):
+        for size in (96 * 1024 + 1, 128 * 1024):
+            source = b'#' + b'a' * (size - 2) + b'\n'
+            request = {**self.request, 'sources': {**self.request['sources'],
+                       'host-kernel-maintenance.py': base64.b64encode(source).decode()}}
+            capability = {**self.capability, 'maintenanceModuleHashes': {
+                          **self.capability['maintenanceModuleHashes'],
+                          'host-kernel-maintenance.py': hashlib.sha256(source).hexdigest()}}
+            with self.subTest(size=size), patch.object(upgrade, 'helper_status', return_value={
+                    **self.identity, 'dnsProtocolVersion': 2, **capability}):
+                result = upgrade.upgrade(request)
+                self.assertEqual(result['maintenanceModuleHashes'], capability['maintenanceModuleHashes'])
+                self.assertEqual(self.files[upgrade.TOOLS / 'host-kernel-maintenance.py'], source)
+                self.assertEqual(self.writes[-1], (upgrade.HELPER, 0o755))
+
+    def test_other_helpers_still_reject_the_original_size_boundary_before_writes(self):
+        source = base64.b64encode(b'#' + b'a' * 131072).decode()
+        for name in upgrade.NAMES - {'host-kernel-maintenance.py'}:
+            with self.subTest(name=name), self.assertRaises(ValueError):
+                upgrade.upgrade({**self.request, 'sources': {**self.request['sources'], name: source}})
+        self.assertEqual(self.writes, [])
         upgrade.identity.assert_not_called()
 
     def test_interrupted_tools_leave_old_entrypoint_until_retry(self):

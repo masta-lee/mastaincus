@@ -74,9 +74,13 @@ class SecurityTests(unittest.TestCase):
             output=io.StringIO()
             with redirect_stdout(output):exec(compile(options['input'],'fixed-stdin-fixture','exec'),{'__name__':'__main__'})
             return types.SimpleNamespace(stdout=output.getvalue().encode(),returncode=0)
-        def source(path,*_):
-            if path.name=='host-security-maintenance.py':return b"def assert_apparmor_idle(value):\n assert value['recipe']=='alpine-kernel-patch-v1'\ndef execute(value):\n assert len(value)==10\n KERNEL_JOURNAL_GUARD(value)\n return {'phase':'customers-restored','recipe':value['recipe']}\nif __name__=='__main__':raise AssertionError('legacy main ran')\n"
-            if path.name=='host-kernel-maintenance.py':return b"def assert_kernel_idle(value):\n assert value['recipe'].startswith('alpine-apparmor-')\ndef execute(value):\n assert len(value)==11\n APPARMOR_JOURNAL_GUARD(value)\n return {'phase':'inspected','recipe':value['recipe']}\nif __name__=='__main__':raise AssertionError('kernel main ran')\n"
+        def source(path,*_,complete=False):
+            if path.name=='host-security-maintenance.py':
+                self.assertTrue(complete, 'fixed AppArmor execution must read every protected source byte')
+                return b"def assert_apparmor_idle(value):\n assert value['recipe']=='alpine-kernel-patch-v1'\ndef execute(value):\n assert len(value)==10\n KERNEL_JOURNAL_GUARD(value)\n return {'phase':'customers-restored','recipe':value['recipe']}\nif __name__=='__main__':raise AssertionError('legacy main ran')\n"
+            if path.name=='host-kernel-maintenance.py':
+                self.assertTrue(complete, 'fixed kernel execution must read every protected source byte')
+                return b"def assert_kernel_idle(value):\n assert value['recipe'].startswith('alpine-apparmor-')\ndef execute(value):\n assert len(value)==11\n APPARMOR_JOURNAL_GUARD(value)\n return {'phase':'inspected','recipe':value['recipe']}\nif __name__=='__main__':raise AssertionError('kernel main ran')\n"
             return json.dumps({'managementIp':'10.253.240.2','nodePublicKey':self.peer}).encode()
         with tempfile.TemporaryDirectory() as directory,patch.object(gateway.sys,'stdin',types.SimpleNamespace(buffer=io.BytesIO(json.dumps(request).encode()))), \
             patch.object(gateway.time,'time',return_value=1),patch.object(gateway,'read_protected_state',side_effect=source), \

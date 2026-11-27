@@ -25,7 +25,7 @@ CONFIG = pathlib.Path("/etc/wireguard") / (INTERFACE + ".conf")
 STATE = pathlib.Path("/var/lib/incudal-onboarding")
 MANAGEMENT_PUBLIC_KEY = pathlib.Path("/root/.ssh/incudal-host-management.pub")
 DNS_TOOLS = pathlib.Path('/usr/local/libexec/incudal-onboarding-dns')
-MAINTENANCE_MODULE_LIMITS = {'host-security-maintenance.py': 65536, 'host-kernel-maintenance.py': 96 * 1024}
+MAINTENANCE_MODULE_LIMITS = {'host-security-maintenance.py': 65536, 'host-kernel-maintenance.py': 128 * 1024}
 
 
 def harden_host(job, control):
@@ -398,8 +398,8 @@ def maintain_host(job, control):
     if address not in control.network or address in (control.ip,control.network.network_address,control.network.broadcast_address) or request['managementIp']!=str(address) or peer!=request['nodePublicKey']:raise ValueError('invalid binding')
     allowed=dict(line.split(maxsplit=1) for line in run('wg','show',INTERFACE,'allowed-ips').splitlines())
     if allowed.get(peer)!=str(address)+'/32':raise ValueError('route mismatch')
-    source=read_protected_state(DNS_TOOLS/'host-security-maintenance.py',65536)
-    kernel_source=read_protected_state(DNS_TOOLS/'host-kernel-maintenance.py',96*1024)
+    source=read_protected_state(DNS_TOOLS/'host-security-maintenance.py',65536,complete=True)
+    kernel_source=read_protected_state(DNS_TOOLS/'host-kernel-maintenance.py',MAINTENANCE_MODULE_LIMITS['host-kernel-maintenance.py'],complete=True)
     scan=subprocess.run(['ssh-keyscan','-T','5','-p',str(request['sshPort']),'-t','ed25519,rsa,ecdsa',str(address)],capture_output=True,timeout=15,check=False)
     known=verified_host_scan(scan,request['sshFingerprint'])
     with tempfile.TemporaryDirectory(prefix='incudal-maintenance-',dir='/root') as directory:

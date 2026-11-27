@@ -13,7 +13,7 @@ export async function expectedGatewayMaintenanceModuleHashes(): Promise<GatewayM
   const hashes = {} as GatewayMaintenanceModuleHashes
   for (const name of ['host-security-maintenance.py', 'host-kernel-maintenance.py'] as const) {
     const source = await readFile(fileURLToPath(new URL('../../templates/' + name, import.meta.url)))
-    if (!source.length || source.length > (name === 'host-kernel-maintenance.py' ? 96 * 1024 : 65536)) {
+    if (!source.length || source.length > (name === 'host-kernel-maintenance.py' ? 128 * 1024 : 65536)) {
       throw new OnboardingError('GATEWAY_DNS_UPGRADE_FAILED')
     }
     hashes[name] = createHash('sha256').update(source).digest('hex')
@@ -100,7 +100,7 @@ export async function refreshPinnedGatewayHelpers(gateway: OnboardingGateway, pa
   const sources: Record<string, string> = {}
   for (const name of ['onboarding-gateway.py', 'refresh-host-gateway-endpoint.py', 'install-host-gateway-dns.sh', 'alpine-ssh-security.sh', 'host-security-maintenance.py', 'host-kernel-maintenance.py']) {
     const source = await readFile(fileURLToPath(new URL(['alpine-ssh-security.sh','host-security-maintenance.py','host-kernel-maintenance.py'].includes(name) ? '../../templates/' + name : '../../../scripts/' + name, import.meta.url)))
-    if (source.length > (name==='host-kernel-maintenance.py'?96*1024:131072) || source.length === 0) throw new OnboardingError('GATEWAY_DNS_UPGRADE_FAILED')
+    if (source.length > (name==='host-kernel-maintenance.py'?128*1024:131072) || source.length === 0) throw new OnboardingError('GATEWAY_DNS_UPGRADE_FAILED')
     sources[name] = source.toString('base64')
   }
   const executor = await readFile(fileURLToPath(new URL('../../../scripts/upgrade-onboarding-gateway.py', import.meta.url)), 'utf8')

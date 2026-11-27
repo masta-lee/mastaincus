@@ -1,5 +1,9 @@
 # 网关灾备工程进度
 
+2026-11-27 第七批安全源码准备保存：固定 kernel metadata、原私有备份和回退、旧 journal/hash 与 root/boot 峰值修复，产品 `6f32f757…`。Linux r6 的原 `84ce968c…` 完整 84 项无跳过通过；最终测试 `e8cde413…` 只收紧 APK 前根目录空间负例，r7 单项四子例通过，其余 83 方法 AST 保持。固定 kernel 全链 128 KiB、两个维护模块完整读取，Linux 6 项通道／13 项升级及实际 FD/publish/hash/超限零写通过；新真实后台、原 PG、系统和输入保护保持。详见 [宿主内核验收](docs/security-host-kernel-validation-2026-11-27.md)。
+
+前一提交 `eca80074366852a5113752989cabf4077dbf3902` 已完成普通 CI 45967552390 的 30 项与完整预览 45968108311 的 17 项必需任务，双实际包完整独核通过，Release 预期 skipped。本批新来源需要独立跟进 CI／预览终态。真实双架构内核启动／回滚、PG 原 worker 矩阵、真实 Debian13 系统资格与新的主控备份本机完整模拟恢复仍在进行；PG 新实际运行缺少 BIOS 固件，保留失败并准备可信依赖，不操作原 B／生产。全部相关验收后才主控可信热更新和正式发行；完整公网／OSS／72 小时目标继续单列未验收。
+
 2026-11-27 安全维护接续：模块根级 vmlinuz 精确 alias 修订及 writer-ready 测试已完成新 Linux64/0skip/0fail和对应守卫/类型，产品21a、测试150d准备分批保存。真实已认证 LTS 包另有 release 命名配置、System.map 和 kernel.release 三路径尚未兼容，已批准下一批全链 metadata 修复；未据 alias 分项宣布真实 kernel 启动/自动许可或整个灾备完成。PG Ubuntu 双库的直接 API 及原矩阵执行计划待最终审视，完整 R6 Debian13/glibc2.41 环境仍需独立验收，新的 AMD64 原始云镜像已官方 HTTPS/SHA512 核对（未声称 detached PGP）。最新实际缺口见 [并行安全验收](docs/security-parallel-review-2026-11-25.md)，原正式版本与生产保持。
 
 ## 2026-11-27 安全验收与仓库替代的当前范围

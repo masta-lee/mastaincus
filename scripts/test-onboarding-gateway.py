@@ -24,7 +24,7 @@ spec.loader.exec_module(gateway)
 class MaintenanceCapabilityTests(unittest.TestCase):
     def test_complete_protected_pair_advertises_full_source_hashes(self):
         sources = {'host-security-maintenance.py': b'# apparmor module\n',
-                   'host-kernel-maintenance.py': b'# kernel module\n' + b'x' * 70000 + b'\n# final byte\n'}
+                   'host-kernel-maintenance.py': b'# kernel module\n' + b'x' * 105000 + b'\n# final byte\n'}
         def read(path, limit, complete=False):
             self.assertEqual(path.parent, gateway.DNS_TOOLS)
             self.assertEqual(limit, gateway.MAINTENANCE_MODULE_LIMITS[path.name])
@@ -95,6 +95,56 @@ class MaintenanceCapabilityTests(unittest.TestCase):
             self.assertEqual(result['managementSshPublicKey'], public)
             self.assertNotIn('maintenanceProtocolVersion', result)
             self.assertNotIn('maintenanceModuleHashes', result)
+
+    def test_maintenance_execution_completes_fragmented_kernel_or_refuses_before_probe(self):
+        job = '00000000-0000-4000-8000-000000000001'
+        peer = base64.b64encode(bytes([2]) * 32).decode()
+        request = {'managementIp': '10.253.240.3', 'sshPort': 22,
+                   'sshFingerprint': 'SHA256:' + 'a' * 43, 'nodePublicKey': peer,
+                   'operation': {'action': 'inspect', 'nodeId': job, 'requestId': job,
+                                 'identityHash': 'a' * 64, 'bootId': job, 'prepareHash': '0' * 64,
+                                 'recipe': 'alpine-kernel-patch-v1', 'architecture': 'x86_64',
+                                 'expiresAt': 130000, 'customers': [], 'expectedPlanHash': None}}
+        original_reader = gateway.read_protected_state
+        safe = types.SimpleNamespace(st_uid=0, st_mode=0o100644, st_nlink=1, st_size=9)
+        for chunks, complete in [([b'first', b'last', b''], True), ([b'first', b''], False)]:
+            content = []
+            def read(path, limit, complete=False):
+                if path == gateway.STATE / (job + '.json'):
+                    return json.dumps({'managementIp': request['managementIp'], 'nodePublicKey': peer}).encode()
+                if path.name == 'host-security-maintenance.py':
+                    self.assertTrue(complete)
+                    return b'# fixed apparmor module\n'
+                self.assertEqual(path, gateway.DNS_TOOLS / 'host-kernel-maintenance.py')
+                self.assertEqual(limit, 128 * 1024)
+                self.assertTrue(complete)
+                raw = original_reader(path, limit, complete=complete)
+                content.append(raw)
+                return raw
+            stdin = types.SimpleNamespace(stdin=types.SimpleNamespace(buffer=io.BytesIO(json.dumps(request).encode())))
+            with self.subTest(complete=complete), mock.patch.object(gateway, 'sys', stdin), \
+                 mock.patch.object(gateway.time, 'time', return_value=100), \
+                 mock.patch.object(gateway, 'run', return_value=peer + '\t10.253.240.3/32'), \
+                 mock.patch.object(gateway, 'read_protected_state', side_effect=read), \
+                 mock.patch.object(pathlib.Path, 'lstat', return_value=safe), \
+                 mock.patch.object(gateway.os, 'open', return_value=19), \
+                 mock.patch.object(gateway.os, 'fstat', return_value=safe), \
+                 mock.patch.object(gateway.os, 'read', side_effect=chunks), \
+                 mock.patch.object(gateway.os, 'close'), \
+                 mock.patch.object(gateway.os, 'O_NOFOLLOW', 0, create=True), \
+                 mock.patch.object(gateway.os, 'O_NONBLOCK', 0, create=True), \
+                 mock.patch.object(gateway.subprocess, 'run', side_effect=RuntimeError('fixture probe boundary')) as probe:
+                if complete:
+                    with self.assertRaisesRegex(RuntimeError, '^fixture probe boundary$'):
+                        gateway.maintain_host(job, ipaddress.IPv4Interface('10.253.240.1/20'))
+                    self.assertEqual(content, [b'firstlast'])
+                    self.assertEqual(probe.call_count, 1)
+                    self.assertEqual(probe.call_args.args[0][0], 'ssh-keyscan')
+                else:
+                    with self.assertRaisesRegex(ValueError, '^invalid recovery state$'):
+                        gateway.maintain_host(job, ipaddress.IPv4Interface('10.253.240.1/20'))
+                    self.assertEqual(content, [])
+                    probe.assert_not_called()
 
 
 class RecoveryRouteTests(unittest.TestCase):

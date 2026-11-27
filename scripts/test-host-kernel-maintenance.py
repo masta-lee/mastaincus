@@ -502,6 +502,102 @@ class KernelAliasPlanTests(unittest.TestCase):
                 self.parse_alias_apk(self.alias_apk(**case))
 
 
+class KernelMetadataPlanTests(unittest.TestCase):
+    def metadata_apk(self, flavor='linux-virt', architecture='x86_64', changes=None, extra=()):
+        release = '6.12.118-0-' + flavor[6:]
+        def entry(name, body, **options):
+            info = tarfile.TarInfo(name)
+            info.uid = info.gid = 0; info.mode = 0o644; info.size = len(body)
+            for key, value in options.items():
+                setattr(info, key, value)
+            return info, body
+        def tar(entries):
+            stream = io.BytesIO()
+            with tarfile.open(fileobj=stream, mode='w') as archive:
+                for info, body in entries:
+                    archive.addfile(info, io.BytesIO(body) if info.isfile() else None)
+            return gzip.compress(stream.getvalue())
+        metadata = [('boot/config-' + release, b'CONFIG_TEST=y\n'), ('boot/System.map-' + release, b'fixture-map\n'),
+                    ('usr/share/kernel/' + flavor[6:] + '/kernel.release', (release + '\n').encode())]
+        entries = [entry('boot/vmlinuz-' + flavor[6:], b'candidate'),
+                   entry('lib/modules/' + release + '/kernel/test.ko', b'module')]
+        for name, body in metadata:
+            changes_at_path = (changes or {}).get(name, {})
+            entries.append(entry(changes_at_path.get('name', name), changes_at_path.get('body', body),
+                                 **{key: value for key, value in changes_at_path.items() if key not in {'name', 'body'}}))
+        entries.extend(entry(name, body, **options) for name, body, options in extra)
+        # This fixture tests tar parsing only. It carries no real signature.
+        return tar([entry('.SIGN.RSA.test.pub', b'synthetic parsing fixture')]) + \
+            tar([entry('.PKGINFO', ('pkgname = ' + flavor + '\npkgver = 6.12.118-r0\narch = ' + architecture + '\n').encode())]) + tar(entries)
+
+    def parse(self, data, flavor='linux-virt', architecture='x86_64'):
+        return KernelAliasPlanTests.parse_alias_apk(self, data, flavor, architecture)
+
+    def test_metadata_paths_are_exact_same_flavor_and_release(self):
+        for flavor in ('linux-virt', 'linux-lts'):
+            release = '6.12.118-0-' + flavor[6:]
+            self.assertEqual(module.kernel_metadata_paths(flavor, release),
+                             {'config': '/boot/config-' + release, 'map': '/boot/System.map-' + release,
+                              'release': '/usr/share/kernel/' + flavor[6:] + '/kernel.release'})
+            for wrong in ('../6.12.118-0-' + flavor[6:], '6.12.118-r0', '6.12.118-0-other', None):
+                with self.subTest(flavor=flavor, release=wrong), self.assertRaises((ValueError, TypeError)):
+                    module.kernel_metadata_paths(flavor, wrong)
+        for flavor in ('linux-other', 'virt', None, [], True):
+            with self.subTest(flavor=flavor), self.assertRaises(ValueError):
+                module.kernel_metadata_paths(flavor, '6.12.118-0-virt')
+
+    def test_synthetic_metadata_supports_both_flavors_and_architectures(self):
+        for flavor in ('linux-virt', 'linux-lts'):
+            for architecture in ('x86_64', 'aarch64'):
+                with self.subTest(flavor=flavor, architecture=architecture):
+                    payload = self.parse(self.metadata_apk(flavor, architecture), flavor, architecture)
+                    release = '6.12.118-0-' + flavor[6:]
+                    paths = module.kernel_metadata_paths(flavor, release)
+                    self.assertEqual(set(payload), {'/boot/vmlinuz-' + flavor[6:],
+                        '/lib/modules/' + release + '/kernel/test.ko', *paths.values()})
+                    release_body = (release + '\n').encode()
+                    self.assertEqual(payload[paths['release']], {'sha256': module.digest(release_body),
+                        'size': len(release_body), 'mode': 0o644, 'uid': 0, 'gid': 0})
+
+    def test_metadata_release_requires_exact_version_and_one_lf(self):
+        path = 'usr/share/kernel/virt/kernel.release'
+        for body in (b'6.12.118-0-virt', b'6.12.118-0-virt\r\n', b'6.12.118-0-virt\n\n',
+                     b'6.12.119-0-virt\n', b'6.12.118-0-lts\n', b''):
+            with self.subTest(body=body), self.assertRaises(ValueError):
+                self.parse(self.metadata_apk(changes={path: {'body': body}}))
+
+    def test_metadata_archive_cannot_expand_paths_or_admit_foreign_owners_and_links(self):
+        paths = module.kernel_metadata_paths('linux-virt', '6.12.118-0-virt')
+        for path in paths.values():
+            for options in ({'uid': 1}, {'gid': 1}, {'mode': 0o666}, {'mode': 0o4755},
+                            {'type': tarfile.SYMTYPE, 'linkname': '/etc/passwd'},
+                            {'type': tarfile.LNKTYPE, 'linkname': '/boot/vmlinuz-virt'}):
+                with self.subTest(path=path, options=options), self.assertRaises(ValueError):
+                    self.parse(self.metadata_apk(changes={path.lstrip('/'): options}))
+        for wrong in ('boot/config-6.12.119-0-virt', 'boot/System.map-6.12.118-0-lts',
+                      'usr/share/kernel/lts/kernel.release', 'usr/share/kernel/virt/unreviewed',
+                      '../usr/share/kernel/virt/kernel.release'):
+            with self.subTest(path=wrong), self.assertRaises(ValueError):
+                self.parse(self.metadata_apk(changes={'usr/share/kernel/virt/kernel.release': {'name': wrong}}))
+        for name, options in (('usr/local', {'type': tarfile.DIRTYPE}), ('usr/share/kernel/lts', {'type': tarfile.DIRTYPE}),
+                              ('usr/share/kernel/virt/kernel.release', {})):
+            with self.subTest(extra=name), self.assertRaises(ValueError):
+                self.parse(self.metadata_apk(extra=[(name, b'', options)]))
+
+    def test_metadata_journal_proofs_reject_false_types_and_noncanonical_release_digest(self):
+        plan = {'flavor': 'linux-virt', 'candidateRelease': '6.12.118-0-virt'}
+        path = '/usr/share/kernel/virt/kernel.release'
+        body = b'6.12.118-0-virt\n'
+        proof = {'sha256': module.digest(body), 'size': len(body), 'mode': 0o644, 'uid': 0, 'gid': 0}
+        module.validate_metadata_payload(path, proof, plan)
+        for changes in ({'gid': 1}, {'uid': True}, {'size': True}, {'mode': 0o666}, {'mode': 0o4755},
+                        {'sha256': 'a' * 64}, {'size': len(body) - 1}, {'unknown': True}):
+            with self.subTest(changes=changes), self.assertRaises(ValueError):
+                module.validate_metadata_payload(path, {**proof, **changes}, plan)
+        with self.assertRaises(ValueError):
+            module.validate_metadata_payload('/usr/share/kernel/lts/kernel.release', proof, plan)
+
+
 @unittest.skipUnless(os.name == 'posix' and hasattr(os, 'waitid') and hasattr(os, 'getuid') and os.getuid() == 0,
                      'requires isolated Linux subprocess fixtures')
 class KernelCommandTests(unittest.TestCase):
@@ -846,7 +942,7 @@ class KernelModuleAliasFilesystemTests(unittest.TestCase):
 
 @unittest.skipUnless(os.name == 'posix' and hasattr(os, 'getuid') and os.getuid() == 0, 'requires isolated Linux root filesystem fixtures')
 class KernelFilesystemTests(unittest.TestCase):
-    def fixture(self, include_alias=False):
+    def fixture(self, include_alias=False, include_metadata=False):
         stack = ExitStack()
         directory = stack.enter_context(tempfile.TemporaryDirectory(prefix='incudal-kernel-unit-', dir='/var/lib'))
         root, fs = Path(directory), Path(directory) / 'fs'
@@ -879,6 +975,10 @@ class KernelFilesystemTests(unittest.TestCase):
         put('/lib/modules/6.12.100-0-virt/kernel/test.ko', b'old-module')
         if include_alias:
             os.symlink('/boot/vmlinuz-virt', mapped('/lib/modules/6.12.100-0-virt/vmlinuz'))
+        if include_metadata:
+            put('/boot/config-6.12.100-0-virt', b'old-config')
+            put('/boot/System.map-6.12.100-0-virt', b'old-map')
+            put('/usr/share/kernel/virt/kernel.release', b'6.12.100-0-virt\n')
         put('/etc/mkinitfs/mkinitfs.conf', b'features="base ext4"\n')
         put('/etc/default/grub', b'GRUB_CMDLINE_LINUX_DEFAULT="console=ttyS0 apparmor=1"\n')
         put('/etc/ssh/ssh_host_ed25519_key.pub', b'fixture-original-public-key\n')
@@ -911,6 +1011,11 @@ class KernelFilesystemTests(unittest.TestCase):
                        '/lib/modules/' + candidate_release + '/kernel/test.ko': {'sha256': module.digest(b'new-module'), 'size': 10, 'mode': 0o644, 'uid': 0, 'gid': 0}}
             if include_alias:
                 payload['/lib/modules/' + candidate_release + '/vmlinuz'] = module.module_alias_metadata('linux-virt')
+            if include_metadata:
+                for path, data in [(('/boot/config-' + candidate_release), b'new-config'),
+                                   (('/boot/System.map-' + candidate_release), b'new-map'),
+                                   ('/usr/share/kernel/virt/kernel.release', (candidate_release + '\n').encode())]:
+                    payload[path] = {'sha256': module.digest(data), 'size': len(data), 'mode': 0o644, 'uid': 0, 'gid': 0}
             transaction = {'plan': plan, 'context': context(), 'installed': dict(inventory), 'expectedInstalled': {**inventory, 'linux-virt': candidate},
                            'baseline': {'bootloader': 'grub', 'config': '/boot/grub/grub.cfg',
                                         'arguments': module.linux_arguments(before_config, 'grub', 'linux-virt'),
@@ -920,6 +1025,8 @@ class KernelFilesystemTests(unittest.TestCase):
                                         'identity': identity, 'cmdline': mapped('/proc/cmdline').read_text().strip()},
                            'cache': module.cache_manifest(target / 'cache'), 'payload': payload,
                            'reactivation': installed == candidate, 'staging': None, 'candidateArtifacts': None, 'candidateModules': None}
+            if include_metadata:
+                transaction['baseline']['packageMetadata'] = module.package_metadata_snapshot('linux-virt', running[0])
             plan['planHash'] = module.digest(module.encoded({key: field for key, field in transaction.items() if key not in {'staging', 'candidateArtifacts', 'candidateModules'}}))
             return plan, transaction
         commands = []
@@ -955,6 +1062,18 @@ class KernelFilesystemTests(unittest.TestCase):
                         os.symlink('/boot/vmlinuz-virt', alias)
                     else:
                         self.assertEqual(os.readlink(alias), '/boot/vmlinuz-virt')
+                if include_metadata:
+                    for old in ['/boot/config-' + running[0], '/boot/System.map-' + running[0]]:
+                        path = mapped(old)
+                        self.assertTrue(path.is_relative_to(fs))
+                        try:
+                            path.unlink()
+                        except FileNotFoundError:
+                            pass
+                    installed_release = module.version_release(expected, 'linux-virt')
+                    put('/boot/config-' + installed_release, b'new-config')
+                    put('/boot/System.map-' + installed_release, b'new-map')
+                    put('/usr/share/kernel/virt/kernel.release', (installed_release + '\n').encode())
                 return b'OK\n'
             if program == 'mkinitfs':
                 Path(args[args.index('-o') + 1]).write_bytes(b'new-initramfs')
@@ -996,6 +1115,392 @@ class KernelFilesystemTests(unittest.TestCase):
         put('/proc/sys/kernel/osrelease', running[0].encode())
         module.execute({**request, 'action': 'verify'})
         return module.strict_json((module.ROOT / 'kernel-maintenance.json').read_bytes())
+
+    def metadata_artifacts(self, value, root):
+        inspected = module.execute(value)
+        request = {**value, 'action': 'prepare', 'expectedPlanHash': inspected['plan']['planHash']}
+        self.assertEqual(module.execute(request)['phase'], 'prepared-artifacts')
+        return request, module.strict_json((root / 'kernel-maintenance.json').read_bytes())
+
+    def test_metadata_is_backed_up_before_apk_and_rollback_keeps_registered_new_release(self):
+        stack, root, fs, value, _, _, inventory, commands, _ = self.fixture(include_alias=True, include_metadata=True)
+        with stack:
+            (fs / 'boot/System.map-6.12.100-0-virt').chmod(0o640)
+            request, state = self.metadata_artifacts(value, root)
+            before = state['transaction']['baseline']['packageMetadata']
+            self.assertEqual(set(before), {'/boot/config-6.12.100-0-virt', '/boot/System.map-6.12.100-0-virt',
+                                           '/usr/share/kernel/virt/kernel.release'})
+            self.assertFalse(any('fix' in args or 'upgrade' in args for args in commands))
+            for path, proof in before.items():
+                backup = module.metadata_backup_path(state, path)
+                self.assertEqual(module.file_proof(backup, private=True), {**proof, 'mode': 0o600})
+                self.assertEqual(backup.lstat().st_nlink, 1)
+                self.assertEqual(backup.lstat().st_uid, 0); self.assertEqual(backup.lstat().st_gid, 0)
+            for phase in ('packages-installed', 'boot-staged', 'prepared'):
+                self.assertEqual(module.execute(request)['phase'], phase)
+            self.assertFalse((fs / 'boot/config-6.12.100-0-virt').exists())
+            self.assertFalse((fs / 'boot/System.map-6.12.100-0-virt').exists())
+            self.assertEqual(module.execute({**request, 'action': 'rollback'})['phase'], 'rolled-back')
+            self.assertEqual((fs / 'boot/config-6.12.100-0-virt').read_bytes(), b'old-config')
+            self.assertEqual((fs / 'boot/System.map-6.12.100-0-virt').read_bytes(), b'old-map')
+            self.assertEqual(stat.S_IMODE((fs / 'boot/System.map-6.12.100-0-virt').lstat().st_mode), 0o640)
+            self.assertEqual((fs / 'usr/share/kernel/virt/kernel.release').read_bytes(), b'6.12.118-0-virt\n')
+            self.assertEqual((fs / 'boot/config-6.12.118-0-virt').read_bytes(), b'new-config')
+            self.assertEqual((fs / 'boot/System.map-6.12.118-0-virt').read_bytes(), b'new-map')
+            self.assertEqual((fs / 'boot/vmlinuz-virt').read_bytes(), b'old-kernel')
+            self.assertEqual(inventory, {'linux-virt': '6.12.118-r0', 'incus': '6.20-r0'})
+            self.assertFalse(any('downgrade' in args for args in commands))
+
+    def test_metadata_none_baseline_does_not_invent_old_files_or_backup_records(self):
+        stack, root, fs, value, _, _, _, _, _ = self.fixture(include_metadata=True)
+        with stack:
+            old_paths = module.kernel_metadata_paths('linux-virt', '6.12.100-0-virt')
+            for path in old_paths.values():
+                target = fs / path.lstrip('/'); self.assertTrue(target.is_relative_to(fs)); target.unlink()
+            request, state = self.metadata_artifacts(value, root)
+            self.assertEqual(state['transaction']['baseline']['packageMetadata'], dict.fromkeys(old_paths.values()))
+            self.assertEqual(list((module.run_directory(state) / 'metadata-before').iterdir()), [])
+            for phase in ('packages-installed', 'boot-staged', 'prepared'):
+                self.assertEqual(module.execute(request)['phase'], phase)
+            self.assertEqual(module.execute({**request, 'action': 'rollback'})['phase'], 'rolled-back')
+            self.assertFalse((fs / old_paths['config'].lstrip('/')).exists())
+            self.assertFalse((fs / old_paths['map'].lstrip('/')).exists())
+            self.assertEqual((fs / old_paths['release'].lstrip('/')).read_bytes(), b'6.12.118-0-virt\n')
+
+    def test_metadata_backup_interruption_resumes_original_plan_before_any_apk(self):
+        stack, root, _, value, _, _, _, commands, _ = self.fixture(include_metadata=True)
+        with stack:
+            inspected = module.execute(value)
+            request = {**value, 'action': 'prepare', 'expectedPlanHash': inspected['plan']['planHash']}
+            original_copy, copied = module.copy_checked, []
+            def interrupted(source, destination, proof, mode=None):
+                result = original_copy(source, destination, proof, mode)
+                if destination.parent.name == 'metadata-before':
+                    copied.append(destination)
+                    raise ValueError('HARDENING_KERNEL_STEP_TIMEOUT')
+                return result
+            with patch.object(module, 'copy_checked', side_effect=interrupted), self.assertRaisesRegex(ValueError, 'STEP_TIMEOUT'):
+                module.execute(request)
+            self.assertEqual(len(copied), 1)
+            old_backup = module.file_proof(copied[0], private=True)
+            self.assertFalse((root / 'kernel-maintenance.json').exists())
+            self.assertFalse(any('fix' in args or 'upgrade' in args for args in commands))
+            self.assertEqual(module.execute(request)['phase'], 'prepared-artifacts')
+            self.assertEqual(module.file_proof(copied[0], private=True), old_backup)
+            state = module.strict_json((root / 'kernel-maintenance.json').read_bytes())
+            self.assertEqual(state['plan']['planHash'], inspected['plan']['planHash'])
+            module.verify_package_metadata_backups(state)
+
+    def test_metadata_backup_tampering_stops_before_package_replay(self):
+        for change in ('bytes', 'mode', 'link', 'hardlink'):
+            stack, root, fs, value, _, _, inventory, commands, _ = self.fixture(include_metadata=True)
+            with stack, self.subTest(change=change):
+                request, state = self.metadata_artifacts(value, root)
+                backup = module.metadata_backup_path(state, '/boot/config-6.12.100-0-virt')
+                if change == 'bytes': backup.write_bytes(b'foreign backup')
+                elif change == 'mode': backup.chmod(0o644)
+                elif change == 'link':
+                    backup.unlink(); os.symlink(fs / 'boot/config-6.12.100-0-virt', backup)
+                else: os.link(backup, backup.with_name('foreign-hardlink'))
+                offset = len(commands)
+                with self.assertRaises(ValueError):
+                    module.execute(request)
+                self.assertEqual(commands[offset:], [])
+                self.assertEqual(inventory['linux-virt'], '6.12.100-r0')
+                if change == 'bytes': self.assertEqual(backup.read_bytes(), b'foreign backup')
+                elif change == 'link': self.assertTrue(backup.is_symlink())
+
+    def test_metadata_apk_file_and_database_commit_orders_replay_exact_original_package(self):
+        for registered_expected in (False, True):
+            stack, root, fs, value, _, _, inventory, commands, put = self.fixture(include_metadata=True)
+            with stack, self.subTest(registered_expected=registered_expected):
+                request, state = self.metadata_artifacts(value, root)
+                for path in ('boot/config-6.12.100-0-virt', 'boot/System.map-6.12.100-0-virt'):
+                    target = fs / path; self.assertTrue(target.is_relative_to(fs)); target.unlink()
+                put('/boot/config-6.12.118-0-virt', b'new-config')
+                put('/boot/System.map-6.12.118-0-virt', b'new-map')
+                put('/usr/share/kernel/virt/kernel.release', b'6.12.118-0-virt\n')
+                if registered_expected:
+                    inventory['linux-virt'] = '6.12.118-r0'; put('/lib/apk/db/installed', b'expected-db\n')
+                self.assertEqual(module.execute(request)['phase'], 'packages-installed')
+                module.verify_package_metadata(state['transaction'])
+                actual = [args for args in commands if '--simulate' not in args and ('fix' in args or 'upgrade' in args)]
+                self.assertEqual(len(actual), 1); self.assertEqual('fix' in actual[0], registered_expected)
+                self.assertEqual(actual[0][-1], 'linux-virt'); self.assertIn('--no-network', actual[0])
+                self.assertEqual(inventory['linux-virt'], '6.12.118-r0')
+
+    def test_metadata_rollback_uses_original_inventory_after_interrupted_file_commit(self):
+        for registered_expected in (False, True):
+            stack, root, fs, value, _, _, inventory, commands, put = self.fixture(include_metadata=True)
+            with stack, self.subTest(registered_expected=registered_expected):
+                request, _ = self.metadata_artifacts(value, root)
+                for path in ('boot/config-6.12.100-0-virt', 'boot/System.map-6.12.100-0-virt'):
+                    target = fs / path; self.assertTrue(target.is_relative_to(fs)); target.unlink()
+                put('/boot/config-6.12.118-0-virt', b'new-config')
+                put('/boot/System.map-6.12.118-0-virt', b'new-map')
+                put('/usr/share/kernel/virt/kernel.release', b'6.12.118-0-virt\n')
+                if registered_expected:
+                    inventory['linux-virt'] = '6.12.118-r0'; put('/lib/apk/db/installed', b'expected-db\n')
+                offset, original_inventory = len(commands), dict(inventory)
+                self.assertEqual(module.execute({**request, 'action': 'rollback'})['phase'], 'rolled-back')
+                self.assertEqual(inventory, original_inventory)
+                self.assertEqual(commands[offset:], [])
+                self.assertEqual((fs / 'boot/config-6.12.100-0-virt').read_bytes(), b'old-config')
+                self.assertEqual((fs / 'boot/System.map-6.12.100-0-virt').read_bytes(), b'old-map')
+                release = b'6.12.118-0-virt\n' if registered_expected else b'6.12.100-0-virt\n'
+                self.assertEqual((fs / 'usr/share/kernel/virt/kernel.release').read_bytes(), release)
+                self.assertEqual((fs / 'boot/config-6.12.118-0-virt').read_bytes(), b'new-config')
+
+    def test_metadata_pollution_refuses_rollback_before_any_boot_or_module_restore(self):
+        paths = ['/boot/config-6.12.100-0-virt', '/boot/System.map-6.12.100-0-virt',
+                 '/usr/share/kernel/virt/kernel.release', '/boot/config-6.12.118-0-virt']
+        for path in paths:
+            stack, root, fs, value, _, _, _, commands, put = self.fixture(include_metadata=True)
+            with stack, self.subTest(path=path):
+                request, _ = self.prepared(value)
+                put(path, b'foreign administrator edit')
+                old_tree = fs / 'lib/modules/6.12.100-0-virt'
+                self.assertTrue(old_tree.is_relative_to(fs)); shutil.rmtree(old_tree)
+                before = {name: (fs / name).read_bytes() for name in ('boot/vmlinuz-virt', 'boot/initramfs-virt', 'boot/grub/grub.cfg')}
+                offset = len(commands)
+                with self.assertRaisesRegex(ValueError, 'CONFIGURATION_CHANGED'):
+                    module.execute({**request, 'action': 'rollback'})
+                self.assertFalse(old_tree.exists(), 'unknown metadata must be rejected before old modules are rewritten')
+                self.assertEqual({name: (fs / name).read_bytes() for name in before}, before)
+                self.assertEqual((fs / path.lstrip('/')).read_bytes(), b'foreign administrator edit')
+                self.assertEqual(commands[offset:], [])
+
+    def test_metadata_copy_race_is_rechecked_before_publishing_the_original_journal(self):
+        stack, root, fs, value, _, _, _, commands, put = self.fixture(include_metadata=True)
+        with stack:
+            inspected = module.execute(value)
+            request = {**value, 'action': 'prepare', 'expectedPlanHash': inspected['plan']['planHash']}
+            original_copy = module.copy_checked
+            def race(source, destination, proof, mode=None):
+                result = original_copy(source, destination, proof, mode)
+                if destination.parent.name == 'before' and destination.name == 'vmlinuz-virt':
+                    put('/boot/config-6.12.100-0-virt', b'foreign administrator edit')
+                return result
+            with patch.object(module, 'copy_checked', side_effect=race), self.assertRaisesRegex(ValueError, 'CONFIGURATION_CHANGED'):
+                module.execute(request)
+            self.assertFalse((root / 'kernel-maintenance.json').exists())
+            self.assertEqual((fs / 'boot/config-6.12.100-0-virt').read_bytes(), b'foreign administrator edit')
+            self.assertFalse(any('fix' in args or 'upgrade' in args for args in commands))
+
+    def test_metadata_backup_and_copy_scratch_are_included_in_disk_reservation(self):
+        stack, root, _, value, _, _, _, _, _ = self.fixture(include_metadata=True)
+        with stack:
+            request, state = self.metadata_artifacts(value, root)
+            baseline, transaction = state['transaction']['baseline'], state['transaction']
+            records = [*baseline['packageMetadata'].items(), *module.expected_package_metadata(transaction).items()]
+            metadata_size = sum(proof['size'] for _, proof in records if proof is not None)
+            boot_metadata = sum(proof['size'] for path, proof in records if path.startswith('/boot/') and proof is not None)
+            expected_root = module.manifest_size(baseline['modules']) * 2 + module.manifest_size(transaction['cache']) + \
+                module.manifest_size(baseline['artifacts']) * 2 + metadata_size * 2 + 64 * 1024 * 1024
+            expected_boot = module.manifest_size(baseline['artifacts']) * 2 + boot_metadata * 2 + 16 * 1024 * 1024
+            with patch.object(module, 'resources') as reserve:
+                module.save_before(state, request)
+            self.assertEqual(reserve.call_args_list[0].args, (expected_root, expected_boot))
+
+    def test_metadata_disk_shortfall_refuses_all_backups_and_apk_on_both_filesystems(self):
+        native_resources = module.resources
+        old_stack, old_root, _, old_value, _, _, _, _, _ = self.fixture()
+        with old_stack, patch.object(module, 'resources') as reserve:
+            self.metadata_artifacts(old_value, old_root)
+            old_root_budget, old_boot_budget = reserve.call_args_list[0].args
+        for shortage in ('root', 'boot'):
+            stack, root, fs, value, _, _, inventory, commands, _ = self.fixture(include_metadata=True)
+            with stack, self.subTest(shortage=shortage):
+                original_metadata = module.package_metadata_snapshot('linux-virt', '6.12.100-0-virt')
+                original_boot = {name: (fs / name).read_bytes() for name in ('boot/vmlinuz-virt', 'boot/initramfs-virt', 'boot/grub/grub.cfg')}
+                original_db = (fs / 'lib/apk/db/installed').read_bytes()
+                inspected = module.execute(value)
+                request = {**value, 'action': 'prepare', 'expectedPlanHash': inspected['plan']['planHash']}
+                def available(path):
+                    limit = old_boot_budget if shortage == 'boot' and path == '/boot' else \
+                        old_root_budget if shortage == 'root' and path != '/boot' else 1024 * 1024 * 1024
+                    return types.SimpleNamespace(f_flag=0, f_bavail=limit, f_frsize=1, f_favail=4096)
+                with patch.object(module.os, 'statvfs', side_effect=available), \
+                        patch.object(module, 'resources', side_effect=native_resources), \
+                        patch.object(module, 'copy_checked', side_effect=AssertionError('low disk must be rejected before any backup copy')), \
+                        self.assertRaisesRegex(ValueError, '^HARDENING_DISK_LOW$'):
+                    module.execute(request)
+                preparation = root / ('kernel-' + request['requestId'])
+                self.assertFalse((preparation / 'metadata-before').exists())
+                self.assertFalse((preparation / 'before').exists())
+                self.assertFalse((preparation / 'old-modules').exists())
+                self.assertFalse((root / 'kernel-maintenance.json').exists())
+                self.assertEqual(module.package_metadata_snapshot('linux-virt', '6.12.100-0-virt'), original_metadata)
+                self.assertEqual({name: (fs / name).read_bytes() for name in original_boot}, original_boot)
+                self.assertEqual((fs / 'lib/apk/db/installed').read_bytes(), original_db)
+                self.assertEqual(inventory, {'linux-virt': '6.12.100-r0', 'incus': '6.20-r0'})
+                self.assertFalse(any('fix' in args or 'upgrade' in args for args in commands))
+
+    def test_metadata_none_baseline_reserves_large_candidate_before_backups_and_before_apk(self):
+        native_resources = module.resources
+        candidate_size = 40 * 1024 * 1024
+        hasher = hashlib.sha256()
+        block = b'candidate-metadata' * (1024 * 1024 // len(b'candidate-metadata'))
+        remaining = candidate_size
+        while remaining:
+            part = block[:remaining]
+            hasher.update(part); remaining -= len(part)
+        for phase in ('before-backup', 'before-apk'):
+            for shortage in ('root', 'boot'):
+                stack, root, fs, value, _, _, inventory, commands, _ = self.fixture(include_metadata=True)
+                with stack, self.subTest(phase=phase, shortage=shortage):
+                    for path in module.kernel_metadata_paths('linux-virt', '6.12.100-0-virt').values():
+                        target = fs / path.lstrip('/'); self.assertTrue(target.is_relative_to(fs)); target.unlink()
+                    original_source = module.source_transaction
+                    def candidate(request, directory, previous=None):
+                        plan, transaction = original_source(request, directory, previous)
+                        # These are declared signed-output proofs in a fake APK
+                        # fixture, not a claim of native signature acceptance.
+                        for path in ('/boot/config-6.12.118-0-virt', '/boot/System.map-6.12.118-0-virt'):
+                            transaction['payload'][path] = {'sha256': hasher.hexdigest(), 'size': candidate_size,
+                                                            'mode': 0o644, 'uid': 0, 'gid': 0}
+                        plan['planHash'] = None
+                        material = {key: field for key, field in transaction.items() if key not in {'staging', 'candidateArtifacts', 'candidateModules'}}
+                        plan['planHash'] = module.digest(module.encoded(material))
+                        return plan, transaction
+                    with patch.object(module, 'source_transaction', side_effect=candidate):
+                        inspected = module.execute(value)
+                        request = {**value, 'action': 'prepare', 'expectedPlanHash': inspected['plan']['planHash']}
+                        if phase == 'before-apk':
+                            self.assertEqual(module.execute(request)['phase'], 'prepared-artifacts')
+                            state = module.strict_json((root / 'kernel-maintenance.json').read_bytes())
+                            self.assertTrue(all(proof is None for proof in state['transaction']['baseline']['packageMetadata'].values()))
+                        original_journal = (root / 'kernel-maintenance.json').read_bytes() if (root / 'kernel-maintenance.json').exists() else None
+                        original_boot = {name: (fs / name).read_bytes() for name in ('boot/vmlinuz-virt', 'boot/initramfs-virt', 'boot/grub/grub.cfg')}
+                        original_db, offset = (fs / 'lib/apk/db/installed').read_bytes(), len(commands)
+                        def available(path):
+                            free = 32 * 1024 * 1024 if shortage == 'boot' and path == '/boot' else \
+                                (300 if phase == 'before-apk' else 128) * 1024 * 1024 if shortage == 'root' and path != '/boot' else 1024 * 1024 * 1024
+                            return types.SimpleNamespace(f_flag=0, f_bavail=free // 4096, f_frsize=4096, f_favail=4096)
+                        with patch.object(module.os, 'statvfs', side_effect=available), \
+                                patch.object(module, 'resources', side_effect=native_resources), \
+                                patch.object(module, 'copy_checked', side_effect=AssertionError('candidate shortfall must precede any backup or APK write')), \
+                                self.assertRaisesRegex(ValueError, '^HARDENING_DISK_LOW$'):
+                            module.execute(request)
+                        if phase == 'before-backup':
+                            preparation = root / ('kernel-' + request['requestId'])
+                            self.assertFalse((preparation / 'metadata-before').exists())
+                            self.assertFalse((preparation / 'before').exists())
+                            self.assertFalse((preparation / 'old-modules').exists())
+                        self.assertEqual((root / 'kernel-maintenance.json').read_bytes() if (root / 'kernel-maintenance.json').exists() else None, original_journal)
+                        self.assertEqual({name: (fs / name).read_bytes() for name in original_boot}, original_boot)
+                        self.assertEqual((fs / 'lib/apk/db/installed').read_bytes(), original_db)
+                        self.assertEqual(inventory, {'linux-virt': '6.12.100-r0', 'incus': '6.20-r0'})
+                        self.assertTrue(all(proof is None for proof in module.package_metadata_snapshot('linux-virt', '6.12.100-0-virt').values()))
+                        self.assertEqual(commands[offset:], [])
+
+    def test_metadata_interrupted_rollback_resumes_remaining_original_files(self):
+        stack, root, fs, value, _, _, inventory, _, _ = self.fixture(include_metadata=True)
+        with stack:
+            request, _ = self.prepared(value)
+            original_copy, calls = module.copy_checked, []
+            def interrupted(source, destination, proof, mode=None):
+                result = original_copy(source, destination, proof, mode)
+                if destination == fs / 'boot/config-6.12.100-0-virt':
+                    calls.append(destination)
+                    raise ValueError('HARDENING_KERNEL_STEP_TIMEOUT')
+                return result
+            with patch.object(module, 'copy_checked', side_effect=interrupted), self.assertRaisesRegex(ValueError, 'STEP_TIMEOUT'):
+                module.execute({**request, 'action': 'rollback'})
+            self.assertEqual(len(calls), 1)
+            self.assertEqual((fs / 'boot/config-6.12.100-0-virt').read_bytes(), b'old-config')
+            self.assertEqual(module.execute({**request, 'action': 'rollback'})['phase'], 'rolled-back')
+            self.assertEqual((fs / 'boot/System.map-6.12.100-0-virt').read_bytes(), b'old-map')
+            self.assertEqual((fs / 'usr/share/kernel/virt/kernel.release').read_bytes(), b'6.12.118-0-virt\n')
+            self.assertEqual(inventory['linux-virt'], '6.12.118-r0')
+
+    def test_metadata_tampering_blocks_reboot_and_terminal_archive(self):
+        for path in ('/boot/config-6.12.118-0-virt', '/boot/System.map-6.12.118-0-virt', '/usr/share/kernel/virt/kernel.release'):
+            stack, root, fs, value, current, running, _, _, put = self.fixture(include_metadata=True)
+            with stack, self.subTest(path=path):
+                request, _ = self.prepared(value)
+                put(path, b'foreign metadata')
+                with patch.object(module.subprocess, 'Popen') as launch, self.assertRaisesRegex(ValueError, 'PAYLOAD_INCOMPLETE'):
+                    module.execute({**request, 'action': 'reboot'})
+                launch.assert_not_called()
+            stack, root, fs, value, current, running, _, _, put = self.fixture(include_metadata=True)
+            with stack, self.subTest(activated_path=path):
+                self.activated(value, current, running, put)
+                original_journal = (root / 'kernel-maintenance.json').read_bytes()
+                put(path, b'foreign metadata')
+                fresh = {**value, 'action': 'status', 'requestId': str(uuid.uuid4()), 'bootId': current[0], 'prepareHash': module.ZERO,
+                         'expectedPlanHash': 'a' * 64}
+                with self.assertRaisesRegex(ValueError, 'PAYLOAD_INCOMPLETE'):
+                    module.execute(fresh)
+                self.assertEqual((root / 'kernel-maintenance.json').read_bytes(), original_journal)
+                self.assertEqual((fs / path.lstrip('/')).read_bytes(), b'foreign metadata')
+
+    def test_metadata_rollback_reactivation_and_next_patch_keep_original_archives(self):
+        stack, root, fs, value, current, running, inventory, commands, put = self.fixture(include_alias=True, include_metadata=True)
+        with stack:
+            original_request, _ = self.prepared(value)
+            self.assertEqual(module.execute({**original_request, 'action': 'rollback'})['phase'], 'rolled-back')
+            original_journal = (root / 'kernel-maintenance.json').read_bytes()
+            world = b'linux-virt\nincus\nlxcfs\n'; put('/etc/apk/world', world)
+            fresh = {**value, 'requestId': str(uuid.uuid4()), 'bootId': current[0], 'expectedPlanHash': None}
+            offset = len(commands)
+            reactivated = self.activated(fresh, current, running, put)
+            actual = [args for args in commands[offset:] if '--simulate' not in args and ('fix' in args or 'upgrade' in args)]
+            self.assertEqual(len(actual), 1); self.assertIn('fix', actual[0]); self.assertNotIn('upgrade', actual[0])
+            self.assertTrue(reactivated['transaction']['reactivation'])
+            self.assertEqual((root / ('kernel-maintenance-' + original_request['requestId'] + '.json')).read_bytes(), original_journal)
+            self.assertEqual((fs / 'etc/apk/world').read_bytes(), world)
+            new_journal = (root / 'kernel-maintenance.json').read_bytes()
+            next_value = {**value, 'requestId': str(uuid.uuid4()), 'bootId': current[0], 'expectedPlanHash': None}
+            next_request, _ = self.prepared(next_value)
+            next_state = module.strict_json((root / 'kernel-maintenance.json').read_bytes())
+            self.assertEqual(next_state['plan']['candidateVersion'], '6.12.119-r0')
+            self.assertEqual(next_state['transaction']['baseline']['packageMetadata']['/boot/config-6.12.118-0-virt']['sha256'], module.digest(b'new-config'))
+            self.assertEqual((root / ('kernel-maintenance-' + fresh['requestId'] + '.json')).read_bytes(), new_journal)
+            self.assertEqual(module.execute({**next_request, 'action': 'rollback'})['phase'], 'rolled-back')
+            self.assertEqual((fs / 'boot/config-6.12.118-0-virt').read_bytes(), b'new-config')
+            self.assertEqual((fs / 'usr/share/kernel/virt/kernel.release').read_bytes(), b'6.12.119-0-virt\n')
+            self.assertEqual(inventory['linux-virt'], '6.12.119-r0')
+
+    def test_metadata_journal_exact_keys_and_legacy_no_metadata_hash_are_preserved(self):
+        stack, root, _, value, _, _, _, _, _ = self.fixture(include_metadata=True)
+        with stack:
+            self.prepared(value)
+            original = (root / 'kernel-maintenance.json').read_bytes()
+            state = module.strict_json(original)
+            def rehash(changed):
+                transaction = changed['transaction']
+                material = {key: field for key, field in transaction.items() if key not in {'staging', 'candidateArtifacts', 'candidateModules'}}
+                material['plan'] = {**transaction['plan'], 'planHash': None}
+                digest = module.digest(module.encoded(material))
+                changed['plan']['planHash'] = transaction['plan']['planHash'] = digest
+                changed['identity']['expectedPlanHash'] = digest
+            for change in ('extra', 'missing', 'uid', 'gid', 'mode', 'type', 'release'):
+                changed = copy.deepcopy(state)
+                metadata = changed['transaction']['baseline']['packageMetadata']
+                if change == 'extra': metadata['/etc/passwd'] = None
+                elif change == 'missing': metadata.pop('/boot/config-6.12.100-0-virt')
+                elif change == 'release': changed['transaction']['payload']['/usr/share/kernel/virt/kernel.release']['sha256'] = 'a' * 64
+                elif change == 'type': metadata['/boot/config-6.12.100-0-virt'] = False
+                else: metadata['/boot/config-6.12.100-0-virt'][change] = 1 if change in {'uid', 'gid'} else 0o777
+                rehash(changed)
+                with self.subTest(change=change), self.assertRaises(ValueError):
+                    module.validate_journal(changed)
+                self.assertEqual((root / 'kernel-maintenance.json').read_bytes(), original)
+        stack, root, _, value, _, _, _, _, _ = self.fixture(include_alias=True)
+        with stack:
+            request, _ = self.prepared(value)
+            original = (root / 'kernel-maintenance.json').read_bytes()
+            state = module.strict_json(original)
+            self.assertNotIn('packageMetadata', state['transaction']['baseline'])
+            with patch.object(module, 'metadata_proof', side_effect=AssertionError('old journal must not read a new metadata range')):
+                self.assertEqual(module.execute({**request, 'action': 'status'})['phase'], 'prepared')
+                module.validate_journal(state)
+                self.assertEqual((root / 'kernel-maintenance.json').read_bytes(), original)
+                self.assertEqual(module.execute({**request, 'action': 'rollback'})['phase'], 'rolled-back')
+            after = module.strict_json((root / 'kernel-maintenance.json').read_bytes())
+            self.assertNotIn('packageMetadata', after['transaction']['baseline'])
+            self.assertEqual(after['plan']['planHash'], state['plan']['planHash'])
 
     def test_alias_preparation_and_removed_tree_rollback_keep_link_and_original_boot_bytes(self):
         stack, root, fs, value, _current, _running, inventory, _commands, _put = self.fixture(include_alias=True)

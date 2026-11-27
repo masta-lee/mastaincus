@@ -251,6 +251,12 @@ const channelUnit = spawnSync(process.execPath, ['--import', 'tsx', 'scripts/tes
   env: { ...process.env, GATEWAY_CHANNEL_UNIT_ONLY: '1', DATABASE_URL: 'postgresql://127.0.0.1:1/gateway_channel_unit_test' },
 })
 assert.equal(channelUnit.status, 0, channelUnit.stdout + channelUnit.stderr)
+for (const args of [['../scripts/test-onboarding-gateway.py', 'MaintenanceCapabilityTests'],
+  ['../scripts/test-upgrade-onboarding-gateway.py']]) {
+  const helperGuard = spawnSync(process.platform === 'win32' ? 'python' : 'python3', args,
+    { encoding: 'utf8', windowsHide: true, timeout: 60_000 })
+  assert.equal(helperGuard.status, 0, helperGuard.stdout + helperGuard.stderr)
+}
 const python = spawnSync(process.platform === 'win32' ? 'python' : 'python3', ['../scripts/test-host-security-hardening.py'], { encoding: 'utf8', windowsHide: true })
 assert.equal(python.status, 0, python.stdout + python.stderr)
 const maintenancePython=spawnSync(process.platform==='win32'?'python':'python3',['../scripts/test-host-maintenance-plan.py'],{encoding:'utf8',windowsHide:true})
