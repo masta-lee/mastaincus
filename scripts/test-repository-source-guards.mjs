@@ -176,6 +176,10 @@ assert.ok(legacyWorkerDrill.includes("const initialLegacyBefore=mode==='before'"
   legacyWorkerDrill.includes('startupInfo.nlink===1') &&
   legacyWorkerDrill.includes('equals(candidateStartup)'),
   'missing/invalid startup guards cannot pass current-install or post-candidate verification; exact signed startup bytes are mandatory')
+assert.ok(legacyWorkerDrill.includes('assert.match(output,/^Job=(?:0)?$/m)') &&
+  legacyWorkerDrill.includes('assert.match(output,/^Result=success$/m)') &&
+  legacyWorkerDrill.includes('assert.match(output,/^ExecMainStatus=0$/m)'),
+  'completed oneshots must retain successful natural exits and reject active jobs while accepting systemctl empty or zero no-job representations')
 assert.ok(read('scripts/check-release-runtime-files.py').includes("'scripts/install-panel.sh'"),
   'the startup hook installer must be compared against its actual package bytes')
 assert.ok(installer.includes('configure_host_pool_gateway'), 'installer must configure the management gateway')

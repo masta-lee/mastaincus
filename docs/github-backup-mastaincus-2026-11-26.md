@@ -1,5 +1,9 @@
 # mastaincus 仓库替代与原正式资产迁移
 
+同原4a签名包对照[45922907949](https://github.com/masta-lee/mastaincus/actions/runs/45922907949)，driver为c76c70ca8f09a3d0c808115edb073f04fe4f774e，已实际通过首次预期故障回滚、第二次原worker完整升级、生产检查、身份/迁移/校时与唯一健康backend。5/300/10真实限制和PID在两健康分段重置前后保持，故障与重试过程中没有重置。原先current两项start-limit失败的测试准备计数问题已有对应AMD真实结果；ARM和完整新来源17job仍待。
+
+该对照继续实际执行了root rollback unit，systemctl start自然成功，Result=success/ExecMainStatus=0且原security launcher与精确task参数正确；验证随后因Job字段为空而失败。systemctl对没有待运行job显示Job=，原断言只接受Job=0，是新实证的表示兼容漏点。最小修为两种空任务表示均接受，仍要求同步start自然成功/Result success/进程exit0，并拒绝非零/未知/缺字段job；7项格式正负对照及仓库守卫通过，未修改产品、实际unit保护、原包或签名。原c76运行保留failure，不能提前记最后根回滚身份及下一duplicate完整通过。下一步同最终提交完整双架构预览与实际新包核验，不发布新正式版或操作生产。
+
 2026-11-27最新补证：固定4a包诊断45918378053（driver13ba89aa3baefb6e6748a65a9b178614f3b1037b）保留原failure，unit最新Result为start-limit-hit。该次诊断文本解析会覆盖重复Pre/Post且漏读status=0/0，“只剩一条/未执行”结论不成立；已改用原生D-Bus完整10字段，并增加unit文件身份、安全标准错误码和SQLSTATE。原pin B的stockjournald实读校准实际数组格式；不输出argv、环境或原MESSAGE。
 
 原B独立健康单元在与baseline相同的StartLimitIntervalSec300/Burst5/RestartSec10下，前5次正常，第6次5.652秒内真实命中start-limit-hit；仅reset该新单元后正常、原限制不变，PG88982与boot身份保持且临时unit清理通过。证据为logs/mastaincus-systemd-startlimit-control-20261127-r1/native-result-r1.json。新harness只在已验健康准备完成、另一独立root场景开始之前分段清测试计数，比较PID与真实限制不变；一次故障/原worker回滚/重试过程保持连续保护，不在错误后重置。另修startup helper缺失等错误被当可选的漏判：只有最初legacy-before可缺，current及post-candidate阶段要求root755/单link和actual signed candidate中完整startup字节。该同原4a包的counter-control实际结果仍待，不能先写根因闭合或迁移通过。

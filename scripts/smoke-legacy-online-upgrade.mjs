@@ -113,7 +113,10 @@ if (mode === 'root-rollback-prepare') {
   // transient InvocationID/timestamp surviving after that completed job.
   const unit=mode==='root-rollback-wait'?state.rootRollbackUnit:'incudal-online-update@'+state.taskId+'.service'
   const output=execFileSync('/usr/bin/systemctl',['show',unit,'--property=Result,ExecMainStatus,Job,ExecStart'],{encoding:'utf8'})
-  assert.match(output,/^Result=success$/m);assert.match(output,/^ExecMainStatus=0$/m);assert.match(output,/^Job=0$/m)
+  assert.match(output,/^Result=success$/m);assert.match(output,/^ExecMainStatus=0$/m)
+  // systemctl renders an absent completed job as either empty or numeric zero.
+  // The synchronous start has returned; any active/nonzero job still fails.
+  assert.match(output,/^Job=(?:0)?$/m)
   const operation=mode==='root-rollback-wait'?'rollback':'update'
   let launcher='/usr/local/libexec/incudal/incudal-online-task'
   if(output.includes('argv[]=/usr/local/libexec/incudal/database-secure-task ')) {
