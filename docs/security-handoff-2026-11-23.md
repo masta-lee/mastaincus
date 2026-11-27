@@ -1,5 +1,7 @@
 # 安全修复阶段收尾与未完成清单
 
+2026-11-27 最新状态见[当前验收进度](security-validation-progress-2026-11-27.md)：代码287的主CI30、SSH9、完整预览17与实际双包均通过；命名测试包test.a831的17项及双实际包完整独核也已通过，未正式发行或更新生产。真实内核激活回滚、双PG22调用、Debian13/B1原真实备份恢复及最终主控热更新仍未完成。下文各阶段按原来源保留，不把旧“在途”状态当作当前结论。
+
 第五批最终来源 `986fe81cd63c9b88aee128833428defd5bd1b036` 的普通 CI 已 30/30 成功、完整发行预览 17 项必需任务全部成功，两项 current rollback 已实际通过；双实际包签名、321 固定源码、权限、CRC/链接/gzip 尾块独核自然 0。AMD64 原生完成与 ARM64 同启动归零后的受保护证据路径均由实际日志确认，原失败保留。详细 [仓库替代验收](github-backup-mastaincus-2026-11-26.md)；内核/双 PG/新备份模拟恢复、最终主控热更新与正式新版仍待，不把此阶段通过当作全部安全或灾备完成。
 
 2026-11-27 当前接续：已按 owner 要求分批提交推送至公开新仓库 `masta-lee/mastaincus`，最新为 `986fe81cd63c9b88aee128833428defd5bd1b036`。第四批 933 普通 CI 已自然 30/30 成功，完整预览 15 项通过、两项 current rollback 证据权限失败保留；第五批仅修证据创建先后顺序，原 root0600 读取保护不放宽，原生模式对照和独审通过。986 的[完整预览](https://github.com/masta-lee/mastaincus/actions/runs/45956521774)与[普通 CI](https://github.com/masta-lee/mastaincus/actions/runs/45956468567)在途；实际包签名/完整结构与流程终态分别记录，详情见 [仓库替代验收](github-backup-mastaincus-2026-11-26.md)。
