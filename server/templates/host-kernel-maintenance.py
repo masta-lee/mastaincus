@@ -358,7 +358,16 @@ def same_series(before, expected):
 
 
 def installed_packages(value=None):
-    output = command([trusted_program('apk')['path'], 'info', '-v'], value=value).decode()
+    try:
+        output = command([trusted_program('apk')['path'], 'info', '-v'], timeout=8, value=value).decode()
+    except ValueError as error:
+        if str(error) != 'HARDENING_KERNEL_STEP_TIMEOUT':
+            raise
+        # Only this read-only inventory may retry after command() has stopped
+        # its process group. Recheck the tool and the original request expiry.
+        if value is not None:
+            current_request(value)
+        output = command([trusted_program('apk')['path'], 'info', '-v'], timeout=20, value=value).decode()
     result = {}
     for line in output.splitlines():
         match = re.fullmatch(r'([a-zA-Z0-9+_.-]+)-([0-9][a-zA-Z0-9+_.~-]*)', line)

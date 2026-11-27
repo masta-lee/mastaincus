@@ -60,6 +60,75 @@ def apk3_package_names(args, installed, action):
 
 
 class KernelPlanTests(unittest.TestCase):
+    def test_inventory_timeout_rechecks_tool_and_retries_once_with_original_request(self):
+        request = base_request()
+        calls = []
+        tools = [{'path': '/first/apk'}, {'path': '/second/apk'}]
+
+        def command(args, timeout, value):
+            calls.append((args, timeout, value))
+            if len(calls) == 1:
+                raise ValueError('HARDENING_KERNEL_STEP_TIMEOUT')
+            return b'linux-virt-6.18.58-r0\nbaselayout-3.7.0-r0\n'
+
+        with patch.object(module, 'trusted_program', side_effect=tools) as lookup, \
+                patch.object(module, 'command', side_effect=command), \
+                patch.object(module, 'current_request', wraps=module.current_request) as expiry:
+            self.assertEqual(module.installed_packages(request), {'linux-virt': '6.18.58-r0', 'baselayout': '3.7.0-r0'})
+        self.assertEqual([(args, timeout) for args, timeout, _ in calls],
+                         [(['/first/apk', 'info', '-v'], 8), (['/second/apk', 'info', '-v'], 20)])
+        self.assertTrue(all(value is request for _, _, value in calls))
+        self.assertEqual(lookup.call_count, 2)
+        expiry.assert_called_once_with(request)
+
+    def test_inventory_second_timeout_stops_without_third_attempt(self):
+        with patch.object(module, 'trusted_program', return_value={'path': '/trusted/apk'}) as lookup, \
+                patch.object(module, 'command', side_effect=ValueError('HARDENING_KERNEL_STEP_TIMEOUT')) as command:
+            with self.assertRaisesRegex(ValueError, '^HARDENING_KERNEL_STEP_TIMEOUT$'):
+                module.installed_packages()
+        self.assertEqual(lookup.call_count, 2)
+        self.assertEqual([call.kwargs['timeout'] for call in command.call_args_list], [8, 20])
+
+    def test_inventory_non_timeout_and_cleanup_failures_never_retry(self):
+        for code in ('HARDENING_KERNEL_PREPARE_FAILED', 'HARDENING_KERNEL_CHILD_PENDING',
+                     'HARDENING_REQUEST_EXPIRED', 'HARDENING_KERNEL_UNTRUSTED_PATH'):
+            with self.subTest(code=code), \
+                    patch.object(module, 'trusted_program', return_value={'path': '/trusted/apk'}) as lookup, \
+                    patch.object(module, 'command', side_effect=ValueError(code)) as command:
+                with self.assertRaisesRegex(ValueError, '^' + code + '$'):
+                    module.installed_packages()
+            self.assertEqual(command.call_count, 1)
+            self.assertEqual(lookup.call_count, 1)
+
+    def test_inventory_expired_original_request_prevents_second_tool_and_command(self):
+        request = base_request()
+        request['expiresAt'] = 1
+        with patch.object(module, 'trusted_program', return_value={'path': '/trusted/apk'}) as lookup, \
+                patch.object(module, 'command', side_effect=ValueError('HARDENING_KERNEL_STEP_TIMEOUT')) as command:
+            with self.assertRaisesRegex(ValueError, '^HARDENING_REQUEST_EXPIRED$'):
+                module.installed_packages(request)
+        self.assertEqual(command.call_count, 1)
+        self.assertEqual(lookup.call_count, 1)
+        self.assertEqual(request['expiresAt'], 1)
+
+    def test_inventory_retry_still_requires_complete_unique_package_rows(self):
+        for output in (b'', b'linux-virt-6.18.58-r0\nlinux-virt-6.18.58-r0\n',
+                       b'linux-virt-6.18.58-r0\nwarning: unknown row\n', b'\xff'):
+            with self.subTest(output=output), \
+                    patch.object(module, 'trusted_program', return_value={'path': '/trusted/apk'}), \
+                    patch.object(module, 'command', side_effect=[ValueError('HARDENING_KERNEL_STEP_TIMEOUT'), output]) as command:
+                with self.assertRaises((ValueError, UnicodeDecodeError)):
+                    module.installed_packages()
+            self.assertEqual(command.call_count, 2)
+
+    def test_inventory_retry_rejects_a_newly_untrusted_tool_before_another_process(self):
+        with patch.object(module, 'trusted_program', side_effect=[{'path': '/first/apk'}, ValueError('HARDENING_KERNEL_UNTRUSTED_PATH')]) as lookup, \
+                patch.object(module, 'command', side_effect=ValueError('HARDENING_KERNEL_STEP_TIMEOUT')) as command:
+            with self.assertRaisesRegex(ValueError, '^HARDENING_KERNEL_UNTRUSTED_PATH$'):
+                module.installed_packages()
+        self.assertEqual(command.call_count, 1)
+        self.assertEqual(lookup.call_count, 2)
+
     def test_strict_json_rejects_duplicate_keys_at_every_depth_and_nonfinite_numbers(self):
         value = {'one': [{'two': {'hash': 'a' * 64}}]}
         self.assertEqual(module.strict_json(module.encoded(value)), value)
@@ -336,6 +405,77 @@ class KernelPlanTests(unittest.TestCase):
 @unittest.skipUnless(os.name == 'posix' and hasattr(os, 'waitid') and hasattr(os, 'getuid') and os.getuid() == 0,
                      'requires isolated Linux subprocess fixtures')
 class KernelCommandTests(unittest.TestCase):
+    def inventory_program(self, directory, with_child):
+        record, attempts = Path(directory) / 'original-child.json', Path(directory) / 'attempts'
+        child = ('import json,os,sys,time;from pathlib import Path;'
+                 'raw=Path("/proc/self/stat").read_text();fields=raw[raw.rfind(") ")+2:].split();'
+                 'Path(sys.argv[1]).write_text(json.dumps({"pid":os.getpid(),"start":fields[19]}));'
+                 'time.sleep(30)')
+        lines = ['#!' + sys.executable, 'import json,os,subprocess,sys,time', 'from pathlib import Path',
+                 "assert sys.argv[1:] == ['info', '-v']", 'attempts=Path(' + repr(str(attempts)) + ')',
+                 'record=Path(' + repr(str(record)) + ')', 'if not attempts.exists():', "    attempts.write_text('first')"]
+        if with_child:
+            lines += ['    subprocess.Popen([sys.executable,"-c",' + repr(child) + ',str(record)],stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL)',
+                      '    deadline=time.monotonic()+5', '    while not record.exists() and time.monotonic()<deadline: time.sleep(.01)',
+                      '    assert record.exists()']
+        lines += ['    time.sleep(30)', 'else:', '    print("linux-virt-6.18.58-r0\\nbaselayout-3.7.0-r0")']
+        program = Path(directory) / 'apk'
+        program.write_text('\n'.join(lines) + '\n')
+        program.chmod(0o700)
+        return program, record
+
+    def test_real_inventory_retry_reaps_first_group_before_second_lookup(self):
+        with tempfile.TemporaryDirectory(prefix='incudal-kernel-inventory-', dir='/var/lib') as directory:
+            program, record = self.inventory_program(directory, True)
+            original_command = module.command
+            budgets, lookups = [], []
+
+            def lookup(name):
+                self.assertEqual(name, 'apk')
+                if lookups:
+                    self.assertFalse(self.child_alive(record), 'the first writer must be stopped before accepting a retry tool')
+                lookups.append(name)
+                return {'path': str(program), 'proof': module.file_proof(program)}
+
+            def command(args, timeout, value):
+                budgets.append(timeout)
+                # The exact 8/20 budgets are checked above; shorten only this
+                # synthetic sleeping process fixture, preserving real cleanup.
+                return original_command(args, timeout=2 if len(budgets) == 1 else 4, value=value)
+
+            try:
+                with patch.object(module, 'trusted_program', side_effect=lookup), patch.object(module, 'command', side_effect=command):
+                    self.assertEqual(module.installed_packages(), {'linux-virt': '6.18.58-r0', 'baselayout': '3.7.0-r0'})
+                self.assertEqual(budgets, [8, 20])
+                self.assertEqual(len(lookups), 2)
+                self.assertTrue(record.exists())
+                self.assertFalse(self.child_alive(record))
+            finally:
+                self.cleanup_child(record)
+
+    def test_real_inventory_timeout_cannot_extend_original_request_expiry(self):
+        with tempfile.TemporaryDirectory(prefix='incudal-kernel-expiry-', dir='/var/lib') as directory:
+            program, record = self.inventory_program(directory, False)
+            request = base_request()
+            request['expiresAt'] = int(time.time() * 1000) + 2000
+            original_expiry = request['expiresAt']
+            original_popen = module.subprocess.Popen
+            processes = []
+
+            def popen(*args, **kwargs):
+                process = original_popen(*args, **kwargs)
+                processes.append(process)
+                return process
+
+            with patch.object(module, 'trusted_program', return_value={'path': str(program)}) as lookup, \
+                    patch.object(module.subprocess, 'Popen', side_effect=popen):
+                with self.assertRaisesRegex(ValueError, '^HARDENING_REQUEST_EXPIRED$'):
+                    module.installed_packages(request)
+            self.assertEqual(lookup.call_count, 1, 'expired authority cannot resolve a second retry executable')
+            self.assertEqual(len(processes), 1)
+            self.assertTrue(all(process.poll() is not None for process in processes))
+            self.assertEqual(request['expiresAt'], original_expiry)
+
     def child_alive(self, record):
         if not record.exists():
             return False

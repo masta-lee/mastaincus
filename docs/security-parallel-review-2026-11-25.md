@@ -1,5 +1,15 @@
 # 安全剩余工作：并行精修与实际验证
 
+## 2026-11-27 库存超时的自动恢复与当前来源
+
+新内核测试已把首次准备失败定位到本机`apk info -v`读取超过原8秒预算。独立测量执行原命令自然exit0，输出5680B，进程寿命9.124369秒、总调用9.458322秒、CPU约7.89秒；这是TCG测试范围，采样未确认APK锁等待。测量首轮浮点秒数被原strictJson拒绝，原消息与失败保留，后续使用整数微秒对已保存真实消息完成12项严格解析对照，不重派旧盘。
+
+产品仅在`installed_packages`遇到精确`HARDENING_KERNEL_STEP_TIMEOUT`时自动重试一次。首次保持8秒，第二次重新核验受信APK程序后给20秒，并继续按原请求expiresAt限制实际预算；过期、子进程清理、权限、其它失败及重复/非法版本记录仍拒绝。原全局command默认8秒保持，未修改内核/启动/包安装等其它命令预算。模板SHA68aef3317b18574cbc28bfadcbca43c8be04a7b92a7be14f980b7e2a034ebbd9，守卫SHA59bf556955d135193205eeff6f4caa446382058f374227b977ca1b2deba5b73c。
+
+对应48项Linux原生全部自然通过、0skip，包含第一组writer已清理才第二lookup、许可过期不启动第二进程、原参数/输出/副作用边界；原B/PG88982/boot/服务/包库/nft及输入前后相同，本次没有B单元修改。Windows48项中29项Linux专用明确跳过，剩余通过。server types、host-kernel-maintenance-plan及security-hardening守卫自然0。加固守卫第一次因缺DATABASE_URL在导入前退出，按项目测试入口的占位URL补跑后通过，原失败保留。证据为logs/kernel-inventory-retry-20261127-r1-native-result.log及其输入冻结。当前新模板实际boot/rollback和完整备份恢复仍在验收，未据本机/工具测试声称宿主已部署。
+
+仓库迁移已有阶段提交6399ccea、ca11550a、dc071a0e，main/工作分支均已同步。ca完整双架构预览45945358636自然17项必需job全success/Release skipped；普通ca CI唯一目录顺序测试误判已完整原生209/209/0skip修复，新dc普通CI45948929272在途。源码、实际包独核、目标主控热更新与正式新版的状态继续分别记入HANDOFF。
+
 本记录区分源码、工具回归、真实 Linux、完整发行预览及生产部署。Owner 已授权三个子智能体并行工作；主智能体统一整合和操作测试环境、Git、主控热更新。生产程序仍为完整 `v1.8.14-test.a241daf`，本批尚未热更新或正式发行。
 
 ## 2026-11-26 15:52：psql精修及当前206完整Linux通过
