@@ -10,6 +10,7 @@ import signal
 import stat
 import subprocess
 import sys
+import time
 
 TARGET = '/usr/local/libexec/incudal/incudal-repository-source-startup'
 SOURCE_COMMIT = '4a3d7c84aa66c2d2508344bfb8b0a6dd0bc54c78'
@@ -26,6 +27,8 @@ ERROR_TYPES = frozenset({'ValueError', 'PermissionError', 'FileNotFoundError',
 FACTS = ('st_dev', 'st_ino', 'st_uid', 'st_gid', 'st_mode', 'st_nlink', 'st_size',
          'st_mtime_ns', 'st_ctime_ns')
 SYSTEM_ENV = {'PATH': '/usr/sbin:/usr/bin:/sbin:/bin', 'LC_ALL': 'C'}
+BACKEND_UNIT = 'incudal-backend.service'
+BACKEND_DBUS_PATH = '/org/freedesktop/systemd1/unit/incudal_2dbackend_2eservice'
 rows = []
 
 
@@ -68,7 +71,7 @@ def native_exec_metadata(property_name):
         refused()
     result = subprocess.run(['/usr/bin/busctl', '--json=short', 'get-property',
                              'org.freedesktop.systemd1',
-                             '/org/freedesktop/systemd1/unit/incudal_2dbackend_2eservice',
+                             BACKEND_DBUS_PATH,
                              'org.freedesktop.systemd1.Service', property_name],
                             capture_output=True, timeout=15, check=True, env=SYSTEM_ENV)
     if len(result.stdout) > 65536:
@@ -97,6 +100,10 @@ def native_exec_metadata(property_name):
                                   'install-platform-backup.sh')
                  if name in executable or any(name in argument for argument in arguments)]
         commands.append({'executable': executable, 'knownEntries': known, 'ignoreErrors': ignore,
+                         'repositoryStartupExactCommand': executable == '/usr/bin/env' and arguments == [
+                             '/usr/bin/env', '-i', 'PATH=/usr/sbin:/usr/bin:/sbin:/bin',
+                             'LC_ALL=C', '/usr/bin/bash', TARGET],
+                         'argumentsSha256': hashlib.sha256(json.dumps(arguments, separators=(',', ':')).encode()).hexdigest(),
                          'startRealtimeUsec': start_real, 'startMonotonicUsec': start_mono,
                          'stopRealtimeUsec': stop_real, 'stopMonotonicUsec': stop_mono,
                          'pid': pid, 'exitStatus': status, 'exitCode': code,
@@ -105,8 +112,8 @@ def native_exec_metadata(property_name):
 
 
 def unit_state():
-    result = subprocess.run(['/usr/bin/systemctl', 'show', 'incudal-backend.service',
-                             '--property=ActiveState,SubState,Result,ExecMainStatus,ExecMainCode,MainPID,ControlPID,InvocationID,FragmentPath,DropInPaths,NRestarts'],
+    result = subprocess.run(['/usr/bin/systemctl', 'show', BACKEND_UNIT,
+                             '--property=ActiveState,SubState,Result,ExecMainStatus,ExecMainCode,MainPID,ControlPID,InvocationID,FragmentPath,DropInPaths,NRestarts,ExecMainStartTimestampMonotonic,ActiveEnterTimestampMonotonic'],
                             capture_output=True, timeout=15, check=True, env=SYSTEM_ENV)
     if len(result.stdout) > 65536:
         refused()
@@ -119,8 +126,9 @@ def unit_state():
             if not re.fullmatch(r'[a-z-]{1,64}', value):
                 refused()
             values[key] = value
-        elif key in ('ExecMainStatus', 'ExecMainCode', 'MainPID', 'ControlPID', 'NRestarts'):
-            if not re.fullmatch(r'[0-9]{1,12}', value):
+        elif key in ('ExecMainStatus', 'ExecMainCode', 'MainPID', 'ControlPID', 'NRestarts',
+                     'ExecMainStartTimestampMonotonic', 'ActiveEnterTimestampMonotonic'):
+            if not re.fullmatch(r'[0-9]{1,20}', value) or int(value) >= 2**64:
                 refused()
             values[key] = int(value)
         elif key == 'InvocationID':
@@ -137,6 +145,90 @@ def unit_state():
     values['ExecStartPre'] = native_exec_metadata('ExecStartPre')
     values['ExecStartPost'] = native_exec_metadata('ExecStartPost')
     return values
+
+
+def observe_startup():
+    """Read execution tuples throughout a real restart without changing units."""
+    if (os.name != 'posix' or os.geteuid() != 0 or sys.argv[1:] != ['--observe']
+            or os.environ.get('GITHUB_ACTIONS') != 'true'
+            or os.environ.get('RUNNER_ENVIRONMENT') != 'github-hosted'):
+        refused()
+    helper, _ = record(TARGET, required=True)
+    if helper['sha256'] != EXPECTED or helper['bytes'] != EXPECTED_BYTES or helper['mode'] != '0o755':
+        refused()
+    stopped = False
+
+    def stop(signum, frame):
+        nonlocal stopped
+        stopped = True
+
+    signal.signal(signal.SIGTERM, stop)
+    signal.signal(signal.SIGINT, stop)
+    start = time.monotonic()
+    start_real = time.time_ns() // 1000
+    previous = None
+    changes = 0
+    output_bytes = 0
+
+    def emit(value):
+        nonlocal output_bytes
+        line = json.dumps(value, sort_keys=True)
+        output_bytes += len(line.encode()) + 1
+        if output_bytes > 2 * 1024 * 1024:
+            refused()
+        print(line, flush=True)
+
+    emit({'phase': 'current-startup-observer-ready', 'normalizer': helper,
+          'sourceCommit': SOURCE_COMMIT, 'readonly': True,
+          'intervalSeconds': 0.1, 'deadlineSeconds': 300})
+    while not stopped:
+        if time.monotonic() - start > 300:
+            refused()
+        state = unit_state()
+        # A restart may cross the three independent property reads. Bind only
+        # snapshots whose invocation and main process are still the same.
+        identity = subprocess.run(['/usr/bin/systemctl', 'show', BACKEND_UNIT,
+                                   '--property=InvocationID,MainPID,ExecMainStartTimestampMonotonic'],
+                                  capture_output=True, timeout=15, check=True, env=SYSTEM_ENV)
+        if len(identity.stdout) > 4096:
+            refused()
+        identity_fields = dict(line.split('=', 1) for line in identity.stdout.decode('utf-8', 'strict').splitlines())
+        stable = identity_fields == {
+            'InvocationID': state['InvocationID'], 'MainPID': str(state['MainPID']),
+            'ExecMainStartTimestampMonotonic': str(state['ExecMainStartTimestampMonotonic'])}
+        encoded = json.dumps({'stableInvocation': stable, 'unit': state}, sort_keys=True)
+        if encoded != previous:
+            changes += 1
+            if changes > 256:
+                refused()
+            emit({'phase': 'current-startup-observer-snapshot', 'ordinal': changes,
+                  'realtimeMicroseconds': time.time_ns() // 1000,
+                  'monotonicNanoseconds': time.monotonic_ns(),
+                  'stableInvocation': stable, 'unit': state})
+            previous = encoded
+        time.sleep(0.1)
+    final_helper, _ = record(TARGET, required=True)
+    if final_helper['sha256'] != EXPECTED or final_helper['bytes'] != EXPECTED_BYTES or final_helper['mode'] != '0o755':
+        refused()
+    journal = subprocess.run(['/usr/bin/journalctl', '_PID=1', '--no-pager', '-n', '500',
+                              '--since=@' + str(start_real // 1000000), '--output=json'],
+                             capture_output=True, timeout=15, check=True, env=SYSTEM_ENV)
+    if len(journal.stdout) > 2 * 1024 * 1024:
+        refused()
+    for line in journal.stdout.splitlines():
+        entry = json.loads(line)
+        message = entry.get('MESSAGE', '')
+        timestamp = entry.get('__REALTIME_TIMESTAMP', '')
+        if (isinstance(message, str) and
+                (message in ('Reloading.', 'Reloading...') or message.startswith('Reloading finished in ')) and
+                isinstance(timestamp, str) and re.fullmatch(r'[1-9][0-9]{0,19}', timestamp)):
+            emit({'phase': 'current-startup-observer-manager-reload',
+                  'realtimeMicroseconds': int(timestamp),
+                  'messageSha256': hashlib.sha256(message.encode()).hexdigest()})
+    emit({'phase': 'current-startup-observer-finished', 'snapshots': changes,
+          'normalizer': final_helper, 'readonly': True,
+          'executionSuccessDetermined': False})
+    return 0
 
 
 def journal_evidence():
@@ -338,7 +430,7 @@ def run():
 
 if __name__ == '__main__':
     try:
-        status = run()
+        status = observe_startup() if sys.argv[1:] == ['--observe'] else run()
     except BaseException as exception:
         name = type(exception).__name__
         print(json.dumps({'phase': 'fixed-4a-current-rollback-trace-failed',

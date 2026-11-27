@@ -162,6 +162,16 @@ assert.ok(currentRollbackTrace.includes("reply.get('type') != 'a(sasbttttuii)'")
   currentRollbackTrace.includes("values['ExecStartPost'] = native_exec_metadata('ExecStartPost')") &&
   !currentRollbackTrace.includes("'--property=ActiveState,SubState,Result,ExecMainStatus,MainPID,InvocationID,ExecStartPre,ExecStartPost'"),
   'native D-Bus tuples must preserve every execution command and numeric status instead of overwriting repeated formatted properties')
+assert.ok(currentRollbackTrace.includes('def observe_startup():') &&
+  currentRollbackTrace.includes("'repositoryStartupExactCommand': executable == '/usr/bin/env'") &&
+  currentRollbackTrace.includes("'stableInvocation': stable") &&
+  currentRollbackTrace.includes('ExecMainStartTimestampMonotonic') &&
+  currentRollbackTrace.includes("'executionSuccessDetermined': False") &&
+  legacyDrill.includes('UPGRADE_DRILL_STARTUP_OBSERVE') &&
+  legacyDrill.includes('trap stop_startup_observer EXIT') &&
+  migrationDiagnostics.includes('UPGRADE_DRILL_STARTUP_OBSERVE="$fixture_control"') &&
+  legacyWorkerDrill.includes('actual root startup correction must complete through the loaded backend unit'),
+  'optional disposable-runner observation must bind native tuples to the invocation, stop its own child and retain the strict actual-startup assertion')
 const fixtureBudget = legacyDrill.match(/reset_healthy_fixture_start_budget\(\) \{[\s\S]*?^\}/m)?.[0]
 assert.ok(fixtureBudget && fixtureBudget.indexOf('systemctl is-active --quiet incudal-backend') < fixtureBudget.indexOf('systemctl reset-failed') &&
   fixtureBudget.includes('"$fixture_pid_after" == "$fixture_pid_before"') &&

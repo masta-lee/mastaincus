@@ -24,7 +24,21 @@ export UPGRADE_DRILL_BASELINE_VERSION
 work=$(mktemp -d /root/incudal-upgrade-drill-XXXXXX)
 export UPGRADE_DRILL_WORK="$work"
 stage=legacy-install
+startup_observer_pid=''
+startup_observer_output=''
+stop_startup_observer() {
+  if [[ -n "$startup_observer_pid" ]]; then
+    local observer_status
+    kill -TERM "$startup_observer_pid" 2>/dev/null || true
+    if wait "$startup_observer_pid"; then observer_status=0; else observer_status=$?; fi
+    startup_observer_pid=''
+    cat "$startup_observer_output"
+    printf '{"phase":"current-startup-observer-exit","exitCode":%d}\n' "$observer_status"
+  fi
+}
+trap stop_startup_observer EXIT
 report_failure() {
+  stop_startup_observer
   echo "Legacy upgrade failed at $stage ($scenario). Sanitized diagnostics follow."
   journalctl -u incudal-backend --no-pager -n 60 > "$work/backend.log" 2>&1 || true
   # Raw logs stay on the disposable runner; redact generated credentials.
@@ -259,6 +273,17 @@ fi
 if [[ $scenario == rollback && $installer_source == current ]]; then
   stage=actual-root-postflight-rollback
   reset_healthy_fixture_start_budget
+  if [[ ${UPGRADE_DRILL_STARTUP_OBSERVE:-false} == true ]]; then
+    startup_observer_output="$work/startup-observation.jsonl"
+    (umask 077; exec /usr/bin/python3 -I -B "$repo/scripts/test-repository-current-rollback-native-trace.py" --observe) > "$startup_observer_output" &
+    startup_observer_pid=$!
+    for ((observer_ready_attempt=0; observer_ready_attempt<80; observer_ready_attempt++)); do
+      grep -Fq '"phase": "current-startup-observer-ready"' "$startup_observer_output" && break
+      kill -0 "$startup_observer_pid" 2>/dev/null || break
+      sleep 0.1
+    done
+    grep -Fq '"phase": "current-startup-observer-ready"' "$startup_observer_output"
+  fi
   node "$repo/scripts/smoke-legacy-online-upgrade.mjs" root-rollback-prepare "$candidate"
   root_rollback_task=$(python3 -c 'import json; print(json.load(open("/root/incudal-legacy-upgrade.json"))["taskId"])')
   # Queue the genuine root unit behind a normal backend startup. Its worker
@@ -270,6 +295,7 @@ if [[ $scenario == rollback && $installer_source == current ]]; then
   # launcher and the old worker's duplicate guard. Do not restart in between.
   systemctl start "incudal-online-update@${root_rollback_task}.service"
   node "$repo/scripts/smoke-legacy-online-upgrade.mjs" root-duplicate-after "$candidate"
+  stop_startup_observer
 fi
 test "$(ss -ltnp 'sport = :3001' | tail -n +2 | wc -l)" = 1
 test "$(runuser -u postgres -- psql -X -At -d postgres -c "SELECT datdba=(SELECT oid FROM pg_roles WHERE rolname='incudal') FROM pg_database WHERE datname='incudal_retained_upgrade_test'")" = t

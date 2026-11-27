@@ -1,5 +1,13 @@
 # mastaincus 仓库替代与原正式资产迁移
 
+2026-11-27续接已核最新完整运行45924264197，source为886e6b11fdb5e20dc23a36ea9b498b66de990560。17项必需任务15项success，双架构current rollback在实际root回滚完成后的启动钩子状态断言失败，Release预期skipped。双架构实际ZIP、tar、原Ed25519与四负对照、321份固定git-show运行文件、gzip尾块和完整链接解析已独立核验通过，冻结输入前后不变。补核结果保存在logs/mastaincus-preview-886e6b11-artifacts/resume-v2-review-result.json，原v1组件清单假设失败也保留。上述包核验没有消除两项实际流程失败。[运行记录](https://github.com/masta-lee/mastaincus/actions/runs/45924264197)
+
+本批增加仅供专用GitHub诊断的只读D-Bus观察器，覆盖root rollback内部restart，完整保存原生执行字段、精确startup命令是否匹配、InvocationID、MainPID及单调时间。跨启动读取标为stableInvocation=false，记录器不直接判断启动成功。旧实际钩子断言继续保留，shell在成功和失败退出时停止自己的观察子进程；固定4a安装包、原14与现有生产程序不在本批改动范围。
+
+原专用隔离B的新临时unit已验证成功、明确exit7失败、不同启动ID及reload状态变化。实际systemd为255.4-1ubuntu8.19，reload后同InvocationID/MainPID的Post从code1/status0/pid>0变为code0/status0/pid0。原生r2自然exit0，原PG88982、boot、包库、后端及隔离规则前后相同，临时unit已清理。r1将跨状态失败采样排除在“失败被捕获”对照之外而失败，该失败和原输入保留；r2修正专用对照，跨状态采样仍保留不稳定标记。12项原生数组解析正负对照、服务器类型、仓库守卫、清单、Bash/Python语法及Workflow YAML解析通过。证据为logs/mastaincus-startup-observer-native-20261127-r2-result.log和r1/r2各自输入及观察日志。
+
+按owner分批推送要求保存本批，再用固定4a包运行新的观察诊断，核CI实际是否发生同次启动元数据重置。两项current rollback、原内核实际生效/回退、双PG故障续接与完整恢复、主控新备份本机完整模拟恢复及最终主控候选热更新仍待闭环，正式新版尚未发布。
+
 同原4a签名包对照[45922907949](https://github.com/masta-lee/mastaincus/actions/runs/45922907949)，driver为c76c70ca8f09a3d0c808115edb073f04fe4f774e，已实际通过首次预期故障回滚、第二次原worker完整升级、生产检查、身份/迁移/校时与唯一健康backend。5/300/10真实限制和PID在两健康分段重置前后保持，故障与重试过程中没有重置。原先current两项start-limit失败的测试准备计数问题已有对应AMD真实结果；ARM和完整新来源17job仍待。
 
 该对照继续实际执行了root rollback unit，systemctl start自然成功，Result=success/ExecMainStatus=0且原security launcher与精确task参数正确；验证随后因Job字段为空而失败。systemctl对没有待运行job显示Job=，原断言只接受Job=0，是新实证的表示兼容漏点。最小修为两种空任务表示均接受，仍要求同步start自然成功/Result success/进程exit0，并拒绝非零/未知/缺字段job；7项格式正负对照及仓库守卫通过，未修改产品、实际unit保护、原包或签名。原c76运行保留failure，不能提前记最后根回滚身份及下一duplicate完整通过。下一步同最终提交完整双架构预览与实际新包核验，不发布新正式版或操作生产。

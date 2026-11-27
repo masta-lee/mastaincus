@@ -331,7 +331,7 @@ jobs:
           fixture_mjs="$(dirname "$reproducer_script")/smoke-legacy-online-upgrade.mjs"
           printf '{"phase":"fixed-4a-current-harness-source","driverSource":"%s","originalArtifactSource":"4a3d7c84aa66c2d2508344bfb8b0a6dd0bc54c78","healthyCounterHarnessControl":%s,"harnessSha256":"%s","harnessMjsSha256":"%s"}\n' "$GITHUB_SHA" "$fixture_control" "$(sha256sum "$reproducer_script" | awk '{print $1}')" "$(sha256sum "$fixture_mjs" | awk '{print $1}')"
           set +e
-          sudo env GITHUB_ACTIONS=true RUNNER_ENVIRONMENT=github-hosted UPGRADE_DRILL_INSTALLER_SOURCE=current INCUDAL_AGENT_RELEASE_TOKEN=${{ github.token }} INCUDAL_PREVIEW_AGENT_DIR="$PWD/preview-agent" \
+          sudo env GITHUB_ACTIONS=true RUNNER_ENVIRONMENT=github-hosted UPGRADE_DRILL_INSTALLER_SOURCE=current UPGRADE_DRILL_STARTUP_OBSERVE="$fixture_control" INCUDAL_AGENT_RELEASE_TOKEN=${{ github.token }} INCUDAL_PREVIEW_AGENT_DIR="$PWD/preview-agent" \
             bash "$reproducer_script" "$candidate" "$PWD/old-artifact/incudal-v1.8.14-linux-amd64.tar.gz" rollback
           original_status=$?
           set -e
