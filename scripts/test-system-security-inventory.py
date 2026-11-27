@@ -2555,8 +2555,10 @@ class RuntimeRecoveryPsql(unittest.TestCase):
 
     def test_client_fixture_keeps_real_fd_unlisted_owner_and_permission_rejection(self):
         with self.client_files()as(logical,physical,change,restore):
-            native=physical['psql'].stat();fd=os.open(logical['psql'],os.O_RDONLY)
+            fd=os.open(logical['psql'],os.O_RDONLY)
             try:
+                # Compare the same open-descriptor state after Windows open-time metadata updates.
+                native=physical['psql'].stat()
                 observed=os.fstat(fd)
                 for field in ['st_dev','st_ino','st_mode','st_nlink','st_size','st_mtime_ns','st_ctime_ns']:
                     self.assertEqual(getattr(observed,field),getattr(native,field),field)
@@ -3242,6 +3244,79 @@ class DebianArchive(unittest.TestCase):
             record,body,_=module.authenticated_debian_archive('libc6','2.41-12+deb13u5','amd64');self.assertEqual(record['sha256'],digest);self.assertEqual(body,raw)
         for output,files,error in [(metadata,[],'NOT_CACHED'),(metadata,[file,file],'UNREVIEWED'),(metadata+'SHA256: '+digest+'\n',[file],'UNREVIEWED'),(metadata+'\n'+metadata.replace(digest,'0'*64),[file],'UNREVIEWED')]:
             with patch.object(module,'command',return_value=output),patch.object(module.pathlib,'Path',return_value=cache(files)),patch.object(module,'runtime_payload_regular',return_value={'sha256':digest,'size':len(raw),'content':raw}),self.assertRaisesRegex(ValueError,error):module.authenticated_debian_archive('libc6','2.41-12+deb13u5','amd64')
+
+class DebianZstdArchive(unittest.TestCase):
+    # Standard libzstd frames with checksum, generated once; no compressor dependency.
+    NORMAL='KLUv/WSQAN0AAKBib3VuZGVkIHpzdGQgcmVjZWlwdAEA8k6dTMmRlNY='
+    UNKNOWN='KLUv/QQA3QAAoGJvdW5kZWQgenN0ZCByZWNlaXB0AQDyTp1MyZGU1g=='
+    OVER='KLUv/QRYVAAAEHh4AQD7/znAAgIAEHgCABB4AgAQeAIAEHgCABB4AgAQeAIAEHgCABB4AgAQeAIAEHgCABB4AgAQeAIAEHgCABB4AgAQeAIAEHgCABB4AgAQeAIAEHgCABB4AgAQeAIAEHgCABB4AgAQeAIAEHgCABB4AgAQeAIAEHgCABB4AgAQeAIAEHgCABB4AgAQeAIAEHgCABB4AgAQeAIAEHgCABB4AgAQeAIAEHgCABB4AgAQeAIAEHgCABB4AgAQeAIAEHgCABB4AgAQeAIAEHgCABB4AgAQeAIAEHgCABB4AgAQeAIAEHgCABB4AgAQeAIAEHgCABB4AgAQeAIAEHgCABB4AgAQeAkAAHg/nYjj'
+    CONTROL='KLUv/WQAJ/0EACKHGBtwS3UAmJDAYWSylpzjR2ccD1zT38Srm/7pJcjX5scaJR7HhwMIJEjQ0XHH5ziISQrRYLraNisNEgzS5R5HuAazcOkHJ3Stgi0aKzwh67jkNdEHyZ/q/5+S+v9kPNjutYMEFQCZL1QPoAEBKIAGcCYv1C0D6gUIDpDHSIACIKMOqABiNMS503oIUEC8ITUApONWuKkNgGPlMjcBJIDUCcA='
+    DATA='KLUv/WQAJ80CAKQDLi91c3IvYmluL2ZpeHR1cmUAMDAwMDY0NDAwMDAwMTYAADAxMTA3MQAgMAB1c3RhcgAwdmVuZG9yIAoAnAXw4ACIySBAAfGG1ACQHGAArQY4Vi7jURAG6sMqZw=='
+    ESCAPE='KLUv/WQAJ0UCANQCLi4vZXNjYXBlADAwMDA2NDQwMDAwMDAxAAAwMDczMzIAIDAAdXN0YXIAMHgACQD7BfAIASqIN6QGgORABDBogGPlMjcBJOTLjAU='
+    SYMLINK='KLUv/WQAJ0UCABQDLi9wb3N0aW5zdAAwMDAwNjQ0MDAwADAxMTM1NAAgMi9vdXRzaWRlAHVzdGFyADAwAAgA8wbwJ4IJYO0nBQgAwLFyGZuAF0C8Z1I='
+    DUPLICATE='KLUv/WQAJ+UCABQDLi9jb250cm9sADAwMDA2NDQwMDAwMDAxAAAwMDc0NzQAIDAAdXN0YXIAMHgAMzM3eQ4A/Z/rgR+odwyoowHyCR9AnsA+UBECVBBvSA0AyYEIYNAAx8plbgJIwBTW/g=='
+    @staticmethod
+    def frame(value):
+        import base64
+        return base64.b64decode(value,validate=True)
+    def test_nonstandard_dictionary_and_non_bytes_refused_before_library_load(self):
+        import ctypes
+        valid=self.frame(self.NORMAL)
+        for raw in [b'unknown',b'\x50\x2a\x4d\x18'+b'\0'*8,valid[:5],valid[:4]+bytes([valid[4]|1])+valid[5:],valid[:4]+bytes([valid[4]|8])+valid[5:],bytearray(valid)]:
+            with self.subTest(kind=type(raw).__name__),patch.object(ctypes,'CDLL')as library,self.assertRaisesRegex(ValueError,'ARCHIVE_UNREVIEWED'):module.debian_zstd_archive(raw,8*1024*1024)
+            library.assert_not_called()
+    @unittest.skipUnless(sys.platform=='linux','native installed libzstd1 and held Linux library FD')
+    def test_known_unknown_sizes_and_all_original_output_caps(self):
+        for value in [self.NORMAL,self.UNKNOWN]:
+            for limit in [8,128,256]:self.assertEqual(module.debian_zstd_archive(self.frame(value),limit*1024*1024),b'bounded zstd receipt'*20)
+            frame=self.frame(value);transparent=frame[:4]+bytes([frame[4]|0x10])+frame[5:]
+            self.assertEqual(module.debian_zstd_archive(transparent,8*1024*1024),b'bounded zstd receipt'*20)
+        exact=bytearray(self.frame(self.UNKNOWN));exact[5]=0x80
+        self.assertEqual(module.debian_zstd_archive(bytes(exact),8*1024*1024),b'bounded zstd receipt'*20)
+    @unittest.skipUnless(sys.platform=='linux','native installed libzstd1 and held Linux library FD')
+    def test_native_single_frame_checksum_and_window_refusals(self):
+        valid=self.frame(self.NORMAL);unknown=self.frame(self.UNKNOWN)
+        checksum=valid[:-1]+bytes([valid[-1]^1]);wide=unknown[:5]+b'\x88'+unknown[6:]
+        for raw in [valid[:-1],valid[:-10],valid+b'x',valid+b'\0',valid+valid,valid+b'\x50\x2a\x4d\x18'+b'\0'*8,checksum,wide]:
+            with self.subTest(size=len(raw)),self.assertRaisesRegex(ValueError,'ARCHIVE_UNREVIEWED'):module.debian_zstd_archive(raw,8*1024*1024)
+        with self.assertRaisesRegex(ValueError,'ARCHIVE_UNREVIEWED'):module.debian_zstd_archive(self.frame(self.OVER),8*1024*1024)
+        with self.assertRaisesRegex(ValueError,'ARCHIVE_UNREVIEWED'):module.debian_zstd_archive(valid,True)
+    @unittest.skipUnless(sys.platform=='linux','native installed libzstd1 and held Linux library FD')
+    def test_authenticated_control_data_and_tar_refusals(self):
+        import hashlib
+        raw=DebianArchive.ar([('debian-binary',b'2.0\n'),('control.tar.zst',self.frame(self.CONTROL)),('data.tar.zst',self.frame(self.DATA))])
+        controls=module.debian_archive_members(raw)
+        self.assertEqual(controls,{'control':b'Package: fixture\nVersion: 1\nArchitecture: amd64\n','postinst':b'#!/bin/sh\nexit 0\n'})
+        self.assertEqual(module.debian_archive_members(raw,'data',{'usr/bin/fixture'}),{'usr/bin/fixture':b'vendor fixture'})
+        manifest=module.debian_archive_members(raw,'data',manifest=True)
+        self.assertEqual(manifest['usr/bin/fixture'],{'type':'file','mode':0o644,'uid':0,'gid':0,'size':14,'sha256':hashlib.sha256(b'vendor fixture').hexdigest()})
+        for value in [self.ESCAPE,self.SYMLINK,self.DUPLICATE]:
+            invalid=DebianArchive.ar([('debian-binary',b'2.0\n'),('control.tar.zst',self.frame(value))])
+            with self.assertRaisesRegex(ValueError,'ARCHIVE_UNREVIEWED'):module.debian_archive_members(invalid)
+        duplicate=DebianArchive.ar([('debian-binary',b'2.0\n'),('control.tar.zst',self.frame(self.CONTROL)),('control.tar',b'unreviewed')])
+        with self.assertRaisesRegex(ValueError,'ARCHIVE_UNREVIEWED'):module.debian_archive_members(duplicate)
+    @unittest.skipUnless(sys.platform=='linux','native installed libzstd1 and held Linux library FD')
+    def test_untrusted_library_metadata_and_architecture_are_refused_before_load(self):
+        import ctypes,stat
+        original=os.fstat;pread=os.pread
+        for field,value in [('st_uid',12345),('st_mode',stat.S_IFREG|0o666),('st_nlink',2)]:
+            def changed(fd):
+                info=original(fd)
+                if not stat.S_ISREG(info.st_mode):return info
+                fields={name:getattr(info,name)for name in ['st_dev','st_ino','st_uid','st_gid','st_mode','st_nlink','st_size','st_mtime_ns','st_ctime_ns']};fields[field]=value
+                return types.SimpleNamespace(**fields)
+            with self.subTest(field=field),patch.object(os,'fstat',side_effect=changed),patch.object(ctypes,'CDLL')as library,self.assertRaisesRegex(ValueError,'ARCHIVE_UNREVIEWED'):module.debian_zstd_archive(self.frame(self.NORMAL),8*1024*1024)
+            library.assert_not_called()
+        def bad_machine(fd,count,offset):
+            data=pread(fd,count,offset);return data[:18]+b'\x00\x00'+data[20:]
+        with patch.object(os,'pread',side_effect=bad_machine),patch.object(ctypes,'CDLL')as library,self.assertRaisesRegex(ValueError,'ARCHIVE_UNREVIEWED'):module.debian_zstd_archive(self.frame(self.NORMAL),8*1024*1024)
+        library.assert_not_called()
+    @unittest.skipUnless(sys.platform=='linux','native installed libzstd1 and held Linux library FD')
+    def test_failed_fd_load_closes_the_verified_file(self):
+        import ctypes
+        with patch.object(ctypes,'CDLL',side_effect=OSError('loader refused'))as library,self.assertRaisesRegex(ValueError,'ARCHIVE_UNREVIEWED'):module.debian_zstd_archive(self.frame(self.NORMAL),8*1024*1024)
+        path=library.call_args.args[0];self.assertTrue(path.startswith('/proc/self/fd/'))
+        with self.assertRaises(OSError):os.fstat(int(path.rsplit('/',1)[1]))
 
 @unittest.skipUnless(hasattr(os,'geteuid')and os.geteuid()==0,'Linux root, strictly tempfile-only policy evidence and locks')
 class NativeSystemdPolicy(unittest.TestCase):

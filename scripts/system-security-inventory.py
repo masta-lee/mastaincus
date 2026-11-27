@@ -183,6 +183,98 @@ except BaseException as error:
     sys.stderr.write('SYSTEM_SECURITY_SYSTEMD_POLICY_REJECTED\n');sys.exit(125)
 '''
 
+def debian_zstd_archive(data,limit):
+    """Decode one standard frame with the installed, held same-architecture library."""
+    import ctypes
+    error='SYSTEM_SECURITY_ARCHIVE_UNREVIEWED'
+    # FHD bit4 is transparent/unused; the format requires decoders to ignore it.
+    if type(data)is not bytes or not 6<=len(data)<=256*1024*1024 or data[:4]!=b'\x28\xb5\x2f\xfd' or data[4]&0x0b or type(limit)is not int or limit not in [8*1024*1024,128*1024*1024,256*1024*1024]:raise ValueError(error)
+    if sys.platform!='linux':raise ValueError(error)
+    architecture={'x86_64':('x86_64-linux-gnu',62),'aarch64':('aarch64-linux-gnu',183)}.get(os.uname().machine)
+    if architecture is None:raise ValueError(error)
+    directories=[];fd=None;library=None;context=None
+    facts=lambda value:tuple(getattr(value,key)for key in ['st_dev','st_ino','st_uid','st_gid','st_mode','st_nlink','st_size','st_mtime_ns','st_ctime_ns'])
+    try:
+        flags=os.O_RDONLY|os.O_DIRECTORY|os.O_NOFOLLOW|os.O_CLOEXEC
+        for name in ['/', 'usr', 'lib', architecture[0]]:
+            directory=os.open(name,flags,**({'dir_fd':directories[-1][0]}if directories else {}))
+            directories.append((directory,name,None));info=os.fstat(directory);directories[-1]=(directory,name,info)
+            if not stat.S_ISDIR(info.st_mode)or info.st_uid!=0 or info.st_mode&0o022:raise ValueError(error)
+        parent=directories[-1][0];soname='libzstd.so.1';alias=os.stat(soname,dir_fd=parent,follow_symlinks=False)
+        target=os.readlink(soname,dir_fd=parent)if stat.S_ISLNK(alias.st_mode)else soname
+        if alias.st_uid!=0 or alias.st_nlink!=1 or not re.fullmatch(r'libzstd\.so\.1(?:\.[0-9]{1,3}){0,2}',target):raise ValueError(error)
+        fd=os.open(target,os.O_RDONLY|os.O_NOFOLLOW|os.O_NONBLOCK|os.O_CLOEXEC,dir_fd=parent)
+        info=os.fstat(fd)
+        if not stat.S_ISREG(info.st_mode)or info.st_uid!=0 or info.st_nlink!=1 or info.st_mode&0o022 or not 64<=info.st_size<=16*1024*1024:raise ValueError(error)
+        header=os.pread(fd,64,0)
+        if len(header)!=64 or header[:7]!=b'\x7fELF\x02\x01\x01' or int.from_bytes(header[16:18],'little')!=3 or int.from_bytes(header[18:20],'little')!=architecture[1]or header[20:24]!=b'\x01\x00\x00\x00':raise ValueError(error)
+        def verify():
+            if facts(os.fstat(fd))!=facts(info)or facts(os.stat(target,dir_fd=parent,follow_symlinks=False))!=facts(info)or facts(os.stat(soname,dir_fd=parent,follow_symlinks=False))!=facts(alias):raise ValueError(error)
+            if stat.S_ISLNK(alias.st_mode)and os.readlink(soname,dir_fd=parent)!=target:raise ValueError(error)
+            for index,(directory,name,before)in enumerate(directories):
+                current=os.fstat(directory);named=os.lstat('/')if index==0 else os.stat(name,dir_fd=directories[index-1][0],follow_symlinks=False)
+                if not os.path.samestat(before,current)or not os.path.samestat(before,named)or any(getattr(before,key)!=getattr(value,key)for value in [current,named]for key in ['st_mode','st_uid','st_gid']):raise ValueError(error)
+        verify()
+        library=ctypes.CDLL('/proc/self/fd/'+str(fd),mode=os.RTLD_NOW|os.RTLD_LOCAL)
+        class Input(ctypes.Structure):_fields_=[('src',ctypes.c_void_p),('size',ctypes.c_size_t),('pos',ctypes.c_size_t)]
+        class Output(ctypes.Structure):_fields_=[('dst',ctypes.c_void_p),('size',ctypes.c_size_t),('pos',ctypes.c_size_t)]
+        signatures={'ZSTD_createDCtx':([],ctypes.c_void_p),'ZSTD_freeDCtx':([ctypes.c_void_p],ctypes.c_size_t),
+            'ZSTD_isError':([ctypes.c_size_t],ctypes.c_uint),'ZSTD_DCtx_setParameter':([ctypes.c_void_p,ctypes.c_int,ctypes.c_int],ctypes.c_size_t),
+            'ZSTD_getFrameContentSize':([ctypes.c_void_p,ctypes.c_size_t],ctypes.c_ulonglong),
+            'ZSTD_findFrameCompressedSize':([ctypes.c_void_p,ctypes.c_size_t],ctypes.c_size_t),
+            'ZSTD_decompressStream':([ctypes.c_void_p,ctypes.POINTER(Output),ctypes.POINTER(Input)],ctypes.c_size_t)}
+        for name,(arguments,result)in signatures.items():
+            function=getattr(library,name);function.argtypes=arguments;function.restype=result
+        # dlopen can otherwise return an old mapping when a closed FD number is reused.
+        address=ctypes.cast(library.ZSTD_decompressStream,ctypes.c_void_p).value;matches=0
+        with open('/proc/self/maps','rb')as stream:maps=stream.read(1024*1024+1)
+        if len(maps)>1024*1024:raise ValueError(error)
+        for line in maps.decode('utf-8').splitlines():
+            fields=line.split(None,5)
+            if len(fields)<5:raise ValueError(error)
+            start,end=(int(value,16)for value in fields[0].split('-'))
+            if start<=address<end:
+                device=tuple(int(value,16)for value in fields[3].split(':'))
+                if fields[1]!='r-xp'or device!=(os.major(info.st_dev),os.minor(info.st_dev))or int(fields[4])!=info.st_ino:raise ValueError(error)
+                matches+=1
+        if matches!=1:raise ValueError(error)
+        verify()
+        def checked(value):
+            if library.ZSTD_isError(value):raise ValueError(error)
+            return value
+        source=ctypes.c_char_p(data);length=len(data)
+        if checked(library.ZSTD_findFrameCompressedSize(source,length))!=length:raise ValueError(error)
+        declared=library.ZSTD_getFrameContentSize(source,length);unknown=(1<<64)-1
+        if declared==unknown-1 or declared!=unknown and declared>limit:raise ValueError(error)
+        if data[4]&0x20:
+            if declared==unknown or declared>64*1024*1024:raise ValueError(error)
+        else:
+            base=1<<(10+(data[5]>>3))
+            if base+(base>>3)*(data[5]&7)>64*1024*1024:raise ValueError(error)
+        context=library.ZSTD_createDCtx()
+        if not context:raise ValueError(error)
+        # Public streaming API: zstd.h v1.5.5, ZSTD_d_windowLogMax=100.
+        # The same parameter cannot bound the single-pass decoder's window.
+        checked(library.ZSTD_DCtx_setParameter(context,100,26))
+        compressed=Input(ctypes.cast(source,ctypes.c_void_p),length,0)
+        buffer=ctypes.create_string_buffer(65536);decoded=bytearray()
+        while True:
+            output=Output(ctypes.cast(buffer,ctypes.c_void_p),min(65536,limit+1-len(decoded)),0);before=compressed.pos
+            remaining=checked(library.ZSTD_decompressStream(context,ctypes.byref(output),ctypes.byref(compressed)))
+            decoded.extend(buffer.raw[:output.pos])
+            if len(decoded)>limit:raise ValueError(error)
+            if remaining==0:
+                if compressed.pos!=length or declared!=unknown and len(decoded)!=declared:raise ValueError(error)
+                break
+            if compressed.pos==before and output.pos==0:raise ValueError(error)
+        verify()
+        return bytes(decoded)
+    except (OSError,AttributeError,TypeError,ValueError,OverflowError):raise ValueError(error)from None
+    finally:
+        if context is not None:library.ZSTD_freeDCtx(context)
+        if fd is not None:os.close(fd)
+        for directory,_name,_info in reversed(directories):os.close(directory)
+
 def debian_archive_members(data,part='control',wanted=None,manifest=False):
     import io,tarfile,bz2,lzma,zlib
     if part not in ['control','data']or not isinstance(data,bytes)or not 8<len(data)<=256*1024*1024 or data[:8]!=b'!<arch>\n':raise ValueError('SYSTEM_SECURITY_ARCHIVE_UNREVIEWED')
@@ -195,7 +287,7 @@ def debian_archive_members(data,part='control',wanted=None,manifest=False):
         if size<0 or position+60+size>len(data)or not re.fullmatch(r'[a-zA-Z0-9_.+-]{1,16}',name)or name in members:raise ValueError('SYSTEM_SECURITY_ARCHIVE_UNREVIEWED')
         members.add(name)
         if name=='debian-binary':format_verified=data[position+60:position+60+size]==b'2.0\n'
-        if name in [part+'.tar',part+'.tar.gz',part+'.tar.xz',part+'.tar.bz2']:
+        if name in [part+'.tar',part+'.tar.gz',part+'.tar.xz',part+'.tar.bz2',part+'.tar.zst']:
             if archive is not None:raise ValueError('SYSTEM_SECURITY_ARCHIVE_UNREVIEWED')
             archive=data[position+60:position+60+size];archive_name=name
         position+=60+size+(size%2)
@@ -203,6 +295,7 @@ def debian_archive_members(data,part='control',wanted=None,manifest=False):
     # Bound decompression before tarfile parses extended headers; otherwise a
     # forged PAX size can allocate memory before any member-size check runs.
     limit=(8 if part=='control'else 256 if manifest else 128)*1024*1024
+    if archive_name.endswith('.zst'):archive=debian_zstd_archive(archive,limit)
     try:
         decoder=None
         if archive_name.endswith('.xz'):
