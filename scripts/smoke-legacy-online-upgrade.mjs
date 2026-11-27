@@ -4,14 +4,17 @@
 import assert from 'node:assert/strict'
 import { createHash } from 'node:crypto'
 import { createReadStream } from 'node:fs'
-import { readFile, writeFile, realpath, lstat } from 'node:fs/promises'
+import { readFile, writeFile, realpath, lstat, open } from 'node:fs/promises'
+import { constants as fileFlags } from 'node:fs'
 import { createRequire } from 'node:module'
 import { Readable } from 'node:stream'
 import { execFile, execFileSync } from 'node:child_process'
 import { promisify } from 'node:util'
 import { resolve } from 'node:path'
+import { fileURLToPath } from 'node:url'
 import { verifyPanelDigest } from './panel-package-signature.mjs'
 import { migrateCandidateRepositoryConfiguration } from './finalize-verified-owner-candidate.mjs'
+import { hasCompletedRepositoryStartup, hasRecordedRepositoryStartup } from './repository-startup-execution-evidence.mjs'
 
 assert.equal(process.env.GITHUB_ACTIONS, 'true')
 assert.equal(process.env.RUNNER_ENVIRONMENT, 'github-hosted')
@@ -77,9 +80,28 @@ async function verifyRootLauncherGitGate() {
     assert.equal(candidateInstaller.split(end).length,2)
     const candidateStartup=Buffer.from(candidateInstaller.split(marker)[1].split(end)[0]+'\n')
     assert.ok((await readFile(startup)).equals(candidateStartup),'the active startup guard must match its independently signed candidate installer in complete bytes')
-    const post=execFileSync('/usr/bin/systemctl',['show','incudal-backend.service','--property=ExecStartPost','--value'],{encoding:'utf8'})
-    const entry=[...post.matchAll(/\{[^}]*\}/g)].map(match=>match[0]).find(text=>text.includes(startup))
-    assert.ok(entry?.includes('argv[]=/usr/bin/env -i PATH=/usr/sbin:/usr/bin:/sbin:/bin LC_ALL=C /usr/bin/bash '+startup+' ;')&&/code=exited\s*;\s*status=0/.test(entry),'actual root startup correction must complete through the loaded backend unit')
+    const snapshot=JSON.parse(execFileSync('/usr/bin/python3',['-I','-B',
+      fileURLToPath(new URL('./test-repository-current-rollback-native-trace.py',import.meta.url)),'--snapshot'],
+      {encoding:'utf8',maxBuffer:1024*1024,timeout:60000}))
+    let completed=hasCompletedRepositoryStartup(snapshot)
+    if(!completed&&['root-rollback-wait','root-duplicate-after'].includes(mode)) {
+      const work=process.env.UPGRADE_DRILL_WORK
+      assert.match(work||'',/^\/root\/incudal-upgrade-drill-[A-Za-z0-9]{6}$/)
+      const directoryInfo=await lstat(work)
+      assert.ok(directoryInfo.isDirectory()&&!directoryInfo.isSymbolicLink()&&directoryInfo.uid===0&&directoryInfo.gid===0&&(directoryInfo.mode&0o777)===0o700)
+      const proof=await open(work+'/startup-observation.jsonl',fileFlags.O_RDONLY|fileFlags.O_NOFOLLOW|fileFlags.O_NONBLOCK)
+      try {
+        const before=await proof.stat()
+        assert.ok(before.isFile()&&before.uid===0&&before.gid===0&&before.nlink===1&&(before.mode&0o777)===0o600&&before.size>0&&before.size<=2*1024*1024)
+        const bytes=await proof.readFile()
+        const after=await proof.stat(),named=await lstat(work+'/startup-observation.jsonl')
+        for(const key of ['dev','ino','size','mtimeMs','ctimeMs','mode','uid','gid','nlink'])assert.equal(after[key],before[key])
+        assert.equal(named.dev,before.dev);assert.equal(named.ino,before.ino)
+        const reports=bytes.toString('utf8').trimEnd().split('\n').map(line=>JSON.parse(line))
+        completed=hasRecordedRepositoryStartup(snapshot,reports)
+      } finally { await proof.close() }
+    }
+    assert.ok(completed,'actual root startup correction must complete through the loaded backend unit')
     for(const unit of ['incudal-online-update@1.service','incudal-online-rollback@1.service']) {
       const after=execFileSync('/usr/bin/systemctl',['show',unit,'--property=After','--value'],{encoding:'utf8'})
       assert.ok(after.trim().split(/\s+/).includes('incudal-backend.service'),'actual loaded root task unit must wait for backend startup: '+unit)

@@ -1,5 +1,13 @@
 # mastaincus 仓库替代与原正式资产迁移
 
+启动取证批次6399ccea26d27648da94fba289ca68bbb9cf9db6已推main和工作分支。普通CI45941186540已自然终态27success/2failure；两失败分别为安全恢复测试非root/Python3.12的文件属性模型漏适配，以及Ubuntu runner预装Microsoft APT源403。原失败保留，新最小修复已通过以下专用验收，待下一同来源CI。[普通CI](https://github.com/masta-lee/mastaincus/actions/runs/45941186540)
+
+固定4a包诊断45941189480已自然failure，并取得决定性原生时序。checkpoint12记录同InvocationID864b8191642c4923a6ad76a90720221d、MainPID28984的startup pid28985/code1/status0，单调开始511469935、完成511531286，backend ActiveEnter511549432。随后三次manager reload后checkpoint13保留同InvocationID/PID/两启动时间，却把所有Post执行字段清零；最终原断言失败。观察器exit0/13快照，实际脚本和unit/drop-in文件完整hash保持。真实数据在logs/mastaincus-diag-45941189480-reports.json，全原日志另存且未覆盖。[固定包诊断](https://github.com/masta-lee/mastaincus/actions/runs/45941189480)
+
+本批针对上述真实机制修订测试核验：用原生当前状态直接确认成功，或在所有当前执行字段归零时，以停止后的root0600/单link/O_NOFOLLOW证据核对同InvocationID、MainPID、单调启动时间、完整脚本、unit/drop-in和精确参数hash。未知source、缺少FragmentPath、未完成/跨启动/篡改/实际非零退出均拒绝，保留实际root回滚和下一duplicate任务原行为。实际CI数据11项正负对照及仓库守卫通过，独立审查补了未知source与空FragmentPath负例。实时校时回拨保留原值，完成先后仅按单调时间核对。原B第三轮原生控制自然exit0，5快照、新--snapshot当前读取及实际重载后的证据判定均通过，原B/PG/服务/包库/隔离相同，临时unit已清理。证据为logs/mastaincus-startup-observer-native-20261127-r3-result.log与独立snapshot/observer输入；新同提交CI仍待。
+
+普通CI修订仅涉及ci.yml和test-system-security-inventory.py。Python3.12的Path.lstat通过os.stat(follow_symlinks=False)，原模型只模拟os.lstat/fstat；新适配只转换既定payload/parent且原UID/GID精确相同的身份，其他元数据与未列目标保持实际值。原B Python3.12.3的baseline拒绝与候选12/12通过、symlink/UID/GID/模式及坏777 HOME拒绝均实证。本机完整Python209项自然0、47项Windows跳过；对应安全守卫、仓库守卫、Workflow YAML和283个Bash块通过。APT实际sudo/env/bash/print-uris只选择原Ubuntu签名源，原额外Microsoft源仅出现在显式开放SourceParts对照，实际包下载和镜像开通继续由下一CI验证。失败退出7保持、清理失败可见，原B/源配置/PG等前后相同，r1/r2失败保留。两文件冻结SHA为abb1758be43a89e9a498761ae332fea1cefb3a22c1919a2925faad1e2ff53be6与3776d5563e4a5f36e73d21e29a74ac9045dfdceea3fc0dbbdcacf33db036d317，报告logs/source-ci-repair-20261127-summary.md。
+
 2026-11-27续接已核最新完整运行45924264197，source为886e6b11fdb5e20dc23a36ea9b498b66de990560。17项必需任务15项success，双架构current rollback在实际root回滚完成后的启动钩子状态断言失败，Release预期skipped。双架构实际ZIP、tar、原Ed25519与四负对照、321份固定git-show运行文件、gzip尾块和完整链接解析已独立核验通过，冻结输入前后不变。补核结果保存在logs/mastaincus-preview-886e6b11-artifacts/resume-v2-review-result.json，原v1组件清单假设失败也保留。上述包核验没有消除两项实际流程失败。[运行记录](https://github.com/masta-lee/mastaincus/actions/runs/45924264197)
 
 本批增加仅供专用GitHub诊断的只读D-Bus观察器，覆盖root rollback内部restart，完整保存原生执行字段、精确startup命令是否匹配、InvocationID、MainPID及单调时间。跨启动读取标为stableInvocation=false，记录器不直接判断启动成功。旧实际钩子断言继续保留，shell在成功和失败退出时停止自己的观察子进程；固定4a安装包、原14与现有生产程序不在本批改动范围。

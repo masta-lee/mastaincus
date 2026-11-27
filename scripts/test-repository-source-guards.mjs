@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict'
+import { hasCompletedRepositoryStartup, hasRecordedRepositoryStartup } from './repository-startup-execution-evidence.mjs'
 import { readFileSync, existsSync } from 'node:fs'
 import { resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -172,6 +173,66 @@ assert.ok(currentRollbackTrace.includes('def observe_startup():') &&
   migrationDiagnostics.includes('UPGRADE_DRILL_STARTUP_OBSERVE="$fixture_control"') &&
   legacyWorkerDrill.includes('actual root startup correction must complete through the loaded backend unit'),
   'optional disposable-runner observation must bind native tuples to the invocation, stop its own child and retain the strict actual-startup assertion')
+const executionUnit = {
+  ActiveState: 'active', SubState: 'running', Result: 'success', InvocationID: 'a'.repeat(32), MainPID: 7,
+  ExecMainStartTimestampMonotonic: 10, ActiveEnterTimestampMonotonic: 30,
+  FragmentPath: [{path: '/etc/systemd/system/incudal-backend.service', sha256: 'b'.repeat(64),
+    bytes: 100, uid: 0, gid: 0, mode: '0o644', links: 1}], DropInPaths: [],
+  ExecStartPost: [{repositoryStartupExactCommand: true, ignoreErrors: false,
+    source: 'native-systemd-dbus-execution-tuple', argumentsSha256: 'c'.repeat(64),
+    exitCode: 1, exitStatus: 0, pid: 9, startRealtimeUsec: 100, stopRealtimeUsec: 110,
+    startMonotonicUsec: 20, stopMonotonicUsec: 25}]
+}
+const executionNormalizer = {sha256: 'd'.repeat(64), bytes: 100, uid: 0, gid: 0, mode: '0o755', links: 1}
+const completedSnapshot = {unit: executionUnit, normalizer: executionNormalizer}
+assert.equal(hasCompletedRepositoryStartup(completedSnapshot), true)
+const clockAdjustedSnapshot = structuredClone(completedSnapshot)
+clockAdjustedSnapshot.unit.ExecStartPost[0].stopRealtimeUsec = 90
+assert.equal(hasCompletedRepositoryStartup(clockAdjustedSnapshot), true,
+  'normal wall-clock correction must retain successful monotonic startup execution')
+for (const [field, value] of [['exitCode', 0], ['exitStatus', 7], ['pid', 0], ['ignoreErrors', true],
+  ['startMonotonicUsec', 0], ['stopMonotonicUsec', 31], ['repositoryStartupExactCommand', false]]) {
+  const invalid = structuredClone(completedSnapshot)
+  invalid.unit.ExecStartPost[0][field] = value
+  assert.equal(hasCompletedRepositoryStartup(invalid), false, `invalid execution ${field} must fail`)
+}
+const resetSnapshot = structuredClone(completedSnapshot)
+for (const field of ['exitCode', 'exitStatus', 'pid', 'startRealtimeUsec', 'stopRealtimeUsec',
+  'startMonotonicUsec', 'stopMonotonicUsec']) resetSnapshot.unit.ExecStartPost[0][field] = 0
+const recordedExecution = [
+  {phase: 'current-startup-observer-ready', readonly: true, normalizer: executionNormalizer},
+  {phase: 'current-startup-observer-snapshot', stableInvocation: true, unit: executionUnit},
+  {phase: 'current-startup-observer-finished', readonly: true, snapshots: 1, normalizer: executionNormalizer}
+]
+assert.equal(hasCompletedRepositoryStartup(resetSnapshot), false, 'reset fields alone never prove execution')
+assert.equal(hasRecordedRepositoryStartup(resetSnapshot, recordedExecution), true)
+assert.equal(hasRecordedRepositoryStartup(resetSnapshot, []), false)
+assert.equal(hasRecordedRepositoryStartup(resetSnapshot, recordedExecution.slice(0, -1)), false)
+for (const change of [
+  value => {value.unit.InvocationID = 'e'.repeat(32)},
+  value => {value.unit.MainPID = 8},
+  value => {value.unit.ExecMainStartTimestampMonotonic = 11},
+  value => {value.unit.FragmentPath[0].sha256 = 'e'.repeat(64)},
+  value => {value.unit.ExecStartPost[0].argumentsSha256 = 'e'.repeat(64)},
+  value => {value.unit.ExecStartPost[0].exitStatus = 7},
+  value => {value.unit.ExecStartPost[0].source = 'unknown-source'},
+  value => {value.unit.FragmentPath = []},
+  value => {value.normalizer.mode = '0o777'},
+  value => {value.unit.ActiveState = 'inactive'}
+]) {
+  const invalid = structuredClone(resetSnapshot)
+  change(invalid)
+  assert.equal(hasRecordedRepositoryStartup(invalid, recordedExecution), false, 'stale or changed execution evidence must fail')
+}
+const unstableExecution = structuredClone(recordedExecution)
+unstableExecution[1].stableInvocation = false
+assert.equal(hasRecordedRepositoryStartup(resetSnapshot, unstableExecution), false)
+assert.ok(legacyWorkerDrill.includes('hasCompletedRepositoryStartup(snapshot)') &&
+  legacyWorkerDrill.includes('hasRecordedRepositoryStartup(snapshot,reports)') &&
+  legacyWorkerDrill.includes('fileFlags.O_NOFOLLOW') &&
+  legacyDrill.indexOf('systemctl start "incudal-online-rollback@${root_rollback_task}.service"') <
+    legacyDrill.indexOf('stop_startup_observer\n  node "$repo/scripts/smoke-legacy-online-upgrade.mjs" root-rollback-wait'),
+  'root rollback must stop the read-only observer before validating its protected completed proof and original startup identity')
 const fixtureBudget = legacyDrill.match(/reset_healthy_fixture_start_budget\(\) \{[\s\S]*?^\}/m)?.[0]
 assert.ok(fixtureBudget && fixtureBudget.indexOf('systemctl is-active --quiet incudal-backend') < fixtureBudget.indexOf('systemctl reset-failed') &&
   fixtureBudget.includes('"$fixture_pid_after" == "$fixture_pid_before"') &&

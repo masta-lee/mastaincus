@@ -57,7 +57,12 @@ jobs:
           (cd agent && CGO_ENABLED=0 go test -c -o /tmp/incudal-resource-tests ./internal/provisioning)
           CGO_ENABLED=0 go build -o /tmp/incudal-disk-full-test scripts/test-pool-disk-full.go
       - name: Real AppArmor image unpack, generated initialization, password SSH and cleanup
-        run: sudo env "PATH=$PATH" "DATABASE_URL=$DATABASE_URL" "JWT_SECRET=$JWT_SECRET" "INCUDAL_NATIVE_IMAGE=$INCUDAL_NATIVE_IMAGE" GITHUB_ACTIONS=true RUNNER_ENVIRONMENT=github-hosted bash scripts/smoke-provisioning-six-incus.sh
+        run: |
+          test -s /etc/apt/sources.list.d/ubuntu.sources
+          apt_config=$(sudo mktemp /run/incudal-ci-apt.XXXXXX)
+          trap 'sudo rm -f -- "$apt_config"' EXIT
+          printf '%s\n' 'Dir::Etc::sourcelist "/etc/apt/sources.list.d/ubuntu.sources";' 'Dir::Etc::sourceparts "-";' | sudo tee "$apt_config" >/dev/null
+          sudo env "PATH=$PATH" "DATABASE_URL=$DATABASE_URL" "JWT_SECRET=$JWT_SECRET" "INCUDAL_NATIVE_IMAGE=$INCUDAL_NATIVE_IMAGE" "APT_CONFIG=$apt_config" GITHUB_ACTIONS=true RUNNER_ENVIRONMENT=github-hosted bash scripts/smoke-provisioning-six-incus.sh
   onboarding-ip-integration:
     name: Onboarding lifecycle and OCI IP reuse
     runs-on: ubuntu-24.04
@@ -93,7 +98,7 @@ jobs:
           pnpm --filter server test:host-public-ip-integration
       - name: Native retirement and crash continuation
         run: |
-          command -v wg >/dev/null || { sudo apt-get update -qq; sudo apt-get install -y -qq wireguard-tools; }
+          command -v wg >/dev/null || { sudo apt-get -o Dir::Etc::sourcelist=/etc/apt/sources.list.d/ubuntu.sources -o Dir::Etc::sourceparts=- update -qq; sudo apt-get install -y -qq wireguard-tools; }
           sudo env INCUDAL_NETWORK_NAMESPACE_TEST=1 unshare --net python3 -B scripts/test-onboarding-retirement-network.py
 
   cleanup-incus:
@@ -174,7 +179,12 @@ jobs:
           pnpm --filter server test:smtp-security-transport
           sudo python3 scripts/test-system-security-inventory.py
           sudo python3 scripts/test-sealed-manifest-order.py
-          python3 scripts/test-system-security-inventory.py
+          (
+            fixture_home=$(sudo mktemp -d /var/lib/incudal-ci-user.XXXXXX)
+            trap 'sudo rmdir -- "$fixture_home"' EXIT
+            sudo chown "$(id -u):$(id -g)" "$fixture_home"
+            HOME="$fixture_home" python3 scripts/test-system-security-inventory.py
+          )
           python3 scripts/test-nginx-security.py
           pnpm --filter server test:system-image-transport
           pnpm --filter server test:sample-seed-safety
@@ -192,7 +202,7 @@ jobs:
           sudo python3 -B scripts/test-upgrade-onboarding-gateway.py
           pnpm --filter server test:gateway-dns-convergence
           pnpm --filter server test:gateway-domain-guards
-          sudo apt-get update -qq
+          sudo apt-get -o Dir::Etc::sourcelist=/etc/apt/sources.list.d/ubuntu.sources -o Dir::Etc::sourceparts=- update -qq
           sudo apt-get install -y -qq wireguard-tools iproute2 nftables
           sudo env INCUDAL_NETWORK_NAMESPACE_TEST=1 unshare --net python3 scripts/test-onboarding-control-network.py
           sudo env INCUDAL_NETWORK_NAMESPACE_TEST=1 unshare --net python3 scripts/test-recovery-port-protocol-network.py
@@ -273,7 +283,7 @@ jobs:
       - name: Authentication integrity regressions
         run: |
           set -euo pipefail
-          command -v createdb >/dev/null || { sudo apt-get update -qq; sudo apt-get install -y -qq postgresql-client; }
+          command -v createdb >/dev/null || { sudo apt-get -o Dir::Etc::sourcelist=/etc/apt/sources.list.d/ubuntu.sources -o Dir::Etc::sourceparts=- update -qq; sudo apt-get install -y -qq postgresql-client; }
           for guard in authentication-integrity oauth-integrity authentication-functional; do
             database="security_${guard//-/_}_pool_test"
             createdb -h 127.0.0.1 -p 55449 -U recovery_test "$database"
@@ -293,7 +303,7 @@ jobs:
       - name: Restore continuation, final host gates and purchase accounting
         run: |
           set -euo pipefail
-          command -v createdb >/dev/null || { sudo apt-get update -qq; sudo apt-get install -y -qq postgresql-client; }
+          command -v createdb >/dev/null || { sudo apt-get -o Dir::Etc::sourcelist=/etc/apt/sources.list.d/ubuntu.sources -o Dir::Etc::sourceparts=- update -qq; sudo apt-get install -y -qq postgresql-client; }
           for pair in 'auto-resume:auto_recovery_test' 'state:state_recovery_test' 'final-check:final_recovery_test' 'instance:instance_recovery_test' 'helper:helper_recovery_test' 'gateway:gateway_recovery_test' 'replacement:replacement_recovery_test'; do
             guard="${pair%%:*}"; database="${pair##*:}"
             createdb -h 127.0.0.1 -p 55449 -U recovery_test "$database"

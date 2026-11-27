@@ -2436,7 +2436,7 @@ class RuntimeRecoveryPsql(unittest.TestCase):
         # parents, never its identity, other files or executable/parent modes.
         # Windows adapts Unix modes/parents only, never the SQL probe.
         import hashlib
-        real_path=pathlib.Path;real_open=os.open;real_lstat=os.lstat;real_fstat=os.fstat
+        real_path=pathlib.Path;real_open=os.open;real_lstat=os.lstat;real_stat=os.stat;real_fstat=os.fstat
         if real_files is None:real_files=module.runtime_database_client_files
         physical_path=type(root)if root is not None else real_path
         parent=('/root'if os.geteuid()==0 else str(physical_path.home()))if sys.platform=='linux'else str(root)if root is not None else None
@@ -2469,6 +2469,13 @@ class RuntimeRecoveryPsql(unittest.TestCase):
             physical=mapped(value);info=real_lstat(physical,*args,**kwargs)
             selected=os.path.abspath(os.fspath(physical))
             return root_owner(info,selected)if owner and selected in payload_paths|parent_paths else info
+        def stat_file(value,*args,**kwargs):
+            if isinstance(value,int):return real_stat(value,*args,**kwargs)
+            physical=mapped(value);info=real_stat(physical,*args,**kwargs)
+            if not owner:return info
+            selected=os.path.abspath(os.fspath(physical))
+            if kwargs.get('follow_symlinks',True):selected=os.path.realpath(selected)
+            return root_owner(info,selected)if selected in payload_paths|parent_paths else info
         def fstat(fd):
             info=real_fstat(fd)
             try:physical=readlink('/proc/self/fd/'+str(fd))
@@ -2492,7 +2499,7 @@ class RuntimeRecoveryPsql(unittest.TestCase):
             else:raise AssertionError(kind)
         def restore(name):physical[name].write_bytes(originals[name]);physical[name].chmod(0o755);modes[name]=0o755
         with contextlib.ExitStack()as stack:
-            stack.enter_context(patch.object(module.pathlib,'Path',side_effect=path));stack.enter_context(patch.object(module.os,'open',side_effect=lambda value,*args,**kwargs:real_open(mapped(value),*args,**kwargs)));stack.enter_context(patch.object(module.os,'lstat',side_effect=lstat));stack.enter_context(patch.object(module,'runtime_database_client_files',new=real_files))
+            stack.enter_context(patch.object(module.pathlib,'Path',side_effect=path));stack.enter_context(patch.object(module.os,'open',side_effect=lambda value,*args,**kwargs:real_open(mapped(value),*args,**kwargs)));stack.enter_context(patch.object(module.os,'lstat',side_effect=lstat));stack.enter_context(patch.object(module.os,'stat',side_effect=stat_file));stack.enter_context(patch.object(module,'runtime_database_client_files',new=real_files))
             if owner:stack.enter_context(patch.object(module.os,'fstat',side_effect=fstat))
             if sys.platform=='win32':stack.enter_context(patch.object(module,'runtime_payload_parents',return_value=[]));stack.enter_context(patch.object(module,'runtime_payload_regular',side_effect=regular))
             try:yield logical,physical,change,restore
@@ -2563,6 +2570,41 @@ class RuntimeRecoveryPsql(unittest.TestCase):
             if sys.platform=='linux':physical['psql'].parent.chmod(0o775)
             else:change('psql','not-executable')
             with self.assertRaisesRegex(ValueError,'CLIENT_UNCONFIRMED'):module.runtime_database_client_files(16)
+
+    @unittest.skipUnless(sys.platform=='linux','native POSIX symlink and ownership metadata')
+    def test_client_fixture_keeps_stat_symlink_targets_and_no_follow_metadata(self):
+        import stat
+        real_stat=os.stat
+        with self.client_files()as(logical,physical,change,restore):
+            source=physical['psql'];target=source.with_name('unlisted-stat-target');target.write_bytes(b'unlisted target');target.chmod(0o640)
+            source.unlink();source.symlink_to(target.name)
+            for follow in [False,True]:
+                observed=os.stat(logical['psql'],follow_symlinks=follow);native=real_stat(source,follow_symlinks=follow)
+                for field in ['st_dev','st_ino','st_mode','st_nlink','st_size','st_mtime_ns','st_ctime_ns']:
+                    self.assertEqual(getattr(observed,field),getattr(native,field),field)
+                if follow:
+                    for field in ['st_uid','st_gid']:self.assertEqual(getattr(observed,field),getattr(target.stat(),field),field)
+                else:self.assertTrue(stat.S_ISLNK(observed.st_mode));self.assertEqual(observed.st_uid,0)
+            for field in ['st_dev','st_ino','st_mode','st_nlink','st_size']:
+                self.assertEqual(getattr(source.lstat(),field),getattr(os.stat(logical['psql'],follow_symlinks=False),field),field)
+            with self.assertRaisesRegex(ValueError,'CLIENT_UNCONFIRMED'):module.runtime_database_client_files(16)
+
+    @unittest.skipUnless(sys.platform=='linux','native Path.stat ownership adapter')
+    def test_client_fixture_preserves_changed_stat_uid_and_gid(self):
+        real_stat=os.stat;selected=None;delta={}
+        def changed_stat(value,*args,**kwargs):
+            info=real_stat(value,*args,**kwargs)
+            if not isinstance(value,int)and os.path.abspath(os.fspath(value))==selected and delta:
+                fields={name:getattr(info,name)for name in dir(info)if name.startswith('st_')};fields.update(delta)
+                return types.SimpleNamespace(**fields)
+            return info
+        with patch.object(module.os,'stat',side_effect=changed_stat),self.client_files()as(logical,physical,change,restore):
+            selected=os.path.abspath(os.fspath(physical['psql']));native=real_stat(physical['psql'])
+            for field in ['st_uid','st_gid']:
+                delta.clear();delta[field]=getattr(native,field)+1;observed=physical['psql'].stat()
+                self.assertEqual(getattr(observed,field),delta[field],field)
+                for unchanged in ['st_dev','st_ino','st_mode','st_nlink','st_size','st_mtime_ns','st_ctime_ns']:
+                    self.assertEqual(getattr(observed,unchanged),getattr(native,unchanged),unchanged)
 
     def test_real_psql_missing_mode_and_original_hash_drift_refuse_queries(self):
         real_probe=module.database_runtime_proof

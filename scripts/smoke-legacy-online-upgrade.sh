@@ -273,7 +273,7 @@ fi
 if [[ $scenario == rollback && $installer_source == current ]]; then
   stage=actual-root-postflight-rollback
   reset_healthy_fixture_start_budget
-  if [[ ${UPGRADE_DRILL_STARTUP_OBSERVE:-false} == true ]]; then
+  if [[ ${UPGRADE_DRILL_STARTUP_OBSERVE:-true} == true ]]; then
     startup_observer_output="$work/startup-observation.jsonl"
     (umask 077; exec /usr/bin/python3 -I -B "$repo/scripts/test-repository-current-rollback-native-trace.py" --observe) > "$startup_observer_output" &
     startup_observer_pid=$!
@@ -290,6 +290,7 @@ if [[ $scenario == rollback && $installer_source == current ]]; then
   # performs another real restart; no candidate HTTP adapter is involved.
   systemctl restart --no-block incudal-backend
   systemctl start "incudal-online-rollback@${root_rollback_task}.service"
+  stop_startup_observer
   node "$repo/scripts/smoke-legacy-online-upgrade.mjs" root-rollback-wait "$candidate"
   # A completed task is intentionally replayed only to exercise the next real
   # launcher and the old worker's duplicate guard. Do not restart in between.

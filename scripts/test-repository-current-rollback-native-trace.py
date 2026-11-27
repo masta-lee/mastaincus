@@ -231,6 +231,32 @@ def observe_startup():
     return 0
 
 
+def report_startup_snapshot():
+    if (os.name != 'posix' or os.geteuid() != 0 or sys.argv[1:] != ['--snapshot']
+            or os.environ.get('GITHUB_ACTIONS') != 'true'
+            or os.environ.get('RUNNER_ENVIRONMENT') != 'github-hosted'):
+        refused()
+    helper, _ = record(TARGET, required=True)
+    if helper['sha256'] != EXPECTED or helper['bytes'] != EXPECTED_BYTES or helper['mode'] != '0o755':
+        refused()
+    state = unit_state()
+    identity = subprocess.run(['/usr/bin/systemctl', 'show', BACKEND_UNIT,
+                               '--property=InvocationID,MainPID,ExecMainStartTimestampMonotonic'],
+                              capture_output=True, timeout=15, check=True, env=SYSTEM_ENV)
+    if len(identity.stdout) > 4096:
+        refused()
+    identity_fields = dict(line.split('=', 1) for line in identity.stdout.decode('utf-8', 'strict').splitlines())
+    if identity_fields != {'InvocationID': state['InvocationID'], 'MainPID': str(state['MainPID']),
+                           'ExecMainStartTimestampMonotonic': str(state['ExecMainStartTimestampMonotonic'])}:
+        refused()
+    final_helper, _ = record(TARGET, required=True)
+    if final_helper != helper:
+        refused()
+    print(json.dumps({'phase': 'current-startup-execution-snapshot',
+                      'normalizer': helper, 'unit': state, 'readonly': True}), flush=True)
+    return 0
+
+
 def journal_evidence():
     result = subprocess.run(['/usr/bin/journalctl', '-u', 'incudal-backend.service',
                              '--no-pager', '-n', '120', '--output=json'],
@@ -430,7 +456,12 @@ def run():
 
 if __name__ == '__main__':
     try:
-        status = observe_startup() if sys.argv[1:] == ['--observe'] else run()
+        if sys.argv[1:] == ['--observe']:
+            status = observe_startup()
+        elif sys.argv[1:] == ['--snapshot']:
+            status = report_startup_snapshot()
+        else:
+            status = run()
     except BaseException as exception:
         name = type(exception).__name__
         print(json.dumps({'phase': 'fixed-4a-current-rollback-trace-failed',
