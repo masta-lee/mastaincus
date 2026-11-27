@@ -138,6 +138,23 @@ assert.ok(legacyDrill.includes('stage=actual-root-postflight-rollback') &&
   legacyWorkerDrill.includes('root-rollback-prepare') && legacyWorkerDrill.includes('root-rollback-wait') &&
   legacyWorkerDrill.includes('root duplicate task must preserve the completed rollback'),
   'rollback regression must use the real root units and admit the next duplicate worker without an extra backend restart')
+const migrationDiagnostics = read('.github/workflows/repository-migration-diagnostics.yml')
+const currentRollbackTrace = read('scripts/test-repository-current-rollback-native-trace.py')
+assert.ok(migrationDiagnostics.includes("ref: '4a3d7c84aa66c2d2508344bfb8b0a6dd0bc54c78'") &&
+  migrationDiagnostics.includes("artifact-ids: '15161578442'") &&
+  migrationDiagnostics.includes('61dc194460d7f73953cca4ea9749cfec75c9d2972c40955c96e6474804d7af33') &&
+  migrationDiagnostics.includes('UPGRADE_DRILL_INSTALLER_SOURCE=current') &&
+  migrationDiagnostics.includes('bash reproduction-source/scripts/smoke-legacy-online-upgrade.sh') &&
+  migrationDiagnostics.includes('exit "$original_status"') &&
+  migrationDiagnostics.includes("ref: 'c56f4fefc2f5f5c5b1e9048aa8c77305fa51336d'"),
+  'current rollback diagnostics must pin their original 4a package/reproducer and retain the independent c56 historical probe')
+assert.ok(currentRollbackTrace.includes("SOURCE_COMMIT = '4a3d7c84aa66c2d2508344bfb8b0a6dd0bc54c78'") &&
+  currentRollbackTrace.includes("EXPECTED = '09cef9b5c92ea649d8ef03e97553a789313ff68897108322aeb3295d891ada83'") &&
+  currentRollbackTrace.includes("os.environ.get('RUNNER_ENVIRONMENT') != 'github-hosted'") &&
+  currentRollbackTrace.includes("record(TARGET, required=True)") &&
+  currentRollbackTrace.includes("stopped.get('MainPID') != 0") &&
+  currentRollbackTrace.includes("os.O_RDONLY | os.O_NOFOLLOW | os.O_CLOEXEC | os.O_NONBLOCK"),
+  'diagnostics must reject local/production execution and authenticate the exact protected installed normalizer before tracing it')
 assert.ok(read('scripts/check-release-runtime-files.py').includes("'scripts/install-panel.sh'"),
   'the startup hook installer must be compared against its actual package bytes')
 assert.ok(installer.includes('configure_host_pool_gateway'), 'installer must configure the management gateway')

@@ -14,6 +14,10 @@ on:
         description: 'Trace the fixed c56 real old-worker rollback; does not build or publish'
         type: boolean
         default: false
+      current_rollback_startup:
+        description: 'Trace the fixed 4a current-installer rollback retry; does not build or publish'
+        type: boolean
+        default: false
 
 permissions:
   contents: read
@@ -21,7 +25,7 @@ permissions:
 
 jobs:
   normalizer-native-trace:
-    if: github.repository == 'masta-lee/mastaincus' && !inputs.current_startup && !inputs.rollback_startup
+    if: github.repository == 'masta-lee/mastaincus' && !inputs.current_startup && !inputs.rollback_startup && !inputs.current_rollback_startup
     runs-on: ubuntu-latest
     timeout-minutes: 30
     env:
@@ -159,7 +163,7 @@ jobs:
           retention-days: 3
 
   current-startup-wrapper:
-    if: github.repository == 'masta-lee/mastaincus' && inputs.current_startup && !inputs.rollback_startup
+    if: github.repository == 'masta-lee/mastaincus' && inputs.current_startup && !inputs.rollback_startup && !inputs.current_rollback_startup
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
@@ -190,7 +194,7 @@ jobs:
           bash scripts/test-repository-startup-toolchain.sh
 
   fixed-rollback-startup:
-    if: github.repository == 'masta-lee/mastaincus' && inputs.rollback_startup
+    if: github.repository == 'masta-lee/mastaincus' && inputs.rollback_startup && !inputs.current_startup && !inputs.current_rollback_startup
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
@@ -255,4 +259,77 @@ jobs:
             set -e
             printf '{"phase":"fixed-c56-rollback-status","originalExitCode":%d,"traceExitCode":%d}\n' "$original_status" "$trace_status"
           fi
+          exit "$original_status"
+
+  fixed-current-rollback-startup:
+    if: github.repository == 'masta-lee/mastaincus' && inputs.current_rollback_startup && !inputs.current_startup && !inputs.rollback_startup
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          ref: '4a3d7c84aa66c2d2508344bfb8b0a6dd0bc54c78'
+          path: reproduction-source
+          persist-credentials: false
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: '24'
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          repository: masta-lee/mastaincus
+          run-id: '45914480174'
+          artifact-ids: '15161578442'
+          github-token: ${{ github.token }}
+          merge-multiple: true
+          path: diagnostic-artifact
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          repository: masta-lee/mastaincus
+          run-id: '45914480174'
+          name: incudal-preview-agent
+          github-token: ${{ github.token }}
+          path: preview-agent
+      - name: Validate the fixed 4a signed candidate, installer and original baseline
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          candidate="$PWD/diagnostic-artifact/incudal-preview-4a3d7c8-linux-amd64.tar.gz"
+          test "$(git -C reproduction-source rev-parse HEAD)" = 4a3d7c84aa66c2d2508344bfb8b0a6dd0bc54c78
+          test "$(stat -c %s "$candidate")" = 221409186
+          test "$(sha256sum "$candidate" | awk '{print $1}')" = 61dc194460d7f73953cca4ea9749cfec75c9d2972c40955c96e6474804d7af33
+          test "$(sha256sum reproduction-source/scripts/install-panel.sh | awk '{print $1}')" = baaf2dd2c4834d90f2e3cebdd716edda503ea5280b883166c44aa04d60b7a8e5
+          node --input-type=module - "$candidate" <<'JS'
+          import assert from 'node:assert/strict'
+          import {readFileSync} from 'node:fs'
+          import {createHash} from 'node:crypto'
+          import {verifyPanelDigest} from './scripts/panel-package-signature.mjs'
+          const publisher=readFileSync('scripts/agent-package-signature.mjs')
+          assert.equal(createHash('sha1').update(Buffer.concat([Buffer.from('blob '+publisher.length+'\0'),publisher])).digest('hex'),'ed3877b83c74661e85a5bf9da762b7bb26c9cce5')
+          assert.ok(verifyPanelDigest('preview-4a3d7c8','amd64','61dc194460d7f73953cca4ea9749cfec75c9d2972c40955c96e6474804d7af33',readFileSync(process.argv[2]+'.sig','utf8').trim()))
+          JS
+          gh release download v1.8.14 --repo "$GITHUB_REPOSITORY" --pattern 'incudal-v1.8.14-linux-amd64.tar.gz*' --dir old-artifact
+          (cd old-artifact && sha256sum --check incudal-v1.8.14-linux-amd64.tar.gz.sha256)
+          printf '{"driverSource":"%s","reproductionSource":"4a3d7c84aa66c2d2508344bfb8b0a6dd0bc54c78","artifactRun":45914480174,"artifactId":15161578442,"normalizerSha256":"09cef9b5c92ea649d8ef03e97553a789313ff68897108322aeb3295d891ada83"}\n' "$GITHUB_SHA"
+      - name: Run the unchanged 4a current rollback and inspect its actual failed startup
+        run: |
+          set -euo pipefail
+          candidate="$PWD/diagnostic-artifact/incudal-preview-4a3d7c8-linux-amd64.tar.gz"
+          set +e
+          sudo env GITHUB_ACTIONS=true RUNNER_ENVIRONMENT=github-hosted UPGRADE_DRILL_INSTALLER_SOURCE=current INCUDAL_AGENT_RELEASE_TOKEN=${{ github.token }} INCUDAL_PREVIEW_AGENT_DIR="$PWD/preview-agent" \
+            bash reproduction-source/scripts/smoke-legacy-online-upgrade.sh "$candidate" "$PWD/old-artifact/incudal-v1.8.14-linux-amd64.tar.gz" rollback
+          original_status=$?
+          set -e
+          if [[ "$original_status" -ne 0 ]]; then
+            set +e
+            sudo /usr/bin/env -i PATH=/usr/sbin:/usr/bin:/sbin:/bin LC_ALL=C HOME=/var/cache/incudal-ota GITHUB_ACTIONS=true RUNNER_ENVIRONMENT=github-hosted \
+              /usr/bin/python3 -I -B scripts/test-repository-current-rollback-native-trace.py
+            trace_status=$?
+            set -e
+            printf '{"phase":"fixed-4a-current-rollback-status","originalExitCode":%d,"traceExitCode":%d}\n' "$original_status" "$trace_status"
+          fi
+          # Later diagnostic correction cannot turn the original failure green.
           exit "$original_status"

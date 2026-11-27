@@ -1,6 +1,16 @@
 # mastaincus 仓库替代与原正式资产迁移
 
-Owner确认原仓库已退出，masta-lee/mastaincus 是今后唯一维护、安装和发行仓库。2026-11-27 owner明确批准公开，沿用无需token的安装和更新。仓库已公开；main及工作分支最新已推送来源为adcc4b4541f83cddacbcce87347ef16a91ec377d。匿名下载、该来源的双架构全新安装已通过；旧版升级／回滚预览仍失败，不能据公开和下载成功宣布整条迁移验收完成。
+Owner确认原仓库已退出，masta-lee/mastaincus 是今后唯一维护、安装和发行仓库。2026-11-27 owner明确批准公开，沿用无需token的安装和更新。仓库已公开；当前产品已推送来源为4a3d7c84aa66c2d2508344bfb8b0a6dd0bc54c78，main与工作分支一致。原v1.8.14六资产仍为latest，Agent v1.0.16已迁移，原安装包、校验值、tag及发行身份保持。匿名下载、双架构全新安装与原worker正常升级已有本次证据；新安装路径的回滚再升级仍失败，迁移尚未完整验收。
+
+2026-11-27最新完整预览[45914480174](https://github.com/masta-lee/mastaincus/actions/runs/45914480174)已自然终态failure，完整headSha为4a3d7c84aa66c2d2508344bfb8b0a6dd0bc54c78。17个非发行job中15个success：双构建、双Incus、候选Agent、双首装、六个legacy clean/migrated-atomic/rollback和两个current clean均通过；两个current rollback失败，正式Release按无tag预览预期skipped。AMD实际全套守卫planned/executed/passed均233。原c56四项rollback失败不被覆写；本次legacy回滚成功只证明其对应原包及路径。
+
+两个current rollback的首次生产就绪故障注入exit70后，旧worker实际回滚完成、唯一旧backend健康、身份和旧组件登记保持。第二次原worker更新打印DATABASE_ROLE_PREFLIGHT_READY与DATABASE_ROLE_SEPARATION_READY，随后systemctl restart incudal-backend失败，第二次autoRollback的restart也失败；尚未运行到actual-root-postflight-rollback段。现有脱敏日志不足以判定是哪个Pre/Post步骤，不能将静态猜测记为根因。新增单诊断入口固定原4a Git、原实际AMD artifact15161578442及完整SHA、原14包和current安装器，不重建或签发候选；只在新GitHub一次性机器回放原失败，取实际unit步骤状态及固定09cef normalizer的受限trace，保持原失败exit，不用诊断修正覆盖失败结论。原c56诊断保持原来源。
+
+本次两实际包独立验收通过：AMD221409186B/SHA25661dc194460d7f73953cca4ea9749cfec75c9d2972c40955c96e6474804d7af33，ARM220575396B/SHA2565f5558b8c9231473a7922c6053f88ccae833257ef0790542fcb568e1ebb2ebe2；原Ed25519及错误arch/version/hash/signature控制、gzip/tar路径/属主/权限、各321份Git runtime字节均过。actual installer135090B/baaf2dd2…、embedded normalizer13538B/09cef9b5…、helper18606B/2c2407c1…均正确。native guard8230…按真实copy清单与tar属于source-only，未伪称在运行包中。报告为logs/mastaincus-preview-4a3d7c84-artifacts/independent-dual-architecture-summary.md；本轮匿名raw/main installer再核135090B/baaf2dd2全SHA相等。README的旧私有/资产迁移中说明已更新。
+
+原安全余项继续保留：当前PG派生链7文件、两active源、四旧freeze及29历史记录经根独立SHA/AST复核通过，实际111成员/NTFS/ACL来源check自然0；单次真实prepare却在PG3408_RECEIPT_PUBLISH_FAILED自然exit1，留下新d950阶段而未发布prepared，无VM/PG/候选执行。新失败保留，先查Win32原生原因，不重跑/覆盖旧目录。两真实PG、r6启动后客户端失效续接、内核boot/fallback/后续patch、旧ELF来源及主控新备份完整本机模拟恢复仍未验收。本次不发布新正式版、不操作生产或客户、不改密码/发行身份。
+
+以下保留各阶段历史来源、失败及验证范围，不作为上述最新来源的通过结论。
 
 最新完整预览[45897736610](https://github.com/masta-lee/mastaincus/actions/runs/45897736610)已自然终态failure：两个构建、两个Incus构建、候选Agent与两项全新安装共7个job成功，十项旧升级失败，正式Release预期skipped。两份实际候选包独立验证了原签名、完整SHA、路径／属主与各321份运行文件；原v1.8.14与Agent资产不变。原6be及首次新仓库失败保留，不能覆盖为通过。
 

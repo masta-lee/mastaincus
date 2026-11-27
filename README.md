@@ -20,9 +20,9 @@ PayIncus 是一套面向 hosting 业务的 Incus 商业化交付平台。它把�
 
 当前维护仓库为 `masta-lee/mastaincus`，原源码、提交历史和版本标签已保留。源码、新安装、面板更新、Agent 和文档地址使用该仓库。原有 BSD 3-Clause 许可证和版权声明保留在 [LICENSE](LICENSE) 中。
 
-原最新正式版为 [v1.8.14](https://github.com/masta-lee/mastaincus/releases/tag/v1.8.14)，配套 [Agent v1.0.16](https://github.com/masta-lee/mastaincus/releases/tag/agent-v1.0.16) 的原资产仍在核查迁移。旧正式资产与当前开发源码分别记录，迁移进度见 [源码备份记录](docs/github-backup-mastaincus-2026-11-26.md)。一键安装默认获取本仓库最新正式版；使用边界见 [网关配置说明](docs/gateway-setup-v1.7.7.md) 和 [OSS 部署说明](docs-site/docs/deployment/oss-backup.md)，生产部署证据以 [HANDOFF.md](HANDOFF.md) 为准。当前开发分支的后续安全精修尚未正式发行，完整灾备接管仍待验收。
+原最新正式版 [v1.8.14](https://github.com/masta-lee/mastaincus/releases/tag/v1.8.14) 和配套 [Agent v1.0.16](https://github.com/masta-lee/mastaincus/releases/tag/agent-v1.0.16) 已迁移至本仓库，原安装包、校验值与发行身份保持。旧正式资产与当前开发源码分别记录，迁移及验证进度见 [源码备份记录](docs/github-backup-mastaincus-2026-11-26.md)。一键安装默认获取本仓库最新正式版；使用边界见 [网关配置说明](docs/gateway-setup-v1.7.7.md) 和 [OSS 部署说明](docs-site/docs/deployment/oss-backup.md)，生产部署证据以 [HANDOFF.md](HANDOFF.md) 为准。当前开发分支的后续安全精修尚未正式发行，完整灾备接管仍待验收。
 
-新仓库当前为私有，源码、raw 安装入口和发行资产需要有仓库访问权限的 GitHub 身份；下面的匿名下载示例在该阶段不能直接使用。GitHub Pages 目标地址尚未部署，可先阅读 `docs-site/docs/` 中的文档源码。
+本仓库已公开，源码、安装脚本和正式发行资产可匿名下载，无需 GitHub token。下面的一键安装命令使用新仓库；文档源码保存在 `docs-site/docs/`。
 
 v1.7.0 的旧版本 OTA 归档所有权校验回归已在 v1.7.1 修复，新安装与更新使用最新正式版本。失败任务和数据库备份保留；发行完成不等于现有主控已升级，也不代表完整公网灾备场景已验收。
 
