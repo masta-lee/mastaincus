@@ -1,6 +1,22 @@
 # 2026-11-27：CI 终态与双 PostgreSQL 隔离测试接续
 
-本记录只说明已取得的证据。双 PostgreSQL 原 worker 矩阵尚未启动完成，不能据下列预检宣布完整恢复、最终生产热更新或新版发行通过。
+## 11 月 28 日双 PostgreSQL 实机结果
+
+R23 已通过原 worker 的首个中断场景（1/22）。源机执行真实 capture，写入持久 intent，按指定故障点返回 `INJECTED_AFTER_INTENT`。调用器随后从客机读回 state，核实 capture 进行中、seed 已校验、本轮尝试序号为 1。实际计划 SHA256 为 `5609ae0466c9f0d4e8428356f7b4447efe3fb62534b3044403d64cad780007f7`，第一步回执 SHA256 为 `88f8fccd97822f8ce2915053e51af9288b0c997ae7c08027e332100407c0a7e1`。后续步骤按同一计划续跑。
+
+该轮在进入测试之前逐字节核实、归档了 R19 留存的两个 dump、R22 两份 worker bundle 和源端初始 state；原目录身份和文件内容均保留，源端库在写入测试数据前再次核为空。此前 R22 的首次拒绝单独保留。
+
+两台独立 Ubuntu 客机已核对原磁盘、SSH 身份、PG16 实例和角色 OID。R22 首次由实机数据生成完整运行计划，并在两台客机校验、安装同一套 worker。首次源端 capture 已实际执行，返回 `UNKNOWN_SECURITY_STATE`，未到预期的 after-intent 中断点。**本轮实际调用 1 次，达到预期的矩阵步骤 0/22。** 原计划 SHA256 为 `8f75d9c83222a3366fa27a6ae0a5504d43b94344c46da74b2c9052f133718d6a`。两台 QEMU 已按原句柄停止、释放端口，Windows 禁止目标进程与只读 SQL 复核通过。
+
+| 轮次 | 取得的证据与停止原因 |
+| --- | --- |
+| R19 | 修正 Windows 旁路保护反复发起短 SQL 会话的问题，在启动和收尾分别对原本机 PG 做完整只读 SQL，窗口内按进程、镜像、PID 文件和监听归属持续核对。两台 PG 准备通过，源机真实重启且重新认证。Ubuntu 调用夹具缺少新 boot 的 systemd 来源记录，产品在缺失客户端分支拒绝该 journal；源机原调用记录及两份 dump 均留存。 |
+| R20b–R21 | 核实指定 R19 旧 journal 的内容、文件身份、唯一 token 和两份 dump。将旧调用目录在原客机内保全归档，保留两份原 dump；以后的基线检查仍拒绝其他控制。R21 两台真实 SQL 返回数据库 OID 16386、两个角色 OID 16384／16385，原测试计划把 PostgreSQL 返回的十进制文本直接当作整数而拒绝。 |
+| R22 | 在夹具与 SQL 的交界处只接受规范正整数 OID，保留数据库原值并拒绝非法输入。通过完整计划校验和两份 worker bundle 核验，随后触发上述首个 worker 拒绝。此时源端安全状态根仍有不同于当前 worker 备份名的条目；已保留的 R19 dump 目录是已知的一个，重开前需逐项清点，不能假定没有其它条目。 |
+
+本专项绑定候选 `ad2ca04d` 的产品和测试 Git 源码字节。共享 B 的实时全库只读审计仍在单独核验，已观察到的两条失败巡检和其中一条缺少开始记录的事实保留。原 3116 备份同版隔离恢复、完整系统补丁生效分别取证。主控任务 68 已完成的安全候选热更新见[主控交付](security-urgent-controller-update-2026-11-28.md)。
+
+下列内容保留较早轮次的运行记录。
 
 ## GitHub Actions 失败已核对
 
@@ -131,3 +147,31 @@ R8 微阶段已冻结16份来源，freeze `6cb283d9e9a950497d05e29531467c8c9b163
 两处完整diff和本次全部纯控／原生结果已经交根审。尚未启动R11、原22次worker调用仍为0；下一步实际启动成功后先沿原forensic读取原3398日志／intent／包审计／client18 proof，再按真实状态在同boot执行独立精准续接，不能直接调用原fresh packages或删intent。完整PG、B1原备份恢复、最终主控热更新与正式发行仍未完成。
 
 以上为准备阶段记录。根随后核完整功能diff、19项控制、原生preflight和实际预算后，批准R11一次受限执行。原B／Windows启动前保护实际通过，source PID2932／21165、target PID16748／21167均已报告owned-guest-started，分别为原盘实际第四次启动；新整体6次范围剩原API和worker两次重启。原held `e493` 启动器／两原盘和seed保持，实际600秒SSH观察及固定1800秒同boot诊断进行中，尚未取得新boot ID、forensic结果或22次worker调用。此启动不等于完整PG通过。
+
+## R11 已完成真实诊断并停止，缓存修复未执行
+
+R11两角色原pin、serial、独立machine身份和SSH均实际通过。source boot为 `7faea7aa-0ce0-49f2-9314-e905c2d8c41a`，target为 `7da17145-d942-4059-89f3-5a220d456620`；source原intent11622字节／`61c080606f5612fa10a8ada41a274ab3d9b458be72a15629be0fa2c06ad0ba80`的身份、全文和历史R7事实通过，packages-proof不存在，target包准备文件均不存在。完整私有诊断SHA为 `2eaaceed3e34aa49da7315fcd3c1e0e077b64013b2b99927557dafcad44533e4`。独立target一次只读pin对照也通过，boot与主holder一致；这没有代填未来Matrix身份或改变期限。
+
+实际包状态全部REQUIRED已installed，`dpkg --audit`没有待配置项。三次 `/usr/bin/apt-cache` 显式禁用两种磁盘cache后，读取精确16.15、18.7、19.0安装版均在30秒共同查询门槛超时，查询子进程已停止／reap、管道已关闭。这是当前确切冷元数据查询瓶颈，不能追认成旧R7未留存的原始异常。另一次source原pin下只读 `apt-config` 实际返回 `PKG='pkgcache.bin'`、`SRC='srcpkgcache.bin'`，证明默认磁盘缓存本已启用；无需改APT配置或以替换命令返回值绕开产品真实30秒查询。
+
+根审过的source精准recipe准备为guest6915字节／`21d8db9fa3e89024db383e69d141cc9a2f6ffc92a980f9add1c64f4a754d13f7`和controller5245字节／`102eb912cc0271e92ca7115c817996f78fbe5344b3451aa099999a74f1406168`。它只重建原默认APT缓存，保留原intent／完整states／全部signed索引／精确版本，随后执行原归档和vendor18验证及原proof最终代码；不安装／更新、不运行19、不调用PG服务／SQL／worker、不改APT配置或产品30秒。此次实际一次执行却在**本机连接／执行guest之前**因原窗口剩余不足45秒，被 `PG_R11_CACHE_INSUFFICIENT_ORIGINAL_WINDOW` 拒绝。因而没有gencaches、下载／改归档或新packages-proof的原生成功证据，不能报告该问题已修好。
+
+R11的原1800秒窗口自然到期，子holder退出1、主码 `PG_R8_CONTROLLER_DIAGNOSIS_WINDOW_EXPIRED`，原两句柄均signaled、exit0、关闭、端口空闲，cleanup errors为空。最后完整B／Windows保护实际通过，218条合法追加仍严格回原 `9de03503…`，实际backend93844保持；没有新的secondary错误。启动器captureComplete、executionCloseObserved、ownedChildReaped、ownedJobStopped、readerThreadsJoined、streamsClosed和pipeHandlesClosed均确认。stdout3771字节／`ff6f43d1988adccead84f470d41d08a6145f0aa5784c28f64cfac09941515551`、stderr131030字节／`b9427a989e3b7cfb9b3365a988baca3e664bf635442609902e159fb0dfcd6438`完整私有保留；外层capture命令完成0不是PG通过。
+
+每台已耗四次实际boot、原22调用仍为0；原4范围已用尽、获批整体6余2，下一完整流程仍需一次启动和原API／worker两次重启。不得重置原1800期限或把原6范围擅自变为7。后停新目录观察为source1225850880、target300875776字节；原FileID／全文与seed／key的精确新封存reader `40271a00…` 已准备待根审，旧R10锚只作历史。下一步复用本轮已核实的包状态和已审cache recipe，在经过明确根审的新有限范围成功启动后立即精准续接，不重复30秒冷查询调查或重新prepare。完整PG、B1恢复、生产热更新和正式发行仍未完成。
+
+## 2026-11-28：R12 归档拒绝与 R13 最终接续候选
+
+R12 已实际使用原两盘完成第五次启动和原身份诊断。source 的默认 APT 缓存重建真实执行后，归档审核拒绝了 Ubuntu PostgreSQL16 的 `control.tar.zst`／`data.tar.zst`；此前产品只处理 tar/gzip/xz/bzip2。client19 始终是被动归档，没有执行。原22次 worker 调用仍为0，未生成 finalPlan。
+
+该轮先在20:00:13 UTC写出失败终态，外部 stop 文件到20:01:36 UTC才创建，没有接受 stop 的回执；不能把失败记成主动正常停止。旧 holder 把另一个主异常泛化且未保留详细 traceback，具体历史主因仍未证明。原两句柄确认停止、关闭，端口空闲，旧失败及7次范围保持。根审后的后停封存为4656字节／`16dc73209f4288390c16416f35feaf85541ec2cc2a17d2fd3f8136ae5b995aaa`：source全文1293221888字节／`2a5fac5a9529c083be5fd74973106331fea04e938f7cbe765ecfafeeb613d784`，target307036160字节／`065bd8fea41f065c781a3392178bfe4e67d9adedaa983e6579798902b4420254`，原FileID、3758096384虚拟容量、prepared、seed、keys及全部历史锚保持。
+
+产品 Zstandard 修复为 `680e1bb4…`、测试 `cd192ba2…`。受认证专用 Linux B 上实际10项、零skip、2.939秒自然通过；原client/server两包完整SHA匹配原APT归档，解析出266／1476条真实manifest。原B后端93844、PG88982、boot、包库、防火墙及上传材料前后保持。该证据只证明归档和对应原生分项，不代表22项恢复矩阵或生产已部署。
+
+R13 固定来源审查另外发现两个确定准备缺陷：新plan保留了R12 coordinator／guard的旧指针；新bootstrap把当前产品SHA用于校验旧seed的marker来源。前者已绑定当前 `3af3662f…`／`0b0774b7…` 并单独保留历史指针；后者只将原marker固定 `f2693318…` 与当前product固定 `680e1bb4…` 分开核验，原marker、seed、intent和工具字节不改。新bootstrap30741字节／`7d686e778c94b57dd99b221d1b021fc4b1525c689d7ca3ff35092eff27501437`，stager与forensic同步重绑。
+
+最终相关29项自然0、零skip：原身份函数IO适配5、wx／partial5、来源／完整20源闭包9、exact continue6、cache请求4。身份控制实际调用原identity函数，精确重构旧 `492cba82…` 候选并复现拒绝；原marker两版身份相同，当前／未知SHA冒充旧marker及旧product冒充当前product仍被拒绝。此前90项保存其原freeze和IO适配范围，不冒充全部最终源码已原生执行。
+
+R13 最终freeze3018字节／`b3d7e87fef04fe9bc628810a13a394ced352d11ce1087c2aa9b9c80bf2b732c0`，plan15901字节／`927c6598e64a8b44cd556e7c9a5bbb4292069328c1606202deecb22255f72a6a`，最终只读审查台账10772字节／`dd4ac394fe674912bbd7d272e9ab8a25c5cd9247ac1ae07833bab8fa6dbec92f`。原native `1ab67a24…` 只证明161 held／111 runtime的coordinator预检；未验完整20源／Matrix原生流程。按根要求不再新增预检、不提前占用正式before：原 `e493078c…` 启动器进入 `Execution.start` 后，先完整freeze与原Matrix.preflight并生成正式before，再启动两原客机。
+
+新的有限范围为总8＝实际已耗5＋原必需3；每Matrix原4、3attempts、72小时以及产品30／8／20秒保持，旧失败窗口不延长、不追认。**本次记录时R13尚待根执行审查、没有新VM或worker调用；完整目标仍需真实新工具／包准备、原22次worker及实际重启、最终B／Windows保护和确认清理通过。** 正式发行、主控热更新和完整灾备仍未完成。

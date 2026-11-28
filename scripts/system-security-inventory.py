@@ -464,10 +464,33 @@ def snapshot_read(path,limit,budget):
     except (urllib.error.URLError,TimeoutError,OSError):raise ValueError('SYSTEM_SECURITY_BEFORE_SOURCE_UNAVAILABLE')
     return b''.join(blocks)
 
+def snapshot_keyring_bytes(legacy):
+    # Debian 13 ships the old .gpg name as a relative alias for this exact
+    # .pgp file. Older installations provide a regular .gpg file.
+    native = legacy.with_name('debian-archive-keyring.pgp')
+    runtime_payload_parents(legacy)
+    try:
+        info = legacy.lstat()
+    except FileNotFoundError:
+        selected = native
+    else:
+        selected = legacy
+        if stat.S_ISLNK(info.st_mode):
+            if info.st_uid != 0 or info.st_nlink != 1 or os.readlink(legacy) != native.name:
+                raise ValueError('SYSTEM_SECURITY_UNTRUSTED_PATH')
+            selected = native
+    try:
+        return runtime_payload_regular(selected, 1024 * 1024, content=True)['content']
+    except (OSError, ValueError) as error:
+        raise ValueError('SYSTEM_SECURITY_UNTRUSTED_PATH') from error
+
 def snapshot_release_fields(raw,archive,snapshot_time,directory):
     import email.utils
     if archive not in DEBIAN_SNAPSHOT_KEYS or not raw.startswith(b'-----BEGIN PGP SIGNED MESSAGE-----\n')or len(raw)>2*1024*1024:raise ValueError('SYSTEM_SECURITY_BEFORE_SOURCE_REJECTED')
-    keyring=pathlib.Path('/usr/share/keyrings/debian-archive-keyring.gpg');protected_hash(keyring)
+    # gpgv consumes the very bytes read through the checked regular file
+    # descriptor, even if a package replaces the installed keyring later.
+    keyring=directory/'debian-archive-keyring.gpg'
+    write_runtime_evidence_file(keyring,snapshot_keyring_bytes(pathlib.Path('/usr/share/keyrings/debian-archive-keyring.gpg')))
     signature=directory/'InRelease';write_runtime_evidence_file(signature,raw)
     status=command(['gpgv','--status-fd=1','--keyring',str(keyring),str(signature)],30)
     fingerprints=[]

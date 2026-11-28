@@ -2924,6 +2924,63 @@ class RuntimeRecoveryPsql(unittest.TestCase):
                 self.assertEqual(path.read_bytes(),before);self.assertEqual(events[count:],[]);self.assertEqual(state['pgStarts'],1);self.assertEqual(state['backendStarts'],0)
 
 class BeforeSnapshot(unittest.TestCase):
+    @unittest.skipUnless(sys.platform == 'linux' and os.geteuid() == 0, 'native root-owned keyring metadata')
+    def test_snapshot_keyring_accepts_regular_files_and_only_the_packaged_alias(self):
+        with tempfile.TemporaryDirectory(dir='/var/lib') as temporary:
+            directory = pathlib.Path(temporary)
+            legacy = directory / 'debian-archive-keyring.gpg'
+            native = directory / 'debian-archive-keyring.pgp'
+            legacy.write_bytes(b'old regular keyring')
+            self.assertEqual(module.snapshot_keyring_bytes(legacy), b'old regular keyring')
+            legacy.unlink()
+            native.write_bytes(b'new regular keyring')
+            self.assertEqual(module.snapshot_keyring_bytes(legacy), b'new regular keyring')
+            legacy.symlink_to(native.name)
+            self.assertEqual(module.snapshot_keyring_bytes(legacy), b'new regular keyring')
+
+            for target in [str(native), './' + native.name, 'other.pgp']:
+                legacy.unlink()
+                legacy.symlink_to(target)
+                with self.assertRaisesRegex(ValueError, 'UNTRUSTED_PATH'):
+                    module.snapshot_keyring_bytes(legacy)
+            legacy.unlink()
+            legacy.symlink_to(native.name)
+            os.chown(legacy, 65534, 65534, follow_symlinks=False)
+            with self.assertRaisesRegex(ValueError, 'UNTRUSTED_PATH'):
+                module.snapshot_keyring_bytes(legacy)
+            os.chown(legacy, 0, 0, follow_symlinks=False)
+            native.chmod(0o666)
+            with self.assertRaisesRegex(ValueError, 'UNTRUSTED_PATH'):
+                module.snapshot_keyring_bytes(legacy)
+            native.chmod(0o644)
+            other = directory / 'other.pgp'
+            native.rename(other)
+            native.symlink_to(other.name)
+            with self.assertRaisesRegex(ValueError, 'UNTRUSTED_PATH'):
+                module.snapshot_keyring_bytes(legacy)
+            native.unlink()
+            os.link(other, native)
+            with self.assertRaisesRegex(ValueError, 'UNTRUSTED_PATH'):
+                module.snapshot_keyring_bytes(legacy)
+            native.unlink()
+            os.chown(other, 65534, 65534)
+            other.rename(native)
+            with self.assertRaisesRegex(ValueError, 'UNTRUSTED_PATH'):
+                module.snapshot_keyring_bytes(legacy)
+
+    def test_snapshot_rejects_signers_outside_the_existing_archive_authority(self):
+        directory = pathlib.Path('/unused-snapshot-evidence')
+        release = b'-----BEGIN PGP SIGNED MESSAGE-----\n'
+        with patch.object(module, 'snapshot_keyring_bytes', return_value=b'original bytes'), \
+             patch.object(module, 'write_runtime_evidence_file') as evidence, \
+             patch.object(module, 'command', return_value='[GNUPG:] VALIDSIG ' + '0' * 40) as run:
+            with self.assertRaisesRegex(ValueError, 'BEFORE_SOURCE_REJECTED'):
+                module.snapshot_release_fields(release, 'debian', '20260101T000000Z', directory)
+            evidence.assert_any_call(directory / 'debian-archive-keyring.gpg', b'original bytes')
+            run.assert_called_once_with(['gpgv', '--status-fd=1', '--keyring',
+                                         str(directory / 'debian-archive-keyring.gpg'),
+                                         str(directory / 'InRelease')], 30)
+
     def test_only_the_single_canonical_same_name_snapshot_redirect_is_allowed(self):
         root='https://snapshot.debian.org/file/'+'a'*40+'/'
         for original,target in [('https://snapshot.debian.org/archive/debian/20260711T202405Z/dists/trixie/InRelease',root+'InRelease'),('https://snapshot.debian.org/archive/debian/20260711T202405Z/pool/main/g/glibc/libc6_2.41-12+deb13u4_amd64.deb',root+'libc6_2.41-12%2Bdeb13u4_amd64.deb')]:

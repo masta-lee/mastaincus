@@ -7,6 +7,7 @@ REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 source "$REPO_ROOT/scripts/install-panel.sh"
 
 WORK_DIR="$(mktemp -d)"
+
 cat > "$WORK_DIR/legacy-helper-original" <<'LEGACY_HELPER'
 #!/usr/bin/env bash
 [[ "${1:-}" == "https://github.com/mastalee928/payincus.git" ]] || exit 1
@@ -91,6 +92,30 @@ bash -s -- "$WORK_DIR" <<'STARTUP_DIAGNOSTIC_GUARD'
 STARTUP_DIAGNOSTIC_GUARD
 HTTP_FIXTURE_PID=""
 trap '[[ -z "$HTTP_FIXTURE_PID" ]] || kill "$HTTP_FIXTURE_PID" 2>/dev/null || true; rm -rf "$WORK_DIR"' EXIT
+
+# The signature verifier is needed even on a minimal machine with Node and
+# PostgreSQL already installed and recommended APT packages disabled.
+(
+    apt-get() { printf '%s\n' "$@" > "$WORK_DIR/system-packages"; }
+    command() {
+        if [[ "$1" == -v ]]; then
+            printf '%s\n' "$2" >> "$WORK_DIR/checked-system-tools"
+            [[ "$2" != gpgv || "$have_gpgv" == yes ]]
+        else
+            builtin command "$@"
+        fi
+    }
+    have_gpgv=yes
+    install_system_tools > "$WORK_DIR/tools-ok" 2>&1
+    grep -Fxq 'gpgv' "$WORK_DIR/system-packages"
+    grep -Fxq 'gpgv' "$WORK_DIR/checked-system-tools"
+    have_gpgv=no
+    if (install_system_tools) > "$WORK_DIR/tools-missing" 2>&1; then
+        printf 'install_system_tools accepted a missing gpgv executable\n' >&2
+        exit 1
+    fi
+    grep -Fq 'gpgv' "$WORK_DIR/tools-missing"
+)
 
 # Real Bash readonly assignment semantics differ from an ordinary fixture
 # variable. Pass the fixed path only to the two children, never reassign it.
