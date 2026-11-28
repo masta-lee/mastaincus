@@ -1,0 +1,40 @@
+name: Debian controller runtime recovery
+on:
+  workflow_dispatch:
+    inputs:
+      candidate_run:
+        description: Successful named Build & Release run ID
+        type: string
+        required: true
+        default: '46105401297'
+      candidate_commit:
+        description: Full source commit of the signed test candidate
+        type: string
+        required: true
+        default: ad2ca04dc1e4c2da4ac0a8342052a278aab231cc
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  debian:
+    if: github.repository == 'masta-lee/mastaincus' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 110
+    env:
+      CANDIDATE_RUN: ${{ inputs.candidate_run }}
+      CANDIDATE_COMMIT: ${{ inputs.candidate_commit }}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          persist-credentials: false
+      - name: Verify and fetch the exact panel artifact
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: bash scripts/controller-runtime-lab.sh fetch
+      - name: Run recovery on a disposable Debian controller
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends qemu-system-x86 qemu-utils xorriso acl
+          sudo setfacl -m "u:$(id -un):rw" /dev/kvm
+          bash scripts/controller-runtime-lab.sh run
