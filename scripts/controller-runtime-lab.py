@@ -61,22 +61,23 @@ def guest_event(scope, phase, status, reason=''):
         serial.write(msg.encode())
 
 
-def guest_scope():
-    scope = json.loads((GUEST / 'scope.json').read_bytes())
+def guest_scope(scope):
     identity = scope['id']
     need(re.fullmatch('[a-f0-9]{32}', identity) and re.fullmatch('[a-f0-9]{48}', scope['challenge']),
          'INVALID_GUEST_SCOPE')
-    need(os.geteuid() == 0 and Path('/sys/class/dmi/id/product_uuid').read_text().strip().lower() ==
-         str(uuid.UUID(hex=identity)) and Path('/sys/class/block/vda/serial').read_text().strip() ==
-         'r6-' + identity[:12] and Path('/var/lib/cloud/data/instance-id').read_text().strip() ==
-         'runtime-' + identity, 'NOT_DISPOSABLE_GUEST')
+    need(os.geteuid() == 0, 'UNEXPECTED_GUEST_USER')
+    need(Path('/sys/class/dmi/id/product_uuid').read_text().strip().lower() ==
+         str(uuid.UUID(hex=identity)), 'UNEXPECTED_GUEST_UUID')
+    need(Path('/sys/class/block/vda/serial').read_text().strip() ==
+         'r6-' + identity[:12], 'UNEXPECTED_GUEST_DISK')
+    need(Path('/var/lib/cloud/data/instance-id').read_text().strip() ==
+         'runtime-' + identity, 'UNEXPECTED_CLOUD_INSTANCE')
     need(Path('/etc/os-release').read_text().find('VERSION_ID="13"') >= 0, 'UNEXPECTED_GUEST_OS')
     need(run(['getconf', 'GNU_LIBC_VERSION'], 10, capture_output=True).stdout.strip() == b'glibc 2.41',
          'UNEXPECTED_LIBC_SERIES')
     need(re.fullmatch('[a-f0-9]{40}', scope['commit']) and
          scope['package'] == 'incudal-v1.8.14-test.' + scope['commit'][:7] + '-linux-amd64.tar.gz',
          'UNEXPECTED_PACKAGE')
-    return scope
 
 
 def apt_preferences(names, version):
@@ -192,19 +193,25 @@ def host(lab, commit, package):
                    ['systemctl', 'start', '--no-block', 'runtime-lab.service']]}
     (lab / 'user-data').write_text('#cloud-config\n' + json.dumps(config))
     (lab / 'meta-data').write_text(json.dumps({'instance-id': 'runtime-' + identity, 'local-hostname': 'runtime-lab'}))
+    mac = '02:00:66:' + ':'.join(identity[i:i + 2] for i in (0, 2, 4))
+    network = {'version': 2, 'ethernets': {'uplink': {
+        'match': {'macaddress': mac}, 'set-name': 'r6net0',
+        'dhcp4': True, 'dhcp6': False, 'accept-ra': False,
+    }}}
+    (lab / 'network-config').write_text(json.dumps(network))
     def iso(label, output, names):
         run(['xorriso', '-as', 'mkisofs', '-quiet', '-r', '-J', '-joliet-long', '-V', label,
              '-o', str(lab / output), *names], 120, cwd=lab, stdout=subprocess.DEVNULL)
-    iso('cidata', 'seed.iso', ['user-data', 'meta-data'])
+    iso('cidata', 'seed.iso', ['user-data', 'meta-data', 'network-config'])
     iso('RUNTIMEPKG', 'package.iso', [package, package + '.sig'])
     args = ['qemu-system-x86_64', '-nodefaults', '-no-user-config', '-accel', 'kvm', '-cpu', 'host',
-            '-machine', 'q35', '-m', '3072', '-smp', '2', '-uuid', str(uuid.UUID(hex=identity)),
+            '-machine', 'q35,smm=off', '-m', '3072', '-smp', '2', '-uuid', str(uuid.UUID(hex=identity)),
             '-drive', f'file={disk},format=qcow2,if=none,id=root', '-device',
-            'virtio-blk-pci,drive=root,serial=r6-' + identity[:12], '-device', 'virtio-scsi-pci,id=scsi']
+            'virtio-blk-pci,drive=root,bootindex=1,serial=r6-' + identity[:12], '-device', 'virtio-scsi-pci,id=scsi']
     for i, item in enumerate(('seed.iso', 'package.iso')):
         args += ['-drive', f'file={lab / item},format=raw,readonly=on,if=none,id=iso{i}',
                  '-device', f'scsi-cd,drive=iso{i},bus=scsi.0']
-    args += ['-netdev', 'user,id=net0', '-device', 'virtio-net-pci,netdev=net0', '-display', 'none',
+    args += ['-netdev', 'user,id=net0', '-device', 'virtio-net-pci,netdev=net0,romfile=,mac=' + mac, '-display', 'none',
              '-serial', 'file:' + str(lab / 'serial.log'), '-monitor', 'none']
     process = subprocess.Popen(args, stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL)
     try:
@@ -220,8 +227,21 @@ def host(lab, commit, package):
 
 
 def observe(process, path, scope):
+    # Provide firmware / Linux / cloud-init evidence if the service never
+    # reaches Python. Only these fixed labels can enter the public job log.
+    milestones = {
+        b'Linux version ': 'Linux kernel',
+        b'Welcome to ': 'userspace',
+        b"running 'init-local'": 'cloud-init local',
+        b"running 'init'": 'cloud-init network',
+        b'cloud-final.service': 'cloud-init final unit',
+        b'Kernel panic': 'kernel panic',
+        b'No bootable device': 'no bootable device',
+    }
+    boot_deadline = time.monotonic() + 8 * 60
     deadline = time.monotonic() + 90 * 60
     offset, partial, completed = 0, b'', []
+    first_event = False
     while time.monotonic() < deadline:
         if path.exists():
             need(path.stat().st_size <= 32 * 1024**2, 'GUEST_CONSOLE_LIMIT')
@@ -232,12 +252,16 @@ def observe(process, path, scope):
             lines = (partial + data).split(b'\n')
             partial = lines.pop()
             for line in lines:
+                for marker in tuple(milestones):
+                    if marker in line:
+                        print('Guest console:', milestones.pop(marker), flush=True)
                 _, marker, raw = line.partition(b'INCUDAL_RUNTIME_LAB ')
                 if not marker or not raw.startswith(b'{'):
                     continue
                 event = json.loads(raw)
                 if event.get('challenge') != scope['challenge']:
                     continue
+                first_event = True
                 phase, status = event['phase'], event['status']
                 need(phase in PHASES and status in ('begin', 'pass', 'fail') and
                      re.fullmatch(r'[A-Z0-9_]{0,101}', event['reason']), 'INVALID_GUEST_EVENT')
@@ -250,14 +274,16 @@ def observe(process, path, scope):
         if process.poll() is not None:
             need(process.returncode == 0 and tuple(completed) == PHASES, 'GUEST_COMPLETION_UNCONFIRMED')
             return
+        need(first_event or time.monotonic() < boot_deadline, 'GUEST_STARTUP_EVENT_MISSING')
         time.sleep(.5)
     raise TimeoutError('NATIVE_TEST_WINDOW_EXPIRED')
 
 def guest():
     import importlib.util
-    scope = guest_scope()
+    scope = json.loads((GUEST / 'scope.json').read_bytes())
     phase = 'install'
     try:
+        guest_scope(scope)
         identity = {'id': scope['id'], 'boot': BOOT_ID.read_text().strip(),
                     'machine': digest(Path('/etc/machine-id'))}
         path = GUEST / 'transaction.py'
@@ -316,7 +342,7 @@ def guest():
 
 def cut():
     import importlib.util
-    guest_scope()
+    guest_scope(json.loads((GUEST / 'scope.json').read_bytes()))
     path = GUEST / 'transaction.py'
     spec = importlib.util.spec_from_file_location('native_transaction_test', path)
     tx = importlib.util.module_from_spec(spec)
