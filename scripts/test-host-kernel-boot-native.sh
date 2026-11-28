@@ -100,6 +100,10 @@ try:
                     'prepareHash': module.ZERO, 'recipe': module.RECIPE, 'architecture': os.uname().machine,
                     'expiresAt': int(time.time() * 1000) + 59000, 'customers': [], 'expectedPlanHash': None}
             inspected = module.execute(wire)
+            if inspected['phase'] == 'inspected' and inspected['plan']['status'] == 'blocked':
+                reason = inspected['plan'].get('reason')
+                if isinstance(reason, str) and re.fullmatch(r'HARDENING_[A-Z_]{1,90}', reason):
+                    module.fail(reason)
             if inspected['phase'] != 'inspected' or inspected['plan']['status'] != 'available' or inspected['plan']['candidateVersion'] != expected:
                 module.fail('HARDENING_KERNEL_NATIVE_PLAN_UNAVAILABLE')
             wire.update(action='prepare', expectedPlanHash=inspected['plan']['planHash'])

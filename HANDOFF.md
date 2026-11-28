@@ -9,10 +9,10 @@
 | 唯一维护仓库 | [masta-lee/mastaincus](https://github.com/masta-lee/mastaincus)，公开；main 与工作分支分批同步 |
 | 原正式版 | [v1.8.14](https://github.com/masta-lee/mastaincus/releases/tag/v1.8.14)；原 tar、签名、校验及 tag 保持 |
 | 原配套 Agent | [v1.0.16](https://github.com/masta-lee/mastaincus/releases/tag/agent-v1.0.16) |
-| 最近已核源码 CI | 278c44f8 的 [CI](https://github.com/masta-lee/mastaincus/actions/runs/46131138206) 30 项通过 |
-| 最近完整成功预览 | 278c44f8 的[双架构具名预览](https://github.com/masta-lee/mastaincus/actions/runs/46131138638) 17 项通过，含两次首装、10 个原 worker 升级／回滚；正式发布步骤按预期跳过 |
-| 命名测试包 | v1.8.14-test.278c44f，AMD64 与 ARM64 实际 tar 独立核验通过，运行主控的候选仍为 ad2ca04 |
-| 最新已保存产品修复 | 278c44f8 安装三个固定 root 工具时只遍历一次完整签名包。主控上的运行时门禁由 ad2ca04d 提供 |
+| 安全候选源码 CI | 6bb3f40d 的 [CI](https://github.com/masta-lee/mastaincus/actions/runs/46145700198) 30 项通过 |
+| 最近完整成功预览 | 6bb3f40d 的[双架构具名预览](https://github.com/masta-lee/mastaincus/actions/runs/46145705340) 17 项通过，含两次首装、10 个原 worker 升级／回滚。正式发布步骤按预期跳过 |
+| 命名测试包 | v1.8.14-test.6bb3f40。AMD64 与 ARM64 的实际 tar 各有 321 份源码逐字节匹配，原发行签名、组件签名、权限、链接与归档完整性均通过 |
+| 最新已保存产品修复 | 6bb3f40d 按本机 dpkg 时间定位已安装版本，并校验历史索引的同源重定向、签名及目标 SHA。该包在 [Debian 13 KVM](https://github.com/masta-lee/mastaincus/actions/runs/46148100813) 完成安装，随后原资格检查拒绝活动的 systemd-networkd，尚未执行完整事务 |
 | 已保存 CI 修复 | 47accbab：原 v1.8.14 两个固定资产下载最多 3 次、每次独立临时目录；原 SHA 保持。真实 Bash 故障控制、同提交 CI／完整预览通过；线上该轮首次下载成功，不冒称发生过真实重试 |
 | 当前安装精修 | 31b10f94已推送main和工作分支。installer 3cc6304b…、guard 221a4506…；完整包认证后续接、原配置／证书保持、真实身份残留写前拒绝及失败传播。Windows完整守卫自然0（877.934秒），同提交Linux双架构各69续接／25文件操作／7升级控制通过且无跳过；未正式发布或生产部署 |
 | 本批实质修复 | 库存读取 template 87f84759…；测试 8a88d4a6…，Linux 89/89、零跳过、原环境保持；已随当前31b10f94通过源码CI及完整双架构预览 |
@@ -20,6 +20,10 @@
 | 生产版本 | 主控任务 68 更新至 v1.8.14-test.ad2ca04，签名包 25,763 文件、唯一健康后端、原资金／身份／运行实例比对通过。Agent 最近登记为 security.10 |
 
 安装、更新和匿名下载入口均使用新仓库。当前源码中旧官方地址的匹配用于识别并迁移已有旧安装；旧签名包与历史记录仍保持，不能机械替换匹配值而破坏迁移。
+
+11 月 28 日独立核对预览 46145705340 的两份签名 tar。AMD64 为 221,418,388 字节，SHA256 为 `4667688e343e7f3728e2911b5fdd8e2906898f7505ee350819e1c9f951043801`。ARM64 为 220,465,355 字节，SHA256 为 `8cf2cce2e63dfa76183cea67f342c8d7fc1a611e4cb594ef38f8280fac76729b`。两包内的 Debian 库存脚本均为 `3c76f23b93a44e1531c7068f1093ebb54df7b4714c104b81254d3908ba5ef270`。Debian 运行单独指定这个候选 run 和产品提交，测试入口提交为 ecca19dc。
+
+宿主内核[双架构实机运行](https://github.com/masta-lee/mastaincus/actions/runs/46146936594)中，AMD64 完成依赖、GRUB 配置与第一次正常关机，第二次启动打开 KVM 设备时权限不足。ARM64 在同架构模拟器中经 GRUB 完成新系统启动与 OpenRC 基线检查，随后在回滚前准备阶段退出。此次测试入口修正在每次 KVM 开机前核设备和当前 runner 的实际读写资格，并保留原生检查第一个返回的错误码。两架构的内核激活及回滚继续验收。
 
 ## 安全清单：20 项，17 项源码修复与对应验证，3 项未闭环
 

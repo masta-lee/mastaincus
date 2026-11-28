@@ -9,6 +9,7 @@ import re
 import secrets
 import shutil
 import socket
+import stat
 import subprocess
 import sys
 import time
@@ -35,6 +36,22 @@ def run(argv, timeout, **kwargs):
 def digest(path):
     with path.open('rb') as stream:
         return hashlib.file_digest(stream, 'sha256').hexdigest()
+
+
+def open_kvm():
+    path = '/dev/kvm'
+    before = os.lstat(path)
+    require(stat.S_ISCHR(before.st_mode) and before.st_uid == 0 and
+            (os.major(before.st_rdev), os.minor(before.st_rdev)) == (10, 232), 'Unexpected KVM device')
+    # The hosted machine can reset a device ACL between separate QEMU boots.
+    # Grant only this runner user and confirm O_RDWR on the very same device.
+    run(['sudo', '-n', 'setfacl', '-m', f'u:{os.getuid()}:rw', path], 15)
+    fd = os.open(path, os.O_RDWR | os.O_NOFOLLOW | os.O_CLOEXEC)
+    try:
+        require(os.path.samestat(before, os.fstat(fd)) and os.path.samestat(before, os.lstat(path)),
+                'KVM device changed before boot')
+    finally:
+        os.close(fd)
 
 
 class Lab:
@@ -120,6 +137,7 @@ class Lab:
             shutil.copyfile(self.var_template, variables)
         self.boot_console_start = 0
         if self.accel == 'kvm':
+            open_kvm()
             machine, cpu, accel = ('virt,gic-version=host' if self.arm else 'q35'), 'host', 'kvm'
         else:
             require(self.arm, 'AMD64 runner requires KVM')
@@ -220,7 +238,10 @@ class Lab:
                 log.seek(max(0, log.seek(0, os.SEEK_END) - 65536))
                 tail = log.read(65536)
             codes = re.findall(rb'\b(?:HARDENING_[A-Z_]{1,90}|E04_GUEST_FAILURE phase=[a-z-]{1,30} line=[0-9]{1,5})\b', tail)
-            raise ValueError(name + ' failed' + (': ' + codes[-1].decode() if codes else ''))
+            # The guest's ERR trap runs after the Python driver and can emit
+            # more than once. Keep its line and the driver's original code.
+            reasons = ', '.join(dict.fromkeys(code.decode() for code in codes[-6:]))
+            raise ValueError(name + ' failed' + (': ' + reasons if reasons else ''))
         if not reboot:
             print(name + ' passed', flush=True)
 
