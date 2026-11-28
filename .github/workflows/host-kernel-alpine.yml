@@ -1,0 +1,39 @@
+name: Alpine host kernel activation and rollback
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  kernel:
+    if: github.repository == 'masta-lee/mastaincus' && github.ref == 'refs/heads/main'
+    name: Full kernel boot and rollback (${{ matrix.arch }})
+    runs-on: ${{ matrix.runner }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: ubuntu-24.04
+            arch: x86_64
+            packages: qemu-system-x86 ovmf
+          - runner: ubuntu-24.04-arm
+            arch: aarch64
+            packages: qemu-system-arm qemu-efi-aarch64
+    timeout-minutes: 110
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09
+        with:
+          persist-credentials: false
+      - name: Prepare an isolated native Alpine guest
+        env:
+          QEMU_PACKAGES: ${{ matrix.packages }}
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends $QEMU_PACKAGES qemu-utils xorriso openssh-client dosfstools mtools acl
+          sudo setfacl -m "u:$(id -un):rw" /dev/kvm
+      - name: Run original and candidate boots and both rollbacks
+        env:
+          TEST_ARCH: ${{ matrix.arch }}
+        run: python3 -I -B scripts/host-kernel-lab.py "$TEST_ARCH"
