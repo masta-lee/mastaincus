@@ -1036,8 +1036,10 @@ def private_cache_permissions(path):
 
 
 def package_base(directory):
+    # APK3 exposes script/commit-hook controls only to commit applets. Keeping
+    # them off update/policy/fetch lets the signed read-only plan work there.
     return [trusted_program('apk')['path'], '--cache-dir', str(directory / 'cache'), '--repositories-file', str(directory / 'repositories'),
-            '--timeout', '8', '--no-scripts', '--no-commit-hooks']
+            '--timeout', '8']
 
 
 def signed_policy_candidate(output, flavor, branch, architecture, installed):
@@ -1084,7 +1086,7 @@ def signed_planning_cache(value, directory, branch, flavor, expected, base):
     private_cache_permissions(shared)
     policy_candidate = signed_policy_candidate(command([*source_base, 'policy', flavor], timeout=8, value=value),
                                                flavor, branch, value['architecture'], expected[flavor])
-    output = command([*source_base, '--simulate', 'upgrade', flavor], timeout=8, value=value)
+    output = command([*source_base, '--no-scripts', '--no-commit-hooks', '--simulate', 'upgrade', flavor], timeout=8, value=value)
     text = output.decode()
     if not re.search(r'\b(?:Installing|Upgrading|Downgrading|Removing|Purging|Reinstalling)\b', text):
         if policy_candidate != expected[flavor]:
@@ -1143,7 +1145,7 @@ def fixed_context(context):
 
 
 def simulate_original(transaction, directory, value, current, reinstall=False):
-    base = package_base(directory)
+    base = [*package_base(directory), '--no-scripts', '--no-commit-hooks']
     expected = transaction['plan']['candidateVersion']
     flavor = transaction['plan']['flavor']
     # APK fix/upgrade resolve complete argv strings as package names, not version
@@ -1618,7 +1620,7 @@ def install_original(state, value):
     if cache_manifest(directory / 'cache') != transaction['cache']:
         fail('HARDENING_KERNEL_CACHE_CHANGED')
     current_request(value)
-    base = package_base(directory)
+    base = [*package_base(directory), '--no-scripts', '--no-commit-hooks']
     args = [*base, '--no-network', 'fix', '--reinstall', flavor] if reinstall else [*base, '--no-network', 'upgrade', flavor]
     command(args, timeout=30, value=value)
     if installed_packages(value) != transaction['expectedInstalled']:

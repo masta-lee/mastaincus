@@ -1,7 +1,7 @@
 import { spawn, execFile } from 'node:child_process'
 import { createReadStream, createWriteStream, existsSync } from 'node:fs'
-import { chmod, mkdir, readFile, stat, writeFile } from 'node:fs/promises'
-import { join } from 'node:path'
+import { chmod, mkdir, mkdtemp, open, readFile, rm, stat, writeFile } from 'node:fs/promises'
+import { dirname, join } from 'node:path'
 import { pipeline } from 'node:stream/promises'
 import { promisify } from 'node:util'
 import { createHash } from 'node:crypto'
@@ -76,8 +76,115 @@ export async function databaseMetadata(database?: string) {
   const migrations = await appliedBackupMigrations(database)
   return { postgresMajor: Math.floor(Number(info.version) / 10000), bytes: Number(info.bytes), migrationHash: createHash('sha256').update(JSON.stringify(migrations)).digest('hex') }
 }
-// Child utilities run as the application OS user; secrets never enter argv or logs.
-async function pgProcess(command: 'pg_dump' | 'pg_restore' | 'psql', args: string[], database: string | undefined, input?: string, output?: string) {
+type PgTool = 'pg_dump' | 'pg_restore' | 'psql'
+function pgTool(major: number, name: PgTool) {
+  ensure(Number.isInteger(major) && major >= 14 && major <= 30, 'OSS_POSTGRES_VERSION_MISMATCH', 409)
+  return `/usr/lib/postgresql/${major}/bin/${name}`
+}
+async function connectedPgMajor() {
+  const [row] = await pgQuery<{ version: string }>("SELECT current_setting('server_version_num') AS version")
+  return Math.floor(Number(row.version) / 10000)
+}
+async function archiveReader(source: string, major: number) {
+  const fd = await open(source, 'r')
+  const header = Buffer.alloc(8)
+  try {
+    ensure((await fd.read(header, 0, header.length, 0)).bytesRead === 8
+      && header.subarray(0, 5).equals(Buffer.from('PGDMP'))
+      && header[5] === 1 && header[6] >= 14 && header[6] <= 16 && header[7] === 0,
+    'OSS_DATABASE_ARCHIVE_INVALID', 409)
+  }
+  finally { await fd.close() }
+  const requiredMajor = header[6] === 16 ? 17 : header[6] === 15 ? 16 : 14
+  const candidates = [...new Set([major, 14, 15, 16, 17, 18])]
+  const inspectorMajor = candidates.find(value => value >= requiredMajor && existsSync(pgTool(value, 'pg_restore')))
+  ensure(inspectorMajor, 'OSS_DATABASE_TOOL_MISSING', 503)
+  const sourceVersions = await archivedDumpToolchain(source, pgTool(inspectorMajor, 'pg_restore'))
+  const producer = dumpVersionMajor(sourceVersions.dumpVersion)
+  ensure(dumpVersionMajor(sourceVersions.databaseVersion) === major
+    && producer >= major && producer >= requiredMajor && producer <= 18,
+  'OSS_POSTGRES_VERSION_MISMATCH', 409)
+  // Verification reproduces the producer's schema dump. Check its tool before
+  // importing data so an unavailable fingerprint tool leaves the target empty.
+  ensure(existsSync(pgTool(producer, 'pg_dump')), 'OSS_DATABASE_TOOL_MISSING', 503)
+  const readerMajor = existsSync(pgTool(producer, 'pg_restore')) ? producer : inspectorMajor
+  return { reader: pgTool(readerMajor, 'pg_restore'), sourceVersions,
+    requiresSqlCompatibility: major < 17 && readerMajor >= 17 }
+}
+function dumpVersionMajor(version: string) {
+  ensure(/^\d+\.\d+(?:\.\d+)?(?: \([^\r\n]{1,200}\))?$/.test(version)
+    && [...version].every(character => character.charCodeAt(0) >= 32 && character.charCodeAt(0) <= 126),
+  'OSS_DATABASE_ARCHIVE_INVALID', 409)
+  return Number.parseInt(version, 10)
+}
+function sqlDumpToolchain(head: Buffer): DumpToolchain {
+  const header = /^--\r?\n-- PostgreSQL database dump\r?\n--\r?\n\r?\n(?:\\restrict [A-Za-z0-9]+\r?\n\r?\n)?-- Dumped from database version ([^\r\n]+)\r?\n-- Dumped by pg_dump version ([^\r\n]+)\r?\n/.exec(head.subarray(0, 4096).toString('latin1'))
+  ensure(header, 'OSS_DATABASE_ARCHIVE_INVALID', 409)
+  return { databaseVersion: header[1], dumpVersion: header[2] }
+}
+// The renderer can be newer than the producer named in the archive. Remove
+// the unsupported setting only from its bounded native session prologue.
+export function compatiblePgRestorePrefix(head: Buffer, versions: DumpToolchain): Buffer {
+  const databaseMajor = dumpVersionMajor(versions.databaseVersion)
+  const producerMajor = dumpVersionMajor(versions.dumpVersion)
+  ensure(databaseMajor >= 14 && databaseMajor <= 18 && producerMajor >= databaseMajor && producerMajor <= 18,
+    'OSS_POSTGRES_VERSION_MISMATCH', 409)
+  const actual = sqlDumpToolchain(head)
+  ensure(actual.databaseVersion === versions.databaseVersion && actual.dumpVersion === versions.dumpVersion,
+    'OSS_DATABASE_ARCHIVE_INVALID', 409)
+  const text = head.subarray(0, 4096).toString('latin1')
+  const opening = /^--\r?\n-- PostgreSQL database dump\r?\n--\r?\n\r?\n(?:\\restrict [A-Za-z0-9]+\r?\n\r?\n)?-- Dumped from database version [^\r\n]+\r?\n-- Dumped by pg_dump version [^\r\n]+\r?\n\r?\n(?:BEGIN;\r?\n\r?\n)?SET statement_timeout = 0;\r?\nSET lock_timeout = 0;\r?\nSET idle_in_transaction_session_timeout = 0;\r?\n/.exec(text)
+  ensure(opening, 'OSS_DATABASE_ARCHIVE_INVALID', 409)
+  const start = opening[0].length
+  const setting = /^SET transaction_timeout = 0;\r?\n/.exec(text.slice(start))
+  const next = start + (setting?.[0].length ?? 0)
+  ensure(text.startsWith('SET client_encoding = ', next), 'OSS_DATABASE_ARCHIVE_INVALID', 409)
+  if (!setting || databaseMajor >= 17) return head
+  return Buffer.concat([head.subarray(0, start), head.subarray(next)])
+}
+async function executeCompatibleRestoreSql(source: string, database: string, args: string[], versions?: DumpToolchain) {
+  ensure(/^incudal_(check|restore|verify)_[a-f0-9]{32}$/.test(database) && !/[\r\n]/.test(database),
+    'OSS_DATABASE_INVALID')
+  const major = await connectedPgMajor()
+  const fd = await open(source, 'r')
+  try {
+    const head = Buffer.alloc(4096)
+    const { bytesRead } = await fd.read(head, 0, head.length, 0)
+    const sourceVersions = versions ?? sqlDumpToolchain(head.subarray(0, bytesRead))
+    ensure(dumpVersionMajor(sourceVersions.databaseVersion) === major, 'OSS_POSTGRES_VERSION_MISMATCH', 409)
+    ensure(existsSync(pgTool(dumpVersionMajor(sourceVersions.dumpVersion), 'pg_dump')),
+      'OSS_DATABASE_TOOL_MISSING', 503)
+    const prefix = compatiblePgRestorePrefix(head.subarray(0, bytesRead), sourceVersions)
+    async function* compatibleSql() {
+      yield prefix
+      yield* fd.createReadStream({start: bytesRead, autoClose: false})
+    }
+    await runPgTool(pgTool(major, 'psql'), 'psql', args, database, compatibleSql(), undefined, true)
+  } finally { await fd.close() }
+}
+async function pgProcess(command: PgTool, args: string[], database: string | undefined, input?: string, output?: string, dumpMajor?: number) {
+  const major = dumpMajor ?? await connectedPgMajor()
+  if (command === 'pg_restore' && input && database) {
+    ensure(/^incudal_(check|restore|verify)_[a-f0-9]{32}$/.test(database), 'OSS_DATABASE_INVALID')
+    const { reader, sourceVersions, requiresSqlCompatibility } = await archiveReader(input, major)
+    if (requiresSqlCompatibility) {
+      // Finish decoding before any SQL reaches the isolated target. A corrupt
+      // archive or disk write failure can never deliver the generated COMMIT.
+      const folder = await mkdtemp(join(dirname(input), '.pg-restore-'))
+      const sql = join(folder, 'restore.sql')
+      try {
+        await runPgTool(reader, 'pg_restore', ['--no-owner', '--no-privileges', '--single-transaction', '--file=-'], undefined, input, sql)
+        await executeCompatibleRestoreSql(sql, database,
+          ['-X', '--set', 'ON_ERROR_STOP=1', '--no-password', '--dbname', database], sourceVersions)
+      } finally { await rm(folder, {recursive:true, force:true}) }
+      return
+    }
+    await runPgTool(reader, command, args, database, input, output)
+    return
+  }
+  await runPgTool(pgTool(major, command), command, args, database, input, output)
+}
+async function runPgTool(program: string, command: PgTool, args: string[], database: string | undefined, input?: string | AsyncIterable<Buffer>, output?: string, unprivilegedOs = false) {
   let uid = Number((await exec('/usr/bin/id', ['-u', 'incudal'])).stdout.trim())
   let gid = Number((await exec('/usr/bin/id', ['-g', 'incudal'])).stdout.trim())
   ensure(uid > 0 && gid > 0, 'OSS_RUNTIME_INVALID', 503)
@@ -85,10 +192,10 @@ async function pgProcess(command: 'pg_dump' | 'pg_restore' | 'psql', args: strin
   if (database && command !== 'pg_dump') {
     ensure(/^incudal_(check|restore|verify)_[a-f0-9]{32}$/.test(database), 'OSS_DATABASE_INVALID')
     const migrationUrl=await retainedMigrationIdentity(postgresConnection().url)
-    uid=0;gid=0
+    if (!unprivilegedOs) { uid=0;gid=0 }
     environment={...environment,PGUSER:decodeURIComponent(migrationUrl.username),PGPASSWORD:decodeURIComponent(migrationUrl.password)}
   }
-  const child = spawn(command, args, { uid, gid, env: environment, stdio: ['pipe', 'pipe', 'pipe'] })
+  const child = spawn(program, args, { uid, gid, env: environment, stdio: ['pipe', 'pipe', 'pipe'] })
   let timedOut = false, diagnostic = ''
   const timer = setTimeout(() => { timedOut = true; child.kill('SIGKILL') }, 60 * 60 * 1000)
   child.stderr.on('data', chunk => { diagnostic = (diagnostic + chunk.toString()).slice(-32768) })
@@ -98,7 +205,7 @@ async function pgProcess(command: 'pg_dump' | 'pg_restore' | 'psql', args: strin
   })
   try {
     const operations: Promise<unknown>[] = [finished]
-    if (input) operations.push(pipeline(createReadStream(input), child.stdin))
+    if (input) operations.push(pipeline(typeof input === 'string' ? createReadStream(input) : input, child.stdin))
     else child.stdin.end()
     if (output) operations.push(pipeline(child.stdout, createWriteStream(output, { flags: 'wx', mode: 0o600 })))
     else child.stdout.resume()
@@ -197,16 +304,18 @@ export async function migrateBackupDatabase(app: string, database: string) {
   await grantRestoredRuntime(database)
 }
 export async function restoreDatabaseSql(source: string, target: string) {
-  await pgProcess('psql', ['-X', '--set', 'ON_ERROR_STOP=1', '--single-transaction', '--dbname', target], target, source)
+  await executeCompatibleRestoreSql(source, target,
+    ['-X', '--set', 'ON_ERROR_STOP=1', '--single-transaction', '--no-password', '--dbname', target])
   await grantRestoredRuntime(target)
 }
 // Derive SQL from the already verified custom archive, never a second live dump.
 export async function exportReadableDatabase(source: string, report: DatabaseIntegrity, directory: string) {
   const folder = join(directory, 'readable-sql'); await mkdir(folder, { mode: 0o700 })
   const sources: Array<{ name: string; path: string }> = []
+  const { reader } = await archiveReader(source, await connectedPgMajor())
   const exportSql = async (name: string, args: string[]) => {
     const path = join(folder, `${sources.length}.sql`)
-    await exec('/usr/bin/pg_restore', [...args, '--file', path, source], { env: { PATH: '/usr/bin:/bin' }, timeout: 3600000, maxBuffer: 65536 })
+    await exec(reader, [...args, '--file', path, source], { env: { PATH: '/usr/bin:/bin', LC_ALL: 'C' }, timeout: 3600000, maxBuffer: 65536 })
     await chmod(path, 0o600); sources.push({ name, path })
   }
   // Portable full SQL restores into an explicitly selected isolated target.
@@ -276,8 +385,9 @@ export function restoreDumpToolchainHeader(value: string, toolchain: DumpToolcha
   ensure(header.test(value), 'OSS_DATABASE_DUMP_INVALID')
   return value.replace(header, (_all, opening: string, middle: string, ending: string) => `${opening}${toolchain.databaseVersion}${middle}${toolchain.dumpVersion}${ending}`)
 }
-async function archivedDumpToolchain(source: string): Promise<DumpToolchain> {
-  const { stdout } = await exec('/usr/bin/pg_restore', ['--list', source], { env: { PATH: '/usr/bin:/bin' }, maxBuffer: 16 * 1024 * 1024 })
+async function archivedDumpToolchain(source: string, reader?: string): Promise<DumpToolchain> {
+  const program = reader ?? (await archiveReader(source, await connectedPgMajor())).reader
+  const { stdout } = await exec(program, ['--list', source], { env: { PATH: '/usr/bin:/bin', LC_ALL:'C' }, maxBuffer: 16 * 1024 * 1024 })
   const field = (name: string) => {
     const matches = [...stdout.matchAll(new RegExp(`^;[ \\t]+${name}: ([^\\r\\n]+)\\r?$`, 'gm'))]
     ensure(matches.length === 1, 'OSS_DATABASE_DUMP_INVALID')
@@ -288,7 +398,8 @@ async function archivedDumpToolchain(source: string): Promise<DumpToolchain> {
 export async function schemaFingerprint(directory: string, suffix: string, database?: string, snapshot?: string, toolchain?: DumpToolchain, expectedHash?:string) {
   const path = join(directory, `schema-${suffix}.sql`)
   // Verification normalizes destination role/tablespace mapping only. The actual archive keeps this metadata.
-  await pgProcess('pg_dump', ['--schema-only', '--no-owner', '--no-privileges', '--no-tablespaces', ...(snapshot ? [`--snapshot=${validateSnapshot(snapshot)}`] : [])], database, undefined, path)
+  const fingerprintMajor = toolchain ? dumpVersionMajor(toolchain.dumpVersion) : undefined
+  await pgProcess('pg_dump', ['--schema-only', '--no-owner', '--no-privileges', '--no-tablespaces', ...(snapshot ? [`--snapshot=${validateSnapshot(snapshot)}`] : [])], database, undefined, path, fingerprintMajor)
   ensure((await stat(path)).size <= 64 * 1024 * 1024, 'OSS_DATABASE_SCHEMA_TOO_LARGE')
   const value = await readFile(path, 'utf8')
   return publicSchemaFingerprint(toolchain ? restoreDumpToolchainHeader(value, toolchain) : value,expectedHash)
@@ -397,12 +508,13 @@ async function archivedSequenceStates(source: string, sequences: DatabaseIntegri
   if (!sequences.length) return []
   // Sequence counters are non-MVCC. Capture their exact dump values, then verify those values after restore.
   // These pg_restore calls only inspect the locally generated archive; no SQL is executed.
-  const env = { PATH: '/usr/bin:/bin' }
-  const { stdout } = await exec('/usr/bin/pg_restore', ['--list', source], { env, maxBuffer: 16 * 1024 * 1024 })
+  const env = { PATH: '/usr/bin:/bin', LC_ALL: 'C' }
+  const { reader } = await archiveReader(source, await connectedPgMajor())
+  const { stdout } = await exec(reader, ['--list', source], { env, maxBuffer: 16 * 1024 * 1024 })
   const entries = stdout.split('\n').filter(line => /^\d+; .* SEQUENCE SET /.test(line))
   const list = join(directory, 'sequence-list'), sql = join(directory, 'sequence-values.sql')
   await writeFile(list, entries.join('\n') + '\n', { flag: 'wx', mode: 0o600 })
-  await exec('/usr/bin/pg_restore', ['--use-list', list, '--file', sql, source], { env, maxBuffer: 1024 * 1024 })
+  await exec(reader, ['--use-list', list, '--file', sql, source], { env, maxBuffer: 1024 * 1024 })
   await chmod(sql, 0o600)
   ensure((await stat(sql)).size <= 4 * 1024 * 1024, 'OSS_DATABASE_TOO_MANY_TABLES')
   const states = new Map<string, { lastValue: string; isCalled: boolean }>()

@@ -68,14 +68,22 @@ def prepare(module, identity):
     check(policy and policy['qualification']['manager']['pid'] == 1 and
           policy['qualification']['journald']['pid'] > 1, 'SYSTEMD_QUALIFICATION_REQUIRED')
     vendors = {}
+    layout = module.runtime_payload_layout()
     for name, path in [('nodejs', 'usr/bin/node'), ('postgresql-16', 'usr/lib/postgresql/16/bin/postgres'),
                        ('postgresql-client-16', 'usr/lib/postgresql/16/bin/psql')]:
         key, = [k for k in baseline if k.split(':')[0] == name]
         _, archive, _ = module.acquire_runtime_debian_archive(name, baseline[key], key.split(':')[1], role='before')
-        authentic = module.runtime_archive_programs(archive, [path])[path]
-        check(module.runtime_payload_regular('/' + path, 128 * 1024**2)['sha256'] == authentic,
+        # Node's genuine data archive exceeds the small-file reader's total
+        # cap. The existing full manifest parser retains its 256 MiB archive
+        # and 128 MiB file caps and authenticates every member's metadata.
+        program = module.runtime_archive_payload(archive, layout).get('/' + path)
+        check(isinstance(program, dict) and program.get('type') == 'file', 'VENDOR_BEFORE_UNREVIEWED')
+        module.validate_runtime_payload_record('/' + path, program, layout)
+        check(program['uid'] == program['gid'] == 0 and program['mode'] == 0o755,
+              'VENDOR_BEFORE_UNREVIEWED')
+        check(module.runtime_payload_regular('/' + path, 128 * 1024**2) == program,
               'VENDOR_BEFORE_MISMATCH')
-        vendors[name] = authentic
+        vendors[name] = program['sha256']
     return {'identity': identity, 'backend': backend, 'database': database, 'changes': changes,
             'baseline': baseline, 'expected': expected, 'vendors': vendors,
             'qualification': policy['qualification'], 'programs': policy['programs']}

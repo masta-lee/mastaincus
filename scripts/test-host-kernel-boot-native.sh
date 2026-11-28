@@ -61,6 +61,51 @@ if not callable(getattr(apparmor, 'assert_apparmor_idle', None)) or not callable
     module.fail('HARDENING_KERNEL_OTHER_JOURNAL_UNKNOWN')
 module.APPARMOR_JOURNAL_GUARD = apparmor.assert_apparmor_idle
 apparmor.KERNEL_JOURNAL_GUARD = module.assert_kernel_idle
+
+# Keep the original command and cleanup implementation. Its public error code
+# intentionally hides subprocess output, so retain a bounded diagnostic while
+# the temporary streams are still open on this disposable test machine.
+original_command = module.command
+original_popen = module.subprocess.Popen
+def diagnose_kernel_command(args, timeout=8, value=None, *, stdout_only=False):
+    last_process = None
+    def launch(*positional, **keywords):
+        nonlocal last_process
+        process = original_popen(*positional, **keywords)
+        last_process = process
+        original_wait = process.wait
+        def wait(*wait_args, **wait_keywords):
+            result = original_wait(*wait_args, **wait_keywords)
+            try:
+                output, errors = keywords['stdout'], keywords['stderr']
+                error_prefix = os.pread(errors.fileno(), 1024, 0)
+                process.kernel_test_diagnostic = {
+                    'program': Path(args[0]).name,
+                    'arguments': [str(arg)[:512] for arg in args[1:]][:24],
+                    'exit': result,
+                    'stdoutBytes': os.fstat(output.fileno()).st_size,
+                    'stderrBytes': os.fstat(errors.fileno()).st_size,
+                    'stderrPrefixBytes': len(error_prefix),
+                    'stderrPrefixSha256': module.digest(error_prefix),
+                    'stderrPrefix': error_prefix.decode('utf-8', errors='replace'),
+                }
+            except Exception:
+                process.kernel_test_diagnostic = {'program': Path(args[0]).name, 'exit': result, 'diagnosticUnavailable': True}
+            return result
+        process.wait = wait
+        return process
+    module.subprocess.Popen = launch
+    try:
+        return original_command(args, timeout=timeout, value=value, stdout_only=stdout_only)
+    except BaseException:
+        diagnostic = getattr(last_process, 'kernel_test_diagnostic', None)
+        if diagnostic is not None:
+            print('E04_NATIVE_COMMAND_FAILURE ' + json.dumps(diagnostic, ensure_ascii=True, separators=(',', ':')), file=sys.stderr, flush=True)
+        raise
+    finally:
+        module.subprocess.Popen = original_popen
+module.command = diagnose_kernel_command
+
 marker = Path('/var/lib/incudal-kernel-native.disposable')
 if module.read(marker, private=True, limit=128) != b'payincus-disposable-kernel-v1\n':
     module.fail('HARDENING_KERNEL_NATIVE_DISPOSABLE_VM_REQUIRED')

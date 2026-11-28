@@ -401,14 +401,14 @@ class KernelPlanTests(unittest.TestCase):
                 calls.append(args)
                 self.assertIn('--no-network', args)
                 self.assertIn('--simulate', args)
-                self.assertIn('--no-scripts', args)
-                self.assertIn('--no-commit-hooks', args)
+                self.assertEqual(args.count('--no-scripts'), 1)
+                self.assertEqual(args.count('--no-commit-hooks'), 1)
                 action = 'fix' if 'fix' in args else 'upgrade'
                 self.assertEqual(apk3_package_names(args, installed, action), [flavor])
                 if 'fix' in args:
                     return ('Reinstalling ' + flavor + ' (' + installed[flavor] + ')\n').encode()
                 return ('Upgrading ' + flavor + ' (' + before + ' -> ' + expected + ')\n').encode()
-            with patch.object(module, 'package_base', return_value=['/sbin/apk', '--no-scripts', '--no-commit-hooks']), \
+            with patch.object(module, 'package_base', return_value=['/sbin/apk']), \
                     patch.object(module, 'command', side_effect=command):
                 # The real APK name lookup rejects the former argument even
                 # though that exact version is installed and in the old cache.
@@ -478,6 +478,15 @@ class KernelPlanTests(unittest.TestCase):
                       ':\n    https://dl-cdn.alpinelinux.org/alpine/v3.22/main\n').encode()
             def command(args, **unused):
                 calls.append(args)
+                # APK3 exposes script/commit-hook flags only to applets whose
+                # optgroup_commit is set. Exercise the real package_base below
+                # so global flags cannot make metadata/download calls fail.
+                if args[-1] == 'update' or 'policy' in args or 'fetch' in args:
+                    self.assertNotIn('--no-scripts', args)
+                    self.assertNotIn('--no-commit-hooks', args)
+                elif 'upgrade' in args or 'fix' in args:
+                    self.assertEqual(args.count('--no-scripts'), 1)
+                    self.assertEqual(args.count('--no-commit-hooks'), 1)
                 if args[-1] == 'update':
                     (shared / 'APKINDEX.abc.tar.gz').write_bytes(b'index fixture')
                     return b''
@@ -526,12 +535,12 @@ class KernelPlanTests(unittest.TestCase):
                 if expected_error:
                     with self.assertRaises(expected_error) as rejected:
                         module.signed_planning_cache(value, directory, '3.22', flavor, {flavor: before},
-                            ['/sbin/apk', '--cache-dir', str(directory / 'cache')])
+                            module.package_base(directory))
                     self.assertEqual(str(rejected.exception), 'HARDENING_KERNEL_OTHER_JOURNAL_UNKNOWN' if unreadable else
                         'HARDENING_KERNEL_PACKAGE_FORMAT_UNSUPPORTED' if unsupported else 'HARDENING_KERNEL_PACKAGE_PLAN_CHANGED')
                 else:
                     self.assertEqual(module.signed_planning_cache(value, directory, '3.22', flavor, {flavor: before},
-                        ['/sbin/apk', '--cache-dir', str(directory / 'cache')]), expected)
+                        module.package_base(directory)), expected)
                     self.assertEqual({path.name for path in (directory / 'cache').iterdir()},
                         {'APKINDEX.abc.tar.gz', flavor + '-' + expected + '.apk'})
             fetches = [args for args in calls if 'fetch' in args]
@@ -2182,6 +2191,8 @@ class KernelFilesystemTests(unittest.TestCase):
             installing = [args for args in commands if 'upgrade' in args and '--simulate' not in args]
             self.assertEqual(len(installing), 1)
             self.assertIn('--no-network', installing[0]); self.assertIn('--no-scripts', installing[0]); self.assertIn('--no-commit-hooks', installing[0])
+            self.assertEqual(installing[0].count('--no-scripts'), 1)
+            self.assertEqual(installing[0].count('--no-commit-hooks'), 1)
 
     def test_durable_barrier_lost_launch_reply_and_original_request_single_dispatch(self):
         stack, root, _, value, current_boot, running, _, _, put = self.fixture()

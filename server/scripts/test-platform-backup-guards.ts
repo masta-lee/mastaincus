@@ -10,7 +10,7 @@ import { openPromise } from 'yauzl'
 import { BackupError, normalizeConfig, openSecret, sealSecret, publicConfig, recoveryRequestAllowed, validatePrefix, nextScheduledTime } from '../src/services/platform-backup-core.js'
 import { decryptBackup, encryptBackup, hashFile, validAssetName, validateManifest } from '../src/services/platform-backup-archive.js'
 import { AliyunOssClient, sanitizedOssError } from '../src/services/aliyun-oss-client.js'
-import { assertDatabaseIntegrity, normalizedDumpHash, normalizePublicSchemaPrologue, publicSchemaFingerprint, restoreDumpToolchainHeader, databaseToolFailure, restoredLargeObjectOwnershipSql, type DatabaseIntegrity } from '../src/services/platform-backup-database.js'
+import { assertDatabaseIntegrity, normalizedDumpHash, normalizePublicSchemaPrologue, publicSchemaFingerprint, restoreDumpToolchainHeader, databaseToolFailure, restoredLargeObjectOwnershipSql, compatiblePgRestorePrefix, type DatabaseIntegrity } from '../src/services/platform-backup-database.js'
 import { createReadableZip, readableZipName, verifyReadableZip } from '../src/services/platform-backup-readable.js'
 import { waitForProtectedBackendHealth, waitForRestoredAgentHeartbeats } from '../src/services/platform-backup-health.js'
 import { retainGatewayEndpoints, reconcileArchivedGatewayPeers } from '../src/services/platform-backup-gateway.js'
@@ -288,6 +288,68 @@ try {
   assert.notEqual(normalizedDumpHash(restoreDumpToolchainHeader(destinationSchemaDump.replace('id bigint', 'id text'), dumpToolchain)), normalizedDumpHash(legacySchemaDump), 'schema changes must remain integrity failures')
   assert.throws(() => restoreDumpToolchainHeader('SELECT 1;\n' + destinationSchemaDump, dumpToolchain), /OSS_DATABASE_DUMP_INVALID/)
   assert.throws(() => restoreDumpToolchainHeader(destinationSchemaDump, { ...dumpToolchain, dumpVersion: '16.15\nDROP TABLE example;' }), /OSS_DATABASE_DUMP_INVALID/)
+  const restoreSession = (databaseVersion: string, dumpVersion: string, setting = 'SET transaction_timeout = 0;\n',
+    options: { restricted?: boolean; transaction?: boolean; eol?: '\n' | '\r\n' } = {}) => {
+    const restriction = options.restricted === false ? '' : '\\restrict FixtureRestore42\n\n'
+    const transaction = options.transaction === false ? '' : 'BEGIN;\n\n'
+    const text = `--\n-- PostgreSQL database dump\n--\n\n${restriction}-- Dumped from database version ${databaseVersion}\n-- Dumped by pg_dump version ${dumpVersion}\n\n${transaction}SET statement_timeout = 0;\nSET lock_timeout = 0;\nSET idle_in_transaction_session_timeout = 0;\n${setting}SET client_encoding = 'UTF8';\n`
+    return options.eol === '\r\n' ? text.replaceAll('\n', '\r\n') : text
+  }
+  const restoreBody = Buffer.from(
+    "COPY public.example (message) FROM stdin;\nSET transaction_timeout = 0;\n" +
+    '客户数据库🙂'.repeat(600) +
+    "\n\\.\nCREATE FUNCTION restored_message() RETURNS text LANGUAGE sql AS $$ SELECT 'SET transaction_timeout = 0;' $$;\nCOMMIT;\n\\unrestrict FixtureRestore42\n",
+    'utf8')
+  for (const databaseVersion of ['14.19', '15.14', '16.15 (Ubuntu 16.15-0ubuntu0.24.04.1)']) {
+    for (const dumpVersion of ['16.15 (Ubuntu 16.15-0ubuntu0.24.04.1)', '17.7 (Debian 17.7-1.pgdg13+1)', '18.7 (Ubuntu 18.7-1.pgdg24.04+5)']) {
+      for (const restricted of [false, true]) for (const transaction of [false, true]) for (const eol of ['\n', '\r\n'] as const) {
+        const versions = { databaseVersion, dumpVersion }
+        const options = { restricted, transaction, eol }
+        const session = Buffer.from(restoreSession(databaseVersion, dumpVersion, undefined, options))
+        const source = Buffer.concat([session, restoreBody])
+        const original = Buffer.from(source)
+        const head = source.subarray(0, 4096)
+        const mapped = compatiblePgRestorePrefix(head, versions)
+        const restored = Buffer.concat([mapped, source.subarray(head.length)])
+        const expected = Buffer.concat([Buffer.from(restoreSession(databaseVersion, dumpVersion, '', options)), restoreBody])
+        assert.deepEqual(restored, expected, 'only the unsupported session setting is removed across the actual 4096-byte read boundary')
+        assert.deepEqual(source, original, 'compatibility mapping must not modify the authenticated input buffer')
+        assert.ok(restored.includes(restoreBody), 'COPY data, UTF-8, SQL function bodies and transaction markers remain byte-for-byte')
+        assert.equal(compatiblePgRestorePrefix(mapped, versions), mapped, 'reapplying compatibility after removal returns the same bytes and buffer')
+        const noSetting = Buffer.from(restoreSession(databaseVersion, dumpVersion, '', options))
+        assert.equal(compatiblePgRestorePrefix(noSetting, versions), noSetting, 'a valid old prologue without the setting remains untouched')
+      }
+    }
+  }
+  for (const versions of [
+    { databaseVersion: '17.7', dumpVersion: '17.7' },
+    { databaseVersion: '17.7', dumpVersion: '18.7' },
+    { databaseVersion: '18.7', dumpVersion: '18.7' }
+  ]) for (const setting of ['', 'SET transaction_timeout = 0;\n']) {
+    const head = Buffer.from(restoreSession(versions.databaseVersion, versions.dumpVersion, setting))
+    assert.equal(compatiblePgRestorePrefix(head, versions), head, 'PG17 and later keep supported session settings unchanged')
+  }
+  const restoreVersions = { databaseVersion: '16.15', dumpVersion: '18.7' }
+  const restorePrefix = restoreSession(restoreVersions.databaseVersion, restoreVersions.dumpVersion)
+  for (const invalid of [
+    'SELECT 1;\n' + restorePrefix,
+    restorePrefix.replace('BEGIN;\n\n', 'BEGIN;\nSET LOCAL role = postgres;\n\n'),
+    restorePrefix.replace('SET transaction_timeout = 0;\n', 'SET transaction_timeout = 1;\n'),
+    restorePrefix.replace('SET transaction_timeout = 0;\n', 'SET transaction_timeout = 0;\nSET transaction_timeout = 0;\n'),
+    restorePrefix.replace('Dumped from database version 16.15', 'Dumped from database version 16.14'),
+    restorePrefix.replace('\\restrict FixtureRestore42\n\n', '\\restrict FixtureRestore42\n\n\\restrict Duplicate42\n\n'),
+    restorePrefix.replace('SET client_encoding', '\\connect incudal\nSET client_encoding'),
+    restorePrefix.replace('SET statement_timeout = 0;\n', 'SET statement_timeout = 0;\nSET search_path = public;\n')
+  ]) assert.throws(() => compatiblePgRestorePrefix(Buffer.from(invalid), restoreVersions), /OSS_DATABASE_ARCHIVE_INVALID/)
+  for (const versions of [
+    { databaseVersion: '16.15', dumpVersion: '15.14' },
+    { databaseVersion: '16.15', dumpVersion: '19.0' },
+    { databaseVersion: '13.20', dumpVersion: '18.7' },
+    { databaseVersion: '19.0', dumpVersion: '19.0' }
+  ]) assert.throws(() => compatiblePgRestorePrefix(Buffer.from(restorePrefix), versions), /OSS_POSTGRES_VERSION_MISMATCH/)
+  for (const dumpVersion of ['18.7\nCOMMIT;', '18.7 (invalid\u0000version)']) {
+    assert.throws(() => compatiblePgRestorePrefix(Buffer.from(restorePrefix), { ...restoreVersions, dumpVersion }), /OSS_DATABASE_ARCHIVE_INVALID/)
+  }
   let healthClock = 0
   const healthRuntime = {
     now: () => healthClock,

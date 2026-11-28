@@ -65,22 +65,72 @@ def failure_reason(error):
     reason = str(error)
     if not re.fullmatch(r'[A-Z][A-Z0-9_]{1,100}', reason):
         return type(error).__name__.upper()
-    if reason != 'SYSTEM_SECURITY_UNTRUSTED_PATH':
+    archive_error = reason == 'SYSTEM_SECURITY_ARCHIVE_UNREVIEWED'
+    if not archive_error and reason != 'SYSTEM_SECURITY_UNTRUSTED_PATH':
         return reason
     # Report the checked product line and fixed file attributes only. Never
     # emit the raw pathname, command, traceback, file contents or environment.
-    trace = error.__traceback__
     rejected, caller = None, None
-    while trace:
-        if Path(trace.tb_frame.f_code.co_filename).name == 'system-security-inventory.py':
-            caller, rejected = rejected, trace
-        trace = trace.tb_next
+    locations, seen = [], set()
+    for _ in range(4 if archive_error else 1):
+        if error is None or id(error) in seen:
+            break
+        seen.add(id(error))
+        trace = error.__traceback__
+        for _ in range(64):
+            if trace is None:
+                break
+            if Path(trace.tb_frame.f_code.co_filename).name == 'system-security-inventory.py':
+                caller, rejected = rejected, trace
+                locations.append(trace)
+            trace = trace.tb_next
+        # The native decoder deliberately hides its exception context from
+        # public traceback output. Its checked refusal line remains useful.
+        error = error.__context__
     if rejected is None:
         return reason
     reason += '_L' + str(rejected.tb_lineno)
     if caller is not None:
         reason += '_FROM' + str(caller.tb_lineno)
     frame = rejected.tb_frame.f_locals
+    if archive_error:
+        def detail(token):
+            nonlocal reason
+            if len(reason) + len(token) + 1 <= 199:
+                reason += '_' + token
+
+        # Hash only bounded in-memory ar bytes. No file is opened for diagnosis.
+        for location in locations:
+            values = location.tb_frame.f_locals
+            raw = values.get('raw', values.get('data'))
+            if (type(raw) is bytes and 8 < len(raw) <= 256 * 1024**2
+                    and raw[:8] == b'!<arch>\n'):
+                detail('H' + hashlib.sha256(raw).hexdigest().upper())
+                detail('RAW' + str(len(raw)))
+                break
+        part = frame.get('part')
+        if part in ('control', 'data'):
+            detail(part.upper())
+        limit = frame.get('limit')
+        if type(limit) is int and 0 < limit <= 256 * 1024**2:
+            detail('LIMIT' + str(limit))
+        archive = frame.get('archive')
+        if type(archive) is bytes and len(archive) <= 256 * 1024**2 + 1:
+            detail('BYTES' + str(len(archive)))
+        programs = {'usr/bin/node': 'NODEJS',
+                    'usr/lib/postgresql/16/bin/postgres': 'PG16',
+                    'usr/lib/postgresql/16/bin/psql': 'PGCLIENT16'}
+        labels = set()
+        for location in locations:
+            values = location.tb_frame.f_locals
+            names = values.get('wanted', values.get('names'))
+            if type(names) in (list, tuple, set, frozenset) and len(names) <= 16:
+                for name, label in programs.items():
+                    if name in names:
+                        labels.add(label)
+        for label in sorted(labels):
+            detail(label)
+        return reason
     info = frame.get('info')
     if isinstance(info, os.stat_result):
         reason += f'_M{info.st_mode:o}_U{info.st_uid}_G{info.st_gid}_N{info.st_nlink}_B{info.st_size}'

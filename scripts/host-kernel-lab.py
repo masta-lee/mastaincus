@@ -237,6 +237,28 @@ class Lab:
             with (self.dir / 'private.log').open('rb') as log:
                 log.seek(max(0, log.seek(0, os.SEEK_END) - 65536))
                 tail = log.read(65536)
+            # Keep native output on the runner. Publish only the command name,
+            # outcome and known diagnostic classes, with a prefix digest.
+            for line in tail.splitlines():
+                if line.startswith(b'E04_NATIVE_COMMAND_FAILURE ') and len(line) <= 16384:
+                    diagnostic = json.loads(line[len(b'E04_NATIVE_COMMAND_FAILURE '):])
+                    arguments = diagnostic.get('arguments', [])
+                    operations = {'update', 'policy', 'upgrade', 'fix', 'fetch', 'verify', 'status', 'tracking', '-a', '--help'}
+                    summary = {key: diagnostic[key] for key in ('program', 'exit', 'stdoutBytes', 'stderrBytes',
+                               'stderrPrefixBytes', 'stderrPrefixSha256', 'diagnosticUnavailable') if key in diagnostic}
+                    summary['operation'] = next((arg for arg in arguments if arg in operations), 'unspecified')
+                    errors = diagnostic.get('stderrPrefix', '')
+                    classes = ((r'(?i)(?:unrecognized|unknown|invalid) option', 'OPTION_REJECTED'),
+                               (r'(?i)unable to select packages|unsatisfiable constraints', 'PACKAGE_SELECTION_FAILED'),
+                               (r'(?i)certificate verify failed|certificate verification failed', 'TLS_VERIFICATION_FAILED'),
+                               (r'(?i)permission denied', 'PERMISSION_DENIED'),
+                               (r'(?i)temporary error|network unreachable|connection refused|operation timed out', 'NETWORK_UNAVAILABLE'),
+                               (r'(?i)bad signature|signature verification failed|untrusted signature', 'SIGNATURE_REJECTED'))
+                    summary['errorClass'] = next((label for pattern, label in classes if re.search(pattern, errors)), 'UNCLASSIFIED_NATIVE_EXIT')
+                    option = re.search(r"(?i)(?:unrecognized|unknown|invalid) option[: ]+['\"]?(-{0,2}[a-z0-9-]+)", errors)
+                    if option and any(arg.lstrip('-') == option[1].lstrip('-') for arg in arguments if arg.startswith('-')):
+                        summary['rejectedOption'] = option[1]
+                    print('E04_NATIVE_COMMAND_SUMMARY ' + json.dumps(summary, separators=(',', ':')), flush=True)
             codes = re.findall(rb'\b(?:HARDENING_[A-Z_]{1,90}|E04_GUEST_FAILURE phase=[a-z-]{1,30} line=[0-9]{1,5})\b', tail)
             # The guest's ERR trap runs after the Python driver and can emit
             # more than once. Keep its line and the driver's original code.
