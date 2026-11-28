@@ -53,12 +53,53 @@ def run(args, timeout, **kwargs):
 def guest_event(scope, phase, status, reason=''):
     # Never export logs, request parameters, SQL, SSH keys or stage artifacts.
     need(phase in PHASES and status in ('begin', 'pass', 'fail'), 'UNEXPECTED_EVENT')
-    if not re.fullmatch(r'[A-Z][A-Z0-9_]{1,100}', reason):
+    if not re.fullmatch(r'[A-Z][A-Z0-9_]{1,199}', reason):
         reason = ''
     env = {'challenge': scope['challenge'], 'phase': phase, 'status': status, 'reason': reason}
     msg = '\nINCUDAL_RUNTIME_LAB ' + json.dumps(env, separators=(',', ':')) + '\n'
     with open('/dev/ttyS0', 'wb', buffering=0) as serial:
         serial.write(msg.encode())
+
+
+def failure_reason(error):
+    reason = str(error)
+    if not re.fullmatch(r'[A-Z][A-Z0-9_]{1,100}', reason):
+        return type(error).__name__.upper()
+    if reason != 'SYSTEM_SECURITY_UNTRUSTED_PATH':
+        return reason
+    # Report the checked product line and fixed file attributes only. Never
+    # emit the raw pathname, command, traceback, file contents or environment.
+    trace = error.__traceback__
+    rejected = None
+    while trace:
+        if Path(trace.tb_frame.f_code.co_filename).name == 'system-security-inventory.py':
+            rejected = trace
+        trace = trace.tb_next
+    if rejected is None:
+        return reason
+    reason += '_L' + str(rejected.tb_lineno)
+    frame = rejected.tb_frame.f_locals
+    info = frame.get('info')
+    if isinstance(info, os.stat_result):
+        reason += f'_M{info.st_mode:o}_U{info.st_uid}_G{info.st_gid}_N{info.st_nlink}_B{info.st_size}'
+    # Limit reported names to fixed, public installation paths.
+    files = {
+        '/opt/incudal/.env': 'PANEL_ENV',
+        '/opt/incudal/server/dist/app.js': 'BACKEND_ENTRY',
+        '/var/lib/incudal-system-security': 'MAINTENANCE_DIR',
+        '/var/lib/incudal-system-security/runtime-integrity.json': 'INTEGRITY_RECEIPT',
+        '/var/cache/apt/archives': 'APT_CACHE',
+        '/etc/postgresql/16/main/postgresql.conf': 'PG_CONFIG',
+        '/etc/postgresql/16/main/pg_hba.conf': 'PG_HBA',
+        '/etc/postgresql/16/main/start.conf': 'PG_START',
+        '/etc/postgresql/16/main/pg_ctl.conf': 'PG_CTL',
+        '/var/lib/postgresql/16/main/postgresql.auto.conf': 'PG_AUTO',
+    }
+    for key in ('path', 'root', 'cache', 'file'):
+        value = frame.get(key)
+        if isinstance(value, (Path, str)) and str(value) in files:
+            return reason + '_' + files[str(value)]
+    return reason
 
 
 def guest_scope(scope):
@@ -264,7 +305,7 @@ def observe(process, path, scope):
                 first_event = True
                 phase, status = event['phase'], event['status']
                 need(phase in PHASES and status in ('begin', 'pass', 'fail') and
-                     re.fullmatch(r'[A-Z0-9_]{0,101}', event['reason']), 'INVALID_GUEST_EVENT')
+                     re.fullmatch(r'[A-Z0-9_]{0,200}', event['reason']), 'INVALID_GUEST_EVENT')
                 print(f"{phase}: {status} {event['reason']}", flush=True)
                 if status == 'fail':
                     raise ValueError('NATIVE_STAGE_FAILED')
@@ -333,10 +374,7 @@ def guest():
         guest_event(scope, 'complete', 'pass')
         run(['/usr/bin/systemctl', 'poweroff', '--no-block'], 15)
     except Exception as error:
-        reason = str(error)
-        if not re.fullmatch(r'[A-Z][A-Z0-9_]{1,100}', reason):
-            reason = type(error).__name__.upper()
-        guest_event(scope, phase, 'fail', reason)
+        guest_event(scope, phase, 'fail', failure_reason(error))
         raise
 
 
@@ -351,10 +389,7 @@ def cut():
     try:
         tx.install_cut(runtime(Path(before['root'])), before, save)
     except Exception as error:
-        reason = str(error)
-        if not re.fullmatch(r'[A-Z][A-Z0-9_]{1,100}', reason):
-            reason = type(error).__name__.upper()
-        save(GUEST / 'cut-error.json', {'reason': reason})
+        save(GUEST / 'cut-error.json', {'reason': failure_reason(error)})
         raise
 
 
