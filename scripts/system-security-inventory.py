@@ -423,12 +423,23 @@ def acquire_runtime_debian_archive(name,version,architecture,original=None,role=
 DEBIAN_SNAPSHOT_KEYS={'debian':frozenset(['B8B80B5B623EAB6AD8775C45B7C5D7D6350947F8','04B54C3CDCA79751B16BC6B5225629DF75B188BD','41587F7DB8C774BCCF131416762F67A0B2C39DE4']),
     'debian-security':frozenset(['5E04A1E3223A19A20706E20F9904613D4CCE68C6'])}
 
-def snapshot_redirect_target(original,target,count):
+def snapshot_redirect_target(original,target,count,signed_index_sha256=None):
     import urllib.parse,posixpath
     value=urllib.parse.urlsplit(target)
     basename=posixpath.basename(urllib.parse.urlsplit(original).path);encoded=urllib.parse.quote(basename,safe='-._~')
     target_name=posixpath.basename(value.path)
-    if count!=0 or value.scheme!='https'or value.hostname!='snapshot.debian.org'or value.netloc!='snapshot.debian.org'or value.query or value.fragment or value.username or value.password or not re.fullmatch(r'/file/[a-f0-9]{40}/[A-Za-z0-9_.~:%\-]+',value.path)or target_name!=encoded or urllib.parse.unquote(target_name)!=basename:raise ValueError('SYSTEM_SECURITY_BEFORE_SOURCE_REJECTED')
+    if count!=0 or value.scheme!='https'or value.hostname!='snapshot.debian.org'or value.netloc!='snapshot.debian.org'or value.query or value.fragment or value.username or value.password or not re.fullmatch(r'/file/[a-f0-9]{40}/[A-Za-z0-9_.~:%\-]+',value.path):raise ValueError('SYSTEM_SECURITY_BEFORE_SOURCE_REJECTED')
+    if target_name == encoded and urllib.parse.unquote(target_name) == basename:
+        return target
+    # snapshot.debian.org may name a Packages.xz object by the SHA256 in
+    # its signed InRelease. This alternative applies only to that exact
+    # index, never to the release, package or discovery metadata requests.
+    if (not isinstance(signed_index_sha256, str) or not re.fullmatch('[a-f0-9]{64}', signed_index_sha256)
+            or target_name != signed_index_sha256 or not re.fullmatch(
+                r'https://snapshot\.debian\.org/archive/(?:debian/\d{8}T\d{6}Z/dists/trixie|'
+                r'debian-security/\d{8}T\d{6}Z/dists/trixie-security)/main/binary-(?:amd64|arm64)/Packages\.xz',
+                original)):
+        raise ValueError('SYSTEM_SECURITY_BEFORE_SOURCE_REJECTED')
     return target
 
 def snapshot_collected_time(source,signed):
@@ -438,13 +449,56 @@ def snapshot_collected_time(source,signed):
     if source and (type(source.get('historicalExpired'))is not bool or source['historicalExpired']!=expired):raise ValueError('SYSTEM_SECURITY_BEFORE_SOURCE_REJECTED')
     return captured,expired
 
-def snapshot_read(path,limit,budget):
+def before_snapshot_times(locations, installed_at, now):
+    import datetime
+    seen = []
+    for row in locations:
+        if not isinstance(row, dict) or row.get('archive_name') not in DEBIAN_SNAPSHOT_KEYS:
+            continue
+        stamp = row.get('first_seen')
+        if not isinstance(stamp, str) or not re.fullmatch(r'\d{8}T\d{6}Z', stamp):
+            continue
+        first = datetime.datetime.strptime(stamp, '%Y%m%dT%H%M%SZ').replace(tzinfo=datetime.timezone.utc)
+        if first.timestamp() > now:
+            raise ValueError('SYSTEM_SECURITY_BEFORE_SOURCE_REJECTED')
+        seen.append((row['archive_name'], first))
+    seen = sorted(set(seen), key=lambda pair: (pair[1], pair[0]))
+    candidates = []
+    def add(archive, instant):
+        item = archive, instant.strftime('%Y%m%dT%H%M%SZ')
+        if item not in candidates and instant.timestamp() <= now:
+            candidates.append(item)
+    # A binary can exist in the Debian pool well before it appears in
+    # stable's signed Packages index. dpkg's file-list time is a lookup
+    # hint only; every resulting release, index and package is verified.
+    if installed_at is not None and 0 <= installed_at <= now:
+        installed = datetime.datetime.fromtimestamp(installed_at, datetime.timezone.utc)
+        for archive, first in seen:
+            if installed >= first:
+                add(archive, installed)
+    for delay in (0, 1):
+        for archive, first in seen:
+            add(archive, first + datetime.timedelta(days=delay))
+    return candidates[:2]
+
+def installed_file_list_time(name, architecture):
+    directory = pathlib.Path('/var/lib/dpkg/info')
+    for filename in (f'{name}:{architecture}.list', f'{name}.list'):
+        try:
+            info = (directory / filename).lstat()
+        except FileNotFoundError:
+            continue
+        if stat.S_ISREG(info.st_mode) and info.st_uid == 0 and info.st_nlink == 1 and not info.st_mode & 0o022:
+            return info.st_mtime
+    return None
+
+def snapshot_read(path,limit,budget,signed_index_sha256=None):
     import urllib.request,urllib.error
     if not isinstance(path,str)or not path.startswith(('/mr/','/archive/'))or re.search(r'[\x00-\x20\\?#]',path)or '..'in path.split('/'):raise ValueError('SYSTEM_SECURITY_BEFORE_SOURCE_REJECTED')
     class Redirect(urllib.request.HTTPRedirectHandler):
         def __init__(self):self.count=0
         def redirect_request(self,request,fp,code,msg,headers,newurl):
-            snapshot_redirect_target(request.full_url,newurl,self.count);self.count+=1;spend()
+            snapshot_redirect_target(request.full_url,newurl,self.count,signed_index_sha256);self.count+=1;spend()
             return super().redirect_request(request,fp,code,msg,headers,newurl)
     def spend():
         if budget['requests']>=12 or time.monotonic()-budget['started']>=20:raise ValueError('SYSTEM_SECURITY_BEFORE_SOURCE_UNAVAILABLE')
@@ -589,7 +643,7 @@ def complete_runtime_fixed_evidence(path,data):
     sync_runtime_evidence_directory(path.parent)
 
 def authenticated_before_snapshot(name,version,architecture,original=None):
-    import urllib.parse,datetime
+    import urllib.parse
     if not re.fullmatch(r'[a-z0-9+.-]+',name)or not re.fullmatch(r'[0-9A-Za-z.+:~_\-]{1,200}',version)or architecture not in ['amd64','arm64','all']:raise ValueError('SYSTEM_SECURITY_BEFORE_SOURCE_REJECTED')
     release=dict(line.split('=',1)for line in pathlib.Path('/etc/os-release').read_text().splitlines()if '='in line)
     if release.get('ID','').strip('"')!='debian'or release.get('VERSION_CODENAME','').strip('"')!='trixie':raise ValueError('SYSTEM_SECURITY_BEFORE_SOURCE_UNAVAILABLE')
@@ -617,20 +671,14 @@ def authenticated_before_snapshot(name,version,architecture,original=None):
             if len(hashes)!=1 or not re.fullmatch(r'[a-f0-9]{40}',next(iter(hashes))or ''):raise ValueError('SYSTEM_SECURITY_BEFORE_SOURCE_REJECTED')
             identifier=next(iter(hashes));locations=json.loads(snapshot_read('/mr/file/'+identifier+'/info',1024*1024,budget))
             if locations.get('hash')!=identifier or not isinstance(locations.get('result'),list)or len(locations['result'])>64:raise ValueError('SYSTEM_SECURITY_BEFORE_SOURCE_REJECTED')
-            times=[]
-            for row in locations['result']:
-                if isinstance(row,dict)and row.get('archive_name')in DEBIAN_SNAPSHOT_KEYS and re.fullmatch(r'\d{8}T\d{6}Z',row.get('first_seen','')):
-                    first=datetime.datetime.strptime(row['first_seen'],'%Y%m%dT%H%M%SZ').replace(tzinfo=datetime.timezone.utc)
-                    if first.timestamp()>time.time():raise ValueError('SYSTEM_SECURITY_BEFORE_SOURCE_REJECTED')
-                    times.extend((row['archive_name'],(first+datetime.timedelta(days=day)).strftime('%Y%m%dT%H%M%SZ'))for day in [0,1]if (first+datetime.timedelta(days=day)).timestamp()<=time.time())
-            candidates=sorted(set(times),key=lambda row:row[1])[:2]
+            candidates=before_snapshot_times(locations['result'],installed_file_list_time(name,architecture),time.time())
             if not candidates:raise ValueError('SYSTEM_SECURITY_BEFORE_SOURCE_UNAVAILABLE')
         for archive,snapshot_time in candidates:
             base='/archive/'+archive+'/'+snapshot_time+'/';suite='trixie-security'if archive=='debian-security'else'trixie'
             if not (cache/'proof.json').exists():inrelease=snapshot_read(base+'dists/'+suite+'/InRelease',2*1024*1024,budget)
             signed=snapshot_release_fields(inrelease,archive,snapshot_time,verify_directory);index_path='main/binary-'+('amd64'if architecture=='all'else architecture)+'/Packages.xz';index_record=signed['sha256'].get(index_path)
             if not isinstance(index_record,dict)or not 0<index_record['size']<=64*1024*1024:raise ValueError('SYSTEM_SECURITY_BEFORE_SOURCE_REJECTED')
-            if not (cache/'proof.json').exists():index=snapshot_read(base+'dists/'+suite+'/'+index_path,64*1024*1024,budget)
+            if not (cache/'proof.json').exists():index=snapshot_read(base+'dists/'+suite+'/'+index_path,64*1024*1024,budget,index_record['sha256'])
             if len(index)!=index_record['size']or hashlib.sha256(index).hexdigest()!=index_record['sha256']:raise ValueError('SYSTEM_SECURITY_BEFORE_SOURCE_REJECTED')
             match=snapshot_package_record(index,signed,name,version,architecture)
             if match is None:

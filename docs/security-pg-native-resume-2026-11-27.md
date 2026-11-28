@@ -2,7 +2,11 @@
 
 ## 11 月 28 日双 PostgreSQL 实机结果
 
-R23 已通过原 worker 的首个中断场景（1/22）。源机执行真实 capture，写入持久 intent，按指定故障点返回 `INJECTED_AFTER_INTENT`。调用器随后从客机读回 state，核实 capture 进行中、seed 已校验、本轮尝试序号为 1。实际计划 SHA256 为 `5609ae0466c9f0d4e8428356f7b4447efe3fb62534b3044403d64cad780007f7`，第一步回执 SHA256 为 `88f8fccd97822f8ce2915053e51af9288b0c997ae7c08027e332100407c0a7e1`。后续步骤按同一计划续跑。
+R24 完成源端 4/22。前两个 capture 在持久 intent 及 dump 写完后分别触发预期故障，第三次 capture 自然退出 0，第四次 check 自然退出 0。原 seed 的表行、序列和三个大对象完整核验。源机生成四个完整的 PostgreSQL 自定义格式备份，分别为原客户端的 live/drain、客户端 16 的新备份以及由原 Before 记录验证的客户端 18 新备份；传输后在目标机核对字节及 SHA。第三、第四步完整回执 SHA256 分别为 `db97a2453b61a2087d5e27504d18b0e39d9ca9dfdbc0f3518020b9110afda9f0`、`1b8594fad3d4e34020b0939ebdce93695a30cf7bea5dbd73903d2bbe574109f6`。
+
+目标端第 5 次调用返回 `SCRATCH_CREATE_UNCONFIRMED`，尚无已接受的 restore 步骤。检查调用器发现它用普通对象注释去读数据库的共享注释；需用真实目标库验证新库 OID、归属、共享注释和空库，再继续。R24 已保存四份源转移材料及两台原盘，双 QEMU 均观察到原句柄结束和端口释放；外层 launcher 又报告所属子进程退出未同步，故该轮外层 captureComplete 为 false，原 stdout／stderr 摘要及错误回执均保留。
+
+R23 已通过原 worker 的两个中断场景（2/22）。源机执行真实 capture，写入持久 intent，按指定故障点返回 `INJECTED_AFTER_INTENT`。调用器随后从客机读回 state，核实 capture 进行中、seed 已校验、本轮尝试序号为 1。实际计划 SHA256 为 `5609ae0466c9f0d4e8428356f7b4447efe3fb62534b3044403d64cad780007f7`，第一步回执 SHA256 为 `88f8fccd97822f8ce2915053e51af9288b0c997ae7c08027e332100407c0a7e1`。第二次 capture 在实际 dump 后的指定中断点返回 `INJECTED_AFTER_DUMP`，在磁盘读取的第二步回执 SHA256 为 `ab2de63a1c66a517d1e331af8ca43e1e3bcc24d406a8e8f7fb53c5f1e0ae16d4`。第三次 capture 真实运行至旧备份客户端路径，测试程序以 `UNREVIEWED_CLIENT_EXECUTION` 拒绝。最终两台 QEMU 的句柄及端口完成原收口，库、两份历史 dump 和种子数据均留存。
 
 该轮在进入测试之前逐字节核实、归档了 R19 留存的两个 dump、R22 两份 worker bundle 和源端初始 state；原目录身份和文件内容均保留，源端库在写入测试数据前再次核为空。此前 R22 的首次拒绝单独保留。
 

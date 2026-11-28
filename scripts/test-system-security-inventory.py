@@ -3000,6 +3000,47 @@ class BeforeSnapshot(unittest.TestCase):
                 module.snapshot_read('/mr/file/'+'a'*40+'/info',1024,{'requests':requests,'started':0})
             network.assert_not_called()
 
+    def test_only_signed_packages_index_may_use_a_content_named_redirect(self):
+        digest = '3ab4e811cf4f3e5a335d382c58cc19d85f1abe7a4ef4689160ca1f637fa0e9b3'
+        target = 'https://snapshot.debian.org/file/' + 'a' * 40 + '/' + digest
+        for archive, suite in [('debian', 'trixie'), ('debian-security', 'trixie-security')]:
+            for arch in ['amd64', 'arm64']:
+                index = f'https://snapshot.debian.org/archive/{archive}/20260711T202405Z/dists/{suite}/main/binary-{arch}/Packages.xz'
+                self.assertEqual(module.snapshot_redirect_target(index, target, 0, digest), target)
+        for source, destination, count, signed in [
+            (index, target[:-1] + '0', 0, digest), (index, target, 0, '0' * 64),
+            (index, target, 0, None), (index, target, 1, digest),
+            (index, target.replace('snapshot.debian.org', 'example.invalid'), 0, digest),
+            (index, target.replace('https:', 'http:'), 0, digest),
+            (index, target + '?filename=Packages.xz', 0, digest),
+            (index, target.replace(digest, '%33' + digest[1:]), 0, digest),
+            (index.replace('Packages.xz', 'InRelease'), target, 0, digest),
+            (index.replace('trixie-security', 'trixie'), target, 0, digest),
+            (index.replace('/dists/trixie-security/main/binary-arm64/Packages.xz',
+                           '/pool/main/g/glibc/libc6_2.41-12+deb13u4_arm64.deb'), target, 0, digest),
+        ]:
+            with self.subTest(source=source, destination=destination, count=count, signed=signed):
+                with self.assertRaisesRegex(ValueError, 'BEFORE_SOURCE_REJECTED'):
+                    module.snapshot_redirect_target(source, destination, count, signed)
+
+    def test_installed_snapshot_hint_precedes_pool_arrival_without_authorizing_later_or_unknown_archives(self):
+        from datetime import datetime, timezone
+        def epoch(value):
+            return datetime.strptime(value, '%Y%m%dT%H%M%SZ').replace(tzinfo=timezone.utc).timestamp()
+        first, next_day, installed = '20260711T202405Z', '20260712T202405Z', '20261103T045527Z'
+        now = epoch('20261128T000000Z')
+        rows = [{'archive_name': 'debian', 'first_seen': first}] * 2
+        rows.append({'archive_name': 'untrusted', 'first_seen': first})
+        self.assertEqual(module.before_snapshot_times(rows, epoch(installed), now),
+                         [('debian', installed), ('debian', first)])
+        for unusable in [None, epoch(first)-1, now+1]:
+            self.assertEqual(module.before_snapshot_times(rows, unusable, now),
+                             [('debian', first), ('debian', next_day)])
+        self.assertEqual(module.before_snapshot_times(rows, epoch(first), epoch(first)), [('debian', first)])
+        self.assertEqual(module.before_snapshot_times([rows[-1]], epoch(installed), now), [])
+        with self.assertRaisesRegex(ValueError, 'BEFORE_SOURCE_REJECTED'):
+            module.before_snapshot_times(rows, None, epoch(first)-1)
+
     def test_history_expiry_observation_does_not_rewrite_the_original_source_proof(self):
         source={'collectedAt':150,'historicalExpired':False};signed={'date':100,'validUntil':200,'expired':True}
         with patch.object(module.time,'time',return_value=300):self.assertEqual(module.snapshot_collected_time(source,signed),(150,False))
