@@ -47,6 +47,7 @@ class Lab:
         self.port = 22873
         self.proc = None
         self.console = None
+        self.emulator_log = None
         self.boot_console_start = 0
         self.accel = 'kvm' if os.path.exists('/dev/kvm') else 'tcg'
         self.boots = 0
@@ -90,9 +91,12 @@ class Lab:
                                                 input=secrets.token_bytes(32).hex().encode() + b'\n',
                                                 timeout=10).decode().strip()
         require(password_hash.startswith('$6$'), 'Ephemeral account bootstrap failed')
-        cfg = {'users': [{'name': 'root', 'lock_passwd': False, 'passwd': password_hash,
+        cfg = {'users': [{'name': 'root', 'lock_passwd': False, 'hashed_passwd': password_hash,
                           'ssh_authorized_keys': [public]}],
                'disable_root': False, 'ssh_pwauth': False, 'ssh_deletekeys': True,
+               'ssh_genkeytypes': ['ed25519'], 'ssh': {'emit_keys_to_console': False},
+               'package_update': False, 'package_upgrade': False, 'resize_rootfs': True,
+               'growpart': {'mode': 'auto', 'devices': ['/']},
                'ssh_keys': {'ed25519_private': (self.dir / 'host').read_text(), 'ed25519_public': ' '.join(host)},
                'write_files': contents, 'runcmd': [['chmod', '0700', str(ROOT)]]}
         (self.dir / 'user-data').write_text('#cloud-config\n' + json.dumps(cfg))
@@ -135,8 +139,17 @@ class Lab:
         if fallback:
             args.extend(['-drive', f'if=none,id=return,format=raw,readonly=on,file={self.dir / "fallback.fat"}',
                          '-device', 'scsi-hd,drive=return,bus=scsi0.0,bootindex=1'])
+        if self.arm:
+            # virt's native MMIO devices avoid optional PCI option ROMs.
+            devices = {'virtio-blk-pci': 'virtio-blk-device', 'virtio-scsi-pci': 'virtio-scsi-device',
+                       'virtio-net-pci': 'virtio-net-device', 'virtio-rng-pci': 'virtio-rng-device'}
+            for i, arg in enumerate(args):
+                if arg == '-device':
+                    name, comma, opts = args[i + 1].partition(',')
+                    args[i + 1] = devices.get(name, name) + comma + opts
         self.console = (self.dir / f'console-{self.boots}.log').open('xb')
-        self.proc = subprocess.Popen(args, stdin=subprocess.DEVNULL, stdout=self.console, stderr=self.console)
+        self.emulator_log = (self.dir / f'qemu-{self.boots}.log').open('xb')
+        self.proc = subprocess.Popen(args, stdin=subprocess.DEVNULL, stdout=self.console, stderr=self.emulator_log)
 
     def ssh_output(self, command, seconds=20):
         return run(self.ssh + [command], seconds, stdout=subprocess.PIPE, stderr=self.log).stdout.strip()
@@ -155,7 +168,14 @@ class Lab:
                  'printf "%s\\n" "$(cat /var/lib/cloud/data/instance-id)" "$(cat /sys/class/block/vda/serial)" '
                  '"$(uname -m)" "$(cat /proc/sys/kernel/random/boot_id)"')
         while time.monotonic() < end:
-            require(self.proc.poll() is None, 'VM exited before SSH')
+            if self.proc.poll() is not None:
+                # This file contains only the emulator's stderr. Guest stdout
+                # and firmware console use their own file and are never printed.
+                self.emulator_log.flush()
+                with (self.dir / f'qemu-{self.boots}.log').open('rb') as messages:
+                    reason = messages.read(2048).decode(errors='replace')
+                reason = re.sub(r"[^A-Za-z0-9 /,.:_=()-]", " ", reason)
+                raise ValueError(f'VM exited before SSH ({self.proc.returncode}): {reason[:400]}')
             size = path.stat().st_size
             require(offset <= size <= 32 * 1024**2, 'Unexpected guest console size')
             with path.open('rb') as log:
@@ -210,6 +230,7 @@ class Lab:
         require(self.proc.wait(timeout=150) == 0, 'QEMU poweroff failed')
         self.proc = None
         self.console.close()
+        self.emulator_log.close()
 
     def fallback(self):
         expected = {}
@@ -236,7 +257,19 @@ class Lab:
         self.prepare()
         self.start()
         first = self.ready()
-        self.cmd(self.ssh + ['cloud-init status --wait >/dev/null && apk add --no-cache bash util-linux'], 360)
+        init = subprocess.run(self.ssh + ['cloud-init status --wait --format=json'], stdout=subprocess.PIPE,
+                              stderr=self.log, timeout=360)
+        require(init.returncode in (0, 2) and len(init.stdout) <= 65536, 'NoCloud completion query failed')
+        result = json.loads(init.stdout)
+        # Warn categories and fatal module names are bounded and contain no
+        # seed values. A recoverable cloud-init result still fails the task.
+        if init.returncode or result.get('status') != 'done' or result.get('errors') or result.get('recoverable_errors'):
+            report = json.dumps(result, ensure_ascii=True)
+            classes = sorted(set(re.findall(r'(?i)deprecated|deprecation|schema|users.groups|ssh.authkey.fingerprints|'
+                                            r'resizefs|growpart|set.passwords|set.hostname|update.hostname|'
+                                            r'write.files|scripts.user|invalid|permission.denied', report)))
+            raise ValueError('NoCloud startup degraded: ' + ','.join(classes or ['unclassified']))
+        self.cmd(self.ssh + ['apk add --no-cache bash util-linux'], 360)
         for rel in PRODUCTS:
             result = self.ssh_output('sha256sum ' + str(ROOT / Path(rel).name)).split()
             require(len(result) == 2 and result[0].decode() == digest(self.repo / rel), 'Guest test source mismatch')
@@ -267,6 +300,7 @@ class Lab:
                     self.proc.kill()
                     self.proc.wait(timeout=10)
             self.console.close()
+            self.emulator_log.close()
         self.log.close()
 
 
