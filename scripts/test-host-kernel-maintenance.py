@@ -1,6 +1,9 @@
 #!/usr/bin/env python3
 """Kernel transaction fixtures; these do not prove an Alpine kernel booted."""
 import copy
+import ast
+import base64
+import contextlib
 import errno
 import gzip
 import hashlib
@@ -34,6 +37,83 @@ apparmor_source = source.with_name('host-security-maintenance.py')
 apparmor_spec = importlib.util.spec_from_file_location('host_apparmor_maintenance', apparmor_source)
 apparmor_module = importlib.util.module_from_spec(apparmor_spec)
 apparmor_spec.loader.exec_module(apparmor_module)
+
+
+@unittest.skipUnless(Path(__file__).with_name('host-kernel-lab.py').is_file() and
+                     Path(__file__).with_name('test-host-kernel-boot-native.sh').is_file(),
+                     'native test-entry diagnostics are checked from their repository sources')
+class KernelNativeDiagnosticTests(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        path = Path(__file__).with_name('host-kernel-lab.py')
+        spec = importlib.util.spec_from_file_location('kernel_lab_diagnostic_test', path)
+        cls.lab = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(cls.lab)
+
+    def diagnostic(self, raw):
+        return {'program': 'apk', 'arguments': ['--repositories-file', '/private/DO_NOT_EMIT',
+                '--simulate', 'upgrade', 'linux-virt'], 'exit': 0, 'stdoutBytes': len(raw),
+                'stderrBytes': 0, 'stderrPrefix': '', 'stdoutSha256': hashlib.sha256(raw).hexdigest(),
+                'stdoutBase64': base64.b64encode(raw).decode()}
+
+    def test_public_summary_has_only_checked_native_facts_and_plan_classes(self):
+        raw = b'Upgrading linux-virt (6.18.58-r0 -> 6.18.65-r0)\nUpgrading DO_NOT_EMIT (1.0-r0 -> 1.1-r0)\n'
+        result = self.lab.native_diagnostic_summary(self.diagnostic(raw))
+        self.assertEqual(result['planActionCounts']['Upgrading'], 2)
+        self.assertIs(result['nonKernelPlanChange'], True)
+        self.assertEqual(result['operation'], 'upgrade')
+        self.assertEqual(result['stdoutSha256'], hashlib.sha256(raw).hexdigest())
+        self.assertNotIn('DO_NOT_EMIT', json.dumps(result))
+        self.assertNotIn('stdoutBase64', result); self.assertNotIn('arguments', result)
+        legacy = self.diagnostic(b'')
+        legacy.pop('stdoutBase64');legacy.pop('stdoutSha256')
+        legacy.update(exit=-9,stderrPrefix="apk: unrecognized option: '--no-scripts'")
+        legacy['arguments'].append('--no-scripts')
+        self.assertEqual(self.lab.native_diagnostic_summary(legacy)['errorClass'], 'OPTION_REJECTED')
+        self.assertEqual(self.lab.native_diagnostic_summary(legacy)['rejectedOption'], '--no-scripts')
+
+    def test_changed_stream_and_unchecked_native_fields_are_not_published(self):
+        original = self.diagnostic(b'Upgrading linux-virt (6.18.58-r0 -> 6.18.65-r0)\n')
+        for changes in [{'stdoutSha256': 'a'*64}, {'stdoutBytes': original['stdoutBytes']+1},
+                        {'stdoutBase64': 'invalid#base64'}, {'program': 'DO_NOT_EMIT'},
+                        {'arguments': ['/private/DO_NOT_EMIT']*25}, {'exit': True}]:
+            with self.subTest(changes=changes):
+                self.assertIsNone(self.lab.native_diagnostic_summary({**original, **changes}))
+        for row in [{'reason': 'DO_NOT_EMIT','line': 1,'function':'installation_changes'},
+                    {'reason': 'HARDENING_KERNEL_PACKAGE_PLAN_CHANGED','line': True,'function':'installation_changes'},
+                    {'reason': 'HARDENING_KERNEL_PACKAGE_PLAN_CHANGED','line': 1,'function':['DO_NOT_EMIT']}]:
+            self.assertIsNone(self.lab.native_diagnostic_summary(row))
+
+    def test_private_complete_stream_is_kept_while_public_summaries_are_bounded(self):
+        raw = b'Upgrading linux-virt (6.18.58-r0 -> 6.18.65-r0)\n' + b'PRIVATE_DATA\n'*7000
+        record = self.diagnostic(raw)
+        body = b'E04_NATIVE_COMMAND_TRACE '+json.dumps(record).encode()+b'\n'
+        with tempfile.TemporaryDirectory()as directory:
+            path = Path(directory)/'private.log'
+            path.write_bytes(body)
+            result = self.lab.native_diagnostic_summaries(path)
+            self.assertEqual(path.read_bytes(), body)
+            self.assertEqual(len(result), 1)
+            self.assertEqual(result[0]['stdoutBytes'], len(raw))
+            self.assertNotIn('PRIVATE_DATA', json.dumps(result))
+            path.write_bytes(body*13)
+            self.assertEqual(len(self.lab.native_diagnostic_summaries(path)), 12)
+
+    def test_native_refusal_captures_the_original_product_caller_and_keeps_its_error(self):
+        source = Path(__file__).with_name('test-host-kernel-boot-native.sh').read_text()
+        body = source.split("<<'PY'\n", 1)[1].rsplit('\nPY', 1)[0]
+        function, = [item for item in ast.parse(body).body if isinstance(item, ast.FunctionDef) and item.name=='diagnose_kernel_refusal']
+        namespace = {'module': module, 'original_fail': module.fail, 'sys':sys, 're':__import__('re'), 'json':json}
+        exec(compile(ast.Module(body=[function],type_ignores=[]), '<native-refusal-test>', 'exec'), namespace)
+        stderr = io.StringIO()
+        with patch.object(module,'fail',namespace['diagnose_kernel_refusal']),contextlib.redirect_stderr(stderr),self.assertRaisesRegex(ValueError,'^HARDENING_KERNEL_PACKAGE_PLAN_CHANGED$'):
+            module.installation_changes('Upgrading private-package (1.0-r0 -> 1.1-r0)', {'linux-virt':'6.18.58-r0'}, 'linux-virt')
+        prefix = 'E04_NATIVE_PRODUCT_FAILURE '
+        self.assertTrue(stderr.getvalue().startswith(prefix))
+        row = json.loads(stderr.getvalue()[len(prefix):])
+        self.assertEqual(row['function'],'installation_changes')
+        self.assertEqual(row['reason'],'HARDENING_KERNEL_PACKAGE_PLAN_CHANGED')
+        self.assertGreater(row['line'],0);self.assertNotIn('private-package',stderr.getvalue())
 
 
 def base_request():

@@ -1,5 +1,9 @@
 # 2026-11-27 安全验收当前进度
 
+2026-11-29 接续：bc07782e 已保存推送两分支，30 项源码 CI 和具名预览的 17 项必需任务通过；双包独审尚待，不作为正式发行。后续恢复进程隔离修正、原函数七场景守卫、真实客户端 /proc smoke 与 Debian 原生空白修复已完成对应本机验证，最终 server build 与安全修复守卫通过，Linux /proc 和完整系统事务继续验收。E04 两架构 setup/base 与原 GRUB 启动通过，后续 AMD 包计划拒绝、ARM 下载期限失败保留，补齐原生私有输出与实际拒绝行后继续定位。S11/E03/E04 仍未闭环。
+
+B1 R15 原 SSH、cloud-final 和完整资格通过（256.177 秒），随后新观察器返回 B1_ORIGINAL_UNIT_FACTS_INVALID；原运行 probe 与 3116 未读。QEMU 16556 正常关机、exit0、无强制清理、端口释放，actor 与日志排空通过，原主异常保留。现盘 7,533,297,664 字节、SHA256 80001f0ef43dca4f548f9b37db1fb5449ecef6c6386da2b2d73f8daecf7f50d7；下一步仅核实际 systemctl 输出并修入口，不以反复开机代替诊断。
+
 2026-11-28 10:28 当前结果：原20项安全清单仍为17项源码与对应验证、S11/E03/E04三项未闭环。当前源码31b10f94的主CI46084175047全部30项成功，完整预览46084236332的17项必需任务全部成功，Release预期跳过。两架构各69个续接、25个文件操作、7个升级控制无跳过，双首装及10个原worker升级／回滚通过；实际AMD64／ARM64双包独审自然0，321份源码、原签名和完整归档均通过。根已核两报告SHA；证据为logs/mastaincus-preview-31b10f94-artifacts/dual-audit-terminal-success.json，不等同生产热更新或正式发行。
 
 PG R15已完成原两角色身份／完整就绪，初次8秒start查询超时后未重复start、按实际原native进程全核后自动exact continue；随后真实source重启的单次fixture调用又在8秒查询超时退出。native controls／worker22仍0、finalPlan未创建，实际已耗source10／target8，原两流和最终保护／收口保留。R16只补原<=300秒内观察已提交原unit并全核，保留原8秒timeout及30／8／20、4／3／72h，不改配置或重复启动。

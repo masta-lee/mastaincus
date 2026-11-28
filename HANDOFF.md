@@ -9,9 +9,9 @@
 | 唯一维护仓库 | [masta-lee/mastaincus](https://github.com/masta-lee/mastaincus)，公开；main 与工作分支分批同步 |
 | 原正式版 | [v1.8.14](https://github.com/masta-lee/mastaincus/releases/tag/v1.8.14)；原 tar、签名、校验及 tag 保持 |
 | 原配套 Agent | [v1.0.16](https://github.com/masta-lee/mastaincus/releases/tag/agent-v1.0.16) |
-| 安全候选源码 CI | 6bb3f40d 的 [CI](https://github.com/masta-lee/mastaincus/actions/runs/46145700198) 30 项通过 |
-| 最近完整成功预览 | 6bb3f40d 的[双架构具名预览](https://github.com/masta-lee/mastaincus/actions/runs/46145705340) 17 项通过，含两次首装、10 个原 worker 升级／回滚。正式发布步骤按预期跳过 |
-| 命名测试包 | v1.8.14-test.6bb3f40。AMD64 与 ARM64 的实际 tar 各有 321 份源码逐字节匹配，原发行签名、组件签名、权限、链接与归档完整性均通过 |
+| 安全候选源码 CI | bc07782e 的 [CI](https://github.com/masta-lee/mastaincus/actions/runs/46160692809) 30 项通过；本次后续源码另验 |
+| 最近完整成功预览 | bc07782e 的[双架构具名预览](https://github.com/masta-lee/mastaincus/actions/runs/46160727069) 17 项必需任务通过，含两次首装、10 个原 worker 升级／回滚。正式发布步骤按预期跳过 |
+| 最近独立核过的测试包 | v1.8.14-test.6bb3f40。AMD64 与 ARM64 的实际 tar 各有 321 份源码逐字节匹配，原发行签名、组件签名、权限、链接与归档完整性均通过；bc07782e 双包尚未独审 |
 | 最新已保存产品修复 | 6bb3f40d 按本机 dpkg 时间定位已安装版本，并校验历史索引的同源重定向、签名及目标 SHA。该包在 [Debian 13 KVM](https://github.com/masta-lee/mastaincus/actions/runs/46148100813) 完成安装，随后原资格检查拒绝活动的 systemd-networkd，尚未执行完整事务 |
 | 已保存 CI 修复 | 47accbab：原 v1.8.14 两个固定资产下载最多 3 次、每次独立临时目录；原 SHA 保持。真实 Bash 故障控制、同提交 CI／完整预览通过；线上该轮首次下载成功，不冒称发生过真实重试 |
 | 当前安装精修 | 31b10f94已推送main和工作分支。installer 3cc6304b…、guard 221a4506…；完整包认证后续接、原配置／证书保持、真实身份残留写前拒绝及失败传播。Windows完整守卫自然0（877.934秒），同提交Linux双架构各69续接／25文件操作／7升级控制通过且无跳过；未正式发布或生产部署 |
@@ -38,6 +38,14 @@
 资金链前一批的源码、真实 PG 篡改/回调/余额/购买/续费和加密备份往返证据见[资金报告](docs/financial-audit-2026-11-22.md)。未备份的较新交易不能凭空还原，主机/应用密钥整体失陷的信任边界见[安全事件](docs/security-incident-2026-11-24.md)。
 
 ## 本轮实机进展
+
+11 月 29 日接续：bc07782e 已正常推送 main 与工作分支，同提交 30 项 CI 和完整具名预览成功。复审随后发现新 SQL 恢复管道的 OS 权限回退：迁移凭据不能进入 incudal UID 的客户端。现已恢复所有迁移工具 uid/gid=0，并执行原函数的七种进程身份/输入行为守卫；平台备份全守卫及 server type-check、安全修复守卫通过。下一完整预览将沿真实 restoreDatabaseSql 读取其自有客户端 /proc 的 UID/GID、父进程、启动时间、执行文件与 PID 命名空间，并验证普通 incudal 不能读取其环境；本机控制和语法通过，Linux 结果尚待。此后续代码没有部署生产。
+
+Debian 原生运行 46160731810 已越过 Node 归档解析，随后返回 SYSTEM_SECURITY_RUNTIME_CONFFILE_MIGRATION_UNREVIEWED。已复现根因是 command 的 strip() 删除 dpkg Conffiles 第一行的必要前导空格；仅该查询保留原生空白，行格式、重复、MD5、配置保护及原期限均保持。产品 c8687d04…、守卫 68b6b12b…，234 项 Windows 控制退出 0，其中 54 项 Linux 专用跳过。六种原生配置迁移与完整 Debian 系统事务继续验收，不能据此开放自动系统事务门禁。
+
+E04 的运行 46160736357 两架构均完成 setup/base 和原 GRUB 启动。AMD64 在 pre-rollback 返回包计划逻辑拒绝；ARM64 的 apk fetch 在原产品 10 秒期限被终止。新入口保留产品拒绝行/函数及成功 policy/simulate 的完整有界私有输出，公开仅固定分类、长度与 SHA；内核产品 297c54e4…未改。96 项 Windows 守卫退出 0（60 项 Linux 专用跳过），计划/加固守卫和语法通过；后续计划、下载、激活与回滚仍未通过，生产许可集保持为空。
+
+B1 R15 由根核八份来源和原空间门槛后启动一次，QEMU 16556、创建 FILETIME 134403554049660883。原 SSH/pin、cloud-final 与完整资格通过，实际 256.177 秒；新启动观察随后返回 B1_ORIGINAL_UNIT_FACTS_INVALID。原运行 probe 和 3116 备份读取仍未到。QEMU 正常关机、exit0、无强制清理、端口释放，actor 和日志排空通过，原主异常保留；现盘 7,533,297,664 字节、SHA256 80001f0ef43dca4f548f9b37db1fb5449ecef6c6386da2b2d73f8daecf7f50d7。正在核真实 Linux 的 systemctl 空属性契约，R14/R15 失败和原预算保留，不以重复启动或放宽校验代替修复。
 
 最新接续（2026-11-28）：已读源对话最后的执行与交接。B1 R13 已完成原失败迁移的核验和正常续接，当前失败位于后续原 probe，原备份 3116 仍未读取。Debian 运行 46149051855 的静态网络误拒已定位为 IPv4 地址 JSON 不含 MAC；改用 link JSON 选定 MAC，再核同一网卡索引的 IPv4 和默认路由，5 项回归通过，完整事务重新验收。PG18 归档向 PG16 恢复的会话兼容修复正在补齐全部正常入口，尚未作为完成项登记。
 

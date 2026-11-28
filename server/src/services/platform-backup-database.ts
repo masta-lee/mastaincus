@@ -159,7 +159,7 @@ async function executeCompatibleRestoreSql(source: string, database: string, arg
       yield prefix
       yield* fd.createReadStream({start: bytesRead, autoClose: false})
     }
-    await runPgTool(pgTool(major, 'psql'), 'psql', args, database, compatibleSql(), undefined, true)
+    await runPgTool(pgTool(major, 'psql'), 'psql', args, database, compatibleSql())
   } finally { await fd.close() }
 }
 async function pgProcess(command: PgTool, args: string[], database: string | undefined, input?: string, output?: string, dumpMajor?: number) {
@@ -184,7 +184,7 @@ async function pgProcess(command: PgTool, args: string[], database: string | und
   }
   await runPgTool(pgTool(major, command), command, args, database, input, output)
 }
-async function runPgTool(program: string, command: PgTool, args: string[], database: string | undefined, input?: string | AsyncIterable<Buffer>, output?: string, unprivilegedOs = false) {
+async function runPgTool(program: string, command: PgTool, args: string[], database: string | undefined, input?: string | AsyncIterable<Buffer>, output?: string) {
   let uid = Number((await exec('/usr/bin/id', ['-u', 'incudal'])).stdout.trim())
   let gid = Number((await exec('/usr/bin/id', ['-g', 'incudal'])).stdout.trim())
   ensure(uid > 0 && gid > 0, 'OSS_RUNTIME_INVALID', 503)
@@ -192,7 +192,7 @@ async function runPgTool(program: string, command: PgTool, args: string[], datab
   if (database && command !== 'pg_dump') {
     ensure(/^incudal_(check|restore|verify)_[a-f0-9]{32}$/.test(database), 'OSS_DATABASE_INVALID')
     const migrationUrl=await retainedMigrationIdentity(postgresConnection().url)
-    if (!unprivilegedOs) { uid=0;gid=0 }
+    uid=0;gid=0
     environment={...environment,PGUSER:decodeURIComponent(migrationUrl.username),PGPASSWORD:decodeURIComponent(migrationUrl.password)}
   }
   const child = spawn(program, args, { uid, gid, env: environment, stdio: ['pipe', 'pipe', 'pipe'] })

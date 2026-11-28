@@ -1180,7 +1180,9 @@ def runtime_archive_conffile_registration(raw,paths,layout):
     return {runtime_payload_path('/'+path,layout):{'md5':hashlib.md5(data,usedforsecurity=False).hexdigest(),'flags':[]}for path,data in contents.items()}
 
 def runtime_dpkg_conffiles(key,layout):
-    output=command(['dpkg-query','--show','--showformat=${Conffiles}\n',key],30);result={}
+    # The first registration line has a significant leading space. Keep the
+    # native query output so command's normal trimming cannot invalidate it.
+    output=command(['dpkg-query','--show','--showformat=${Conffiles}\n',key],30,preserve_whitespace=True);result={}
     if len(output)>1024*1024:raise ValueError('SYSTEM_SECURITY_RUNTIME_CONFFILE_MIGRATION_UNREVIEWED')
     for line in output.splitlines():
         if not line.strip():continue
@@ -2883,7 +2885,7 @@ def live_process_group(group,proc=pathlib.Path('/proc')):
         if int(fields[2])==group and fields[0]not in ['Z','X']:return True
     return False
 
-def command(args,timeout=90):
+def command(args,timeout=90,*,preserve_whitespace=False):
     # Keep the complete apt/dpkg process group under the deadline. A surviving
     # package hook must not outlive the temporary service policy or task lock.
     with tempfile.TemporaryFile()as out,tempfile.TemporaryFile()as error:
@@ -2908,7 +2910,8 @@ def command(args,timeout=90):
             os.killpg(process.pid,signal.SIGKILL)
             raise ValueError('SYSTEM_SECURITY_PACKAGE_CHILD_PENDING')
         if os.fstat(out.fileno()).st_size+os.fstat(error.fileno()).st_size>2*1024*1024:raise ValueError('SYSTEM_SECURITY_PACKAGE_QUERY_FAILED')
-        out.seek(0);return out.read(2*1024*1024).decode().strip()
+        out.seek(0);output=out.read(2*1024*1024).decode()
+        return output if preserve_whitespace is True else output.strip()
 
 HOST_SERVICES={'incusd','lxcfs','dnsmasq','sshd','nginx','postgres','systemd','systemd-resolve','systemd-timesyn','chronyd','node'}
 

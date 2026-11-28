@@ -3152,9 +3152,35 @@ class RuntimePayload(unittest.TestCase):
 
     def test_original_dpkg_conffile_registration_never_accepts_flags_or_duplicate_paths(self):
         original=' /etc/runtime.conf '+'a'*32+'\n'
-        with patch.object(module,'command',return_value=original):self.assertEqual(module.runtime_dpkg_conffiles('fixture:amd64',{}),{'/etc/runtime.conf':{'md5':'a'*32,'flags':[]}})
+        with patch.object(module,'command',return_value=original)as run:
+            self.assertEqual(module.runtime_dpkg_conffiles('fixture:amd64',{}),{'/etc/runtime.conf':{'md5':'a'*32,'flags':[]}})
+            run.assert_called_once_with(['dpkg-query','--show','--showformat=${Conffiles}\n','fixture:amd64'],30,preserve_whitespace=True)
         for output in [original+original,original.strip()+'\n',original.rstrip()+' obsolete\n',original.rstrip()+' remove-on-upgrade\n',original.replace('/etc/runtime.conf','/etc/../runtime.conf')]:
             with patch.object(module,'command',return_value=output),self.assertRaisesRegex(ValueError,'CONFFILE_MIGRATION_UNREVIEWED|PAYLOAD_UNCONFIRMED'):module.runtime_dpkg_conffiles('fixture:amd64',{})
+
+    def test_real_command_stream_preserves_the_first_conffile_line_and_default_trimming(self):
+        rows=' /etc/runtime.conf '+'a'*32+'\n /etc/second.conf '+'b'*32+'\n'
+        for raw in [rows, '\n'+rows, rows.replace('\n','\r\n')]:
+            def child(args,**kwargs):
+                self.assertEqual(args,['dpkg-query','--show','--showformat=${Conffiles}\n','fixture:amd64'])
+                self.assertTrue(kwargs['start_new_session'])
+                self.assertEqual(kwargs['env']['LC_ALL'],'C')
+                kwargs['stdout'].write(raw.encode());kwargs['stdout'].flush()
+                return types.SimpleNamespace(pid=12345,returncode=0,poll=lambda:0)
+            with self.subTest(raw=raw),patch.object(module.subprocess,'Popen',side_effect=child),patch.object(module,'live_process_group',return_value=False):
+                self.assertEqual(module.runtime_dpkg_conffiles('fixture:amd64',{}),{'/etc/runtime.conf':{'md5':'a'*32,'flags':[]},'/etc/second.conf':{'md5':'b'*32,'flags':[]}})
+                args=['dpkg-query','--show','--showformat=${Conffiles}\n','fixture:amd64']
+                self.assertEqual(module.command(args,30),raw.strip(),'other callers retain the original command output contract')
+                self.assertEqual(module.command(args,30,preserve_whitespace=True),raw,'the opt-in preserves the complete native output')
+
+    def test_real_command_stream_does_not_normalize_invalid_conffile_registration(self):
+        original=' /etc/runtime.conf '+'a'*32+'\n'
+        for raw in [original+original,original.strip()+'\n',original.rstrip()+' obsolete\n',original.rstrip()+' remove-on-upgrade\n',original.replace('/etc/runtime.conf','/etc/../runtime.conf')]:
+            def child(args,**kwargs):
+                kwargs['stdout'].write(raw.encode());kwargs['stdout'].flush()
+                return types.SimpleNamespace(pid=12345,returncode=0,poll=lambda:0)
+            with self.subTest(raw=raw),patch.object(module.subprocess,'Popen',side_effect=child),patch.object(module,'live_process_group',return_value=False),self.assertRaisesRegex(ValueError,'CONFFILE_MIGRATION_UNREVIEWED|PAYLOAD_UNCONFIRMED'):
+                module.runtime_dpkg_conffiles('fixture:amd64',{})
 
     def test_formal_file_absence_needs_original_install_intent_and_never_counts_as_complete(self):
         journal,value=self.fixture();path='/usr/bin/node';actual={name:record['expected']for name,record in value['paths'].items()};actual[path]={'type':'absent'}
@@ -3361,16 +3387,15 @@ class NativeRuntimeDumps(unittest.TestCase):
 class NativeDpkgConffiles(unittest.TestCase):
     def test_six_real_dpkg_conffile_transitions_preserve_original_administrator_bytes(self):
         import hashlib,json,subprocess,stat
-        original_path=pathlib.Path;original_write=module.write_runtime_maintenance
+        original_path=pathlib.Path;original_write=module.write_runtime_maintenance;original_command=module.command
         name='runtime-conffile-qa';key=name+':all';virtual='/etc/'+name+'.conf'
         cases=[('unchanged',b'old default\n',b'old default\n',None),('vendor-changed',b'old default\n',b'new default\n',None),('custom',b'old default\n',b'new default\n',b'administrator config\n'),('deleted',b'old default\n',b'new default\n',False),('new',None,b'new default\n',None),('concurrent-admin',b'old default\n',b'new default\n',None)]
         for case,old,new,administrator in cases:
             with self.subTest(case=case),tempfile.TemporaryDirectory()as directory:
                 folder=original_path(directory).resolve();system=folder/'system';system.mkdir(mode=0o700);(system/'etc').mkdir()
                 security=folder/'security';security.mkdir(mode=0o700);backup=security/('runtime-backup-'+'a'*32);backup.mkdir(mode=0o700);(backup/'archives').mkdir(mode=0o700)
-                def run(args):
-                    result=subprocess.run(args,capture_output=True,text=True,timeout=30,env={'PATH':'/usr/sbin:/usr/bin:/sbin:/bin','LC_ALL':'C'})
-                    self.assertEqual(result.returncode,0,'isolated dpkg stage failed: '+args[0]);return result.stdout.strip('\n')
+                def run(args,timeout=30,**kwargs):
+                    return original_command(args,timeout,**kwargs)
                 raw={}
                 for label,version,content in [('before','1.0-1',old),('expected','1.0-2',new)]:
                     package=folder/label;package.mkdir(mode=0o755);package.chmod(0o755);control=package/'DEBIAN';control.mkdir(mode=0o755);control.chmod(0o755)
@@ -3409,9 +3434,9 @@ class NativeDpkgConffiles(unittest.TestCase):
                     self.assertTrue(candidate.is_relative_to(system),'native acceptance must stay in its isolated root')
                     if not candidate.exists()and not candidate.is_symlink():return {'type':'absent'}
                     return module.runtime_payload_regular(candidate)
-                def command(args,*_):
+                def command(args,timeout=90,**kwargs):
                     self.assertEqual(args[0],'dpkg-query','conffile verification cannot invoke a real host service or package mutation')
-                    return run([args[0],'--admindir='+str(system/'var/lib/dpkg'),*args[1:]])
+                    return run([args[0],'--admindir='+str(system/'var/lib/dpkg'),*args[1:]],timeout,**kwargs)
                 states={key:{'version':'1.0-2','status':'installed'}}
                 if case=='concurrent-admin':target.write_bytes(b'new administrator edit\n')
                 with patch.object(module.pathlib,'Path',side_effect=route),patch.object(module,'read_runtime_payload',return_value=value),patch.object(module,'runtime_payload_actual',side_effect=actual),patch.object(module,'runtime_payload_parents',side_effect=lambda _:[(target.parent,target.parent.lstat())]),patch.object(module,'command',side_effect=command),patch.object(module,'debian_package_states',return_value=states),patch.object(module,'write_runtime_maintenance',side_effect=lambda current,*_,**__:original_write(current,security)):

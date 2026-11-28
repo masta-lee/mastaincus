@@ -13,6 +13,7 @@ if [[ ! -f "$kernel_module" ]]; then kernel_module="${script_root}/host-kernel-m
 apparmor_module="${script_root}/../server/templates/host-security-maintenance.py"
 if [[ ! -f "$apparmor_module" ]]; then apparmor_module="${script_root}/host-security-maintenance.py"; fi
 python3 -I -B - "$phase" "$kernel_module" "$apparmor_module" <<'PY'
+import base64
 import fcntl
 import json
 import os
@@ -67,6 +68,16 @@ apparmor.KERNEL_JOURNAL_GUARD = module.assert_kernel_idle
 # the temporary streams are still open on this disposable test machine.
 original_command = module.command
 original_popen = module.subprocess.Popen
+original_fail = module.fail
+def diagnose_kernel_refusal(reason):
+    # execute(inspect) intentionally turns a private exception into a blocked
+    # plan. Retain its actual product caller before that conversion happens.
+    frame = sys._getframe(1)
+    if frame.f_code.co_filename == module.__file__ and isinstance(reason, str) and re.fullmatch(r'HARDENING_[A-Z_]{1,90}', reason):
+        diagnostic = {'reason': reason, 'line': frame.f_lineno, 'function': frame.f_code.co_name}
+        print('E04_NATIVE_PRODUCT_FAILURE ' + json.dumps(diagnostic, separators=(',', ':')), file=sys.stderr, flush=True)
+    return original_fail(reason)
+module.fail = diagnose_kernel_refusal
 def diagnose_kernel_command(args, timeout=8, value=None, *, stdout_only=False):
     last_process = None
     def launch(*positional, **keywords):
@@ -78,17 +89,26 @@ def diagnose_kernel_command(args, timeout=8, value=None, *, stdout_only=False):
             result = original_wait(*wait_args, **wait_keywords)
             try:
                 output, errors = keywords['stdout'], keywords['stderr']
+                stdout_size = os.fstat(output.fileno()).st_size
+                stderr_size = os.fstat(errors.fileno()).st_size
                 error_prefix = os.pread(errors.fileno(), 1024, 0)
                 process.kernel_test_diagnostic = {
                     'program': Path(args[0]).name,
                     'arguments': [str(arg)[:512] for arg in args[1:]][:24],
                     'exit': result,
-                    'stdoutBytes': os.fstat(output.fileno()).st_size,
-                    'stderrBytes': os.fstat(errors.fileno()).st_size,
+                    'stdoutBytes': stdout_size,
+                    'stderrBytes': stderr_size,
                     'stderrPrefixBytes': len(error_prefix),
                     'stderrPrefixSha256': module.digest(error_prefix),
                     'stderrPrefix': error_prefix.decode('utf-8', errors='replace'),
                 }
+                # The product already enforces this shared bound. pread
+                # preserves its stream offsets and never reads another file.
+                if Path(args[0]).name == 'apk' and stdout_size + stderr_size <= 4 * 1024**2:
+                    stdout = os.pread(output.fileno(), stdout_size, 0)
+                    if len(stdout) == stdout_size:
+                        process.kernel_test_diagnostic.update(
+                            stdoutSha256=module.digest(stdout), stdoutBase64=base64.b64encode(stdout).decode())
             except Exception:
                 process.kernel_test_diagnostic = {'program': Path(args[0]).name, 'exit': result, 'diagnosticUnavailable': True}
             return result
@@ -96,7 +116,13 @@ def diagnose_kernel_command(args, timeout=8, value=None, *, stdout_only=False):
         return process
     module.subprocess.Popen = launch
     try:
-        return original_command(args, timeout=timeout, value=value, stdout_only=stdout_only)
+        result = original_command(args, timeout=timeout, value=value, stdout_only=stdout_only)
+        if Path(args[0]).name == 'apk' and ('policy' in args or '--simulate' in args):
+            diagnostic = getattr(last_process, 'kernel_test_diagnostic', None)
+            if diagnostic is not None:
+                # Full bounded output remains in the host's private.log only.
+                print('E04_NATIVE_COMMAND_TRACE ' + json.dumps(diagnostic, ensure_ascii=True, separators=(',', ':')), file=sys.stderr, flush=True)
+        return result
     except BaseException:
         diagnostic = getattr(last_process, 'kernel_test_diagnostic', None)
         if diagnostic is not None:

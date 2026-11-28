@@ -1,9 +1,11 @@
 // Explicit, isolated Linux drill. Creates only UUID-named fixture/verification databases.
 // No live application database is restored or changed; no row values or credentials are printed.
 import assert from 'node:assert/strict'
-import { execFile } from 'node:child_process'
+import childProcess, { execFile, execFileSync } from 'node:child_process'
 import { promisify } from 'node:util'
+import { syncBuiltinESMExports } from 'node:module'
 import { randomUUID } from 'node:crypto'
+import { readFileSync, readlinkSync, statSync } from 'node:fs'
 import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
 
@@ -13,6 +15,97 @@ assert.equal(process.env.RUN_BACKUP_INTEGRITY_DRILL, '1', 'Explicit isolated dri
 await import(process.env.INTEGRITY_ENV_MODULE || '/opt/incudal/server/dist/config/env.js')
 const db = await import(process.env.INTEGRITY_DATABASE_MODULE || '/opt/incudal/server/dist/services/platform-backup-database.js')
 const exec = promisify(execFile)
+
+function restoreChildProof(child, program) {
+  assert.ok(child instanceof childProcess.ChildProcess && Number.isSafeInteger(child.pid) && child.pid > 0,
+    'Restore proof must come from this invocation\'s actual ChildProcess')
+  const root = `/proc/${child.pid}`
+  const status = readFileSync(`${root}/status`, 'utf8')
+  const ids = name => {
+    const line = status.split('\n').find(value => value.startsWith(`${name}:`))
+    assert.ok(line, 'Restore child must expose native process credentials')
+    const values = line.trim().split(/\s+/).slice(1)
+    assert.ok(values.length === 4 && values.every(value => value === '0'), 'Restore child real/effective/saved/filesystem UID and GID must all be root')
+    return values
+  }
+  const raw = readFileSync(`${root}/stat`, 'utf8')
+  const fields = raw.slice(raw.lastIndexOf(')') + 2).trim().split(/\s+/)
+  assert.equal(Number(raw.slice(0, raw.indexOf(' '))), child.pid)
+  assert.equal(Number(fields[1]), process.pid, 'Restore child must belong to this drill process')
+  assert.ok(/^[1-9][0-9]*$/.test(fields[19]) && !['Z', 'X', 'x'].includes(fields[0]), 'Restore child must be alive with a native start time')
+  const installed = statSync(program), loaded = statSync(`${root}/exe`)
+  assert.ok(installed.isFile() && installed.uid === 0 && !(installed.mode & 0o022), 'Restore client executable must remain root protected')
+  assert.equal(loaded.dev, installed.dev); assert.equal(loaded.ino, installed.ino)
+  assert.equal(readlinkSync(`${root}/ns/pid`), readlinkSync('/proc/self/ns/pid'))
+  return { pid: child.pid, start: fields[19], uid: ids('Uid'), gid: ids('Gid'), executable: [loaded.dev, loaded.ino] }
+}
+
+async function withRestoreProcessIsolation(database, major, action) {
+  assert.ok(/^incudal_restore_[a-f0-9]{32}$/.test(database) && Number.isInteger(major))
+  const uid = Number((await exec('/usr/bin/id', ['-u', 'incudal'])).stdout.trim())
+  const gid = Number((await exec('/usr/bin/id', ['-g', 'incudal'])).stdout.trim())
+  assert.ok(Number.isSafeInteger(uid) && Number.isSafeInteger(gid) && uid > 0 && gid > 0)
+  const originalSpawn = childProcess.spawn, expectedProgram = `/usr/lib/postgresql/${major}/bin/psql`
+  const proofs = []
+  let inspectionFailure
+  // The real client waits for stdin until this synchronous observer returns.
+  // No child PID is discovered by scanning, no spawn state is synthesized.
+  const observe = (...argv) => {
+    const child = originalSpawn(...argv)
+    const [program, args, options] = argv
+    if (program !== expectedProgram || !Array.isArray(args) || options?.env?.PGDATABASE !== database) return child
+    let stage = 'MIGRATION_IDENTITY'
+    try {
+      assert.ok(options.env.PGUSER === 'incudal_migrate' && typeof options.env.PGPASSWORD === 'string' && options.env.PGPASSWORD.length > 0,
+        'Restore must use the retained migration identity without exposing its credential')
+      stage = 'NATIVE_BEFORE'
+      const before = restoreChildProof(child, program)
+      stage = 'ENVIRON_DENIAL'
+      const denied = execFileSync(process.execPath, ['-e', `
+        const fs = require('node:fs');
+        const [pid, uid, gid] = process.argv.slice(1).map(Number);
+        if (!Number.isSafeInteger(pid) || pid <= 0 || process.getuid() !== uid || process.geteuid() !== uid || process.getgid() !== gid || process.getegid() !== gid) process.exit(40);
+        let readable = false;
+        try {
+          const fd = fs.openSync('/proc/' + pid + '/environ', fs.constants.O_RDONLY);
+          try { fs.readSync(fd, Buffer.alloc(1), 0, 1, 0); } finally { fs.closeSync(fd); }
+          readable = true;
+        } catch (error) {
+          if (!['EACCES', 'EPERM', 'ENOENT'].includes(error.code)) process.exit(42);
+          process.stdout.write('ENVIRON_DENIED\\n');
+        }
+        if (readable) process.exit(41);
+      `, String(child.pid), String(uid), String(gid)], {
+        uid, gid, env: { PATH: '/usr/bin:/bin', LC_ALL: 'C' }, timeout: 5000, maxBuffer: 4096,
+        stdio: ['ignore', 'pipe', 'ignore']
+      })
+      assert.equal(denied.toString('utf8'), 'ENVIRON_DENIED\n', 'Ordinary incudal must be unable to read the actual restore child environment')
+      // ENOENT under hidepid is accepted only while root confirms the same
+      // actual child remains alive before and after the unprivileged attempt.
+      stage = 'NATIVE_AFTER'
+      assert.deepEqual(restoreChildProof(child, program), before)
+      proofs.push(before)
+    } catch {
+      inspectionFailure = new Error(`RESTORE_PROCESS_ISOLATION_${stage}_FAILED`)
+      // Terminate only the newly created ChildProcess held by this wrapper.
+      // Return its real handle so the original utility finally still reaps it.
+      child.kill('SIGKILL')
+    }
+    return child
+  }
+  childProcess.spawn = observe
+  syncBuiltinESMExports()
+  try {
+    try { await action() } catch (error) { throw inspectionFailure || error }
+    assert.ok(!inspectionFailure, 'Restore process isolation inspection must complete')
+    assert.equal(proofs.length, 1, 'The real restoreDatabaseSql client must be observed once')
+    console.log('PASS: actual SQL restore child has root UID/GID; ordinary incudal cannot read its environment; native executable and process lifetime verified.')
+  } finally {
+    childProcess.spawn = originalSpawn
+    syncBuiltinESMExports()
+  }
+}
+
 const originalUrl = process.env.DATABASE_URL
 const connection = db.postgresConnection()
 const suffix = randomUUID().replace(/-/g, '')
@@ -79,7 +172,8 @@ try {
   process.env.DATABASE_URL=originalUrl
   await db.createBackupRestoreDatabase(sqlDatabase)
   try {
-    await db.restoreDatabaseSql(fullSql.path, sqlDatabase)
+    await withRestoreProcessIsolation(sqlDatabase, captured.metadata.postgresMajor,
+      () => db.restoreDatabaseSql(fullSql.path, sqlDatabase))
     const compareDir = await mkdtemp(join(directory, 'sql-verify-'))
     await db.verifyRestoredDatabase(sqlDatabase, captured.report, compareDir, 'sql')
   } finally { await db.localDatabaseAdmin(`DROP DATABASE ${q(sqlDatabase)} WITH (FORCE);`) }

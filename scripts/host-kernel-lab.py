@@ -54,6 +54,93 @@ def open_kvm():
         os.close(fd)
 
 
+def native_diagnostic_summary(diagnostic):
+    if not isinstance(diagnostic, dict):
+        return None
+    if 'function' in diagnostic:
+        if not (isinstance(diagnostic.get('reason'), str) and
+                re.fullmatch(r'HARDENING_[A-Z_]{1,90}', diagnostic['reason']) and
+                isinstance(diagnostic['function'], str) and re.fullmatch(r'[a-z_]{1,64}', diagnostic['function']) and
+                type(diagnostic.get('line')) is int and 0 < diagnostic['line'] < 100000):
+            return None
+        return {key: diagnostic[key] for key in ('reason', 'line', 'function')}
+    programs = {'apk', 'depmod', 'mkinitfs', 'grub-mkconfig', 'grub-script-check',
+                'update-extlinux', 'chronyc', 'rc-service', 'incus'}
+    if diagnostic.get('program') not in programs or type(diagnostic.get('exit')) is not int:
+        return None
+    summary = {'program': diagnostic['program'], 'exit': diagnostic['exit']}
+    for key in ('stdoutBytes', 'stderrBytes', 'stderrPrefixBytes'):
+        value = diagnostic.get(key)
+        if type(value) is int and 0 <= value <= 64 * 1024**2:
+            summary[key] = value
+    for key in ('stderrPrefixSha256', 'stdoutSha256'):
+        value = diagnostic.get(key)
+        if isinstance(value, str) and re.fullmatch(r'[a-f0-9]{64}', value):
+            summary[key] = value
+    if diagnostic.get('diagnosticUnavailable') is True:
+        summary['diagnosticUnavailable'] = True
+    arguments = diagnostic.get('arguments', [])
+    if not isinstance(arguments, list) or len(arguments) > 24 or any(not isinstance(arg, str) for arg in arguments):
+        return None
+    operations = {'update', 'policy', 'upgrade', 'fix', 'fetch', 'verify', 'status', 'tracking', '-a', '--help'}
+    summary['operation'] = next((arg for arg in arguments if arg in operations), 'unspecified')
+    errors = diagnostic.get('stderrPrefix', '')
+    if not isinstance(errors, str) or len(errors) > 4096:
+        return None
+    classes = ((r'(?i)(?:unrecognized|unknown|invalid) option', 'OPTION_REJECTED'),
+               (r'(?i)unable to select packages|unsatisfiable constraints', 'PACKAGE_SELECTION_FAILED'),
+               (r'(?i)certificate verify failed|certificate verification failed', 'TLS_VERIFICATION_FAILED'),
+               (r'(?i)permission denied', 'PERMISSION_DENIED'),
+               (r'(?i)temporary error|network unreachable|connection refused|operation timed out', 'NETWORK_UNAVAILABLE'),
+               (r'(?i)bad signature|signature verification failed|untrusted signature', 'SIGNATURE_REJECTED'))
+    summary['errorClass'] = next((label for pattern, label in classes if re.search(pattern, errors)), 'UNCLASSIFIED_NATIVE_EXIT')
+    option = re.search(r"""(?i)(?:unrecognized|unknown|invalid) option[: ]+['"]?(-{0,2}[a-z0-9-]+)""", errors)
+    if option and any(arg.lstrip('-') == option[1].lstrip('-') for arg in arguments if arg.startswith('-')):
+        summary['rejectedOption'] = option[1]
+    encoded = diagnostic.get('stdoutBase64')
+    if encoded is not None:
+        if not isinstance(encoded, str) or len(encoded) > 5592408:
+            return None
+        try:
+            raw = base64.b64decode(encoded, validate=True)
+        except ValueError:
+            return None
+        if len(raw) != summary.get('stdoutBytes') or len(raw) > 4 * 1024**2 or hashlib.sha256(raw).hexdigest() != summary.get('stdoutSha256'):
+            return None
+        text = raw.decode('utf-8', errors='replace')
+        actions = re.findall(r'\b(Installing|Removing|Purging|Downgrading|Upgrading|Reinstalling)\b', text)
+        summary['planActionCounts'] = {name: actions.count(name) for name in
+                                     ('Installing', 'Removing', 'Purging', 'Downgrading', 'Upgrading', 'Reinstalling')}
+        rows = re.findall(r'(?:Installing|Removing|Purging|Downgrading|Upgrading|Reinstalling) ([a-zA-Z0-9+_.-]+) \(', text)
+        summary['nonKernelPlanChange'] = any(name not in {'linux-virt', 'linux-lts'} for name in rows)
+    return summary
+
+
+def native_diagnostic_summaries(path):
+    result = []
+    with path.open('rb') as log:
+        if os.fstat(log.fileno()).st_size > 32 * 1024**2:
+            return []
+        while True:
+            line = log.readline(8 * 1024**2 + 1)
+            if not line:
+                break
+            if len(line) > 8 * 1024**2:
+                return []
+            prefixes = (b'E04_NATIVE_COMMAND_FAILURE ', b'E04_NATIVE_COMMAND_TRACE ', b'E04_NATIVE_PRODUCT_FAILURE ')
+            prefix = next((item for item in prefixes if line.startswith(item)), None)
+            if prefix is None:
+                continue
+            try:
+                summary = native_diagnostic_summary(json.loads(line[len(prefix):]))
+            except (ValueError, TypeError):
+                continue
+            if summary is not None:
+                result.append(summary)
+                result = result[-12:]
+    return result
+
+
 class Lab:
     def __init__(self, arch, directory, repo):
         self.arch = arch
@@ -237,28 +324,10 @@ class Lab:
             with (self.dir / 'private.log').open('rb') as log:
                 log.seek(max(0, log.seek(0, os.SEEK_END) - 65536))
                 tail = log.read(65536)
-            # Keep native output on the runner. Publish only the command name,
-            # outcome and known diagnostic classes, with a prefix digest.
-            for line in tail.splitlines():
-                if line.startswith(b'E04_NATIVE_COMMAND_FAILURE ') and len(line) <= 16384:
-                    diagnostic = json.loads(line[len(b'E04_NATIVE_COMMAND_FAILURE '):])
-                    arguments = diagnostic.get('arguments', [])
-                    operations = {'update', 'policy', 'upgrade', 'fix', 'fetch', 'verify', 'status', 'tracking', '-a', '--help'}
-                    summary = {key: diagnostic[key] for key in ('program', 'exit', 'stdoutBytes', 'stderrBytes',
-                               'stderrPrefixBytes', 'stderrPrefixSha256', 'diagnosticUnavailable') if key in diagnostic}
-                    summary['operation'] = next((arg for arg in arguments if arg in operations), 'unspecified')
-                    errors = diagnostic.get('stderrPrefix', '')
-                    classes = ((r'(?i)(?:unrecognized|unknown|invalid) option', 'OPTION_REJECTED'),
-                               (r'(?i)unable to select packages|unsatisfiable constraints', 'PACKAGE_SELECTION_FAILED'),
-                               (r'(?i)certificate verify failed|certificate verification failed', 'TLS_VERIFICATION_FAILED'),
-                               (r'(?i)permission denied', 'PERMISSION_DENIED'),
-                               (r'(?i)temporary error|network unreachable|connection refused|operation timed out', 'NETWORK_UNAVAILABLE'),
-                               (r'(?i)bad signature|signature verification failed|untrusted signature', 'SIGNATURE_REJECTED'))
-                    summary['errorClass'] = next((label for pattern, label in classes if re.search(pattern, errors)), 'UNCLASSIFIED_NATIVE_EXIT')
-                    option = re.search(r"(?i)(?:unrecognized|unknown|invalid) option[: ]+['\"]?(-{0,2}[a-z0-9-]+)", errors)
-                    if option and any(arg.lstrip('-') == option[1].lstrip('-') for arg in arguments if arg.startswith('-')):
-                        summary['rejectedOption'] = option[1]
-                    print('E04_NATIVE_COMMAND_SUMMARY ' + json.dumps(summary, separators=(',', ':')), flush=True)
+            # Publish fixed facts only; complete APK streams stay private.
+            for summary in native_diagnostic_summaries(self.dir / 'private.log'):
+                kind = 'PRODUCT' if 'function' in summary else 'COMMAND'
+                print('E04_NATIVE_' + kind + '_SUMMARY ' + json.dumps(summary, separators=(',', ':')), flush=True)
             codes = re.findall(rb'\b(?:HARDENING_[A-Z_]{1,90}|E04_GUEST_FAILURE phase=[a-z-]{1,30} line=[0-9]{1,5})\b', tail)
             # The guest's ERR trap runs after the Python driver and can emit
             # more than once. Keep its line and the driver's original code.

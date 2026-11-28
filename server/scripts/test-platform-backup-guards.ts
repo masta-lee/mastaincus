@@ -4,10 +4,13 @@ import { createCipheriv, createPublicKey, generateKeyPairSync, randomBytes, rand
 import { mkdtemp, readFile, readdir, rm, writeFile } from 'node:fs/promises'
 import { join, resolve } from 'node:path'
 import { tmpdir } from 'node:os'
-import { Readable } from 'node:stream'
+import { EventEmitter } from 'node:events'
+import { PassThrough, Readable, Writable } from 'node:stream'
+import { pipeline } from 'node:stream/promises'
+import ts from 'typescript'
 import { ZipFile } from 'yazl'
 import { openPromise } from 'yauzl'
-import { BackupError, normalizeConfig, openSecret, sealSecret, publicConfig, recoveryRequestAllowed, validatePrefix, nextScheduledTime } from '../src/services/platform-backup-core.js'
+import { BackupError, ensure, normalizeConfig, openSecret, sealSecret, publicConfig, recoveryRequestAllowed, validatePrefix, nextScheduledTime } from '../src/services/platform-backup-core.js'
 import { decryptBackup, encryptBackup, hashFile, validAssetName, validateManifest } from '../src/services/platform-backup-archive.js'
 import { AliyunOssClient, sanitizedOssError } from '../src/services/aliyun-oss-client.js'
 import { assertDatabaseIntegrity, normalizedDumpHash, normalizePublicSchemaPrologue, publicSchemaFingerprint, restoreDumpToolchainHeader, databaseToolFailure, restoredLargeObjectOwnershipSql, compatiblePgRestorePrefix, type DatabaseIntegrity } from '../src/services/platform-backup-database.js'
@@ -24,6 +27,129 @@ import { assertBackupVersion, assertMigrationHistory, normalizedReleaseSchema, r
 import { verifyAppWorkerLifecycle } from './fixtures/app-worker-lifecycle.js'
 import { verifyRecoveryStateMode } from './fixtures/recovery-state-mode.js'
 import { verifyRecoveryServiceStart } from './fixtures/recovery-service-start.js'
+
+async function verifyPgToolProcessIdentity(source: string) {
+  // Execute the current private functions without exporting a production test
+  // hook. Only OS/process/file boundaries are simulated; pipeline is native.
+  const parsed = ts.createSourceFile('platform-backup-database.ts', source, ts.ScriptTarget.Latest, true, ts.ScriptKind.TS)
+  const names = ['postgresConnection', 'pgEnv', 'pgTool', 'connectedPgMajor', 'dumpVersionMajor', 'sqlDumpToolchain', 'compatiblePgRestorePrefix', 'executeCompatibleRestoreSql', 'runPgTool']
+  const declarations = names.map(name => {
+    const matches = parsed.statements.filter((node): node is ts.FunctionDeclaration => ts.isFunctionDeclaration(node) && node.name?.text === name)
+    assert.equal(matches.length, 1, `execute the one original ${name} declaration`)
+    return matches[0]
+  })
+  const run = declarations[names.indexOf('runPgTool')]
+  assert.equal(run.parameters.length, 6, 'migration process identity has no OS privilege bypass parameter')
+  const compatibility = declarations[names.indexOf('executeCompatibleRestoreSql')]
+  const calls: ts.CallExpression[] = []
+  const collect = (node: ts.Node) => {
+    if (ts.isCallExpression(node) && ts.isIdentifier(node.expression) && node.expression.text === 'runPgTool') calls.push(node)
+    ts.forEachChild(node, collect)
+  }
+  collect(compatibility)
+  assert.equal(calls.length, 1)
+  assert.equal(calls[0].arguments.length, 5, 'the original compatibility caller cannot request a separate privilege bypass')
+  const executable = ts.transpileModule(declarations.map(node => node.getFullText(parsed)).join('\n'), {
+    compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.CommonJS }
+  }).outputText
+  const factory = new Function('ensure', 'exec', 'retainedMigrationIdentity', 'spawn', 'pipeline', 'createReadStream', 'createWriteStream', 'open', 'existsSync', 'pgQuery', 'databaseToolFailure', 'process', 'setTimeout', 'clearTimeout',
+    `const exports = {};\n${executable}\nreturn { runPgTool, executeCompatibleRestoreSql };`)
+  const target = 'incudal_restore_' + 'a'.repeat(32)
+  const session = '--\n-- PostgreSQL database dump\n--\n\n-- Dumped from database version 16.15\n-- Dumped by pg_dump version 18.7\n\nBEGIN;\n\nSET statement_timeout = 0;\nSET lock_timeout = 0;\nSET idle_in_transaction_session_timeout = 0;\nSET transaction_timeout = 0;\nSET client_encoding = \'UTF8\';\n'
+  const sql = Buffer.from(session + '-- ' + 'x'.repeat(4200) + '\nSELECT \'客户🙂\';\nCOMMIT;\n')
+  type SpawnOptions = { uid: number; gid: number; env: Record<string, string>; stdio: string[] }
+  for (const scenario of ['compatible', 'restore', 'dump', 'render', 'invalid-id', 'missing-identity', 'invalid-target']) {
+    const launches: { program: string; args: string[]; options: SpawnOptions; input: Buffer[] }[] = []
+    const identityCalls: string[] = [], idCalls: string[][] = [], output: Buffer[] = []
+    let closed = 0, timers = 0, cleared = 0
+    const runtimeUrl = 'postgresql://incudal:fixture-runtime-marker@127.0.0.1:5432/incudal'
+    const execute = async (program: string, args: string[]) => {
+      assert.equal(program, '/usr/bin/id')
+      assert.ok(args[0] === '-u' || args[0] === '-g')
+      assert.equal(args[1], 'incudal')
+      idCalls.push(args)
+      return { stdout: scenario === 'invalid-id' ? '0\n' : args[0] === '-u' ? '1001\n' : '1002\n' }
+    }
+    const migrationIdentity = async (url: URL) => {
+      assert.equal(url.toString(), runtimeUrl)
+      identityCalls.push(url.toString())
+      if (scenario === 'missing-identity') throw new Error('DATABASE_MIGRATION_IDENTITY_UNTRUSTED')
+      return new URL('postgresql://incudal_migrate:fixture-migration-marker@127.0.0.1:5432/incudal')
+    }
+    const launch = (program: string, args: string[], options: SpawnOptions) => {
+      const input: Buffer[] = []
+      launches.push({ program, args, options, input })
+      assert.deepEqual(options.stdio, ['pipe', 'pipe', 'pipe'])
+      const child = Object.assign(new EventEmitter(), {
+        stdin: new PassThrough(), stdout: new PassThrough(), stderr: new PassThrough(), exitCode: null as number | null,
+        kill: () => { assert.fail('completed simulated utility must not be killed') }
+      })
+      child.stdin.on('data', (chunk: Buffer) => input.push(Buffer.from(chunk)))
+      child.stdin.once('finish', () => {
+        child.stdout.end(Buffer.from('fixture-native-output'))
+        child.exitCode = 0
+        child.emit('close', 0)
+      })
+      return child
+    }
+    const tools = factory(ensure, execute, migrationIdentity, launch, pipeline,
+      (filename: string) => { assert.equal(filename, 'fixture.dump'); return Readable.from([Buffer.from('PGDMPfixture')]) },
+      (filename: string, options: { flags: string; mode: number }) => {
+        assert.equal(filename, 'fixture.sql'); assert.deepEqual(options, { flags: 'wx', mode: 0o600 })
+        return new Writable({ write(chunk, _encoding, done) { output.push(Buffer.from(chunk)); done() } })
+      },
+      async (filename: string, mode: string) => {
+        assert.equal(filename, 'fixture.sql'); assert.equal(mode, 'r')
+        return {
+          read: async (buffer: Buffer, offset: number, length: number, position: number) => ({ bytesRead: sql.copy(buffer, offset, position, position + length) }),
+          createReadStream: (options: {start: number; autoClose: boolean}) => { assert.deepEqual(options, {start: 4096, autoClose: false}); return Readable.from([sql.subarray(options.start)]) },
+          close: async () => { closed++ }
+        }
+      },
+      (program: string) => { assert.equal(program, '/usr/lib/postgresql/18/bin/pg_dump'); return true },
+      async () => [{ version: '160015' }], databaseToolFailure, { env: { DATABASE_URL: runtimeUrl } },
+      () => { timers++; return 'fixture-timer' }, (timer: string) => { assert.equal(timer, 'fixture-timer'); cleared++ })
+    if (scenario === 'compatible') {
+      await tools.executeCompatibleRestoreSql('fixture.sql', target, ['-X', '-v', 'ON_ERROR_STOP=1'])
+      assert.equal(closed, 1)
+      assert.equal(launches[0].program, '/usr/lib/postgresql/16/bin/psql')
+      assert.deepEqual(Buffer.concat(launches[0].input), Buffer.from(sql.toString('utf8').replace('SET transaction_timeout = 0;\n', '')))
+    } else if (scenario === 'invalid-target') {
+      await assert.rejects(tools.executeCompatibleRestoreSql('fixture.sql', 'incudal', []), /OSS_DATABASE_INVALID/)
+    } else if (scenario === 'dump') {
+      await tools.runPgTool('/usr/lib/postgresql/16/bin/pg_dump', 'pg_dump', [], 'incudal_check_' + 'b'.repeat(32), undefined, 'fixture.sql')
+    } else if (scenario === 'render') {
+      await tools.runPgTool('/usr/lib/postgresql/18/bin/pg_restore', 'pg_restore', ['--file=-'], undefined, 'fixture.dump', 'fixture.sql')
+    } else {
+      const action = tools.runPgTool('/usr/lib/postgresql/16/bin/psql', 'psql', [], target, (async function* () { yield Buffer.from('SELECT 1;') })())
+      if (scenario === 'invalid-id') await assert.rejects(action, /OSS_RUNTIME_INVALID/)
+      else if (scenario === 'missing-identity') await assert.rejects(action, /DATABASE_MIGRATION_IDENTITY_UNTRUSTED/)
+      else await action
+    }
+    if (['invalid-id', 'missing-identity', 'invalid-target'].includes(scenario)) {
+      assert.equal(launches.length, 0, 'invalid OS or retained identity cannot fall back to an unprivileged credential-bearing child')
+      assert.equal(timers, 0)
+      continue
+    }
+    assert.deepEqual(idCalls, [['-u', 'incudal'], ['-g', 'incudal']])
+    assert.equal(launches.length, 1)
+    assert.equal(timers, 1); assert.equal(cleared, 1)
+    const child = launches[0].options
+    if (scenario === 'dump' || scenario === 'render') {
+      assert.deepEqual([child.uid, child.gid], [1001, 1002])
+      assert.equal(identityCalls.length, 0)
+      assert.equal(child.env.PGUSER, 'incudal')
+      assert.equal(child.env.PGPASSWORD, 'fixture-runtime-marker')
+      assert.deepEqual(Buffer.concat(output), Buffer.from('fixture-native-output'))
+    } else {
+      assert.deepEqual([child.uid, child.gid], [0, 0], 'retained migration credentials stay in an OS-root utility process')
+      assert.equal(identityCalls.length, 1)
+      assert.equal(child.env.PGUSER, 'incudal_migrate')
+      assert.equal(child.env.PGPASSWORD, 'fixture-migration-marker')
+    }
+  }
+  console.log('PASS original PG utility behavior: compatibility/restore root identity; dump/render runtime identity; invalid identities refused; native streaming preserved')
+}
 
 process.env.ENCRYPTION_KEY = 'local-test-encryption-key-not-a-real-credential'
 const workspace = await mkdtemp(join(tmpdir(), 'payincus-oss-test-'))
@@ -262,6 +388,7 @@ try {
   assert.notEqual(normalizedDumpHash(firstDump), normalizedDumpHash(nextDump.replace('CREATE ROLE example;', 'CREATE ROLE different;')))
   const dumpToolchain = { databaseVersion: '16.15 (Debian 16.15-1.pgdg13+2)', dumpVersion: '16.15 (Debian 16.15-1.pgdg13+2)' }
   const databaseRuntime=await readFile(new URL('../src/services/platform-backup-database.ts',import.meta.url),'utf8')
+  await verifyPgToolProcessIdentity(databaseRuntime)
   assert.ok(databaseRuntime.includes("NODE_ENV: 'production', JITI_FS_CACHE:'false'"),'root staging migrations must not write executable TypeScript caches into the installed release')
   const publicBlock='\n--\n-- Name: public; Type: SCHEMA; Schema: -; Owner: -\n--\n\n-- *not* creating schema, since initdb creates it\n'
   const plain='SET row_security = off;\n\nSET default_table_access_method = heap;\nCREATE TABLE test(id integer);'
