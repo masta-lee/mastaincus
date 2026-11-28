@@ -139,13 +139,20 @@ def check_network_profile(scope):
     need(state.get('LoadState') == 'loaded', 'LAB_NETWORKD_LOAD_STATE_CHANGED')
     need(state.get('ActiveState') == 'inactive' and state.get('MainPID') == '0', 'LAB_NETWORKD_RUNNING')
     need(state.get('DropInPaths') == '', 'LAB_NETWORKD_DROPIN_PRESENT')
-    links = json.loads(run(['ip', '-j', '-4', 'addr'], 15, capture_output=True).stdout)
+    links = json.loads(run(['ip', '-j', 'link', 'show'], 15, capture_output=True).stdout)
     mac = '02:00:66:' + ':'.join(scope['id'][i:i + 2] for i in (0, 2, 4))
-    selected = [it for it in links if it.get('address') == mac]
-    need(len(selected) == 1 and any(a.get('local') == '10.0.2.15' and a.get('prefixlen') == 24
-                                    for a in selected[0]['addr_info']), 'LAB_STATIC_ADDRESS_CHANGED')
+    matching = [link for link in links if link.get('address') == mac]
+    need(len(matching) == 1 and type(matching[0].get('ifindex')) is int and matching[0]['ifindex'] > 0
+         and isinstance(matching[0].get('ifname'), str) and matching[0]['ifname'], 'LAB_STATIC_LINK_CHANGED')
+    link = matching[0]
+    addresses = json.loads(run(['ip', '-j', '-4', 'addr', 'show', 'dev', link['ifname']],
+                               15, capture_output=True).stdout)
+    need(len(addresses) == 1 and addresses[0].get('ifindex') == link['ifindex']
+         and addresses[0].get('ifname') == link['ifname']
+         and any(a.get('family') == 'inet' and a.get('local') == '10.0.2.15' and a.get('prefixlen') == 24
+                 for a in addresses[0]['addr_info']), 'LAB_STATIC_ADDRESS_CHANGED')
     routes = json.loads(run(['ip', '-j', '-4', 'route', 'show', 'default'], 15, capture_output=True).stdout)
-    need(len(routes) == 1 and routes[0].get('dev') == selected[0]['ifname']
+    need(len(routes) == 1 and routes[0].get('dev') == link['ifname']
          and routes[0].get('gateway') == '10.0.2.2', 'LAB_STATIC_ROUTE_CHANGED')
 
 
