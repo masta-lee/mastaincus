@@ -130,6 +130,25 @@ def apt_preferences(names, version):
     return 'Package: ' + ' '.join(names) + '\nPin: version ' + version + '\nPin-Priority: 1001\n'
 
 
+def check_network_profile(scope):
+    run(['systemctl', 'is-active', '--quiet', 'runtime-lab-network.service'], 15)
+    result = run(['systemctl', 'show', 'systemd-networkd.service',
+                  '-p', 'LoadState', '-p', 'ActiveState', '-p', 'MainPID', '-p', 'DropInPaths'],
+                 15, capture_output=True, text=True)
+    state = dict(line.split('=', 1) for line in result.stdout.splitlines())
+    need(state.get('LoadState') == 'loaded', 'LAB_NETWORKD_LOAD_STATE_CHANGED')
+    need(state.get('ActiveState') == 'inactive' and state.get('MainPID') == '0', 'LAB_NETWORKD_RUNNING')
+    need(state.get('DropInPaths') == '', 'LAB_NETWORKD_DROPIN_PRESENT')
+    links = json.loads(run(['ip', '-j', '-4', 'addr'], 15, capture_output=True).stdout)
+    mac = '02:00:66:' + ':'.join(scope['id'][i:i + 2] for i in (0, 2, 4))
+    selected = [it for it in links if it.get('address') == mac]
+    need(len(selected) == 1 and any(a.get('local') == '10.0.2.15' and a.get('prefixlen') == 24
+                                    for a in selected[0]['addr_info']), 'LAB_STATIC_ADDRESS_CHANGED')
+    routes = json.loads(run(['ip', '-j', '-4', 'route', 'show', 'default'], 15, capture_output=True).stdout)
+    need(len(routes) == 1 and routes[0].get('dev') == selected[0]['ifname']
+         and routes[0].get('gateway') == '10.0.2.2', 'LAB_STATIC_ROUTE_CHANGED')
+
+
 def install(scope):
     mount = GUEST / 'input'
     mount.mkdir(mode=0o700)
@@ -213,15 +232,31 @@ def host(lab, commit, package):
                'transaction.py': (source / 'controller-runtime-transaction.py').read_bytes()}
     for name, body in payload.items():
         (lab / name).write_bytes(body)
-    unit = ('[Unit]\nDescription=Disposable runtime acceptance\nAfter=network-online.target\n'
-            'Wants=network-online.target\n[Service]\nType=oneshot\nUMask=0077\nTimeoutStartSec=55min\n'
+    unit = ('[Unit]\nDescription=Disposable runtime acceptance\nAfter=network-online.target runtime-lab-network.service\n'
+            'Wants=network-online.target\nRequires=runtime-lab-network.service\n[Service]\nType=oneshot\nUMask=0077\nTimeoutStartSec=55min\n'
             'ExecStart=/usr/bin/python3 -I -B /root/controller-runtime-lab/lab.py guest\n'
             '[Install]\nWantedBy=multi-user.target\n')
-    static = ('#!/bin/sh\nset -eu\np=$(ip -o link show | awk \x27$2 !~ /^lo:/ {gsub(":","",$2); print $2; exit}\x27)\n'
-              'test -n "$p"\nip link set "$p" up\nip addr replace 10.0.2.15/24 dev "$p"\n'
+    mac = '02:00:66:' + ':'.join(identity[i:i + 2] for i in (0, 2, 4))
+    static = ('#!/bin/sh\nset -eu\n'
+              f'p=$(ip -j link show | python3 -c \'import json,sys; ifname, = [i["ifname"] for i in json.load(sys.stdin) if i["address"] == "{mac}"]; print(ifname)\')\n'
+              'ip link set "$p" up\nip addr replace 10.0.2.15/24 dev "$p"\n'
               'ip route replace default via 10.0.2.2 dev "$p"\n'
               'if test -L /etc/resolv.conf; then unlink /etc/resolv.conf; fi\n'
               'printf "nameserver 10.0.2.3\\n" > /etc/resolv.conf\n')
+    # NoCloud DHCP is useful during the initial boot. Afterwards this guest's
+    # sole network owner is the MAC-bound static unit. The image's netplan
+    # generator recreates networkd startup links on every daemon-reload.
+    # Disable the generator, keeping the vendor networkd.service loaded so
+    # production code still checks its unit hash, inactivity and PID.
+    configure = ('#!/bin/sh\nset -eu\n'
+                 'test -x /usr/lib/systemd/system-generators/netplan\n'
+                 'install -d -m 0755 /etc/systemd/system-generators\n'
+                 'ln -s /dev/null /etc/systemd/system-generators/netplan\n'
+                 'systemctl daemon-reload\n'
+                 'systemctl disable --now systemd-networkd-wait-online.service systemd-networkd.socket systemd-networkd.service\n'
+                 'systemctl enable --now runtime-lab-network.service\n'
+                 'systemctl enable runtime-lab.service\n'
+                 'systemctl start --no-block runtime-lab.service\n')
     static_unit = ('[Unit]\nDescription=Isolated QEMU static IPv4\nBefore=network-online.target\n'
                    '[Service]\nType=oneshot\nRemainAfterExit=yes\nExecStart=/usr/local/sbin/runtime-lab-network\n'
                    '[Install]\nWantedBy=multi-user.target\n')
@@ -230,15 +265,11 @@ def host(lab, commit, package):
     config = {'disable_root': True, 'ssh_pwauth': False, 'users': [], 'write_files': payload_files + [
         {'path': '/etc/systemd/system/runtime-lab.service', 'permissions': '0644', 'content': unit},
         {'path': '/usr/local/sbin/runtime-lab-network', 'permissions': '0700', 'content': static},
+        {'path': '/usr/local/sbin/runtime-lab-configure', 'permissions': '0700', 'content': configure},
         {'path': '/etc/systemd/system/runtime-lab-network.service', 'permissions': '0644', 'content': static_unit}],
-        'runcmd': [['systemctl', 'daemon-reload'], ['systemctl', 'enable', 'runtime-lab-network.service'],
-                   ['systemctl', 'disable', '--now', 'systemd-networkd-wait-online.service',
-                    'systemd-networkd.socket', 'systemd-networkd.service'], ['/usr/local/sbin/runtime-lab-network'],
-                   ['systemctl', 'enable', 'runtime-lab.service'],
-                   ['systemctl', 'start', '--no-block', 'runtime-lab.service']]}
+        'runcmd': [['/usr/local/sbin/runtime-lab-configure']]}
     (lab / 'user-data').write_text('#cloud-config\n' + json.dumps(config))
     (lab / 'meta-data').write_text(json.dumps({'instance-id': 'runtime-' + identity, 'local-hostname': 'runtime-lab'}))
-    mac = '02:00:66:' + ':'.join(identity[i:i + 2] for i in (0, 2, 4))
     network = {'version': 2, 'ethernets': {'uplink': {
         'match': {'macaddress': mac}, 'set-name': 'r6net0',
         'dhcp4': True, 'dhcp6': False, 'accept-ra': False,
@@ -329,6 +360,7 @@ def guest():
     phase = 'install'
     try:
         guest_scope(scope)
+        check_network_profile(scope)
         identity = {'id': scope['id'], 'boot': BOOT_ID.read_text().strip(),
                     'machine': digest(Path('/etc/machine-id'))}
         path = GUEST / 'transaction.py'
@@ -341,6 +373,7 @@ def guest():
             guest_event(scope, phase, 'pass')
             phase = 'candidate'
             guest_event(scope, phase, 'begin')
+            check_network_profile(scope)
             module = runtime(root)
             before = tx.prepare(module, identity)
             before['root'] = str(root)
