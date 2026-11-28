@@ -820,7 +820,7 @@ def boot_baseline(flavor, running):
             'identity': runtime_identity(), 'cmdline': Path('/proc/cmdline').read_text().strip()}
 
 
-def local_incus(path, value=None):
+def local_incus(path, value=None, daemon=None):
     # Never follow the CLI's mutable default remote. Only this host's root
     # Incus UNIX socket can prove that all its projects are empty and idle.
     socket_path = Path('/var/lib/incus/unix.socket')
@@ -836,10 +836,12 @@ def local_incus(path, value=None):
             self.sock.settimeout(8)
             self.sock.connect(str(socket_path))
             credentials = self.sock.getsockopt(socket.SOL_SOCKET, socket.SO_PEERCRED, struct.calcsize('3i'))
-            _, uid, _ = struct.unpack('3i', credentials)
+            pid, uid, _ = struct.unpack('3i', credentials)
             current = socket_path.lstat()
             if uid != 0 or (current.st_dev, current.st_ino) != (info.st_dev, info.st_ino):
                 fail('HARDENING_KERNEL_INCUS_IDENTITY_UNKNOWN')
+            if daemon is not None:
+                verify_incus_peer(pid, daemon)
     client = LocalConnection('localhost', timeout=8)
     try:
         client.request('GET', path)
@@ -857,11 +859,11 @@ def local_incus(path, value=None):
         client.close()
 
 
-def empty_remote(value=None):
-    inventory = local_incus('/1.0/instances?recursion=1&all-projects=true', value)
+def empty_remote(value=None, daemon=None):
+    inventory = local_incus('/1.0/instances?recursion=1&all-projects=true', value, daemon)
     if not isinstance(inventory, list) or inventory:
         fail('HARDENING_KERNEL_HOST_OCCUPIED')
-    operations = local_incus('/1.0/operations?recursion=1&all-projects=true', value)
+    operations = local_incus('/1.0/operations?recursion=1&all-projects=true', value, daemon)
     if not isinstance(operations, dict) or any(not isinstance(group, list) or any(not isinstance(row, dict) or
             not isinstance(row.get('status'), str) or row['status'] not in {'Success', 'Failure', 'Cancelled'} for row in group) for group in operations.values()):
         fail('HARDENING_KERNEL_HOST_BUSY')
@@ -1772,10 +1774,52 @@ def commit_boot(state, value):
     save_journal(state, value)
 
 
+def incus_openrc_service():
+    directory = Path('/etc/init.d')
+    protected(directory, directory=True)
+    scripts = set()
+    for name, other in [('incusd', 'incus'), ('incus', 'incusd')]:
+        path = directory / name
+        try:
+            info = path.lstat()
+        except FileNotFoundError:
+            continue
+        if stat.S_ISLNK(info.st_mode):
+            if info.st_uid != 0 or os.readlink(path) not in (other, (directory / other).as_posix()):
+                fail('HARDENING_KERNEL_INCUS_IDENTITY_UNKNOWN')
+            path = directory / other
+        try:
+            info = protected(path)
+        except FileNotFoundError:
+            fail('HARDENING_KERNEL_INCUS_IDENTITY_UNKNOWN')
+        if not info.st_mode & 0o111:
+            fail('HARDENING_KERNEL_INCUS_IDENTITY_UNKNOWN')
+        scripts.add(path.name)
+    if len(scripts) != 1:
+        fail('HARDENING_KERNEL_INCUS_IDENTITY_UNKNOWN')
+    return scripts.pop()
+
+
+def verify_incus_peer(pid, daemon):
+    # SO_PEERCRED identifies the server of this specific authenticated local
+    # socket. Verify its loaded executable against the installed Incus daemon.
+    try:
+        if pid > 1 and os.path.samestat(daemon, Path('/usr/sbin/incusd').lstat()) and \
+                os.path.samestat(daemon, os.stat('/proc/' + str(pid) + '/exe')):
+            return
+    except OSError:
+        pass
+    fail('HARDENING_KERNEL_INCUS_IDENTITY_UNKNOWN')
+
+
 def runtime_services(state, value):
     tools = state['transaction']['baseline']['tools']
-    empty_remote(value)
-    command([tools['rc-service']['path'], 'incus', 'status'], timeout=8, value=value)
+    service = incus_openrc_service()
+    daemon = protected(Path('/usr/sbin/incusd'))
+    if not daemon.st_mode & 0o111:
+        fail('HARDENING_KERNEL_INCUS_IDENTITY_UNKNOWN')
+    empty_remote(value, daemon)
+    command([tools['rc-service']['path'], service, 'status'], timeout=8, value=value)
     command([tools['rc-service']['path'], 'lxcfs', 'status'], timeout=8, value=value)
     tracking = command([tools['chronyc']['path'], '-n', 'tracking'], timeout=5, value=value).decode()
     offset = re.search(r'^System time\s*:\s*([0-9.]+) seconds (?:fast|slow) of NTP time\s*$', tracking, re.M)

@@ -553,6 +553,66 @@ class KernelPlanTests(unittest.TestCase):
     def test_unreadable_original_kernel_cache_never_becomes_download_authority(self):
         self.signed_kernel_cache_fixture('linux-virt', unreadable=True)
 
+    def test_openrc_service_uses_the_installed_daemon_or_legacy_name(self):
+        for names, aliases, expected in [
+                ({'incusd'}, {}, 'incusd'), ({'incus'}, {}, 'incus'),
+                ({'incusd'}, {'incus': 'incusd'}, 'incusd'),
+                ({'incus'}, {'incusd': '/etc/init.d/incus'}, 'incus'),
+                (set(), {}, None), ({'incus', 'incusd'}, {}, None),
+                (set(), {'incus': 'incusd'}, None),
+                ({'incus'}, {'incusd': '/other/incus'}, None)]:
+            with self.subTest(names=names, aliases=aliases):
+                def status(path):
+                    if path.name in aliases:
+                        return types.SimpleNamespace(st_uid=0, st_mode=stat.S_IFLNK | 0o777)
+                    if path.name in names:
+                        return types.SimpleNamespace(st_uid=0, st_mode=stat.S_IFREG | 0o755)
+                    raise FileNotFoundError()
+                def protected(path, directory=False):
+                    if directory:
+                        self.assertEqual(path, Path('/etc/init.d'))
+                        return
+                    info = status(path)
+                    self.assertTrue(stat.S_ISREG(info.st_mode))
+                    return info
+                with patch.object(Path, 'lstat', status), patch.object(module, 'protected', protected), \
+                        patch.object(os, 'readlink', side_effect=lambda path: aliases[path.name]):
+                    if expected is None:
+                        with self.assertRaisesRegex(ValueError, 'INCUS_IDENTITY_UNKNOWN'):
+                            module.incus_openrc_service()
+                    else:
+                        self.assertEqual(module.incus_openrc_service(), expected)
+
+    def test_local_peer_requires_the_live_installed_executable_identity(self):
+        actual = types.SimpleNamespace(st_dev=2, st_ino=19)
+        different = types.SimpleNamespace(st_dev=2, st_ino=23)
+        for pid, installed, peer, valid in [(48, actual, actual, True), (1, actual, actual, False),
+                (48, actual, different, False), (48, different, actual, False), (48, actual, None, False)]:
+            with self.subTest(pid=pid, installed=installed, peer=peer):
+                with patch.object(Path, 'lstat', return_value=installed), \
+                        patch.object(os, 'stat', return_value=peer, side_effect=FileNotFoundError() if peer is None else None) as lookup:
+                    if valid:
+                        module.verify_incus_peer(pid, actual)
+                        lookup.assert_called_once_with('/proc/48/exe')
+                    else:
+                        with self.assertRaisesRegex(ValueError, 'INCUS_IDENTITY_UNKNOWN'):
+                            module.verify_incus_peer(pid, actual)
+
+    def test_runtime_check_uses_selected_openrc_service_and_refuses_its_failure(self):
+        state = {'transaction': {'baseline': {'tools': {'rc-service': {'path': '/sbin/rc-service'}}}}}
+        value = base_request()
+        binary = types.SimpleNamespace(st_mode=stat.S_IFREG | 0o755)
+        for name in ('incusd', 'incus'):
+            with self.subTest(name=name), patch.object(module, 'incus_openrc_service', return_value=name), \
+                    patch.object(module, 'protected', return_value=binary) as trusted, \
+                    patch.object(module, 'empty_remote') as check_empty, \
+                    patch.object(module, 'command', side_effect=ValueError('service failed')) as run:
+                with self.assertRaisesRegex(ValueError, 'service failed'):
+                    module.runtime_services(state, value)
+                trusted.assert_called_once_with(Path('/usr/sbin/incusd'))
+                check_empty.assert_called_once_with(value, binary)
+                run.assert_called_once_with(['/sbin/rc-service', name, 'status'], timeout=8, value=value)
+
     def test_all_project_instances_and_operations_are_required(self):
         for inventory, operations, allowed in [([], {}, True), ([{'name': 'stopped', 'status': 'Stopped'}], {}, False),
                                                ([], {'pending': [{'status': 'Pending', 'project': 'other'}]}, False),
