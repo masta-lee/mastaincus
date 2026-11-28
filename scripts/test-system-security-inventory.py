@@ -2697,16 +2697,30 @@ class RuntimeRecoveryPsql(unittest.TestCase):
         return function(**options)
 
     def test_client_fixture_keeps_real_fd_unlisted_owner_and_permission_rejection(self):
+        native_fstat = os.fstat
+        native_stat = os.stat
         with self.client_files()as(logical,physical,change,restore):
-            fd=os.open(logical['psql'],os.O_RDONLY)
+            fd = os.open(logical['psql'], os.O_RDONLY)
+            fields = ('st_dev', 'st_ino', 'st_mode', 'st_nlink', 'st_size', 'st_mtime_ns', 'st_ctime_ns')
             try:
-                # Compare the same open-descriptor state after Windows open-time metadata updates.
-                native=physical['psql'].stat()
-                observed=os.fstat(fd)
-                for field in ['st_dev','st_ino','st_mode','st_nlink','st_size','st_mtime_ns','st_ctime_ns']:
-                    self.assertEqual(getattr(observed,field),getattr(native,field),field)
-                self.assertEqual(observed.st_uid,0)
-            finally:os.close(fd)
+                handle_before = native_fstat(fd)
+                path_before = native_stat(physical['psql'])
+                observed = os.fstat(fd)
+                handle_after = native_fstat(fd)
+                path_after = native_stat(physical['psql'])
+                self.assertTrue(os.path.samestat(handle_before, path_before))
+                for field in fields:
+                    self.assertEqual(getattr(handle_before, field), getattr(handle_after, field), field)
+                    self.assertEqual(getattr(path_before, field), getattr(path_after, field), field)
+                    self.assertEqual(getattr(observed, field), getattr(handle_before, field), field)
+                    # Windows obtains ctime through different native APIs for a
+                    # pathname and an open descriptor. Verify each against its
+                    # own source and compare the common identity across both.
+                    if sys.platform != 'win32' or field != 'st_ctime_ns':
+                        self.assertEqual(getattr(handle_before, field), getattr(path_before, field), field)
+                self.assertEqual(observed.st_uid, 0)
+            finally:
+                os.close(fd)
             unlisted=physical['psql'].with_name('unlisted');unlisted.write_bytes(b'unlisted owner remains real')
             with unlisted.open('rb')as stream:
                 for field in ['st_uid','st_gid']:self.assertEqual(getattr(os.fstat(stream.fileno()),field),getattr(unlisted.stat(),field))

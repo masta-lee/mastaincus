@@ -9,10 +9,10 @@
 | 唯一维护仓库 | [masta-lee/mastaincus](https://github.com/masta-lee/mastaincus)，公开；main 与工作分支分批同步 |
 | 原正式版 | [v1.8.14](https://github.com/masta-lee/mastaincus/releases/tag/v1.8.14)；原 tar、签名、校验及 tag 保持 |
 | 原配套 Agent | [v1.0.16](https://github.com/masta-lee/mastaincus/releases/tag/agent-v1.0.16) |
-| 最近已核源码 CI | ad2ca04d 的源码 CI 46105368174 全部 30 项成功，具名候选 46105401297 全部 17 项成功 |
-| 最近完整成功预览 | ad2ca04d 双首装、10 个原 worker 升级／回滚和双架构实际包独立签名／完整性审核通过 |
-| 命名测试包 | v1.8.14-test.ad2ca04，完整双包摘要见[本次主控交付](docs/security-urgent-controller-update-2026-11-28.md) |
-| 最新已保存产品修复 | ad2ca04d 默认关闭待原生验收的自动运行时事务，保留现有事务恢复和普通安全维护 |
+| 最近已核源码 CI | 278c44f8 的 [CI](https://github.com/masta-lee/mastaincus/actions/runs/46131138206) 30 项通过 |
+| 最近完整成功预览 | 278c44f8 的[双架构具名预览](https://github.com/masta-lee/mastaincus/actions/runs/46131138638) 17 项通过，含两次首装、10 个原 worker 升级／回滚；正式发布步骤按预期跳过 |
+| 命名测试包 | v1.8.14-test.278c44f，AMD64 与 ARM64 实际 tar 独立核验通过，运行主控的候选仍为 ad2ca04 |
+| 最新已保存产品修复 | 278c44f8 安装三个固定 root 工具时只遍历一次完整签名包。主控上的运行时门禁由 ad2ca04d 提供 |
 | 已保存 CI 修复 | 47accbab：原 v1.8.14 两个固定资产下载最多 3 次、每次独立临时目录；原 SHA 保持。真实 Bash 故障控制、同提交 CI／完整预览通过；线上该轮首次下载成功，不冒称发生过真实重试 |
 | 当前安装精修 | 31b10f94已推送main和工作分支。installer 3cc6304b…、guard 221a4506…；完整包认证后续接、原配置／证书保持、真实身份残留写前拒绝及失败传播。Windows完整守卫自然0（877.934秒），同提交Linux双架构各69续接／25文件操作／7升级控制通过且无跳过；未正式发布或生产部署 |
 | 本批实质修复 | 库存读取 template 87f84759…；测试 8a88d4a6…，Linux 89/89、零跳过、原环境保持；已随当前31b10f94通过源码CI及完整双架构预览 |
@@ -37,9 +37,11 @@
 
 紧急主控安全交付（2026-11-28）：任务 68 已成功。新鲜完整备份在仓库外逐文件校验，19 组账目／客户数据、208 组宿主身份和 5 台运行客户实例均完成更新前后比对。上线维护服务运行新版门禁，PostgreSQL 仍有 8 个被替换的 OpenSSL 映射。指定账户双架构实购、启停重启、Alpine 重装 Debian 13、SSH 和按月续费／重放通过，实扣合计 95.00。详见[主控交付与账户回归](docs/security-urgent-controller-update-2026-11-28.md)。
 
-安装器分项（2026-11-28）：旧安装器为取出三个 root 工具，分别重复解压整包，B1 的 1,800 秒同版续接窗口耗尽。本次统一流式读取三个固定普通文件，分别核唯一性、大小和 shell 语法；整包路径检查仍完整消费 tar，尾部损坏会返回失败。原 a241daf 的 221,264,571 字节 AMD64 包中，三个工具与 Git 原始内容逐字节相同。Windows 完整安装守卫通过（68 个续接场景，另 1 个 Linux 链接场景待 CI；25 个文件操作、7 个升级控制）、宿主安装脚本和分层部署守卫通过。正式发行仍为 v1.8.14，主控仍为已验证的 ad2ca04 候选。
+安装器分项（2026-11-28）：旧安装器为取出三个 root 工具，分别重复解压整包，B1 的 1,800 秒同版续接窗口耗尽。本次统一流式读取三个固定普通文件，分别核唯一性、大小和 shell 语法；整包路径检查仍完整消费 tar，尾部损坏会返回失败。原 a241daf 的 221,264,571 字节 AMD64 包中，三个工具与 Git 原始内容逐字节相同。Windows 完整安装守卫通过（68 个续接场景，本地跳过 1 个 Linux 链接场景；25 个文件操作、7 个升级控制），宿主安装脚本和分层部署守卫通过。实际 278c44f 双包均通过原公钥签名、归档和 321 份源码独核；AMD64 为 221422168 字节、SHA256 34762c14654aaef79ec9a3e563e45127681f11b08814e5bb4f0aee8aefd59da1；ARM64 为 220452060 字节、SHA256 3ec29f257049ec27a9b8c31aeeadb8171fc0333cc63221b8e8a3ed8e7932099f。正式发行仍为 v1.8.14，主控仍为已验证的 ad2ca04 候选。
 
-独立验收还剩 S11／E03／E04。B1 原盘以相同 FileID 及完整摘要重新绑定，原失败回执保留，R9 正在验证新安装器及原 a241daf 备份恢复。PG R18b 两机基线及完整进程收口有回执，22 次业务 worker 尚待终态。AMD 宿主已实测 helper 安装后唯一变化是新建 /etc/machine-id；旧内核、启动文件、模块、fstab 和五项既有管理身份一致。Debian 13 实机已观察到默认 networkd 路径被原保护拦截，静态 IPv4 对照通过原生资格。同来源 Debian 独立 KVM 验收已移至手动工作流，源码 CI 通过。[Debian 实机运行](https://github.com/masta-lee/mastaincus/actions/runs/46127289729)
+Windows 规划器测试修正（2026-11-28）：Python 3.14 的路径 stat 和文件描述符 fstat 对同一个文件可返回不同的 ctime_ns。旧用例在 9 次中失败 4 次。修正后分别核两种原生来源前后稳定、包装后的 fd 等于同一原生 fd，继续核路径与句柄属于同一个文件；Linux 保留 ctime 跨接口比对。原单例连续 100 次通过，Windows 完整规划器 228 项退出 0，53 项 Linux 专用跳过。产品代码和线上运行状态保持。
+
+独立验收还剩 S11／E03／E04。R9 已在原 B1 盘完成 Debian 13／glibc 2.41 的同启动身份核验。新安装器已实际备份、解包、创建 systemd 服务并收到数据库角色就绪回执，随后测试调用器 1,800 秒到期。原 QEMU 正常关机、退出 0、端口释放。原 3116 备份尚未进入传输或恢复。PG R18b 两机基线及完整进程收口有回执，22 次业务 worker 尚待终态。AMD 宿主已实测 helper 安装后唯一变化是新建 /etc/machine-id；旧内核、启动文件、模块、fstab 和五项既有管理身份一致。Debian 13 实机已观察到默认 networkd 路径被原保护拦截，静态 IPv4 对照通过原生资格。同来源 Debian 独立 KVM 验收已移至手动工作流，源码 CI 通过。[Debian 实机运行](https://github.com/masta-lee/mastaincus/actions/runs/46127289729)
 
 - 实际双包：同一31b10f94来源，AMD64完整tar为221404915字节／c96a13d95354014562a0ea583b34f04f176cec931c4fe0632ec6c1a0a7fbd21a，ARM64为220452011字节／d5c442f76baeea4e441932dd43ba439d2ee850e87f0b620178e76072ce6e9769。两份API digest／大小、原公钥签名及4反控、321份完整源码、8个ELF及两组件21文件签名、权限／祖先／链接／完整gzip和双零尾均通过；根独立核终态和两报告SHA。仅RAM归档，C盘小证据381113字节。首轮审计器变量覆盖失败已修且保留；这不是正式发行或生产部署。
 - PG R15：两原身份和就绪全核通过；首次8秒systemctl start查询超时后，初始循环按实际active状态再次完整核同进程／配置／OID，未重复start，随后执行exact continue和真实source重启。重启后的单次fixture调用再次超时便退出，22次worker与native controls均0、finalPlan未创建。完整私有两流／退出及原B最终保护保留，两原进程句柄和端口收口；实际累计source10／target8。R16仅在原300秒fixture预算内观察已提交的原unit，再全核原native进程／SQL，保留原8秒查询超时事实。
