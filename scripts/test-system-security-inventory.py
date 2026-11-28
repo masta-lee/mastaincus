@@ -5,6 +5,149 @@ if sys.platform=='win32':sys.modules.setdefault('fcntl',types.SimpleNamespace())
 spec=importlib.util.spec_from_file_location('inventory',pathlib.Path(__file__).with_name('system-security-inventory.py'))
 module=importlib.util.module_from_spec(spec);spec.loader.exec_module(module)
 
+class AutomaticRuntimeGate(unittest.TestCase):
+    @contextlib.contextmanager
+    def fixture(self,packages,simulation='',previous=None):
+        # Portable root/lock fixtures exercise the real planner and dispatch;
+        # native journal, permissions and service recovery tests remain below.
+        from unittest.mock import MagicMock
+        regular=types.SimpleNamespace(st_mode=0o100600,st_uid=0,st_nlink=1,st_size=100)
+        root=MagicMock();root.is_symlink.return_value=False;root.stat.return_value=types.SimpleNamespace(st_mode=0o40700,st_uid=0)
+        status=MagicMock();status.exists.return_value=previous is not None;status.lstat.return_value=regular;status.read_text.return_value=__import__('json').dumps(previous)
+        root.__truediv__.return_value=status
+        release=MagicMock();release.read_text.return_value='ID=debian\n'
+        absent=MagicMock();absent.exists.return_value=False;absent.is_file.return_value=False;absent.glob.return_value=[]
+        paths={'/etc/os-release':release,'/var/lib/incudal-system-security':root}
+        before={name+':amd64':version for name,version in packages.items()}
+        initial={'version':1,'checkedAt':'2026-11-23T00:00:00Z','packages':dict(packages),'restartRequired':False,
+            'loadedCode':{'complete':True,'allHostProcesses':True,'processes':[{'pid':12,'service':'node','replacedMappings':1}]}}
+        with contextlib.ExitStack()as stack:
+            fixture=types.SimpleNamespace(initial=initial,before=before)
+            stack.enter_context(patch.object(module.os,'geteuid',return_value=0,create=True))
+            stack.enter_context(patch.object(module.os,'fstat',return_value=regular));stack.enter_context(patch.object(module.os,'close'))
+            stack.enter_context(patch.object(module.fcntl,'flock',create=True));stack.enter_context(patch.object(module.fcntl,'LOCK_EX',2,create=True));stack.enter_context(patch.object(module.fcntl,'LOCK_NB',4,create=True))
+            stack.enter_context(patch.object(module.pathlib,'Path',side_effect=lambda value,*_:paths.get(str(value),absent)))
+            stack.enter_context(patch.object(module,'open_platform_operation_lock',return_value=42))
+            for key,value in [('verify_runtime_integrity',None),('recover_runtime_maintenance',None),('inventory',initial),('backend_runtime_proof',None),('database_runtime_proof',None),
+                ('install_runtime_patches',None),('activate_runtime_libraries',None),('clean_service_policy',None),('prepare_service_policy',None),('persist',None),('debian_installed_packages',before),
+                ('replaced_host_mappings',initial['loadedCode'])]:
+                setattr(fixture,key,stack.enter_context(patch.object(module,key,return_value=value)))
+            fixture.command=stack.enter_context(patch.object(module,'command',side_effect=lambda args,*_:simulation if '--simulate'in args else''))
+            fixture.compare=stack.enter_context(patch.object(module.subprocess,'run',return_value=types.SimpleNamespace(returncode=0)))
+            fixture.clock=stack.enter_context(patch.object(module.time,'time',return_value=1795400000))
+            yield fixture
+
+    def test_release_policy_defaults_closed_and_rejects_truthy_overrides(self):
+        self.assertIs(module.AUTOMATIC_RUNTIME_MAINTENANCE_ENABLED,False)
+        for value in [False,None,0,1,'true']:
+            with patch.object(module,'AUTOMATIC_RUNTIME_MAINTENANCE_ENABLED',value):
+                policy=module.automatic_runtime_policy();self.assertEqual(policy['state'],'deferred');self.assertIs(policy['newTransactionsEnabled'],False)
+                self.assertEqual(policy['reason'],'SYSTEM_SECURITY_RUNTIME_RELEASE_VALIDATION_REQUIRED');self.assertIs(policy['existingTransactionRecovery'],True)
+        for name in ['nodejs','libpq5','postgresql-common','postgresql-client-common','postgresql-16','postgresql-client-16','libc6','libc-bin','systemd','systemd-sysv','libsystemd-shared','udev','libudev1','linux-image-amd64','linux-modules-6.12']:
+            self.assertTrue(module.automatic_runtime_package(name),name)
+        for name in module.AUTOMATIC_DEBIAN:self.assertFalse(module.automatic_runtime_package(name),name)
+
+    def test_noop_never_proves_or_activates_new_runtime(self):
+        with self.fixture({'nodejs':'22.23.5-1','postgresql-16':'16.16-1','libc6':'2.41-12','libc-bin':'2.41-12','openssl':'3.5.8-1'})as f:
+            value=module.apply_patches(automatic=True)
+            for mock in [f.backend_runtime_proof,f.database_runtime_proof,f.install_runtime_patches,f.activate_runtime_libraries]:mock.assert_not_called()
+            self.assertEqual(value['loadedCode']['processes'][0]['service'],'node');self.assertNotIn('backendActivation',value)
+            self.assertEqual(f.command.call_count,2)
+            for call in f.command.call_args_list:
+                self.assertFalse(any(argument.startswith(('nodejs','postgresql-','libc6','libc-bin'))for argument in call.args[0]))
+
+    def test_leaf_patch_still_installs_without_runtime_transaction(self):
+        packages={'nodejs':'22.23.5-1','postgresql-16':'16.16-1','libssl3':'3.5.8-1'}
+        with self.fixture(packages,'Inst libssl3 [3.5.8-1] (3.5.9-1 Debian:stable [amd64])')as f:
+            after={**packages,'libssl3':'3.5.9-1'};f.inventory.side_effect=[f.initial,{**f.initial,'packages':after}]
+            f.debian_installed_packages.side_effect=[f.before,{name+':amd64':version for name,version in after.items()}]
+            value=module.apply_patches(automatic=True)
+            f.prepare_service_policy.assert_called_once();f.install_runtime_patches.assert_not_called();f.activate_runtime_libraries.assert_not_called()
+            installs=[call.args[0]for call in f.command.call_args_list if '--assume-yes'in call.args[0]]
+            self.assertEqual(len(installs),1);self.assertEqual(installs[0][-1],'libssl3=3.5.9-1');self.assertEqual(value['patchPlan'],['libssl3=3.5.9-1'])
+
+    def test_leaf_solver_runtime_dependencies_defer_before_install(self):
+        for name,old,new in [('nodejs','22.23.4-1','22.23.5-1'),('postgresql-16','16.15-1','16.16-1'),('postgresql-client-common','280-1','280-2'),('libpq5','16.15-1','16.16-1'),
+            ('libc6','2.41-11','2.41-12'),('libc-bin','2.41-11','2.41-12'),('systemd','257.8-1','257.9-1'),('libsystemd0','257.8-1','257.9-1'),('udev','257.8-1','257.9-1'),('linux-image-amd64','6.12.60-1','6.12.61-1')]:
+            simulation='Inst libssl3 [3.5.8-1] (3.5.9-1 Debian:stable [amd64])\nInst '+name+' ['+old+'] ('+new+' Debian:stable [amd64])'
+            with self.subTest(package=name),self.fixture({'libssl3':'3.5.8-1',name:old},simulation)as f:
+                value=module.apply_patches(automatic=True)
+                self.assertEqual(value['patchState'],'deferred');self.assertEqual(value['patchPlan'],[]);self.assertIn(name+'='+new,value['deferredPatchPlan'])
+                self.assertFalse(module.security_patch_check_due(value,1795400000+300));self.assertTrue(module.security_patch_check_due(value,1795400000+6*3600))
+                f.prepare_service_policy.assert_not_called();f.install_runtime_patches.assert_not_called();f.activate_runtime_libraries.assert_not_called()
+                self.assertEqual(f.command.call_count,2);self.assertEqual(f.compare.call_count,2);self.assertTrue(f.persist.call_args.kwargs['verify_activation'])
+
+    def test_second_solver_cannot_add_runtime_after_prepared_plan(self):
+        safe='Inst libssl3 [3.5.8-1] (3.5.9-1 Debian:stable [amd64])'
+        with self.fixture({'libssl3':'3.5.8-1','nodejs':'22.23.4-1'})as f:
+            f.command.side_effect=['',safe,safe+'\nInst nodejs [22.23.4-1] (22.23.5-1 Debian:stable [amd64])']
+            value=module.apply_patches(automatic=True);self.assertEqual(value['patchState'],'deferred');self.assertEqual(f.persist.call_count,2)
+            f.prepare_service_policy.assert_not_called();f.install_runtime_patches.assert_not_called();self.assertEqual(f.command.call_count,3)
+
+    def test_runtime_only_host_still_persists_readonly_policy(self):
+        with self.fixture({'nodejs':'22.23.5-1','postgresql-16':'16.16-1'})as f:
+            module.apply_patches(automatic=True);f.persist.assert_called_once();f.replaced_host_mappings.assert_called_once_with(all_host=True)
+            f.install_runtime_patches.assert_not_called();f.activate_runtime_libraries.assert_not_called();self.assertEqual(f.command.call_count,1)
+
+    def test_explicit_reviewed_planner_interface_is_unchanged(self):
+        with patch.object(module.subprocess,'run',return_value=types.SimpleNamespace(returncode=0)):
+            self.assertEqual(module.maintenance_patch_plan('Inst nodejs [22.23.4-1] (22.23.5-1 Debian:stable [amd64])',{'nodejs':'22.23.4-1'},{'nodejs'}),['nodejs=22.23.5-1'])
+
+    def test_deferral_does_not_accept_unknown_malformed_or_downgraded_plans(self):
+        installed={'libc6':'2.41-11','libssl3':'3.5.8-1'};valid='Inst libc6 [2.41-11] (2.41-12 Debian:stable [amd64])'
+        with patch.object(module.subprocess,'run',return_value=types.SimpleNamespace(returncode=0)):
+            for output in ['Remv libc6',valid+'\nInst unknown [1.0] (1.1 Debian:stable [amd64])',valid+'\nInst broken',valid+'\n'+valid,valid.replace('[2.41-11]','[2.41-10]')]:
+                with self.assertRaisesRegex(ValueError,'SYSTEM_SECURITY_PLAN_REJECTED'):module.maintenance_patch_plan(output,installed,{'libssl3'},automatic=True)
+        with patch.object(module.subprocess,'run',return_value=types.SimpleNamespace(returncode=1)),self.assertRaisesRegex(ValueError,'SYSTEM_SECURITY_PLAN_REJECTED'):
+            module.maintenance_patch_plan(valid,installed,{'libssl3'},automatic=True)
+
+    def test_existing_recovery_runs_before_policy_or_repository(self):
+        with self.fixture({'nodejs':'22.23.5-1','postgresql-16':'16.16-1'})as f:
+            f.recover_runtime_maintenance.return_value={'packages':['nodejs=22.23.5-1'],'activatedBackendPID':20,'activatedDatabasePID':21,'backup':'runtime-backup-'+'a'*32,'database':{'major':16}}
+            value=module.apply_patches(automatic=True);self.assertEqual(value['backendActivation']['pid'],20);self.assertEqual(value['databaseActivation']['pid'],21)
+            f.verify_runtime_integrity.assert_called_once();f.recover_runtime_maintenance.assert_called_once();f.command.assert_not_called();f.install_runtime_patches.assert_not_called()
+
+    def test_rejected_journal_or_integrity_cannot_fall_through_gate(self):
+        for source,error in [('recover_runtime_maintenance','SYSTEM_SECURITY_RUNTIME_JOURNAL_INVALID'),('recover_runtime_maintenance','SYSTEM_SECURITY_BACKEND_CONFIGURATION_CHANGED'),('verify_runtime_integrity','SYSTEM_SECURITY_RUNTIME_INTEGRITY_MISMATCH')]:
+            with self.subTest(error=error),self.fixture({'openssl':'3.5.8-1'})as f:
+                getattr(f,source).side_effect=ValueError(error)
+                with self.assertRaisesRegex(ValueError,error):module.apply_patches(automatic=True)
+                f.inventory.assert_not_called();f.command.assert_not_called();f.prepare_service_policy.assert_not_called();f.install_runtime_patches.assert_not_called()
+
+    def test_old_status_publishes_policy_once_and_preserves_pending_deadline(self):
+        previous={'version':1,'checkedAt':'2026-11-23T00:00:00Z','patchState':'installed-activation-required','patchPlan':['nodejs=22.23.5-1'],
+            'activationRequired':['nodejs=22.23.5-1'],'backendActivation':{'state':'pending'},'nextPatchCheckAt':'2026-11-23T01:00:00Z'}
+        # Use the real bounded deadline parser rather than making it return False.
+        deadline=module.calendar.timegm(module.time.strptime(previous['nextPatchCheckAt'],'%Y-%m-%dT%H:%M:%SZ'))
+        with self.fixture({},previous=previous)as f:
+            f.clock.return_value=deadline-600;value=module.apply_patches(automatic=True)
+            self.assertEqual(value['automaticRuntimeMaintenance']['state'],'deferred');self.assertEqual(value['activationRequired'],previous['activationRequired'])
+            self.assertEqual(value['nextPatchCheckAt'],previous['nextPatchCheckAt']);f.persist.assert_called_once();f.command.assert_not_called();f.inventory.assert_not_called()
+        with self.fixture({},previous=value)as f:
+            f.clock.return_value=deadline-300;self.assertIsNone(module.apply_patches(automatic=True));f.persist.assert_not_called();f.command.assert_not_called()
+
+    def test_runtime_only_deferral_keeps_six_hour_check_and_service_retries(self):
+        for value in [{'activationRequired':['nodejs=22.23.5-1']},{'activationRequired':['libssl3=3.5.9-1']},{'backendActivation':{'state':'pending'}},{'databaseActivation':{'state':'draining'}}]:
+            self.assertFalse(module.maintenance_needs_prompt_retry(value))
+            with patch.object(module,'AUTOMATIC_RUNTIME_MAINTENANCE_ENABLED',True):self.assertTrue(module.maintenance_needs_prompt_retry(value))
+        for key in ['nginxActivation','sshListenerActivation','clockActivation']:
+            self.assertTrue(module.maintenance_needs_prompt_retry({key:{'state':'pending'}}))
+
+    @unittest.skipUnless(hasattr(os,'geteuid')and os.geteuid()==0,'native private receipt and filesystem permissions')
+    def test_native_policy_receipt_preserves_pending_activation_and_deadline(self):
+        import json,stat
+        real_path=pathlib.Path
+        with tempfile.TemporaryDirectory()as folder:
+            root=real_path(folder);root.chmod(0o700);status=root/'status.json'
+            previous={'version':1,'checkedAt':'2026-11-23T00:00:00Z','patchState':'installed-activation-required','patchPlan':['nodejs=22.23.5-1'],
+                'activationRequired':['nodejs=22.23.5-1'],'databaseActivation':{'state':'pending'},'nextPatchCheckAt':'2026-11-23T01:00:00Z'}
+            status.write_text(json.dumps(previous));status.chmod(0o600);value={**previous}
+            with patch.object(module.pathlib,'Path',side_effect=lambda path:root if str(path)=='/var/lib/incudal-system-security'else real_path(path)):
+                module.persist(value)
+            self.assertEqual(json.loads(status.read_text()),value);self.assertEqual(stat.S_IMODE(status.stat().st_mode),0o600)
+            self.assertEqual(value['automaticRuntimeMaintenance']['state'],'deferred');self.assertEqual(value['patchState'],previous['patchState'])
+            self.assertEqual(value['activationRequired'],previous['activationRequired']);self.assertEqual(value['nextPatchCheckAt'],previous['nextPatchCheckAt'])
+
 class Plans(unittest.TestCase):
     def test_runtime_library_maps_only_read_exact_host_process(self):
         import io
@@ -57,7 +200,7 @@ class Plans(unittest.TestCase):
                 value['databaseActivation']={'state':'activated','pid':21,'activationOnly':True}
             fd=os.open(root/'operation.lock',os.O_RDWR|os.O_CREAT,0o600)
             try:
-                with patch.object(module.pathlib,'Path',side_effect=fixture_path),patch.object(module,'open_platform_operation_lock',return_value=fd),patch.object(module,'verify_runtime_integrity'),patch.object(module,'recover_runtime_maintenance',return_value=None),patch.object(module,'inventory',side_effect=[initial,updated]),patch.object(module,'backend_runtime_proof',return_value=backend),patch.object(module,'database_runtime_proof',return_value=database),patch.object(module,'clean_service_policy'),patch.object(module,'command',return_value='')as command,patch.object(module,'patch_plan',return_value=[]),patch.object(module,'activate_runtime_libraries',side_effect=activate)as activation,patch.object(module,'replaced_host_mappings',return_value={'complete':True,'allHostProcesses':True,'processes':[]}),patch.object(module,'install_runtime_patches')as install,patch.object(module,'persist')as persist:
+                with patch.object(module,'AUTOMATIC_RUNTIME_MAINTENANCE_ENABLED',True),patch.object(module.pathlib,'Path',side_effect=fixture_path),patch.object(module,'open_platform_operation_lock',return_value=fd),patch.object(module,'verify_runtime_integrity'),patch.object(module,'recover_runtime_maintenance',return_value=None),patch.object(module,'inventory',side_effect=[initial,updated]),patch.object(module,'backend_runtime_proof',return_value=backend),patch.object(module,'database_runtime_proof',return_value=database),patch.object(module,'clean_service_policy'),patch.object(module,'command',return_value='')as command,patch.object(module,'patch_plan',return_value=[]),patch.object(module,'activate_runtime_libraries',side_effect=activate)as activation,patch.object(module,'replaced_host_mappings',return_value={'complete':True,'allHostProcesses':True,'processes':[]}),patch.object(module,'install_runtime_patches')as install,patch.object(module,'persist')as persist:
                     result=module.apply_patches(automatic=True)
                 activation.assert_called_once();install.assert_not_called()
                 self.assertTrue(result['backendActivation']['activationOnly']);self.assertTrue(result['databaseActivation']['activationOnly'])
@@ -119,7 +262,7 @@ class Plans(unittest.TestCase):
                 value['backendActivation']=backend_receipt;value['databaseActivation']=database_receipt
             fd=os.open(root/'operation.lock',os.O_RDWR|os.O_CREAT,0o600)
             try:
-                with patch.object(module.pathlib,'Path',side_effect=fixture_path),patch.object(module,'open_platform_operation_lock',return_value=fd),patch.object(module,'verify_runtime_integrity'),patch.object(module,'recover_runtime_maintenance',return_value=None),patch.object(module,'inventory',side_effect=[initial,updated]),patch.object(module,'backend_runtime_proof',return_value=backend),patch.object(module,'database_runtime_proof',return_value=database),patch.object(module,'clean_service_policy'),patch.object(module,'command',return_value=''),patch.object(module,'patch_plan',return_value=planned),patch.object(module,'debian_installed_packages',side_effect=[before,after]),patch.object(module,'install_runtime_patches',side_effect=upgrade),patch.object(module,'persist')as persist:
+                with patch.object(module,'AUTOMATIC_RUNTIME_MAINTENANCE_ENABLED',True),patch.object(module.pathlib,'Path',side_effect=fixture_path),patch.object(module,'open_platform_operation_lock',return_value=fd),patch.object(module,'verify_runtime_integrity'),patch.object(module,'recover_runtime_maintenance',return_value=None),patch.object(module,'inventory',side_effect=[initial,updated]),patch.object(module,'backend_runtime_proof',return_value=backend),patch.object(module,'database_runtime_proof',return_value=database),patch.object(module,'clean_service_policy'),patch.object(module,'command',return_value=''),patch.object(module,'patch_plan',return_value=planned),patch.object(module,'debian_installed_packages',side_effect=[before,after]),patch.object(module,'install_runtime_patches',side_effect=upgrade),patch.object(module,'persist')as persist:
                     result=module.apply_patches(automatic=True)
                 self.assertEqual(result['backendActivation'],backend_receipt)
                 self.assertEqual(result['databaseActivation'],database_receipt)

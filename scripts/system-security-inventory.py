@@ -51,6 +51,24 @@ AUTOMATIC_DEBIAN=frozenset(['openssl','openssl-provider-legacy','libssl3','libss
 # original application and its local database have been independently proved.
 RUNTIME_DEBIAN_BASE_LIBRARIES=frozenset(['libc6','libc-bin'])
 
+# New unattended runtime transactions stay closed until their full native
+# acceptance is complete. This is a release policy, never an environment or
+# caller override. Recovery of an existing authenticated journal is separate.
+AUTOMATIC_RUNTIME_MAINTENANCE_ENABLED=False
+
+def automatic_runtime_package(name):
+    return name in RUNTIME_DEBIAN_BASE_LIBRARIES or name in ['nodejs','libpq5','postgresql-common','postgresql-client-common','udev','libudev1','libpam-systemd']or \
+        name.startswith(('postgresql-','systemd','libsystemd','linux-image-','linux-headers-','linux-modules-'))
+
+def automatic_runtime_policy():
+    enabled=AUTOMATIC_RUNTIME_MAINTENANCE_ENABLED is True
+    return {'state':'enabled'if enabled else'deferred','newTransactionsEnabled':enabled,
+        'reason':None if enabled else'SYSTEM_SECURITY_RUNTIME_RELEASE_VALIDATION_REQUIRED','existingTransactionRecovery':True}
+
+class AutomaticRuntimeMaintenanceDeferred(ValueError):
+    def __init__(self,packages):
+        super().__init__('SYSTEM_SECURITY_RUNTIME_RELEASE_VALIDATION_REQUIRED');self.packages=packages
+
 # These are reviewed raw control bytes, not hashes of a decoded shell script.
 # The exact candidate archive still has to be authenticated by APT. A changed
 # maintainer program or another trigger consumer requires a new review.
@@ -2956,6 +2974,15 @@ def patch_plan(output,installed,allowed):
     if len(changes)>64 or len(changes)!=len({item.split('=',1)[0]for item in changes}):raise ValueError('SYSTEM_SECURITY_PLAN_REJECTED')
     return changes
 
+def maintenance_patch_plan(output,installed,allowed,automatic=False):
+    if not automatic or AUTOMATIC_RUNTIME_MAINTENANCE_ENABLED is True:return patch_plan(output,installed,allowed)
+    # Inspect protected dependency changes under the same strict parser, but
+    # never return an executable plan containing them. A leaf's APT dependency
+    # must not route a runtime update through the ordinary installation lane.
+    inspected=patch_plan(output,installed,allowed|{name for name in installed if automatic_runtime_package(name)})
+    if any(automatic_runtime_package(item.split('=',1)[0])for item in inspected):raise AutomaticRuntimeMaintenanceDeferred(inspected)
+    return inspected
+
 def debian_installed_packages():
     return {key:value['version']for key,value in debian_package_states().items()if value['status']=='installed'}
 
@@ -3045,6 +3072,7 @@ def apply_patches(automatic=False):
     distribution=release.get('ID','').strip('"')
     if distribution not in ['debian','ubuntu']:raise ValueError('SYSTEM_SECURITY_DISTRIBUTION_UNSUPPORTED')
     value={'version':1,'distribution':distribution,'checkedAt':time.strftime('%Y-%m-%dT%H:%M:%SZ',time.gmtime())}
+    runtime_enabled=automatic and AUTOMATIC_RUNTIME_MAINTENANCE_ENABLED is True
     allowed=set(AUTOMATIC_DEBIAN)if automatic else set(DEBIAN)|{'postgresql-'+str(n) for n in range(14,19)}
     sources=[pathlib.Path('/etc/apt/sources.list'),*pathlib.Path('/etc/apt/sources.list.d').glob('*')]
     for source in sources:
@@ -3077,19 +3105,22 @@ def apply_patches(automatic=False):
             info=status.lstat()
             if not stat.S_ISREG(info.st_mode)or info.st_uid!=0 or info.st_nlink!=1 or info.st_mode&0o077 or info.st_size>128*1024:raise ValueError('SYSTEM_SECURITY_UNTRUSTED_PATH')
             previous=json.loads(status.read_text())
+            if not isinstance(previous,dict):raise ValueError('SYSTEM_SECURITY_RECEIPT_INVALID')
             if not security_patch_check_due(previous):
                 # The five-minute timer observes a durable deadline instead of
                 # hitting all package repositories on every tick.
+                if previous.get('automaticRuntimeMaintenance')!=automatic_runtime_policy():
+                    previous['automaticRuntimeMaintenance']=automatic_runtime_policy();persist(previous);return previous
                 return None
         # Recheck installed versions after owning the maintenance lane. A
         # concurrent authorized updater may have completed since discovery.
         value=inventory()
         runtime_before=None;runtime_error=None
-        if automatic and 'nodejs'in value['packages']:
+        if runtime_enabled and 'nodejs'in value['packages']:
             try:runtime_before=backend_runtime_proof()
             except (ValueError,OSError):runtime_error='SYSTEM_SECURITY_BACKEND_UNREVIEWED'
         database_before=None;database_error=None
-        if automatic and any(name.startswith('postgresql-')and name.removeprefix('postgresql-').isdigit()for name in value['packages']):
+        if runtime_enabled and any(name.startswith('postgresql-')and name.removeprefix('postgresql-').isdigit()for name in value['packages']):
             try:database_before=database_runtime_proof()
             except (ValueError,OSError)as error:
                 database_error='SYSTEM_SECURITY_DATABASE_UNREVIEWED'
@@ -3124,15 +3155,18 @@ def apply_patches(automatic=False):
         clean_service_policy()
         command(['apt-get','-o','Acquire::AllowInsecureRepositories=false','-o','Acquire::AllowDowngradeToInsecureRepositories=false','-o','Acquire::AllowWeakRepositories=false','update'],180)
         names=sorted(set(value['packages'])&allowed)
-        if not names:return value
+        if not names:
+            if automatic:
+                value['loadedCode']=replaced_host_mappings(all_host=True);defer_security_check(value);persist(value,verify_activation=True)
+            return value
         output=command(['apt-get','-o','DPkg::Lock::Timeout=5','-o','APT::Get::AllowUnauthenticated=false','--simulate','--only-upgrade','--no-remove','install',*names])
-        changes=patch_plan(output,value['packages'],allowed)
+        changes=maintenance_patch_plan(output,value['packages'],allowed,automatic=automatic)
         validate_runtime_libc_plan(changes,value['packages'])
         if not automatic and any(item.split('=',1)[0]in RUNTIME_DEBIAN_BASE_LIBRARIES for item in changes):raise ValueError('SYSTEM_SECURITY_LIBC_RUNTIME_PROOF_REQUIRED')
         value['patchPlan']=changes;value['patchState']='prepared';persist(value)
         if changes:
             before=debian_installed_packages()
-            planned=patch_plan(command(['apt-get','-o','DPkg::Lock::Timeout=5','-o','APT::Get::AllowUnauthenticated=false','--simulate','--only-upgrade','--no-remove','install',*changes]),value['packages'],allowed)
+            planned=maintenance_patch_plan(command(['apt-get','-o','DPkg::Lock::Timeout=5','-o','APT::Get::AllowUnauthenticated=false','--simulate','--only-upgrade','--no-remove','install',*changes]),value['packages'],allowed,automatic=automatic)
             if sorted(planned)!=sorted(changes):raise ValueError('SYSTEM_SECURITY_PLAN_REJECTED')
             expected=dict(before)
             for item in changes:
@@ -3149,10 +3183,10 @@ def apply_patches(automatic=False):
                     clean_service_policy()
             if debian_installed_packages()!=expected:raise ValueError('SYSTEM_SECURITY_PATCH_NOT_CONFIRMED')
         after=inventory(all_loaded_code=True)
-        # A prior package install can leave the same executable mapped against
-        # old libraries. A no-op apt plan must still finish the reviewed runtime
-        # activation; it does not reinstall packages or restart shared PG.
-        if automatic and runtime_before is not None and database_before is not None and not value.get('backendActivation'):
+        # A prior install can leave old mappings even with a no-op APT plan.
+        # Starting that activation is a new runtime transaction too, so it uses
+        # the release gate. Existing-journal recovery above is never gated.
+        if runtime_enabled and runtime_before is not None and database_before is not None and not value.get('backendActivation'):
             try:activate_runtime_libraries(runtime_before,database_before,after)
             except (ValueError,OSError)as error:
                 code=str(error)
@@ -3182,6 +3216,10 @@ def apply_patches(automatic=False):
         if automatic:defer_security_check(value)
         persist(value,verify_activation=True)
         return value
+    except AutomaticRuntimeMaintenanceDeferred as deferred:
+        value['patchPlan']=[];value['deferredPatchPlan']=deferred.packages;value['patchState']='deferred'
+        value['loadedCode']=replaced_host_mappings(all_host=True)
+        defer_security_check(value);persist(value,verify_activation=True);return value
     except Exception:
         value['patchState']='failed';value['error']='SYSTEM_SECURITY_PATCH_NOT_CONFIRMED'
         if automatic:defer_security_check(value)
@@ -3198,7 +3236,9 @@ def maintain_system_packages():
     if value is not None:print(json.dumps(value,separators=(',',':')))
 
 def maintenance_needs_prompt_retry(value):
-    return value.get('patchState')in ['prepared','failed']or value.get('activationRequired')or any(isinstance(value.get(key),dict)and value[key].get('state')in ['draining','pending']for key in ['nginxActivation','sshListenerActivation','clockActivation','backendActivation','databaseActivation'])
+    runtime_enabled=AUTOMATIC_RUNTIME_MAINTENANCE_ENABLED is True
+    keys=['nginxActivation','sshListenerActivation','clockActivation']+(['backendActivation','databaseActivation']if runtime_enabled else[])
+    return value.get('patchState')in ['prepared','failed']or (runtime_enabled and value.get('activationRequired'))or any(isinstance(value.get(key),dict)and value[key].get('state')in ['draining','pending']for key in keys)
 
 def protected_hash(path,owners=(0,),private=False):
     path=pathlib.Path(path);info=path.lstat()
@@ -4286,6 +4326,7 @@ def persist(value,verify_activation=False):
             # Adopt the exact pending list from the earlier receipt format.
             if 'activationRequired'not in previous and previous.get('patchState')=='installed-activation-required':previous['activationRequired']=previous.get('patchPlan',[])
         preserve_activation(value,previous)
+        value['automaticRuntimeMaintenance']=automatic_runtime_policy()
         if 'activationReceipt' in previous and 'activationReceipt'not in value:
             value['activationReceipt']=previous['activationReceipt']
             value.setdefault('activationRequired',[])
