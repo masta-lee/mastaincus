@@ -29,10 +29,16 @@ jobs:
       - name: Prepare an isolated native Alpine guest
         env:
           QEMU_PACKAGES: ${{ matrix.packages }}
+          TEST_ARCH: ${{ matrix.arch }}
         run: |
           sudo apt-get update -qq
           sudo apt-get install -y --no-install-recommends $QEMU_PACKAGES qemu-utils xorriso openssh-client dosfstools mtools acl
-          sudo setfacl -m "u:$(id -un):rw" /dev/kvm
+          if [[ -c /dev/kvm ]]; then
+            sudo setfacl -m "u:$(id -un):rw" /dev/kvm
+          else
+            [[ "$TEST_ARCH" == aarch64 && "$(uname -m)" == aarch64 ]]
+            echo 'No nested KVM on ARM64 runner; testing a full ARM64 TCG guest.'
+          fi
       - name: Run original and candidate boots and both rollbacks
         env:
           TEST_ARCH: ${{ matrix.arch }}

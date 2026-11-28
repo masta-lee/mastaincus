@@ -47,6 +47,8 @@ class Lab:
         self.port = 22873
         self.proc = None
         self.console = None
+        self.boot_console_start = 0
+        self.accel = 'kvm' if os.path.exists('/dev/kvm') else 'tcg'
         self.boots = 0
         self.log = (directory / 'private.log').open('xb')
 
@@ -112,8 +114,14 @@ class Lab:
         if fallback:
             require(not variables.exists(), 'Unexpected fallback firmware state')
             shutil.copyfile(self.var_template, variables)
-        machine = 'virt,gic-version=host' if self.arm else 'q35'
-        args = ['qemu-system-' + self.arch, '-nodefaults', '-no-user-config', '-accel', 'kvm', '-cpu', 'host',
+        self.boot_console_start = 0
+        if self.accel == 'kvm':
+            machine, cpu, accel = ('virt,gic-version=host' if self.arm else 'q35'), 'host', 'kvm'
+        else:
+            require(self.arm, 'AMD64 runner requires KVM')
+            machine, cpu, accel = 'virt,gic-version=3', 'max', 'tcg,thread=multi'
+        print(f'Booting {self.arch} using {self.accel}, disk boot {self.boots}', flush=True)
+        args = ['qemu-system-' + self.arch, '-nodefaults', '-no-user-config', '-accel', accel, '-cpu', cpu,
                 '-machine', machine, '-m', '3072', '-smp', '2',
                 '-drive', f'if=pflash,format=raw,readonly=on,file={self.code}',
                 '-drive', f'if=pflash,format=raw,file={variables}',
@@ -134,23 +142,55 @@ class Lab:
         return run(self.ssh + [command], seconds, stdout=subprocess.PIPE, stderr=self.log).stdout.strip()
 
     def ready(self, old=None):
-        end = time.monotonic() + 300
+        # The ARM public runners expose no nested KVM. Measure their cold
+        # emulated boot separately; every SSH attempt and product call is bounded.
+        started = time.monotonic()
+        end = started + (600 if self.accel == 'tcg' else 300)
+        path = self.dir / f'console-{self.boots}.log'
+        offset = self.boot_console_start
+        markers = (b'Linux version ', b'Mounting root: ok', b'Welcome to Alpine Linux', b'login:')
+        observed, partial = set(), b''
+        query = ('set -eu; for f in /var/lib/cloud/data/instance-id /sys/class/block/vda/serial '
+                 '/proc/sys/kernel/random/boot_id; do test -s "$f" || test -r "$f" || exit 75; done; '
+                 'printf "%s\\n" "$(cat /var/lib/cloud/data/instance-id)" "$(cat /sys/class/block/vda/serial)" '
+                 '"$(uname -m)" "$(cat /proc/sys/kernel/random/boot_id)"')
         while time.monotonic() < end:
             require(self.proc.poll() is None, 'VM exited before SSH')
+            size = path.stat().st_size
+            require(offset <= size <= 32 * 1024**2, 'Unexpected guest console size')
+            with path.open('rb') as log:
+                log.seek(offset)
+                data = log.read(min(size - offset, 1024**2))
+            offset += len(data)
+            scanned = partial + data
+            for n, marker in enumerate(markers):
+                if marker in scanned and n not in observed:
+                    print(f'Guest boot stage {n + 1} after {time.monotonic() - started:.1f}s', flush=True)
+                    observed.add(n)
+            require(b'Kernel panic - not syncing' not in scanned and
+                    b'Launching initramfs emergency recovery shell' not in scanned, 'Guest kernel/root mount failed')
+            partial = scanned[-128:]
             try:
-                response = self.ssh_output('cat /var/lib/cloud/data/instance-id; cat /sys/class/block/vda/serial; '
-                                           'uname -m; cat /proc/sys/kernel/random/boot_id', 10).decode().splitlines()
+                # An absent first-boot cloud-init marker is transient. Explicit
+                # separators preserve fields even when a sysfs read has no LF.
+                response = self.ssh_output(query, min(10, max(1, end - time.monotonic()))).decode().splitlines()
             except (subprocess.CalledProcessError, subprocess.TimeoutExpired):
-                time.sleep(2)
+                time.sleep(min(2, max(0, end - time.monotonic())))
                 continue
-            require(len(response) == 4 and response[:3] == ['kernel-' + self.id, 'e04-' + self.id[:12], self.arch]
-                    and re.fullmatch(r'[0-9a-f-]{36}', response[3]), 'Unexpected SSH guest identity')
+            require(len(response) == 4, 'SSH boot identity field count changed')
+            for actual, wanted, field in zip(response, ('kernel-' + self.id, 'e04-' + self.id[:12], self.arch),
+                                               ('NoCloud instance ID', 'virtio root disk serial', 'guest architecture')):
+                require(actual == wanted, 'Unexpected SSH ' + field)
+            require(re.fullmatch(r'[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}', response[3]), 'Invalid guest boot ID')
             if response[3] != old:
+                print(f'Authenticated {self.arch} guest after {time.monotonic() - started:.1f}s', flush=True)
                 return response[3]
             time.sleep(1)
         raise TimeoutError('Original SSH boot identity unavailable')
 
     def phase(self, name, reboot=False):
+        if reboot:
+            self.boot_console_start = (self.dir / f'console-{self.boots}.log').stat().st_size
         proc = subprocess.run(self.ssh + ['bash /root/incudal-kernel-lab/host-kernel-lab-guest.sh ' + name],
                               timeout=900, stdout=self.log, stderr=self.log)
         if proc.returncode and not (reboot and proc.returncode == 255):
@@ -236,8 +276,9 @@ def main():
     require(os.geteuid() != 0 and os.environ.get('GITHUB_ACTIONS') == 'true'
             and os.environ.get('RUNNER_ENVIRONMENT') == 'github-hosted'
             and os.environ.get('GITHUB_REPOSITORY') == 'masta-lee/mastaincus'
-            and os.environ.get('GITHUB_REF') == 'refs/heads/main'
-            and os.access('/dev/kvm', os.R_OK | os.W_OK), 'Hosted KVM runner required')
+            and os.environ.get('GITHUB_REF') == 'refs/heads/main', 'Hosted native-architecture runner required')
+    if os.path.exists('/dev/kvm') or sys.argv[1] == 'x86_64':
+        require(os.access('/dev/kvm', os.R_OK | os.W_OK), 'KVM present but inaccessible, or AMD64 runner missing KVM')
     repo = Path(__file__).resolve().parents[1]
     require(subprocess.check_output(['git', 'rev-parse', 'HEAD'], cwd=repo, text=True).strip() ==
             os.environ['GITHUB_SHA'], 'Checkout commit mismatch')
