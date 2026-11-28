@@ -945,6 +945,52 @@ if ! command -v python3 >/dev/null && command -v python >/dev/null; then
     python3() { python "$@"; }
 fi
 
+# Verify that listing errors after valid members and non-unique root helpers
+# cannot install a partial set. These fixtures never touch system destinations.
+helper_work="$WORK_DIR/root-helper-archive"
+mkdir -p "$helper_work/output"
+"$PYTHON_BIN" -I -B - "$helper_work" <<'HELPER_ARCHIVE_FIXTURES'
+import io, pathlib, sys, tarfile
+
+root = pathlib.Path(sys.argv[1])
+names = ("incudal-online-task.sh.example", "incudal-systemctl-wrapper.sh.example", "incudal-ota-chown-wrapper.sh.example")
+for case in ("valid", "duplicate", "missing", "linked", "empty", "oversized"):
+    with tarfile.open(root / (case + ".tar.gz"), "w:gz") as archive:
+        for index, name in enumerate(names):
+            if index == 2 and case == "missing":
+                continue
+            data = ("#!/bin/bash\n# " + name + "\n").encode()
+            if index == 2 and case == "empty":
+                data = b""
+            if index == 2 and case == "oversized":
+                data += b"x" * (1024 * 1024)
+            member = tarfile.TarInfo(("./" if index % 2 else "") + "deploy/" + name)
+            if index == 2 and case == "linked":
+                member.type = tarfile.SYMTYPE
+                member.linkname = names[0]
+                archive.addfile(member)
+            else:
+                member.size = len(data)
+                archive.addfile(member, io.BytesIO(data))
+                if index == 2 and case == "duplicate":
+                    archive.addfile(member, io.BytesIO(data))
+(root / "truncated.tar.gz").write_bytes((root / "valid.tar.gz").read_bytes()[:-8])
+HELPER_ARCHIVE_FIXTURES
+stage_release_root_helpers "$helper_work/valid.tar.gz" "$helper_work/output"
+for helper in incudal-online-task.sh.example incudal-systemctl-wrapper.sh.example incudal-ota-chown-wrapper.sh.example; do
+    printf '#!/bin/bash\n# %s\n' "$helper" | cmp - "$helper_work/output/$helper"
+done
+for variant in duplicate missing linked empty oversized; do
+    mkdir "$helper_work/$variant"
+    if stage_release_root_helpers "$helper_work/$variant.tar.gz" "$helper_work/$variant" ||
+        [[ -n "$(ls -A "$helper_work/$variant")" ]]; then
+        echo "Invalid $variant helper set was accepted or partially staged" >&2; exit 1
+    fi
+done
+if validate_release_archive "$helper_work/truncated.tar.gz"; then
+    echo 'Archive with a truncated gzip trailer passed validation' >&2; exit 1
+fi
+
 for domain in panel.example.com admin.example.com PANEL.example.com xn--fiqs8s.example.com; do
     is_valid_cf_domain "$domain" || { echo "valid CF domain rejected" >&2; exit 1; }
 done

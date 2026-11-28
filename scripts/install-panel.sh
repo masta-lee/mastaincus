@@ -494,40 +494,69 @@ INCUDAL_REPOSITORY_STARTUP_UNITS
     )
 }
 
-install_verified_root_helpers_from_archive() {
-    local tar_file="$1"
-    local helper entry tmp
+# The caller already verified the complete archive's publisher signature. Read
+# the three fixed regular members together so compressed releases need one pass.
+stage_release_root_helpers() {
+    python3 -I -B - "$1" "$2" <<'INCUDAL_STAGE_ROOT_HELPERS'
+import pathlib
+import sys
+import tarfile
 
+archive, destination = sys.argv[1:]
+wanted = {
+    "deploy/incudal-online-task.sh.example",
+    "deploy/incudal-systemctl-wrapper.sh.example",
+    "deploy/incudal-ota-chown-wrapper.sh.example",
+}
+found = {}
+try:
+    with tarfile.open(archive, "r|gz") as members:
+        for member in members:
+            name = member.name.removeprefix("./")
+            if name not in wanted:
+                continue
+            if name in found or not member.isreg() or member.issparse() or not 0 < member.size <= 1024 * 1024:
+                raise ValueError()
+            with members.extractfile(member) as stream:
+                content = stream.read(member.size + 1)
+            if len(content) != member.size:
+                raise ValueError()
+            found[name] = content
+    if found.keys() != wanted:
+        raise ValueError()
+    for name, content in found.items():
+        target = pathlib.Path(destination) / pathlib.PurePosixPath(name).name
+        with target.open("xb") as output:
+            output.write(content)
+except (OSError, EOFError, ValueError, tarfile.TarError):
+    sys.exit("已验证产物中的 root helper 缺失、重复、损坏或不是普通文件")
+INCUDAL_STAGE_ROOT_HELPERS
+}
+
+install_verified_root_helpers_from_archive() (
+    local tar_file="$1"
+    local staging helper tmp
+    local helpers=(incudal-online-task.sh.example incudal-systemctl-wrapper.sh.example incudal-ota-chown-wrapper.sh.example)
+
+    umask 077
+    staging="$(mktemp -d)" || return 1
+    trap 'rm -rf -- "$staging"' EXIT
+    stage_release_root_helpers "$tar_file" "$staging" || return 1
+    normalize_legacy_online_task_helper "$staging/incudal-online-task.sh.example" || return 1
+    for helper in "${helpers[@]}"; do
+        bash -n "$staging/$helper" || { error "已验证产物中的 root helper 无效: deploy/${helper}"; return 1; }
+    done
     install -d -o root -g root -m 0755 /usr/local/libexec/incudal /usr/local/libexec/incudal/ota-path || return "$?"
-    for helper in \
-        incudal-online-task.sh.example \
-        incudal-systemctl-wrapper.sh.example \
-        incudal-ota-chown-wrapper.sh.example; do
-        entry="$(tar -tzf "$tar_file" | grep -E "^(\./)?deploy/${helper}$" || true)"
-        if [[ "$(printf '%s\n' "$entry" | sed '/^$/d' | wc -l)" -ne 1 ]]; then
-            error "已验证产物缺少唯一 root helper: deploy/${helper}"
-            return 1
-        fi
-        tmp="$(mktemp)" || return "$?"
-        if ! tar -xOzf "$tar_file" "$entry" > "$tmp"; then rm -f -- "$tmp"; return 1; fi
-        if [[ "$helper" == incudal-online-task.sh.example ]] && ! normalize_legacy_online_task_helper "$tmp"; then
-            rm -f -- "$tmp"
-            return 1
-        fi
-        if [[ ! -s "$tmp" ]] || ! bash -n "$tmp"; then
-            rm -f "$tmp"
-            error "已验证产物中的 root helper 无效: deploy/${helper}"
-            return 1
-        fi
+    for helper in "${helpers[@]}"; do
+        tmp="$staging/$helper"
         case "$helper" in
             incudal-online-task.sh.example) install -o root -g root -m 0755 "$tmp" /usr/local/libexec/incudal/incudal-online-task || return "$?" ;;
             incudal-systemctl-wrapper.sh.example) install -o root -g root -m 0755 "$tmp" /usr/local/libexec/incudal/systemctl || return "$?" ;;
             incudal-ota-chown-wrapper.sh.example) install -o root -g root -m 0755 "$tmp" /usr/local/libexec/incudal/ota-path/chown || return "$?" ;;
         esac
-        rm -f "$tmp" || return "$?"
     done
     install -d -o root -g root -m 0755 /var/cache/incudal-ota /var/lib/incudal-ota/manifests || return "$?"
-}
+)
 
 # ========================== 颜色定义 ==========================
 readonly RED='\033[1;31m'
@@ -1276,20 +1305,21 @@ validate_release_archive() {
     local tar_file="$1"
     local entry=""
 
-    if ! tar -tzf "$tar_file" >/dev/null 2>&1; then
-        error "产物包不是有效的 tar.gz 文件: ${tar_file}"
+    # Consume one complete listing and propagate errors from tar AND the path
+    # check, including a truncated archive after otherwise valid entries.
+    if ! (
+        set -o pipefail
+        tar -tzf "$tar_file" | while IFS= read -r entry; do
+            entry="${entry#./}"
+            if [[ "$entry" == /* || "$entry" == ".." || "$entry" == ../* || "$entry" == */../* || "$entry" == */.. ]]; then
+                error "产物包包含不安全路径: ${entry}"
+                exit 1
+            fi
+        done
+    ); then
+        error "产物包校验失败: ${tar_file}"
         return 1
     fi
-
-    while IFS= read -r entry; do
-        entry="${entry#./}"
-        if [[ "$entry" == /* || "$entry" == ".." || "$entry" == ../* || "$entry" == */../* || "$entry" == */.. ]]; then
-            error "产物包包含不安全路径: ${entry}"
-            return 1
-        fi
-    done < <(tar -tzf "$tar_file")
-
-    return 0
 }
 
 verify_release_publisher() {
