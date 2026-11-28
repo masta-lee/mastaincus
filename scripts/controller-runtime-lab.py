@@ -70,14 +70,16 @@ def failure_reason(error):
     # Report the checked product line and fixed file attributes only. Never
     # emit the raw pathname, command, traceback, file contents or environment.
     trace = error.__traceback__
-    rejected = None
+    rejected, caller = None, None
     while trace:
         if Path(trace.tb_frame.f_code.co_filename).name == 'system-security-inventory.py':
-            rejected = trace
+            caller, rejected = rejected, trace
         trace = trace.tb_next
     if rejected is None:
         return reason
     reason += '_L' + str(rejected.tb_lineno)
+    if caller is not None:
+        reason += '_FROM' + str(caller.tb_lineno)
     frame = rejected.tb_frame.f_locals
     info = frame.get('info')
     if isinstance(info, os.stat_result):
@@ -89,6 +91,8 @@ def failure_reason(error):
         '/var/lib/incudal-system-security': 'MAINTENANCE_DIR',
         '/var/lib/incudal-system-security/runtime-integrity.json': 'INTEGRITY_RECEIPT',
         '/var/cache/apt/archives': 'APT_CACHE',
+        '/usr/share/keyrings/debian-archive-keyring.gpg': 'DEBIAN_LEGACY_KEYRING',
+        '/usr/share/keyrings/debian-archive-keyring.pgp': 'DEBIAN_KEYRING',
         '/etc/postgresql/16/main/postgresql.conf': 'PG_CONFIG',
         '/etc/postgresql/16/main/pg_hba.conf': 'PG_HBA',
         '/etc/postgresql/16/main/start.conf': 'PG_START',
